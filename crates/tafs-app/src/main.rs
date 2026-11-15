@@ -7,6 +7,7 @@ mod devices;
 mod kiff;
 mod needs_you;
 mod overview;
+mod people;
 mod record;
 mod shell;
 mod sign_in;
@@ -56,13 +57,15 @@ struct Options {
     home: Option<String>,
     /// Synthetic answers for Plan & usage signed in with KIFF, for its screenshots.
     usage: Option<String>,
+    /// Synthetic answers for People & groups signed in with KIFF, for its screenshot.
+    people: Option<String>,
     /// `--size WxH`: the window's size, for a screenshot of a narrower layout.
     size: Option<(i32, i32)>,
     screenshot: Option<String>,
 }
 
 const USAGE: &str = "tafs [--lang en|de|fr|es|it|pt|nl|pl] [--theme light|dark] [--sample] [--signed-in] [--view-only]
-     [--home contract.json] [--usage answers.json] [--size WxH] [--page welcome|sign-in|overview|needs-you|record|calendar|calendar-week|usage|connect-apps|account|devices|taf|taf-card] [--screenshot out.png]";
+     [--home contract.json] [--usage answers.json] [--people answers.json] [--size WxH] [--page welcome|sign-in|overview|needs-you|record|calendar|calendar-week|usage|connect-apps|account|devices|people|taf|taf-card] [--screenshot out.png]";
 
 fn options() -> Result<Options, String> {
     let mut o = Options::default();
@@ -76,6 +79,7 @@ fn options() -> Result<Options, String> {
             "--screenshot" => o.screenshot = Some(value()?),
             "--home" => o.home = Some(value()?),
             "--usage" => o.usage = Some(value()?),
+            "--people" => o.people = Some(value()?),
             "--size" => {
                 let v = value()?;
                 let (w, h) = v.split_once('x').ok_or("--size takes WxH")?;
@@ -127,6 +131,7 @@ fn selection_of(page: Option<&str>) -> Selection {
         Some("connect-apps") => Selection::ConnectApps,
         Some("account") => Selection::Account,
         Some("devices") => Selection::Devices,
+        Some("people") => Selection::People,
         // The sample's Refunds, as the reference set's taf.png opens it.
         Some("taf") | Some("taf-card") => Selection::Taf("refunds".into()),
         // With `--home`, the contract's first taf.
@@ -196,6 +201,7 @@ fn activate(app: &adw::Application, o: &Options) {
         problem: RefCell::new(None),
         home_file: o.home.as_ref().map(std::path::PathBuf::from),
         usage_file: o.usage.as_ref().map(std::path::PathBuf::from),
+        people_file: o.people.as_ref().map(std::path::PathBuf::from),
         calendar_day: o.page.as_deref() == Some("calendar"),
         screenshot: o.screenshot.is_some(),
         on_card: o
@@ -275,6 +281,8 @@ struct App {
     home_file: Option<std::path::PathBuf>,
     /// `--usage`'s file of synthetic answers.
     usage_file: Option<std::path::PathBuf>,
+    /// `--people`'s file of synthetic answers.
+    people_file: Option<std::path::PathBuf>,
     /// A screenshot: the sample's Refunds has the reference set's three Cards.
     screenshot: bool,
     /// `--page taf-card`: the taf opens on its Card tab.
@@ -703,6 +711,28 @@ impl App {
                     None => usage::UsageSource::None,
                 },
             },
+            people: match (mode, self.kept.borrow().as_ref(), &self.people_file) {
+                (Mode::Kiff, Some(kept), _) => people::PeopleSource::Cloud {
+                    token: kept.token.clone(),
+                    languages: self.languages.clone(),
+                },
+                (Mode::Kiff, None, Some(f)) => people::PeopleSource::File(f.clone()),
+                _ => people::PeopleSource::None,
+            },
+            people_known: Rc::new(people::Known {
+                account: cloud.as_deref().and_then(|c| c.account.clone()),
+                agents: cloud
+                    .as_deref()
+                    .map(|c| {
+                        c.home
+                            .tafs
+                            .iter()
+                            .filter_map(|h| tafs_core::home::taf(words, h).ok())
+                            .map(|t| (t.agent, t.name))
+                            .collect()
+                    })
+                    .unwrap_or_default(),
+            }),
             calendar: match (mode, self.kept.borrow().as_ref()) {
                 (Mode::Kiff, Some(kept)) => calendar::CalendarSource::Cloud {
                     token: kept.token.clone(),

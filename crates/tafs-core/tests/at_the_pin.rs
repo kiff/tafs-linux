@@ -147,6 +147,18 @@ const LINES: &[(&str, &[&str])] = &[
     ("sample.list_charges", &[]),
     ("sample.look_up_charge", &[]),
     ("taf.revoke", &[]),
+    ("people.add_group", &[]),
+    ("people.new_group", &[]),
+    ("people.everyone_group", &[]),
+    ("people.manager", &[]),
+    ("people.member", &[]),
+    ("people.uses_none", &[]),
+    ("people.everyone_uses_none", &[]),
+    ("people.no_groups", &[]),
+    ("people.uses", &["tafs"]),
+    ("people.add_someone_to", &["name"]),
+    ("people.group_actions", &["group"]),
+    ("people.not_read", &["why"]),
     ("calendar.today", &[]),
     ("calendar.reading", &[]),
     ("calendar.agenda", &[]),
@@ -1211,5 +1223,49 @@ fn calendar_titles_are_the_reference_sets() {
         )
         .unwrap();
         w.count("calendar.times", 2, &[]).unwrap();
+    }
+}
+
+#[test]
+fn people_lines_at_the_pin() {
+    use tafs_core::account::Account;
+    use tafs_core::people::{account_people, uses, Group};
+    let account = |name: &str, email: &str| Account {
+        tenant_id: "t".into(),
+        slug: "acme".into(),
+        display_name: Some(name.into()),
+        email: Some(email.into()),
+        time_zone: None,
+        capabilities: None,
+        approval_mode: None,
+    };
+    let group = |everyone| Group {
+        id: "g".into(),
+        name: "Finance".into(),
+        everyone,
+        members: vec![],
+        agents: vec![],
+    };
+    let w = book("en");
+    assert_eq!(
+        account_people(&w, &account("Acme", "rae@acme.test"), 3).unwrap(),
+        "Acme · 3 people"
+    );
+    // A Solo account, named after its email: the count alone.
+    assert_eq!(
+        account_people(&w, &account("rae@acme.test", "rae@acme.test"), 1).unwrap(),
+        "1 person"
+    );
+    let names: Vec<String> = ["Refunds", "Invoices"].map(String::from).to_vec();
+    assert_eq!(
+        uses(&w, &group(false), &names).unwrap(),
+        "Uses Invoices and Refunds"
+    );
+    assert_eq!(uses(&w, &group(false), &[]).unwrap(), "Uses no taf yet");
+    for lang in SHIPPED {
+        let w = book(lang);
+        account_people(&w, &account("Acme", "rae@acme.test"), 2).unwrap();
+        uses(&w, &group(true), &[]).unwrap();
+        group(true).shown_name(&w).unwrap();
     }
 }

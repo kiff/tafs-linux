@@ -220,6 +220,8 @@ button.tafs-plain { background: none; border: none; box-shadow: none; padding: 0
 .tafs-dot9 { min-width: 9px; min-height: 9px; border-radius: 999px; }
 .tafs-event { background-color: @tafs_panel; border-radius: 10px; padding: 10px; }
 
+.tafs-person-badge { background-color: @tafs_raised; border-radius: 999px; color: @tafs_ink; font-size: 14px; font-weight: 600; }
+
 .tafs-code { font-family: monospace; font-size: 34px; font-weight: 600; color: @tafs_ink; }
 .tafs-mono { font-family: monospace; }
 .tafs-notice { background-color: @tafs_panel; border-bottom: 1px solid @tafs_line; padding: 12px 24px; }

@@ -59,8 +59,32 @@ sample opens the sign-in over it.
 
 ## Not yet
 
-- **The rows' screens:** KIFF account, People & groups, Alerts and Time zone open their titles
-  until each is ported. Devices, Connect apps and Plan & usage open their screens.
+- **The rows' screens:** KIFF account, Alerts and Time zone open their titles until each is
+  ported. People & groups, Devices, Connect apps and Plan & usage open their screens.
+
+## People & groups
+
+Account › People & groups (`PeopleGroupsView`, `crates/tafs-app/src/people.rs`,
+`tafs-core/src/people.rs`): the round back button to Account, "+ Group" for whoever manages
+people (`members.manage`), then KIFF's error when it couldn't be read ("People and groups
+couldn't be read. …"), the account's line ("Acme · 3 people", the count alone for a Solo
+account), and each group (`GET /v1/groups`), KIFF's default one first ("Everyone", in the
+person's language) then by name: its name (15 semibold) and the tafs it uses ("Uses Invoices and
+Refunds", sorted; "Uses no taf yet"), its actions (rename, delete) for whoever manages people,
+its people (`GET /v1/tenant/members`, the active ones), managers first, then by email, each with
+the first letter on a raised circle, their email (else KIFF's id), and Manager (amber) or Member;
+then "Add someone to Finance" for whoever manages the group, never for Everyone. "No groups yet."
+when there are none. It reads again every 20 seconds while it's open.
+
+Read as strictly as the iPad's decoders: a group without its `members` or `agents`, or a person
+without `subject`, `role` or `status`, fails the read. The sample has no account: no groups.
+`--people <file>` with `--home` draws it from synthetic answers
+(`crates/tafs-app/fixtures/people-kiff.json`), CI's `people`.
+
+Not yet: **every change** (a group, its name, deleting it, adding or removing someone, making a
+manager), each the person's act signed with an approval key: "+ Group", the group's actions and
+Add someone are there, dimmed, and removing or changing someone (the iPad's swipe and context
+menu) isn't drawn, until this computer can approve.
 
 ## Devices
 
