@@ -7,6 +7,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use adw::prelude::*;
+use gtk::{gdk, gio, glib};
 use tafs_core::recipes::{Recipe, Recipes};
 
 use crate::widgets::{eyebrow, panel, primary, symbol, text};
@@ -142,8 +143,52 @@ fn own_words_row(title: &str, line: &str) -> gtk::Button {
     b
 }
 
-/// `AppMarks`: the apps a job uses, by name. tafs cloud's logos come with their own read; the
-/// name stands alone, as the iPad's does while a logo loads or when it fails.
+thread_local! {
+    /// Each logo read once a launch, by its URL: its picture, or none when it didn't load.
+    static LOGOS: RefCell<std::collections::HashMap<String, Option<gdk::Texture>>> =
+        RefCell::default();
+}
+
+/// An app's logo (18), loaded from tafs cloud (`AppMark`'s `AsyncImage`): nothing while it loads
+/// or when it fails, so the name stands alone.
+fn logo(url: String) -> gtk::Picture {
+    // Hidden from a screen reader, as the iPad's: the name says it.
+    let picture = gtk::Picture::builder()
+        .accessible_role(gtk::AccessibleRole::Presentation)
+        .build();
+    picture.set_size_request(18, 18);
+    picture.set_can_shrink(true);
+    picture.set_content_fit(gtk::ContentFit::Contain);
+    picture.set_visible(false);
+    let show = |p: &gtk::Picture, t: &Option<gdk::Texture>| {
+        if let Some(t) = t {
+            p.set_paintable(Some(t));
+            p.set_visible(true);
+        }
+    };
+    if let Some(known) = LOGOS.with(|l| l.borrow().get(&url).cloned()) {
+        show(&picture, &known);
+        return picture;
+    }
+    let p = picture.clone();
+    glib::spawn_future_local(async move {
+        let fetched = {
+            let url = url.clone();
+            gio::spawn_blocking(move || crate::kiff::logo(&url))
+                .await
+                .ok()
+                .flatten()
+        };
+        let texture =
+            fetched.and_then(|b| gdk::Texture::from_bytes(&glib::Bytes::from_owned(b)).ok());
+        LOGOS.with(|l| l.borrow_mut().insert(url, texture.clone()));
+        show(&p, &texture);
+    });
+    picture
+}
+
+/// `AppMarks`: the apps a job uses, each after its logo where tafs cloud serves one (`AppMark`):
+/// the name (12, dim) stands alone without one, while it loads, or when it fails.
 fn app_marks(recipe: &Recipe) -> gtk::FlowBox {
     let marks = gtk::FlowBox::new();
     marks.set_selection_mode(gtk::SelectionMode::None);
@@ -151,7 +196,12 @@ fn app_marks(recipe: &Recipe) -> gtk::FlowBox {
     marks.set_homogeneous(false);
     marks.set_max_children_per_line(20);
     for app in &recipe.apps {
-        marks.insert(&text(&app.name, 12, 400, &["tafs-dim"]), -1);
+        let mark = gtk::Box::new(gtk::Orientation::Horizontal, 6);
+        if let Some(url) = tafs_core::recipes::logo_url(app.logo.as_deref()) {
+            mark.append(&logo(url));
+        }
+        mark.append(&text(&app.name, 12, 400, &["tafs-dim"]));
+        marks.insert(&mark, -1);
     }
     marks
 }

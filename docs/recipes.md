@@ -42,8 +42,11 @@ At most 720 wide, centred, 24 from the sides:
   it ends (`headline`, else its title; 16 semibold), its line (14, soft) and its apps by name (12,
   dim), on a 4-wide edge in its category's colour. A category with no recipe isn't shown.
 
-Logos (`/v1/logos/{key}`) come with their own read: the name stands alone, as the iPad's does
-while a logo loads or when it fails.
+Each app's logo (18) comes before its name where tafs cloud serves one (`AppMark`): only from
+tafs cloud's own address at `/v1/logos/{key}`, with a key of 32 lowercase hex digits
+(`logoURL`); anything else is no logo. It's read without the session's token, as the iPad's image
+load sends none, at most 1 MB, once a launch; while it loads, or when it fails, the name stands
+alone. A screen reader hears the name, not the logo.
 
 ## The sheet
 
@@ -62,4 +65,4 @@ someone who may use Coach, CI's `recipe-sheet`.
 ## Not yet
 
 - **Coach:** "Say it in your own words" and "Hand it to Coach" open it.
-- **The apps' logos**, and the gallery behind + New (`RecipeGallery`).
+- **The gallery** behind + New (`RecipeGallery`).

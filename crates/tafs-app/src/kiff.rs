@@ -114,6 +114,26 @@ pub fn recipes(token: &str, languages: &[&str]) -> Result<Answer, KiffError> {
     )
 }
 
+/// An app's logo from tafs cloud (`AsyncImage(url: logoURL(…))`): no token, as the iPad's image
+/// load sends none; only a URL `recipes::logo_url` made; at most 1 MB. None for anything else.
+pub fn logo(url: &str) -> Option<Vec<u8>> {
+    use std::io::Read;
+    if !url.starts_with(&format!("{}/v1/logos/", tafs_core::home::TAFS_CLOUD)) {
+        return None;
+    }
+    let answer = agent().get(url).call().ok()?;
+    if answer.status() != 200 {
+        return None;
+    }
+    let mut bytes = Vec::new();
+    answer
+        .into_reader()
+        .take(1 << 20)
+        .read_to_end(&mut bytes)
+        .ok()?;
+    Some(bytes)
+}
+
 /// A read at KIFF as the session, by its path (People & groups).
 pub fn kiff_get(token: &str, languages: &[&str], path: &str) -> Result<Answer, KiffError> {
     get(&format!("{KIFF_API}{path}"), token, languages)
