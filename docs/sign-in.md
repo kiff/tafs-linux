@@ -70,6 +70,5 @@ slow-down, expiry and refusals, the modes, a relaunch, the exact hosts. Nothing 
 ## Not yet
 
 - **Pairing** (`PairSignInView`, and the desktop's Add this computer): its own change.
-- **Signing out** comes with Account (`SettingsView`).
 - **A passkey** that approves for this computer (contract §2.6): its own change, with KIFF's
   Linux origin.

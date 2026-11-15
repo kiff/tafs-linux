@@ -73,6 +73,37 @@ const LINES: &[(&str, &[&str])] = &[
     ("needs_you.over_total", &[]),
     ("needs_you.refuse", &[]),
     ("common.details", &[]),
+    ("settings.your_account", &[]),
+    ("settings.mode", &[]),
+    ("settings.mode_kiff", &[]),
+    ("settings.mode_sample", &[]),
+    ("settings.mode_signed_out", &[]),
+    ("settings.kiff_account", &[]),
+    ("settings.signed_in_as", &[]),
+    ("settings.people_apps", &[]),
+    ("people.title", &[]),
+    ("settings.devices.title", &[]),
+    ("settings.plan", &[]),
+    ("settings.alerts", &[]),
+    ("settings.theme_title", &[]),
+    ("settings.theme.light", &[]),
+    ("settings.theme.dark", &[]),
+    ("settings.theme.system", &[]),
+    ("settings.language_title", &[]),
+    ("settings.change_language", &[]),
+    ("settings.time_zone_title", &[]),
+    ("sign_in.how_works", &[]),
+    ("sign_in.every_action_taf_takes_goes", &["device"]),
+    ("settings.legal", &[]),
+    ("settings.about", &[]),
+    ("settings.version", &[]),
+    ("home.tagline", &[]),
+    ("settings.account_actions", &[]),
+    ("settings.sign_out", &[]),
+    ("settings.clear_sample", &[]),
+    ("settings.sign_out_of_kiff.title", &[]),
+    ("settings.sign_out_of_kiff.body_device", &["device"]),
+    ("sign_in.not_signed_out_device", &["why", "device"]),
     ("card.held.each_call_asks", &[]),
     ("card.held.for_each", &["name"]),
     ("card.held.for_item", &["item"]),
@@ -365,4 +396,109 @@ fn last_result_reads_the_report_first() {
         last_result(&w, Some(&CloudRun::default())).unwrap(),
         "Nothing yet"
     );
+}
+
+#[test]
+fn account_is_the_ipads_in_its_order() {
+    use tafs_core::account::{lines, Account, Row};
+    use tafs_core::sidebar::Mode;
+    let w = book("en");
+    let sample = lines(
+        &w,
+        Mode::Sample,
+        None,
+        None,
+        "https://kiff.dev/tafs/terms",
+        "https://kiff.dev/tafs/privacy",
+        "0.1.0",
+    )
+    .unwrap();
+    let headers: Vec<Option<&str>> = sample
+        .sections
+        .iter()
+        .map(|s| s.header.as_deref())
+        .collect();
+    assert_eq!(
+        headers,
+        [
+            Some("Your account"),
+            None,
+            Some("Theme"),
+            Some("Language"),
+            Some("How it works"),
+            Some("Legal"),
+            Some("About"),
+            Some("Account actions")
+        ]
+    );
+    assert_eq!(
+        sample.sections[0].rows[0],
+        Row::Value("Mode".into(), "Sample data".into())
+    );
+    let actions: Vec<&Row> = sample.sections.last().unwrap().rows.iter().collect();
+    assert!(matches!(actions[0], Row::Action(t, _) if t == "Sign in with KIFF"));
+    assert!(matches!(actions[1], Row::Destructive(t, _) if t == "Clear the sample"));
+    assert!(
+        matches!(&sample.sections[4].rows[0], Row::Text(t) if t.ends_with("Your answers are signed on this computer."))
+    );
+
+    let acme = Account {
+        tenant_id: "t1".into(),
+        slug: "acme".into(),
+        display_name: Some("Acme".into()),
+        email: Some("rae@acme.test".into()),
+        time_zone: Some("Europe/Paris".into()),
+        capabilities: None,
+        approval_mode: Some("view".into()),
+    };
+    let kiff = lines(
+        &w,
+        Mode::Kiff,
+        Some(&acme),
+        Some("Not signed out"),
+        "t",
+        "p",
+        "0.1.0",
+    )
+    .unwrap();
+    let headers: Vec<Option<&str>> = kiff.sections.iter().map(|s| s.header.as_deref()).collect();
+    assert_eq!(
+        headers,
+        [
+            Some("Your account"),
+            Some("People & apps"),
+            Some("Plan"),
+            None,
+            Some("Theme"),
+            Some("Language"),
+            None,
+            Some("How it works"),
+            Some("Legal"),
+            Some("About"),
+            Some("Account actions")
+        ]
+    );
+    assert!(
+        matches!(&kiff.sections[0].rows[1], Row::Opens { title, value: Some(v), .. } if title == "KIFF account" && v == "Acme")
+    );
+    assert_eq!(
+        kiff.sections[0].rows[2],
+        Row::Value("Signed in as".into(), "rae@acme.test".into())
+    );
+    assert!(
+        matches!(&kiff.sections[6].rows[0], Row::Opens { value: Some(v), .. } if v == "Europe/Paris")
+    );
+    let last = &kiff.sections.last().unwrap().rows;
+    assert!(matches!(&last[0], Row::Destructive(t, _) if t == "Sign out"));
+    assert_eq!(last[1], Row::Problem("Not signed out".into()));
+
+    // Outside English, the legal rows say the pages are in English.
+    let fr = book("fr");
+    let fr_lines = lines(&fr, Mode::Sample, None, None, "t", "p", "0.1.0").unwrap();
+    let legal = fr_lines
+        .sections
+        .iter()
+        .find(|s| s.rows.iter().any(|r| matches!(r, Row::Link(..))))
+        .unwrap();
+    assert!(matches!(&legal.rows[0], Row::Link(t, _) if t != &fr.line("settings.terms").unwrap()));
 }

@@ -1,0 +1,66 @@
+# Account
+
+The iPad's Account (`SettingsView` in `SignInView.swift`), beside the sidebar, opened from
+Account at its foot. What it says is `tafs-core/src/account.rs`, tested there; the page is
+`crates/tafs-app/src/account.rs`.
+
+## The screen
+
+"Account" at 34 bold, then the iPad's grouped list: each section's header (17 semibold, dim), and
+its rows on the panel colour with corners of 26, 17 in the ink, a line between them. In the iPad's
+order, the sections whose reads are ported:
+
+- **Your account:** Mode (Signed in with KIFF, Sample data, Signed out); for a KIFF account,
+  KIFF account with its name, and Signed in as with the email, said once (`AccountLines`): none
+  when the account is named after it, as a Solo account is.
+- **People & apps** (KIFF): People & groups, Devices, Connect apps.
+- **Plan** (KIFF): Plan & usage, its title alone until the balance is read (`PlanRow`).
+- **Alerts.**
+- **Theme:** Light, Dark or System, as the system's segmented control (a capsule track in the
+  system grey, the chosen segment on it; in dark, #636366). The choice is kept across launches in
+  the user's config folder (`tafs/theme`), as the iPad's `tafs.theme`, and the window follows it at
+  once.
+- **Language:** the app's language by its own name ("English", "Français"), and Change language.
+- **Time zone** (KIFF): the account's, from KIFF, else UTC.
+- **How it works:** "Every action a taf takes goes through KIFF, … Your answers are signed on this
+  computer."
+- **Legal:** Terms and Privacy policy, tafs's own pages, saying "(in English)" outside English.
+- **About:** Version, and "They taf. You kiff."
+- **Account actions:** in the sample, Sign in with KIFF and Clear the sample; signed in, Sign out,
+  and under it why signing out didn't work.
+
+## KIFF's account
+
+Signed in, the app reads `GET /v1/me` at KIFF as the session (`me`), with Home and the held calls:
+
+- **Its name** (`name`): its display name, else its slug. It shows under Account at the sidebar's
+  foot (`accountLabel`), and a screen reader hears "Account, Acme".
+- **`approval_mode`:** what KIFF checks (contract §1.2). The view-only notice follows KIFF's word
+  once it's read; until then, the one the session was handed.
+- **Its capabilities:** `holds.answer` decides whether held calls say someone else answers them
+  (none said: allowed, as the iPad's `allows`); Coach shows for `members.manage` until Coach's own
+  access is read (`mayUseCoach`, which is off with nothing read).
+
+## Signing out
+
+Sign out asks first (`SignOutWay.signOut`): "Sign out of KIFF?", "This computer stops working for
+your account until you sign in again. Your tafs keep working.", Sign out in red, and Cancel.
+Then (`AppModel.signOut`):
+
+- `POST /v1/auth/device/logout` with the session alone. A 401 means KIFF had already ended it.
+- Signed out at KIFF, the keyring forgets the session and its key, and the welcome opens.
+- When KIFF can't be reached, nothing is forgotten: Account opens again with "Not signed out at
+  KIFF yet: … Try again, or sign this computer out from another device's Devices."
+
+**Clear the sample** forgets the sample and opens the welcome; **Sign in with KIFF** from the
+sample opens the sign-in over it.
+
+## Not yet
+
+- **The rows' screens:** KIFF account, People & groups, Devices, Connect apps, Plan & usage,
+  Alerts and Time zone open their titles until each is ported.
+- **Change language:** Linux has no setting of the app's own to open: tafs speaks the desktop's
+  language (`LANGUAGE`, `LANG`). The button is there, dimmed.
+- **Coach's suggestions, the AI-data consent, Export my chats:** with their reads; the iPad draws
+  none until they're read either.
+- **The plan's line** (`plan_line`) in Plan, with tafs cloud's balance.

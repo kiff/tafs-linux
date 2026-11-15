@@ -1,5 +1,6 @@
 //! tafs for Linux: GTK 4 and libadwaita. The same product, account and words as the iPad app.
 
+mod account;
 mod kiff;
 mod needs_you;
 mod overview;
@@ -10,15 +11,17 @@ mod style;
 mod welcome;
 mod widgets;
 
+use std::cell::RefCell;
 use std::rc::Rc;
 
 use adw::prelude::*;
 use gtk::{gio, glib};
+use tafs_core::account::{Account, Action as AccountAction};
 use tafs_core::held::CardException;
 use tafs_core::home::Home;
 use tafs_core::language;
 use tafs_core::sample;
-use tafs_core::session::KeptSession;
+use tafs_core::session::{ApprovalMode, KeptSession};
 use tafs_core::sidebar::{Mode, Selection, SidebarModel};
 use tafs_core::words::{WordBook, SHIPPED};
 
@@ -26,10 +29,9 @@ use tafs_core::words::{WordBook, SHIPPED};
 struct Cloud {
     home: Home,
     held: Vec<CardException>,
+    /// The KIFF account (`GET /v1/me`), once read.
+    account: Option<Account>,
 }
-
-/// Opens the shell: over the sample or the account, view-only or not, with what's been read.
-type OpenShell = dyn Fn(Mode, bool, Option<Rc<Cloud>>);
 
 /// The window's size, a laptop's, as the screenshots are saved.
 const WIDTH: i32 = 1280;
@@ -132,13 +134,16 @@ fn activate(app: &adw::Application, o: &Options) {
             return;
         }
     };
-
-    let manager = adw::StyleManager::default();
-    manager.set_color_scheme(match o.theme.as_deref() {
-        Some("dark") => adw::ColorScheme::ForceDark,
-        Some("light") => adw::ColorScheme::ForceLight,
-        _ => adw::ColorScheme::Default,
+    let screenshot = o.screenshot.is_some();
+    // The appearance: `--theme`, else Account's choice (a screenshot never reads it), else the desktop's.
+    let theme = o.theme.clone().unwrap_or_else(|| {
+        if screenshot {
+            "system".into()
+        } else {
+            store::theme()
+        }
     });
+    adw::StyleManager::default().set_color_scheme(account::scheme(&theme));
     let display = gtk::gdk::Display::default().expect("a display");
     style::install(&display);
 
@@ -149,7 +154,17 @@ fn activate(app: &adw::Application, o: &Options) {
         .title(words.line("app.name").unwrap_or_default())
         .build();
     window.set_size_request(900, 600);
-    let screenshot = o.screenshot.is_some();
+
+    let app_state = Rc::new(App {
+        window: window.clone(),
+        words,
+        languages,
+        signed_in: o.signed_in,
+        first: RefCell::new(selection_of(o.page.as_deref())),
+        kept: RefCell::new(None),
+        sign_out_error: RefCell::new(None),
+        cloud: RefCell::new(None),
+    });
 
     // What opens: the sample when asked, else the kept session, else the welcome. A screenshot
     // never reads or writes the keyring.
@@ -159,151 +174,29 @@ fn activate(app: &adw::Application, o: &Options) {
     } else {
         store::load(now)
     };
-    // The shell: over the sample, or the account's with Home as tafs cloud last sent it (none
-    // read yet: no tafs listed).
-    let open_shell: Rc<OpenShell> = {
-        let (window, words, page) = (window.clone(), words.clone(), o.page.clone());
-        let signed_in = o.signed_in;
-        Rc::new(
-            move |mode: Mode, view_only: bool, cloud: Option<Rc<Cloud>>| {
-                let at = chrono::Local::now();
-                let fail = |e: tafs_core::words::WordsError| -> ! { panic!("{e}") };
-                let (model, tafs, cloud_words) = match (mode, &cloud) {
-                    (Mode::Sample, _) => (
-                        sample::sidebar(&words, at, signed_in).unwrap_or_else(|e| fail(e)),
-                        sample::overview(&words, at).unwrap_or_else(|e| fail(e)),
-                        None,
-                    ),
-                    (_, Some(c)) => {
-                        let (model, tafs) =
-                            home_model(&words, &c.home, &c.held, at).unwrap_or_else(|e| fail(e));
-                        (
-                            model,
-                            tafs,
-                            c.home.needs_you.as_ref().map(|n| n.words.clone()),
-                        )
-                    }
-                    (_, None) => (kiff_model(), vec![], None),
-                };
-                let count = model.needs_you_count();
-                let needs_you = match cloud_words {
-                    Some(words) => words,
-                    None => tafs_core::overview::needs_you_words(&words, count)
-                        .unwrap_or_else(|e| fail(e)),
-                };
-                let overview =
-                    tafs_core::overview::lines(&words, &tafs, &model.held, count, &needs_you)
-                        .unwrap_or_else(|e| fail(e));
-                let holders: Vec<tafs_core::needs_you::Holder> = model
-                    .tafs
-                    .iter()
-                    .map(|(t, _)| tafs_core::needs_you::Holder {
-                        key: &t.key,
-                        name: &t.name,
-                        initial: &t.initial,
-                        color: t.color_index,
-                    })
-                    .collect();
-                let needs_you =
-                    tafs_core::needs_you::lines(&words, &model.held, &holders, true, at)
-                        .unwrap_or_else(|e| fail(e));
-                let shell = shell::build(
-                    words.clone(),
-                    &model,
-                    overview,
-                    needs_you,
-                    view_only,
-                    selection_of(page.as_deref()),
-                );
-                window.set_content(Some(&shell.root));
-            },
-        )
-    };
-    // Signed in: the shell at once, then Home from tafs cloud, drawn again once it's read. An
-    // answer that can't be read, or isn't a 200, leaves it as it was.
-    let open_account: Rc<dyn Fn(KeptSession)> = {
-        let (open_shell, languages) = (open_shell.clone(), languages.clone());
-        Rc::new(move |kept: KeptSession| {
-            let view_only = kept.approval_mode.is_view_only();
-            open_shell(Mode::Kiff, view_only, None);
-            let (open_shell, languages, token) =
-                (open_shell.clone(), languages.clone(), kept.token.clone());
-            glib::spawn_future_local(async move {
-                let read = gio::spawn_blocking(move || {
-                    let home = kiff::home(&token, &languages)
-                        .ok()
-                        .filter(|a| a.status == 200)
-                        .and_then(|a| Home::read(&a.body))?;
-                    // KIFF's held calls: none read, none shown, and Home still is.
-                    let held = kiff::held(&token, &languages)
-                        .ok()
-                        .filter(|a| a.status == 200)
-                        .and_then(|a| tafs_core::held::read_held(&a.body))
-                        .unwrap_or_default();
-                    Some(Cloud { home, held })
-                })
-                .await
-                .ok()
-                .flatten();
-                if let Some(cloud) = read {
-                    open_shell(Mode::Kiff, view_only, Some(Rc::new(cloud)));
-                }
-            });
-        })
-    };
-
     let from_file = o.home.as_deref().map(|path| match read_contract(path) {
-        Some(home) => Rc::new(Cloud { home, held: vec![] }),
+        Some(home) => Rc::new(Cloud {
+            home,
+            held: vec![],
+            account: None,
+        }),
         None => {
             eprintln!("{path} isn't Home as tafs cloud answers it");
             std::process::exit(2);
         }
     });
-    match (o.page.as_deref(), &kept) {
-        _ if o.sample => open_shell(Mode::Sample, false, None),
-        _ if from_file.is_some() => open_shell(Mode::Kiff, o.view_only, from_file.clone()),
-        _ if o.view_only => open_shell(Mode::Kiff, true, None),
+    match (o.page.as_deref(), kept) {
+        _ if o.sample => app_state.open_shell(Mode::Sample, false, None),
+        _ if from_file.is_some() => app_state.open_shell(Mode::Kiff, o.view_only, from_file),
+        _ if o.view_only => app_state.open_shell(Mode::Kiff, true, None),
         (Some("welcome") | Some("sign-in"), _) | (_, None) => {
-            let welcome = welcome::build(&words);
-            window.set_content(Some(&welcome.root));
-            let present: Rc<dyn Fn(Option<tafs_core::signin::DeviceStart>)> = {
-                let (window, words, languages, open_account) = (
-                    window.clone(),
-                    words.clone(),
-                    languages.clone(),
-                    open_account.clone(),
-                );
-                Rc::new(move |preview| {
-                    let open_account = open_account.clone();
-                    let done: Rc<dyn Fn(KeptSession)> =
-                        Rc::new(move |kept: KeptSession| open_account(kept));
-                    sign_in::present(
-                        &window,
-                        window.upcast_ref(),
-                        words.clone(),
-                        languages.clone(),
-                        done,
-                        preview,
-                    );
-                })
-            };
-            {
-                let present = present.clone();
-                welcome.sign_in.connect_clicked(move |_| present(None));
-            }
-            {
-                let open_shell = open_shell.clone();
-                welcome
-                    .sample
-                    .connect_clicked(move |_| open_shell(Mode::Sample, false, None));
-            }
+            app_state.show_welcome();
             if o.page.as_deref() == Some("sign-in") {
                 // A screenshot shows a code without reaching KIFF.
-                let preview = screenshot.then(|| sign_in::preview(lang));
-                present(preview);
+                app_state.present_sign_in(screenshot.then(|| sign_in::preview(lang)));
             }
         }
-        (_, Some(kept)) => open_account(kept.clone()),
+        (_, Some(kept)) => app_state.open_account(kept),
     }
 
     window.present();
@@ -318,6 +211,250 @@ fn activate(app: &adw::Application, o: &Options) {
                 }
             }
             app.quit();
+        });
+    }
+}
+
+/// The window and what it shows: the welcome, or the shell over the sample or the account.
+struct App {
+    window: adw::ApplicationWindow,
+    words: Rc<WordBook>,
+    languages: Vec<&'static str>,
+    /// `--signed-in`: the sample with the account's items, as the reference set draws it.
+    signed_in: bool,
+    /// What opens beside the sidebar.
+    first: RefCell<Selection>,
+    /// The session signed in, for signing out.
+    kept: RefCell<Option<KeptSession>>,
+    /// Why signing out didn't work, shown in Account.
+    sign_out_error: RefCell<Option<String>>,
+    /// What was last read for the account.
+    cloud: RefCell<Option<Rc<Cloud>>>,
+}
+
+impl App {
+    /// The welcome (`OnboardingView`), with nothing kept.
+    fn show_welcome(self: &Rc<Self>) {
+        *self.kept.borrow_mut() = None;
+        *self.cloud.borrow_mut() = None;
+        *self.sign_out_error.borrow_mut() = None;
+        *self.first.borrow_mut() = Selection::Overview;
+        let welcome = welcome::build(&self.words);
+        self.window.set_content(Some(&welcome.root));
+        let me = self.clone();
+        welcome
+            .sign_in
+            .connect_clicked(move |_| me.present_sign_in(None));
+        let me = self.clone();
+        welcome
+            .sample
+            .connect_clicked(move |_| me.open_shell(Mode::Sample, false, None));
+    }
+
+    /// Sign in with KIFF over what's open.
+    fn present_sign_in(self: &Rc<Self>, preview: Option<tafs_core::signin::DeviceStart>) {
+        let me = self.clone();
+        let done: Rc<dyn Fn(KeptSession)> = Rc::new(move |kept| me.open_account(kept));
+        sign_in::present(
+            &self.window,
+            self.window.upcast_ref(),
+            self.words.clone(),
+            self.languages.clone(),
+            done,
+            preview,
+        );
+    }
+
+    /// Signed in: the shell at once, then the account (`GET /v1/me`), Home and the held calls,
+    /// drawn again once read. An answer that can't be read leaves it as it was.
+    fn open_account(self: &Rc<Self>, kept: KeptSession) {
+        let view_only = kept.approval_mode.is_view_only();
+        *self.kept.borrow_mut() = Some(kept.clone());
+        self.open_shell(Mode::Kiff, view_only, None);
+        let (me, languages, token) = (self.clone(), self.languages.clone(), kept.token.clone());
+        glib::spawn_future_local(async move {
+            let read = gio::spawn_blocking(move || {
+                let account = kiff::me(&token, &languages)
+                    .ok()
+                    .and_then(|a| Account::read(&a).ok());
+                let home = kiff::home(&token, &languages)
+                    .ok()
+                    .filter(|a| a.status == 200)
+                    .and_then(|a| Home::read(&a.body))?;
+                // KIFF's held calls: none read, none shown, and Home still is.
+                let held = kiff::held(&token, &languages)
+                    .ok()
+                    .filter(|a| a.status == 200)
+                    .and_then(|a| tafs_core::held::read_held(&a.body))
+                    .unwrap_or_default();
+                Some(Cloud {
+                    home,
+                    held,
+                    account,
+                })
+            })
+            .await
+            .ok()
+            .flatten();
+            if let Some(cloud) = read {
+                // KIFF's word for how the session approves is what counts (contract §1.2).
+                let view_only = match cloud
+                    .account
+                    .as_ref()
+                    .and_then(|a| a.approval_mode.as_deref())
+                {
+                    Some(word) => ApprovalMode::from_kiff(Some(word)).is_view_only(),
+                    None => view_only,
+                };
+                me.open_shell(Mode::Kiff, view_only, Some(Rc::new(cloud)));
+            }
+        });
+    }
+
+    /// The shell: over the sample, or the account's with what's been read.
+    fn open_shell(self: &Rc<Self>, mode: Mode, view_only: bool, cloud: Option<Rc<Cloud>>) {
+        let words = &self.words;
+        *self.cloud.borrow_mut() = cloud.clone();
+        let at = chrono::Local::now();
+        let fail = |e: tafs_core::words::WordsError| -> ! { panic!("{e}") };
+        let (mut model, tafs, cloud_words) = match (mode, &cloud) {
+            (Mode::Sample, _) => (
+                sample::sidebar(words, at, self.signed_in).unwrap_or_else(|e| fail(e)),
+                sample::overview(words, at).unwrap_or_else(|e| fail(e)),
+                None,
+            ),
+            (_, Some(c)) => {
+                let (model, tafs) =
+                    home_model(words, &c.home, &c.held, at).unwrap_or_else(|e| fail(e));
+                (
+                    model,
+                    tafs,
+                    c.home.needs_you.as_ref().map(|n| n.words.clone()),
+                )
+            }
+            (_, None) => (kiff_model(), vec![], None),
+        };
+        let account = cloud.as_ref().and_then(|c| c.account.clone());
+        if let Some(a) = &account {
+            model.account_name = Some(a.name());
+            // `mayUseCoach`: Coach's access, until that's read, the account's members.manage.
+            model.may_use_coach = a
+                .capabilities
+                .as_ref()
+                .is_some_and(|c| c.iter().any(|x| x == "members.manage"));
+        }
+        let count = model.needs_you_count();
+        let needs_you_words = match cloud_words {
+            Some(words) => words,
+            None => tafs_core::overview::needs_you_words(words, count).unwrap_or_else(|e| fail(e)),
+        };
+        let overview =
+            tafs_core::overview::lines(words, &tafs, &model.held, count, &needs_you_words)
+                .unwrap_or_else(|e| fail(e));
+        let holders: Vec<tafs_core::needs_you::Holder> = model
+            .tafs
+            .iter()
+            .map(|(t, _)| tafs_core::needs_you::Holder {
+                key: &t.key,
+                name: &t.name,
+                initial: &t.initial,
+                color: t.color_index,
+            })
+            .collect();
+        let may_answer = account.as_ref().is_none_or(|a| a.allows("holds.answer"));
+        let needs_you = tafs_core::needs_you::lines(words, &model.held, &holders, may_answer, at)
+            .unwrap_or_else(|e| fail(e));
+        let account_lines = tafs_core::account::lines(
+            words,
+            mode,
+            account.as_ref(),
+            self.sign_out_error.borrow().as_deref(),
+            sign_in::TERMS,
+            sign_in::PRIVACY,
+            env!("CARGO_PKG_VERSION"),
+        )
+        .unwrap_or_else(|e| fail(e));
+        let me = self.clone();
+        let actions: Rc<dyn Fn(AccountAction)> =
+            Rc::new(move |action| me.act(action, mode, view_only));
+        let screens = shell::Screens {
+            overview,
+            needs_you,
+            account: account_lines,
+            actions,
+        };
+        let shell = shell::build(
+            words.clone(),
+            &model,
+            screens,
+            view_only,
+            self.first.borrow().clone(),
+        );
+        self.window.set_content(Some(&shell.root));
+    }
+
+    /// Account's actions: sign in from the sample, clear the sample, or sign out of KIFF.
+    fn act(self: &Rc<Self>, action: AccountAction, mode: Mode, view_only: bool) {
+        match action {
+            AccountAction::SignIn => self.present_sign_in(None),
+            // The sample is forgotten, and the welcome opens.
+            AccountAction::ClearSample => self.show_welcome(),
+            AccountAction::ChangeLanguage => {}
+            AccountAction::SignOut => {
+                let Ok((title, body, confirm)) = tafs_core::account::sign_out_question(&self.words)
+                else {
+                    return;
+                };
+                let dialog = adw::AlertDialog::new(Some(&title), Some(&body));
+                dialog.add_response(
+                    "cancel",
+                    &self.words.line("common.cancel").unwrap_or_default(),
+                );
+                dialog.add_response("sign-out", &confirm);
+                dialog.set_response_appearance("sign-out", adw::ResponseAppearance::Destructive);
+                dialog.set_default_response(Some("cancel"));
+                dialog.set_close_response("cancel");
+                let me = self.clone();
+                dialog.connect_response(None, move |_, response| {
+                    if response == "sign-out" {
+                        me.sign_out(mode, view_only);
+                    }
+                });
+                dialog.present(Some(&self.window));
+            }
+        }
+    }
+
+    /// `AppModel.signOut`: KIFF ends the session (a 401 means it already had), then this
+    /// computer forgets it and its key, and the welcome opens. When KIFF can't be reached, the
+    /// session stays, and Account says why.
+    fn sign_out(self: &Rc<Self>, mode: Mode, view_only: bool) {
+        let Some(kept) = self.kept.borrow().clone() else {
+            self.show_welcome();
+            return;
+        };
+        *self.sign_out_error.borrow_mut() = None;
+        let me = self.clone();
+        glib::spawn_future_local(async move {
+            let token = kept.token.clone();
+            let result = gio::spawn_blocking(move || {
+                tafs_core::account::signed_out(kiff::Kiff::new(vec![]).sign_out(&token))
+            })
+            .await
+            .unwrap_or(Err(tafs_core::signin::KiffError::Unreadable));
+            match result {
+                Ok(()) => {
+                    let _ = store::clear();
+                    me.show_welcome();
+                }
+                Err(e) => {
+                    *me.sign_out_error.borrow_mut() =
+                        tafs_core::account::not_signed_out(&me.words, &e).ok();
+                    *me.first.borrow_mut() = Selection::Account;
+                    let cloud = me.cloud.borrow().clone();
+                    me.open_shell(mode, view_only, cloud);
+                }
+            }
         });
     }
 }
@@ -386,7 +523,7 @@ fn kiff_model() -> SidebarModel {
     SidebarModel {
         mode: Mode::Kiff,
         screenshot_signed_in: false,
-        may_use_coach: true,
+        may_use_coach: false,
         held: vec![],
         tafs: vec![],
         list_loaded: false,
