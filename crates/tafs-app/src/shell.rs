@@ -37,6 +37,8 @@ pub struct Screens {
     pub cloud_names: crate::usage::Names,
     /// Where Connect apps reads.
     pub connect: crate::connect::ConnectSource,
+    /// Where Account › Devices reads.
+    pub devices: crate::devices::DevicesSource,
 }
 
 /// Builds the shell. `view_only` shows the notice that this computer can't approve yet.
@@ -57,6 +59,7 @@ pub fn build(
         usage,
         cloud_names,
         connect,
+        devices,
     } = screens;
     let entries = Rc::new(record.entries.clone());
     let lines = model.lines(&w).unwrap_or_else(|e| panic!("{e}"));
@@ -130,7 +133,8 @@ pub fn build(
                 Some((row, _)) => list.select_row(Some(row)),
                 None => list.unselect_all(),
             }
-            let account_open = s == Selection::Account;
+            // Account, and the screens it opens.
+            let account_open = matches!(s, Selection::Account | Selection::Devices);
             account_icon.set_icon_name(Some(icon_for(if account_open {
                 "person.crop.circle.fill"
             } else {
@@ -146,6 +150,14 @@ pub fn build(
                 Selection::Overview => crate::overview::page(&overview, open.clone()),
                 Selection::NeedsYou => crate::needs_you::page(w.clone(), &needs_you),
                 Selection::Record => crate::record::page(w.clone(), record.clone()),
+                Selection::Devices => {
+                    let open = open.clone();
+                    crate::devices::page(
+                        w.clone(),
+                        devices.clone(),
+                        Rc::new(move || open(Selection::Account)),
+                    )
+                }
                 Selection::ConnectApps => {
                     let open = open.clone();
                     crate::connect::page(
@@ -170,7 +182,16 @@ pub fn build(
                         &account,
                         &crate::account::Actions {
                             act: actions.clone(),
-                            open: Rc::new(move |_, title| open(Selection::Titled(title))),
+                            open: Rc::new(move |screen, title| {
+                                open(match screen {
+                                    tafs_core::account::Screen::Devices => Selection::Devices,
+                                    tafs_core::account::Screen::ConnectApps => {
+                                        Selection::ConnectApps
+                                    }
+                                    tafs_core::account::Screen::Usage => Selection::Usage,
+                                    _ => Selection::Titled(title),
+                                })
+                            }),
                         },
                     )
                 }
@@ -442,6 +463,7 @@ fn title_of(
         Selection::Overview => l("home.overview.title"),
         Selection::Account => lines.account.clone(),
         Selection::Coach => l("coach.coach_mode"),
+        Selection::Devices => l("settings.devices.title"),
         Selection::Titled(title) => title.clone(),
         Selection::Taf(key) | Selection::Held { taf: key, .. } => tafs
             .iter()

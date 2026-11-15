@@ -17,6 +17,8 @@ pub enum Selection {
     Usage,
     ConnectApps,
     Account,
+    /// Account › Devices.
+    Devices,
     /// Coach mode, from its button at the foot.
     Coach,
     /// A screen Account opens, by its title, until it's ported.

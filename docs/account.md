@@ -59,8 +59,28 @@ sample opens the sign-in over it.
 
 ## Not yet
 
-- **The rows' screens:** KIFF account, People & groups, Devices, Connect apps, Plan & usage,
-  Alerts and Time zone open their titles until each is ported.
+- **The rows' screens:** KIFF account, People & groups, Alerts and Time zone open their titles
+  until each is ported. Devices, Connect apps and Plan & usage open their screens.
+
+## Devices
+
+Account › Devices (`DevicesView`, `crates/tafs-app/src/devices.rs`, `tafs-core/src/devices.rs`):
+the round back button to Account, then the devices signed in as this person
+(`GET /v1/me/devices` at KIFF), each with its name (KIFF's `display_name`, else `name`, else "A
+device"; 15 semibold) and when it was last used (13, dim): "Last used 3 hours ago", in iOS's
+relative words for each language (`RelativeDateTimeFormatter`: the largest unit that fits; now
+is "in 0 seconds"), or "Not used yet". This computer says "This device"; the others have Sign
+out, in red. Under them: "Signing a device out ends its sign-in on this account at once. To
+sign out this computer, use Sign out of KIFF." When KIFF can't be read, why, in red, above.
+
+Read as strictly as the iPad's decoder: a device without its `id`, or with a date it can't read,
+fails the read. The sample shows the reference set's three (this computer, used now; an iPhone 3
+hours ago; a Mac a day ago) in a screenshot, and none otherwise, as the iPad's sample.
+`--page devices` opens it, as `devices.png`.
+
+Not yet: **signing another device out**, an approval signed by an approval key (Sign out is
+there, dimmed, until this computer can approve). **Add a device** isn't for Linux: a phone
+pairs a computer (`PairComputerView`), never the computer itself.
 - **Change language:** Linux has no setting of the app's own to open: tafs speaks the desktop's
   language (`LANGUAGE`, `LANG`). The button is there, dimmed.
 - **Coach's suggestions, the AI-data consent, Export my chats:** with their reads; the iPad draws

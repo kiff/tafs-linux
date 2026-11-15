@@ -1,0 +1,273 @@
+//! Account › Devices (`DevicesView`): the devices signed in as this person on the account, each
+//! with when it was last used (`KIFFClient.Device`, `GET /v1/me/devices`), and the iOS
+//! `RelativeDateTimeFormatter` line it says that with.
+
+use chrono::{DateTime, Duration, FixedOffset, Utc};
+use serde_json::Value;
+
+use crate::words::{plural_form, WordBook, WordsError};
+
+/// A device signed in as this person (`KIFFClient.Device`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Device {
+    pub id: String,
+    /// KIFF's name for it in the app's language (`display_name`), else the one it gave at
+    /// sign-in (`name`).
+    pub name: Option<String>,
+    /// When it last reached KIFF (`last_used_at`; `last_seen_at` from a session before devices).
+    pub last_used: Option<DateTime<FixedOffset>>,
+    pub this_device: bool,
+}
+
+/// A string, absent or null; anything else fails the read (`decodeIfPresent`).
+fn strict_text(v: &Value, key: &str) -> Result<Option<String>, ()> {
+    match v.get(key) {
+        None | Some(Value::Null) => Ok(None),
+        Some(Value::String(s)) => Ok(Some(s.clone())),
+        Some(_) => Err(()),
+    }
+}
+
+fn strict_date(v: &Value, key: &str) -> Result<Option<DateTime<FixedOffset>>, ()> {
+    match strict_text(v, key)? {
+        None => Ok(None),
+        Some(s) => DateTime::parse_from_rfc3339(&s).map(Some).map_err(|_| ()),
+    }
+}
+
+impl Device {
+    fn read(v: &Value) -> Result<Device, ()> {
+        Ok(Device {
+            id: v.get("id").and_then(Value::as_str).ok_or(())?.to_string(),
+            name: match strict_text(v, "display_name")? {
+                Some(n) => Some(n),
+                None => strict_text(v, "name")?,
+            },
+            last_used: match strict_date(v, "last_used_at")? {
+                Some(d) => Some(d),
+                None => strict_date(v, "last_seen_at")?,
+            },
+            this_device: match v.get("this_device") {
+                None | Some(Value::Null) => false,
+                Some(Value::Bool(b)) => *b,
+                Some(_) => return Err(()),
+            },
+        })
+    }
+
+    /// KIFF's answer, as strictly as the iPad's decoder: one device it can't read fails the read.
+    pub fn read_all(body: &[u8]) -> Option<Vec<Device>> {
+        let v: Value = serde_json::from_slice(body).ok()?;
+        v.get("devices")?
+            .as_array()?
+            .iter()
+            .map(Device::read)
+            .collect::<Result<_, _>>()
+            .ok()
+    }
+}
+
+/// `GET /v1/me/devices` at KIFF.
+pub const PATH: &str = "/v1/me/devices";
+
+/// A row's second line (`DevicesView.lastUsed`): "Last used 3 hours ago", or "Not used yet".
+pub fn last_used(
+    w: &WordBook,
+    at: Option<DateTime<FixedOffset>>,
+    now: DateTime<Utc>,
+) -> Result<String, WordsError> {
+    let Some(at) = at else {
+        return w.line("settings.devices.not_used");
+    };
+    w.get(
+        "settings.devices.last_used",
+        &[("ago", &relative(w.language(), at.with_timezone(&Utc) - now))],
+    )
+}
+
+/// iOS's `RelativeDateTimeFormatter` (full, numeric) in each shipped language: the largest unit
+/// that fits, "3 hours ago" for a time past and "in 0 seconds" for now and later.
+pub fn relative(language: &str, delta: Duration) -> String {
+    let secs = delta.num_seconds().unsigned_abs() as i64;
+    // Under a second either way is 0, which iOS says in the future form ("in 0 seconds").
+    let past = delta < Duration::zero() && secs > 0;
+    let (n, unit) = match secs {
+        s if s < 60 => (s, 0),
+        s if s < 3600 => (s / 60, 1),
+        s if s < 86_400 => (s / 3600, 2),
+        s if s < 7 * 86_400 => (s / 86_400, 3),
+        s if s < 30 * 86_400 => (s / (7 * 86_400), 4),
+        s if s < 365 * 86_400 => (s / (30 * 86_400), 5),
+        s => (s / (365 * 86_400), 6),
+    };
+    let form = plural_form(language, n);
+    // Each unit's forms: one, then other (few and many for Polish).
+    let units: [[&str; 3]; 7] = match language {
+        "fr" => [
+            ["seconde", "secondes", ""],
+            ["minute", "minutes", ""],
+            ["heure", "heures", ""],
+            ["jour", "jours", ""],
+            ["semaine", "semaines", ""],
+            ["mois", "mois", ""],
+            ["an", "ans", ""],
+        ],
+        "de" => [
+            ["Sekunde", "Sekunden", ""],
+            ["Minute", "Minuten", ""],
+            ["Stunde", "Stunden", ""],
+            ["Tag", "Tagen", ""],
+            ["Woche", "Wochen", ""],
+            ["Monat", "Monaten", ""],
+            ["Jahr", "Jahren", ""],
+        ],
+        "es" => [
+            ["segundo", "segundos", ""],
+            ["minuto", "minutos", ""],
+            ["hora", "horas", ""],
+            ["día", "días", ""],
+            ["semana", "semanas", ""],
+            ["mes", "meses", ""],
+            ["año", "años", ""],
+        ],
+        "it" => [
+            ["secondo", "secondi", ""],
+            ["minuto", "minuti", ""],
+            ["ora", "ore", ""],
+            ["giorno", "giorni", ""],
+            ["settimana", "settimane", ""],
+            ["mese", "mesi", ""],
+            ["anno", "anni", ""],
+        ],
+        "pt" => [
+            ["segundo", "segundos", ""],
+            ["minuto", "minutos", ""],
+            ["hora", "horas", ""],
+            ["dia", "dias", ""],
+            ["semana", "semanas", ""],
+            ["mês", "meses", ""],
+            ["ano", "anos", ""],
+        ],
+        "nl" => [
+            ["seconde", "seconden", ""],
+            ["minuut", "minuten", ""],
+            ["uur", "uur", ""],
+            ["dag", "dagen", ""],
+            ["week", "weken", ""],
+            ["maand", "maanden", ""],
+            ["jaar", "jaar", ""],
+        ],
+        "pl" => [
+            ["sekundę", "sekundy", "sekund"],
+            ["minutę", "minuty", "minut"],
+            ["godzinę", "godziny", "godzin"],
+            ["dzień", "dni", "dni"],
+            ["tydzień", "tygodnie", "tygodni"],
+            ["miesiąc", "miesiące", "miesięcy"],
+            ["rok", "lata", "lat"],
+        ],
+        _ => [
+            ["second", "seconds", ""],
+            ["minute", "minutes", ""],
+            ["hour", "hours", ""],
+            ["day", "days", ""],
+            ["week", "weeks", ""],
+            ["month", "months", ""],
+            ["year", "years", ""],
+        ],
+    };
+    let word = match form {
+        "one" => units[unit][0],
+        "few" => units[unit][1],
+        "many" => units[unit][2],
+        _ => units[unit][1],
+    };
+    let amount = format!("{n} {word}");
+    match (language, past) {
+        ("fr", true) => format!("il y a {amount}"),
+        ("fr", false) => format!("dans {amount}"),
+        ("de", true) => format!("vor {amount}"),
+        ("de", false) => format!("in {amount}"),
+        ("es", true) => format!("hace {amount}"),
+        ("es", false) => format!("dentro de {amount}"),
+        ("it", true) => format!("{amount} fa"),
+        ("it", false) => format!("tra {amount}"),
+        ("pt", true) => format!("há {amount}"),
+        ("pt", false) => format!("dentro de {amount}"),
+        ("nl", true) => format!("{amount} geleden"),
+        ("nl", false) => format!("over {amount}"),
+        ("pl", true) => format!("{amount} temu"),
+        ("pl", false) => format!("za {amount}"),
+        (_, true) => format!("{amount} ago"),
+        (_, false) => format!("in {amount}"),
+    }
+}
+
+/// The reference set's Devices over the sample (`SampleScreens.devices`): this computer, used
+/// now, a phone 3 hours ago and a Mac a day ago.
+pub fn sample(w: &WordBook, now: DateTime<Utc>) -> Result<Vec<Device>, WordsError> {
+    let name = |kind: &str| w.get("settings.devices.this_device_name", &[("device", kind)]);
+    let at = |hours: i64| Some((now - Duration::hours(hours)).fixed_offset());
+    Ok(vec![
+        Device {
+            id: "dev_this".into(),
+            name: Some(name(&w.line("device.linux")?)?),
+            last_used: at(0),
+            this_device: true,
+        },
+        Device {
+            id: "dev_phone".into(),
+            name: Some(name("iPhone")?),
+            last_used: at(3),
+            this_device: false,
+        },
+        Device {
+            id: "dev_mac".into(),
+            name: Some(name("Mac")?),
+            last_used: at(26),
+            this_device: false,
+        },
+    ])
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn relative_times_as_ios_says_them() {
+        let ago = |s: i64| Duration::seconds(-s);
+        assert_eq!(relative("en", Duration::zero()), "in 0 seconds");
+        assert_eq!(relative("en", Duration::milliseconds(-400)), "in 0 seconds");
+        assert_eq!(relative("en", ago(3 * 3600)), "3 hours ago");
+        assert_eq!(relative("en", ago(26 * 3600)), "1 day ago");
+        assert_eq!(relative("en", ago(60)), "1 minute ago");
+        assert_eq!(relative("fr", ago(3 * 3600)), "il y a 3 heures");
+        assert_eq!(relative("fr", ago(26 * 3600)), "il y a 1 jour");
+        assert_eq!(relative("de", ago(26 * 3600)), "vor 1 Tag");
+        assert_eq!(relative("de", ago(3 * 86_400)), "vor 3 Tagen");
+        assert_eq!(relative("pt", ago(3 * 3600)), "há 3 horas");
+        assert_eq!(relative("pl", ago(3 * 3600)), "3 godziny temu");
+        assert_eq!(relative("pl", ago(5 * 3600)), "5 godzin temu");
+        assert_eq!(relative("nl", ago(2 * 7 * 86_400)), "2 weken geleden");
+        assert_eq!(relative("it", Duration::seconds(5)), "tra 5 secondi");
+    }
+
+    #[test]
+    fn devices_read_as_strictly_as_the_ipad() {
+        let all = Device::read_all(
+            br#"{"devices":[{"id":"dev_1","display_name":"tafs on Linux","name":"old","last_seen_at":"2026-11-15T10:00:00Z","this_device":true},{"id":"dev_2"}]}"#,
+        )
+        .unwrap();
+        assert_eq!(all[0].name.as_deref(), Some("tafs on Linux"));
+        assert!(all[0].last_used.is_some() && all[0].this_device);
+        assert_eq!(all[1].name, None);
+        assert!(!all[1].this_device);
+        // A date it can't read, or a device without its id, fails the whole read.
+        assert!(
+            Device::read_all(br#"{"devices":[{"id":"d","last_used_at":"yesterday"}]}"#).is_none()
+        );
+        assert!(Device::read_all(br#"{"devices":[{"name":"x"}]}"#).is_none());
+        assert!(Device::read_all(br#"{}"#).is_none());
+    }
+}

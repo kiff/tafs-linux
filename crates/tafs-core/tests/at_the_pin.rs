@@ -147,6 +147,14 @@ const LINES: &[(&str, &[&str])] = &[
     ("sample.list_charges", &[]),
     ("sample.look_up_charge", &[]),
     ("taf.revoke", &[]),
+    ("settings.devices.unnamed", &[]),
+    ("settings.devices.this_device_title", &[]),
+    ("settings.devices.sign_out", &[]),
+    ("settings.devices.not_used", &[]),
+    ("settings.devices.note_device", &["device"]),
+    ("settings.devices.last_used", &["ago"]),
+    ("settings.devices.not_loaded", &["why"]),
+    ("settings.devices.this_device_name", &["device"]),
     ("connect.apps.search", &[]),
     ("connect.apps.yours", &[]),
     ("connect.apps.discover", &[]),
@@ -1073,4 +1081,34 @@ fn connect_apps_is_the_reference_sets() {
         used.used_by.as_deref(),
         Some("Used by Refunds and Chargebacks")
     );
+}
+
+#[test]
+fn devices_is_the_reference_sets() {
+    use tafs_core::devices::{last_used, sample};
+    let now = chrono::Utc::now();
+    for lang in SHIPPED {
+        let w = book(lang);
+        let devices = sample(&w, now).unwrap();
+        assert!(devices[0].this_device && !devices[1].this_device && !devices[2].this_device);
+        for d in &devices {
+            last_used(&w, d.last_used, now).unwrap();
+        }
+    }
+    let w = book("en");
+    let devices = sample(&w, now).unwrap();
+    let lines: Vec<String> = devices
+        .iter()
+        .map(|d| last_used(&w, d.last_used, now).unwrap())
+        .collect();
+    assert_eq!(
+        lines,
+        [
+            "Last used in 0 seconds",
+            "Last used 3 hours ago",
+            "Last used 1 day ago"
+        ]
+    );
+    assert_eq!(devices[1].name.as_deref(), Some("tafs on iPhone"));
+    assert_eq!(last_used(&w, None, now).unwrap(), "Not used yet");
 }
