@@ -1,0 +1,20 @@
+[package]
+name = "tafs"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "tafs for Linux: the GTK 4 and libadwaita app."
+
+[dependencies]
+tafs-core = { path = "../tafs-core" }
+serde_json.workspace = true
+gtk = { version = "0.9", package = "gtk4", features = ["v4_14"] }
+adw = { version = "0.7", package = "libadwaita", features = ["v1_5"] }
+ureq = { version = "2", features = ["json"] }
+oo7 = { version = "0.7", default-features = false, features = ["native_crypto", "async-std"] }
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+futures-lite = "2"
+
+[build-dependencies]
+glib-build-tools = "0.20"

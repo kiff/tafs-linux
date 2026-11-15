@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gresources>
+  <gresource prefix="/dev/kiff/tafs">
+    <file>mascot.png</file>
+    <file alias="icons/scalable/actions/tafs-bell-symbolic.svg">icons/tafs-bell-symbolic.svg</file>
+    <file alias="icons/scalable/actions/tafs-list-symbolic.svg">icons/tafs-list-symbolic.svg</file>
+    <file alias="icons/scalable/actions/tafs-calendar-symbolic.svg">icons/tafs-calendar-symbolic.svg</file>
+    <file alias="icons/scalable/actions/tafs-chart-bar-symbolic.svg">icons/tafs-chart-bar-symbolic.svg</file>
+    <file alias="icons/scalable/actions/tafs-apps-connected-symbolic.svg">icons/tafs-apps-connected-symbolic.svg</file>
+    <file alias="icons/scalable/actions/tafs-person-circle-symbolic.svg">icons/tafs-person-circle-symbolic.svg</file>
+    <file alias="icons/scalable/actions/tafs-person-circle-fill-symbolic.svg">icons/tafs-person-circle-fill-symbolic.svg</file>
+    <file alias="icons/scalable/actions/tafs-sparkle-symbolic.svg">icons/tafs-sparkle-symbolic.svg</file>
+    <file alias="icons/scalable/actions/tafs-sparkles-symbolic.svg">icons/tafs-sparkles-symbolic.svg</file>
+    <file alias="icons/scalable/actions/tafs-copy-symbolic.svg">icons/tafs-copy-symbolic.svg</file>
+    <file alias="icons/scalable/actions/tafs-checkmark-symbolic.svg">icons/tafs-checkmark-symbolic.svg</file>
+  </gresource>
+</gresources>

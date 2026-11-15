@@ -1,0 +1,164 @@
+//! The iPad's look as GTK CSS: `Theme.swift`'s colours, light and dark, and the shared
+//! components' shapes (`Components.swift`: `Panel`, `PrimaryLook`, `OutlineLook`, `Eyebrow`,
+//! `TafAvatar`). The appearance follows the desktop's setting, or `--theme`.
+
+use tafs_core::theme::{taf_color, Tone, BRAND, PALETTE, TAF_COLORS};
+
+/// The colours as `@define-color`, for one appearance.
+fn colours(dark: bool) -> String {
+    let mut out = String::new();
+    for Tone {
+        name,
+        light,
+        dark: d,
+    } in PALETTE
+    {
+        let c = if dark { d } else { light };
+        out.push_str(&format!("@define-color tafs_{name} {};\n", c.css()));
+    }
+    // The selected sidebar row: the system list's grey fill (iOS `systemFill` light, `secondarySystemFill` dark).
+    out.push_str(if dark {
+        "@define-color tafs_selected rgba(120, 120, 128, 0.32);\n"
+    } else {
+        "@define-color tafs_selected rgba(120, 120, 128, 0.16);\n"
+    });
+    out
+}
+
+const SHAPES: &str = r#"
+window, .tafs-ground { background-color: @tafs_background; color: @tafs_ink; }
+.tafs-raised { background-color: @tafs_raised; }
+.tafs-ink { color: @tafs_ink; }
+.tafs-soft { color: @tafs_soft; }
+.tafs-dim { color: @tafs_dim; }
+.tafs-no { color: @tafs_no; }
+.tafs-amber-text { color: @tafs_amber_text; }
+
+/* Eyebrow: capitals, monospaced 12, tracked 0.7. */
+.tafs-eyebrow { font-family: monospace; font-size: 12px; letter-spacing: 0.7px; color: @tafs_dim; }
+.tafs-eyebrow.amber { color: @tafs_amber; }
+
+/* Panel: the panel colour, a 1-point edge, corners of 18, padding 16. */
+.tafs-panel { background-color: @tafs_panel; border: 1px solid @tafs_line; border-radius: 18px; padding: 16px; }
+.tafs-panel.amber-edge { border-color: alpha(@tafs_amber, 0.4); }
+
+/* PrimaryLook: the brand sweep, white 16 semibold, 54 high, corners of 16. */
+button.tafs-primary {
+  background-image: linear-gradient(135deg, BRAND0, BRAND1, BRAND2);
+  color: @tafs_amber_ink; font-size: 16px; font-weight: 600;
+  min-height: 54px; border-radius: 16px; padding: 0 18px; border: none; box-shadow: none;
+}
+button.tafs-primary:hover { background-image: linear-gradient(135deg, BRAND0, BRAND1, BRAND2); }
+button.tafs-primary:active { opacity: 0.8; }
+button.tafs-primary:disabled { background-image: none; background-color: alpha(@tafs_dim, 0.22); color: @tafs_soft; }
+
+/* OutlineLook: ink 15 medium, 48 high, corners of 14, its edge the ink at 40%. */
+button.tafs-outline {
+  background: none; color: @tafs_ink; font-size: 15px; font-weight: 500;
+  min-height: 48px; border-radius: 14px; border: 1px solid alpha(@tafs_ink, 0.4); box-shadow: none;
+}
+button.tafs-outline:hover { background-color: alpha(@tafs_ink, 0.04); }
+button.tafs-outline:active { background-color: alpha(@tafs_ink, 0.08); }
+button.tafs-outline:disabled { opacity: 0.4; }
+
+button.tafs-link { background: none; box-shadow: none; border: none; color: @tafs_amber_text; font-size: 13px; font-weight: 600; padding: 2px 4px; min-height: 0; }
+
+/* The sidebar: the raised colour, rows 15 semibold in the ink, the chosen row a rounded grey fill. */
+.tafs-sidebar { background-color: @tafs_raised; }
+.tafs-sidebar list { background: none; }
+.tafs-sidebar row { border-radius: 10px; padding: 0 12px; margin: 0 12px; background: none; color: @tafs_ink; outline: none; }
+.tafs-sidebar row:hover { background-color: alpha(@tafs_ink, 0.04); }
+.tafs-sidebar row:selected, .tafs-sidebar row:selected:hover { background-color: @tafs_selected; color: @tafs_ink; }
+.tafs-sidebar row.header, .tafs-sidebar row.header:hover,
+.tafs-sidebar row.brand-row, .tafs-sidebar row.brand-row:hover, .tafs-sidebar row.brand-row:selected { background: none; }
+.tafs-sidebar .row-title { font-size: 15px; font-weight: 600; color: @tafs_ink; }
+.tafs-sidebar .row-badge { font-size: 15px; color: @tafs_dim; }
+.tafs-sidebar .held-title { font-size: 14px; font-weight: 600; color: @tafs_ink; }
+.tafs-sidebar .held-line { font-size: 12px; color: @tafs_soft; }
+.tafs-sidebar .taf-now { font-size: 13px; color: @tafs_dim; }
+.tafs-sidebar .taf-now.amber { color: @tafs_amber_text; }
+.tafs-sidebar .taf-now.no { color: @tafs_no; }
+.tafs-sidebar .brand { font-size: 22px; font-weight: 700; color: @tafs_ink; }
+.tafs-dot { background-color: @tafs_amber; border-radius: 4px; min-width: 8px; min-height: 8px; }
+
+/* Coach: the ink button, the dark ground's colour on it, 44 high, corners of 14. */
+button.tafs-coach { background-color: @tafs_ink; background-image: none; color: @tafs_on_fill; font-size: 15px; font-weight: 600;
+  min-height: 44px; border-radius: 14px; border: none; box-shadow: none; }
+button.tafs-coach:hover { background-color: alpha(@tafs_ink, 0.92); }
+button.tafs-coach.driving { background-color: @tafs_amber; }
+button.tafs-account { background: none; box-shadow: none; border: none; padding: 0; min-height: 44px; }
+button.tafs-account:hover { background-color: alpha(@tafs_ink, 0.04); }
+.tafs-account .account-title { font-size: 14px; font-weight: 600; color: @tafs_ink; }
+.tafs-account .account-label { font-size: 12px; color: @tafs_dim; }
+.tafs-account image { color: @tafs_soft; }
+.tafs-account image.open { color: @tafs_amber_text; }
+
+/* TafAvatar: the initial in white on the taf's colour, corners of 30% of its size. */
+.tafs-avatar { color: white; font-weight: 700; }
+AVATARS
+
+/* The welcome's points: a 9-point dot in its colour. */
+.tafs-point { border-radius: 5px; min-width: 9px; min-height: 9px; }
+.tafs-point.ok { background-color: @tafs_ok; }
+.tafs-point.amber { background-color: @tafs_amber; }
+.tafs-point.no { background-color: @tafs_no; }
+
+/* The Overview: a held call on the raised colour, corners of 12; a line between the grid's rows. */
+button.tafs-held-row { background-color: @tafs_raised; background-image: none; border-radius: 12px; padding: 12px; border: none; box-shadow: none; min-height: 0; }
+button.tafs-held-row:hover { background-color: shade(@tafs_raised, 0.97); }
+separator.tafs-line { background-color: @tafs_line; min-height: 1px; }
+
+/* A held call: the reason as an amber chip, the countdown monospaced 12, the taf's words on a wash. */
+.tafs-chip { font-size: 12px; font-weight: 500; color: @tafs_amber_text; background-color: alpha(@tafs_amber, 0.14); border-radius: 999px; padding: 5px 10px; }
+.tafs-countdown { font-size: 12px; }
+.tafs-taf-says { background-color: alpha(@tafs_soft, 0.08); border-radius: 10px; padding: 10px; }
+.tafs-taf-says .taf-about { font-size: 15px; font-weight: 600; }
+.tafs-taf-says .taf-reason { font-size: 14px; }
+.tafs-details title, .tafs-details > title > label { color: @tafs_blue; font-size: 13px; font-weight: 600; }
+button.tafs-outline.refuse { color: @tafs_no; border-color: alpha(@tafs_no, 0.4); }
+
+.tafs-code { font-family: monospace; font-size: 34px; font-weight: 600; color: @tafs_ink; }
+.tafs-mono { font-family: monospace; }
+.tafs-notice { background-color: @tafs_panel; border-bottom: 1px solid @tafs_line; padding: 12px 24px; }
+spinner { color: @tafs_amber; }
+headerbar { background-color: @tafs_background; box-shadow: none; color: @tafs_ink; }
+headerbar button { color: @tafs_amber_text; }
+link, label link { color: @tafs_amber_text; }
+"#;
+
+/// The style sheet for one appearance.
+pub fn css(dark: bool) -> String {
+    let mut avatars = String::new();
+    for (i, hex) in TAF_COLORS.iter().enumerate() {
+        avatars.push_str(&format!(
+            ".tafs-avatar.c{i} {{ background-color: #{hex:06x}; }}\n"
+        ));
+    }
+    let shapes = SHAPES
+        .replace("BRAND0", &format!("#{:06x}", BRAND[0]))
+        .replace("BRAND1", &format!("#{:06x}", BRAND[1]))
+        .replace("BRAND2", &format!("#{:06x}", BRAND[2]))
+        .replace("AVATARS", &avatars);
+    colours(dark) + &shapes
+}
+
+/// The avatar's colour class for a taf's colour index (`Theme.tafColor`).
+pub fn avatar_class(index: i64) -> String {
+    let hex = taf_color(index);
+    let i = TAF_COLORS.iter().position(|c| *c == hex).unwrap_or(0);
+    format!("c{i}")
+}
+
+/// Loads the style sheet, and loads it again when the appearance changes.
+pub fn install(display: &gtk::gdk::Display) {
+    let provider = gtk::CssProvider::new();
+    let manager = adw::StyleManager::default();
+    provider.load_from_string(&css(manager.is_dark()));
+    gtk::style_context_add_provider_for_display(
+        display,
+        &provider,
+        gtk::STYLE_PROVIDER_PRIORITY_APPLICATION,
+    );
+    manager.connect_dark_notify(move |m| provider.load_from_string(&css(m.is_dark())));
+    gtk::IconTheme::for_display(display).add_resource_path("/dev/kiff/tafs/icons");
+}

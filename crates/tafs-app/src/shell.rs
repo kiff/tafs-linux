@@ -1,0 +1,440 @@
+//! The window once signed in, or in the sample: the iPad's one sidebar for the whole app
+//! (`HomeSplitView` with `tab` set, an iPad's full width) and the chosen screen beside it.
+
+use std::cell::RefCell;
+use std::rc::Rc;
+
+use gtk::prelude::*;
+use tafs_core::needs_you::NeedsYouLines;
+use tafs_core::overview::OverviewLines;
+use tafs_core::sidebar::{Selection, SidebarLines, SidebarModel};
+use tafs_core::words::WordBook;
+
+use crate::widgets::{avatar, eyebrow, icon_for, mascot, one_line, outline, symbol, text};
+
+/// What opens a screen beside the sidebar.
+type Opener = Rc<dyn Fn(Selection)>;
+
+/// The sidebar's width: the iPad's at full width.
+pub const SIDEBAR_WIDTH: i32 = 320;
+
+pub struct Shell {
+    pub root: gtk::Box,
+}
+
+/// Builds the shell. `view_only` shows the notice that this computer can't approve yet.
+pub fn build(
+    w: Rc<WordBook>,
+    model: &SidebarModel,
+    overview: OverviewLines,
+    needs_you: NeedsYouLines,
+    view_only: bool,
+    first: Selection,
+) -> Shell {
+    let lines = model.lines(&w).unwrap_or_else(|e| panic!("{e}"));
+    let root = gtk::Box::new(gtk::Orientation::Horizontal, 0);
+    crate::widgets::ground(&root);
+
+    let detail = gtk::Box::new(gtk::Orientation::Vertical, 0);
+    detail.set_hexpand(true);
+    crate::widgets::ground(&detail);
+    if view_only {
+        detail.append(&view_only_notice(&w));
+    }
+    let stack = gtk::Stack::new();
+    stack.set_vexpand(true);
+    stack.set_hexpand(true);
+    stack.set_transition_type(gtk::StackTransitionType::Crossfade);
+    stack.set_transition_duration(250);
+    detail.append(&stack);
+
+    let selection: Rc<RefCell<Option<Selection>>> = Rc::new(RefCell::new(None));
+    let rows: Rc<RefCell<Vec<(gtk::ListBoxRow, Selection)>>> = Rc::new(RefCell::new(Vec::new()));
+    let (sidebar, list, account_icon, account_button, coach_button) = sidebar(&w, &lines, &rows);
+    root.append(&sidebar);
+    root.append(&detail);
+
+    // What a screen opens goes through the sidebar's own choice, once it exists.
+    let holder: Rc<RefCell<Option<Opener>>> = Rc::new(RefCell::new(None));
+    let open: Rc<dyn Fn(Selection)> = {
+        let holder = holder.clone();
+        Rc::new(move |s| {
+            let f = holder.borrow().clone();
+            if let Some(f) = f {
+                f(s);
+            }
+        })
+    };
+    let overview = Rc::new(overview);
+    let needs_you = Rc::new(needs_you);
+    let select: Rc<dyn Fn(Selection)> = {
+        let (open, overview, needs_you) = (open.clone(), overview.clone(), needs_you.clone());
+        let (w, stack, selection, rows, list, account_icon, lines) = (
+            w.clone(),
+            stack.clone(),
+            selection.clone(),
+            rows.clone(),
+            list.clone(),
+            account_icon.clone(),
+            lines.clone(),
+        );
+        let model_tafs: Vec<(String, String)> = model
+            .tafs
+            .iter()
+            .map(|(t, _)| (t.key.clone(), t.name.clone()))
+            .collect();
+        Rc::new(move |s: Selection| {
+            if selection.borrow().as_ref() == Some(&s) {
+                return;
+            }
+            *selection.borrow_mut() = Some(s.clone());
+            // The list shows what's chosen: a row of it, or none for Account at the foot.
+            match rows.borrow().iter().find(|(_, sel)| *sel == s) {
+                Some((row, _)) => list.select_row(Some(row)),
+                None => list.unselect_all(),
+            }
+            let account_open = s == Selection::Account;
+            account_icon.set_icon_name(Some(icon_for(if account_open {
+                "person.crop.circle.fill"
+            } else {
+                "person.crop.circle"
+            })));
+            if account_open {
+                account_icon.add_css_class("open");
+            } else {
+                account_icon.remove_css_class("open");
+            }
+            let title = title_of(&w, &lines, &model_tafs, &s);
+            let page = match s {
+                Selection::Overview => crate::overview::page(&overview, open.clone()),
+                Selection::NeedsYou => crate::needs_you::page(w.clone(), &needs_you),
+                _ => screen_page(&title).upcast::<gtk::Widget>(),
+            };
+            stack.add_child(&page);
+            stack.set_visible_child(&page);
+            // Each pick starts its own screen: nothing kept from the last (`.id(selection)`).
+            let old: Vec<gtk::Widget> = {
+                let mut v = Vec::new();
+                let mut c = stack.first_child();
+                while let Some(child) = c {
+                    c = child.next_sibling();
+                    if child != page {
+                        v.push(child);
+                    }
+                }
+                v
+            };
+            let stack2 = stack.clone();
+            gtk::glib::timeout_add_local_once(std::time::Duration::from_millis(300), move || {
+                for child in old {
+                    if child.parent().is_some() && stack2.visible_child().as_ref() != Some(&child) {
+                        stack2.remove(&child);
+                    }
+                }
+            });
+        })
+    };
+
+    {
+        let (select, rows) = (select.clone(), rows.clone());
+        list.connect_row_activated(move |_, row| {
+            if let Some((_, s)) = rows.borrow().iter().find(|(r, _)| r == row) {
+                select(s.clone());
+            }
+        });
+    }
+    {
+        let select = select.clone();
+        account_button.connect_clicked(move |_| select(Selection::Account));
+    }
+    // Coach mode comes in its own change: until then Coach opens its title, as the other screens do.
+    if let Some(coach) = coach_button {
+        let select = select.clone();
+        coach.connect_clicked(move |_| select(Selection::Coach));
+    }
+    *holder.borrow_mut() = Some(select.clone());
+    select(first);
+    Shell { root }
+}
+
+/// The sidebar: its list (the brand, the screens, NEEDS YOU, YOUR TAFS) and its foot.
+fn sidebar(
+    w: &WordBook,
+    lines: &SidebarLines,
+    rows: &Rc<RefCell<Vec<(gtk::ListBoxRow, Selection)>>>,
+) -> (
+    gtk::Box,
+    gtk::ListBox,
+    gtk::Image,
+    gtk::Button,
+    Option<gtk::Button>,
+) {
+    let pane = gtk::Box::new(gtk::Orientation::Vertical, 0);
+    pane.add_css_class("tafs-sidebar");
+    pane.set_size_request(SIDEBAR_WIDTH, -1);
+    pane.set_hexpand(false);
+
+    let list = gtk::ListBox::new();
+    list.set_selection_mode(gtk::SelectionMode::Single);
+    list.set_activate_on_single_click(true);
+    list.set_margin_top(24);
+    list.set_margin_bottom(12);
+    let add = |row: gtk::ListBoxRow, s: Option<Selection>| {
+        if let Some(s) = s {
+            rows.borrow_mut().push((row.clone(), s));
+        } else {
+            row.set_selectable(false);
+            row.set_activatable(false);
+            row.add_css_class("header");
+        }
+        list.append(&row);
+    };
+
+    // The mascot and "tafs": the way to the Overview, and what opens first.
+    let brand = gtk::Box::new(gtk::Orientation::Horizontal, 10);
+    brand.append(&mascot(34));
+    let name = gtk::Label::new(Some(&lines.brand));
+    name.add_css_class("brand");
+    brand.append(&name);
+    brand.set_margin_top(4);
+    brand.set_margin_bottom(4);
+    let row = sidebar_row(&brand, 52);
+    // The mark is the list's header: no fill when the Overview is open (`listRowBackground(.clear)`).
+    row.add_css_class("brand-row");
+    row.update_property(&[gtk::accessible::Property::Label(&lines.brand)]);
+    add(row, Some(Selection::Overview));
+    add(gap(16), None);
+
+    // The app's screens, each an item, with Needs you's count as a plain grey number.
+    for item in &lines.screens {
+        let b = gtk::Box::new(gtk::Orientation::Horizontal, 14);
+        let icon = symbol(icon_for(item.symbol), 20);
+        icon.add_css_class("tafs-ink");
+        b.append(&icon);
+        let title = gtk::Label::new(Some(&item.title));
+        title.add_css_class("row-title");
+        title.set_xalign(0.0);
+        title.set_hexpand(true);
+        b.append(&title);
+        if let Some(badge) = &item.badge {
+            let count = gtk::Label::new(Some(badge));
+            count.add_css_class("row-badge");
+            b.append(&count);
+        }
+        let row = sidebar_row(&b, 52);
+        row.update_property(&[gtk::accessible::Property::Label(&item.accessible)]);
+        add(row, Some(item.selection.clone()));
+    }
+
+    // NEEDS YOU: each held call, its taf and summary, why and when it lapses.
+    if let Some(label) = &lines.held_label {
+        add(section(label, true), None);
+        for held in &lines.held {
+            let b = gtk::Box::new(gtk::Orientation::Horizontal, 10);
+            let dot = gtk::Box::new(gtk::Orientation::Horizontal, 0);
+            dot.add_css_class("tafs-dot");
+            dot.set_size_request(8, 8);
+            dot.set_valign(gtk::Align::Center);
+            b.append(&dot);
+            let v = gtk::Box::new(gtk::Orientation::Vertical, 2);
+            v.set_hexpand(true);
+            v.set_valign(gtk::Align::Center);
+            v.append(&one_line(&held.title, 14, 600, &["held-title"]));
+            v.append(&one_line(&held.line, 12, 400, &["held-line"]));
+            b.append(&v);
+            let row = sidebar_row(&b, 56);
+            row.update_property(&[gtk::accessible::Property::Label(&format!(
+                "{}, {}",
+                held.title, held.line
+            ))]);
+            add(row, Some(held.selection.clone()));
+        }
+    }
+
+    // YOUR TAFS: those relevant now; all of them are on the Overview.
+    if let Some(label) = &lines.your_tafs_label {
+        add(section(label, false), None);
+        for taf in &lines.your_tafs {
+            let b = gtk::Box::new(gtk::Orientation::Horizontal, 12);
+            b.append(&avatar(&taf.initial, taf.color_index, 34));
+            let v = gtk::Box::new(gtk::Orientation::Vertical, 2);
+            v.set_hexpand(true);
+            v.set_valign(gtk::Align::Center);
+            v.append(&one_line(&taf.name, 15, 600, &["row-title"]));
+            v.append(&one_line(
+                &taf.now,
+                13,
+                400,
+                &["taf-now", tone_class(taf.tone)],
+            ));
+            b.append(&v);
+            b.set_margin_top(2);
+            b.set_margin_bottom(2);
+            let row = sidebar_row(&b, 60);
+            row.update_property(&[gtk::accessible::Property::Label(&format!(
+                "{}, {}",
+                taf.name, taf.now
+            ))]);
+            add(row, Some(Selection::Taf(taf.key.clone())));
+        }
+        if let Some(none) = &lines.no_tafs {
+            let l = text(none, 13, 400, &["tafs-dim"]);
+            let row = sidebar_row(&l, 0);
+            add(row, None);
+        }
+    }
+
+    let scroller = gtk::ScrolledWindow::new();
+    scroller.set_hscrollbar_policy(gtk::PolicyType::Never);
+    scroller.set_vexpand(true);
+    scroller.set_child(Some(&list));
+    pane.append(&scroller);
+
+    // Coach, then the account just under it: always in sight.
+    let foot = gtk::Box::new(gtk::Orientation::Vertical, 8);
+    foot.set_margin_start(16);
+    foot.set_margin_end(16);
+    foot.set_margin_top(12);
+    foot.set_margin_bottom(12);
+    let mut coach_button = None;
+    if let Some(coach) = &lines.coach {
+        let b = gtk::Button::new();
+        b.add_css_class("tafs-coach");
+        let inner = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+        inner.set_halign(gtk::Align::Center);
+        inner.append(&symbol(icon_for("sparkle"), 17));
+        inner.append(&one_line(coach, 15, 600, &[]));
+        b.set_child(Some(&inner));
+        b.update_property(&[gtk::accessible::Property::Label(
+            &w.line("coach.coach_mode").unwrap_or_default(),
+        )]);
+        foot.append(&b);
+        coach_button = Some(b);
+    }
+    let account = gtk::Button::new();
+    account.add_css_class("tafs-account");
+    let inner = gtk::Box::new(gtk::Orientation::Horizontal, 10);
+    let icon = symbol(icon_for("person.crop.circle"), 20);
+    inner.append(&icon);
+    let v = gtk::Box::new(gtk::Orientation::Vertical, 1);
+    v.set_valign(gtk::Align::Center);
+    v.append(&one_line(&lines.account, 14, 600, &["account-title"]));
+    if let Some(label) = &lines.account_label {
+        v.append(&one_line(label, 12, 400, &["account-label"]));
+    }
+    inner.append(&v);
+    account.set_child(Some(&inner));
+    account.update_property(&[gtk::accessible::Property::Label(&lines.account_accessible)]);
+    foot.append(&account);
+    pane.append(&foot);
+    (pane, list, icon, account, coach_button)
+}
+
+/// A row's line colour: dim, or what went wrong in the amber, or red when it's failing.
+fn tone_class(tone: tafs_core::sidebar::Tone) -> &'static str {
+    match tone {
+        tafs_core::sidebar::Tone::Dim => "dim",
+        tafs_core::sidebar::Tone::Amber => "amber",
+        tafs_core::sidebar::Tone::No => "no",
+    }
+}
+
+fn sidebar_row(child: &impl IsA<gtk::Widget>, min_height: i32) -> gtk::ListBoxRow {
+    let row = gtk::ListBoxRow::new();
+    row.set_child(Some(child));
+    if min_height > 0 {
+        row.set_size_request(-1, min_height);
+    }
+    row
+}
+
+/// A section's label, as the iPad's list header: the eyebrow, with room above it.
+fn section(label: &str, amber: bool) -> gtk::ListBoxRow {
+    let e = eyebrow(label, amber);
+    e.set_margin_top(20);
+    e.set_margin_bottom(8);
+    let row = sidebar_row(&e, 0);
+    row.set_selectable(false);
+    row
+}
+
+fn gap(h: i32) -> gtk::ListBoxRow {
+    let b = gtk::Box::new(gtk::Orientation::Vertical, 0);
+    b.set_size_request(-1, h);
+    sidebar_row(&b, 0)
+}
+
+/// The words of what's open beside the sidebar.
+fn title_of(
+    w: &WordBook,
+    lines: &SidebarLines,
+    tafs: &[(String, String)],
+    s: &Selection,
+) -> String {
+    let l = |k: &str| w.line(k).unwrap_or_default();
+    match s {
+        Selection::Overview => l("home.overview.title"),
+        Selection::Account => lines.account.clone(),
+        Selection::Coach => l("coach.coach_mode"),
+        Selection::Taf(key) | Selection::Held { taf: key, .. } => tafs
+            .iter()
+            .find(|(k, _)| k == key)
+            .map(|(_, n)| n.clone())
+            .unwrap_or_default(),
+        other => lines
+            .screens
+            .iter()
+            .find(|i| &i.selection == other)
+            .map(|i| i.title.clone())
+            .unwrap_or_default(),
+    }
+}
+
+/// A screen not ported yet: its title alone, where the iPad's large title is.
+fn screen_page(title: &str) -> gtk::Box {
+    let b = gtk::Box::new(gtk::Orientation::Vertical, 0);
+    b.set_margin_start(24);
+    b.set_margin_end(24);
+    b.set_margin_top(32);
+    let t = text(title, 34, 700, &["tafs-ink"]);
+    t.set_width_chars(16);
+    b.append(&t);
+    crate::widgets::ground(&b);
+    b
+}
+
+/// This computer can't approve until it's added with the phone (the pairing words).
+fn view_only_notice(w: &WordBook) -> gtk::Box {
+    let device = w.line("device.linux").unwrap_or_default();
+    let b = gtk::Box::new(gtk::Orientation::Horizontal, 16);
+    b.add_css_class("tafs-notice");
+    let v = gtk::Box::new(gtk::Orientation::Vertical, 2);
+    v.set_hexpand(true);
+    v.append(&text(
+        &w.line("pair.view_only.title").unwrap_or_default(),
+        15,
+        600,
+        &["tafs-ink"],
+    ));
+    let lead = text(
+        &w.get("pair.view_only.lead", &[("device", &device)])
+            .unwrap_or_default(),
+        13,
+        400,
+        &["tafs-soft"],
+    );
+    // A width it never wraps below: the window's least size is measured at its least width.
+    lead.set_width_chars(40);
+    v.append(&lead);
+    b.append(&v);
+    let add = outline(
+        &w.get("pair.view_only.add", &[("device", &device)])
+            .unwrap_or_default(),
+    );
+    add.set_hexpand(false);
+    add.set_valign(gtk::Align::Center);
+    // Pairing comes in its own change.
+    add.set_sensitive(false);
+    b.append(&add);
+    b
+}

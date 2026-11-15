@@ -1,0 +1,58 @@
+name: CI
+
+# The core's tests at the pin, then the GTK app built and every screen saved in en, fr and pt,
+# light and dark, as the run's `screenshots` artifact. The job fails if any screenshot is missing.
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: GTK 4 and libadwaita
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq libgtk-4-dev libadwaita-1-dev
+      - name: Rust
+        run: rustup toolchain install stable --profile minimal -c clippy,rustfmt && rustup default stable
+      - name: Words and contracts at the pin
+        run: tools/sync.sh
+      - name: Format
+        run: cargo fmt --all --check
+      - name: Lint
+        run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: Tests
+        run: cargo test -p tafs-core
+
+  app:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: GTK 4, libadwaita, a display and the fonts
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq libgtk-4-dev libadwaita-1-dev xvfb fonts-inter
+      - name: Rust
+        run: rustup toolchain install stable --profile minimal && rustup default stable
+      - name: Words and contracts at the pin
+        run: tools/sync.sh
+      - name: Build
+        run: cargo build --release -p tafs
+      - name: Screenshots
+        run: xvfb-run -a -s "-screen 0 1400x900x24" tools/screenshots.sh
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: screenshots
+          path: screenshots/
+          if-no-files-found: error

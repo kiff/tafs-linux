@@ -1,0 +1,192 @@
+//! The Overview: today across the tafs, one line each (`OverviewView` in `ShareViews.swift`),
+//! as the whole app's sidebar opens it (`showsCalendar` off: Calendar is a sidebar item).
+
+use crate::card::Card;
+use crate::sidebar::{short_time, HeldCall, Selection};
+use crate::words::{upper, WordBook, WordsError};
+
+/// One taf as the Overview reads it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OverviewTaf {
+    pub key: String,
+    pub name: String,
+    pub initial: String,
+    pub color_index: i64,
+    /// What it's doing now (`taf.now`).
+    pub now: String,
+    /// The Card in front (`shownCards.first`).
+    pub card: Option<Card>,
+    /// tafs cloud runs it (`cloudTaf(for:)`): its last result is read; the sample's aren't.
+    pub cloud: Option<CloudRun>,
+    /// "Support · 3 people": who it's shared with, for whoever manages it, once read.
+    pub used_by: String,
+}
+
+/// What tafs cloud says of a taf's last run.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct CloudRun {
+    /// Its latest run's report, as text, once read.
+    pub report: Option<String>,
+    pub error: Option<String>,
+    /// When it last ran, as a time of day already in the account's zone.
+    pub last_run: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OverviewLines {
+    pub title: String,
+    pub subtitle: String,
+    /// NEEDS YOU, when anything waits (`needsYouCount > 0`).
+    pub needs_you_label: Option<String>,
+    pub held: Vec<HeldRow>,
+    /// What else waits, beyond the held calls listed: tafs cloud's count in its words.
+    pub rest: Option<String>,
+    pub columns: [String; 4],
+    pub rows: Vec<OverviewRow>,
+    /// "No tafs yet.", with none listed.
+    pub empty: Option<String>,
+    pub each_line_opens: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HeldRow {
+    pub selection: Selection,
+    /// "Deploys · Run migration 0042_orders_index"
+    pub title: String,
+    /// "answer by 03:02"
+    pub answer_by: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OverviewRow {
+    pub selection: Selection,
+    pub name: String,
+    pub initial: String,
+    pub color_index: i64,
+    pub used_by: String,
+    pub now: String,
+    /// "9 calls left today of 10", else "–".
+    pub card: String,
+    pub last_result: String,
+    /// What a screen reader says for the whole line.
+    pub accessible: String,
+}
+
+/// `OverviewView.showsRest`: Needs you counts more than the held calls listed here.
+pub fn shows_rest(count: i64, held: usize) -> bool {
+    count > held as i64
+}
+
+/// `lastResult`: the first line of its last run's report, its Markdown's `**` and `#` dropped,
+/// else that run's error, else when it last ran, else "Nothing yet". "–" for a taf tafs cloud
+/// doesn't run.
+pub fn last_result(w: &WordBook, cloud: Option<&CloudRun>) -> Result<String, WordsError> {
+    let Some(cloud) = cloud else {
+        return Ok("–".into());
+    };
+    if let Some(report) = &cloud.report {
+        let first = report.split('\n').map(str::trim).find(|l| !l.is_empty());
+        if let Some(first) = first {
+            return Ok(first.replace("**", "").replace('#', "").trim().to_string());
+        }
+        if let Some(error) = &cloud.error {
+            return Ok(error.clone());
+        }
+    }
+    match &cloud.last_run {
+        Some(time) => w.get("people.last_ran", &[("time", time)]),
+        None => w.line("overview.nothing_yet"),
+    }
+}
+
+/// The Overview's lines. `needs_you_count` is the sidebar's (`needsYouCount`), and
+/// `needs_you_words` Home's line for it (`needsYouWords`).
+pub fn lines(
+    w: &WordBook,
+    tafs: &[OverviewTaf],
+    held: &[HeldCall],
+    needs_you_count: i64,
+    needs_you_words: &str,
+) -> Result<OverviewLines, WordsError> {
+    let mut held_rows = Vec::new();
+    for call in held {
+        let Some(taf) = tafs.iter().find(|t| t.key == call.taf) else {
+            continue;
+        };
+        held_rows.push(HeldRow {
+            selection: Selection::Held {
+                call: call.id.clone(),
+                taf: taf.key.clone(),
+            },
+            title: format!("{} · {}", taf.name, call.summary),
+            answer_by: w.get(
+                "needs_you.answer_by",
+                &[("time", &short_time(call.expires_at))],
+            )?,
+        });
+    }
+    let mut rows = Vec::new();
+    for t in tafs {
+        let card = match &t.card {
+            Some(c) => c.line(w)?,
+            None => None,
+        };
+        let last = last_result(w, t.cloud.as_ref())?;
+        let accessible = [
+            Some(t.name.clone()),
+            Some(t.now.clone()),
+            card.clone(),
+            Some(last.clone()),
+        ]
+        .into_iter()
+        .flatten()
+        .collect::<Vec<_>>()
+        .join(", ");
+        rows.push(OverviewRow {
+            selection: Selection::Taf(t.key.clone()),
+            name: t.name.clone(),
+            initial: t.initial.clone(),
+            color_index: t.color_index,
+            used_by: t.used_by.clone(),
+            now: t.now.clone(),
+            card: card.unwrap_or_else(|| "–".into()),
+            last_result: last,
+            accessible,
+        });
+    }
+    Ok(OverviewLines {
+        title: w.line("home.overview.title")?,
+        subtitle: w.line("home.overview.subtitle")?,
+        needs_you_label: (needs_you_count > 0)
+            .then(|| w.line("needs_you.title").map(|s| upper(&s)))
+            .transpose()?,
+        held: if needs_you_count > 0 {
+            held_rows
+        } else {
+            vec![]
+        },
+        rest: (needs_you_count > 0 && shows_rest(needs_you_count, held.len()))
+            .then(|| needs_you_words.to_string()),
+        columns: [
+            w.line("home.overview.column_taf")?,
+            w.line("home.overview.column_now")?,
+            w.line("home.overview.column_card")?,
+            w.line("home.overview.column_last_result")?,
+        ],
+        empty: tafs
+            .is_empty()
+            .then(|| w.line("home.no_tafs"))
+            .transpose()?,
+        rows,
+        each_line_opens: w.line("home.overview.each_line_opens")?,
+    })
+}
+
+/// `needsYouWords` when tafs cloud sent none: the count in the app's words.
+pub fn needs_you_words(w: &WordBook, count: i64) -> Result<String, WordsError> {
+    if count == 0 {
+        w.line("needs_you.nothing")
+    } else {
+        w.count("needs_you.count", count, &[])
+    }
+}
