@@ -37,6 +37,11 @@ pub struct TafPage {
     pub held: Vec<CardLines>,
     /// The sample draws its Activity from the Record; a tafs cloud taf's is its own read.
     pub sample: bool,
+    /// Its Cards whole, for the Card tab, and who issued them (`issuer(of:)`).
+    pub cards: Vec<tafs_core::cards::FullCard>,
+    pub issued_by: String,
+    /// Opens on the Card tab (`-screen card`).
+    pub opens_on_card: bool,
     /// tafs cloud's id for it, and where its Activity is read from.
     pub cloud_id: Option<String>,
     pub source: ActivitySource,
@@ -81,16 +86,17 @@ pub fn page(w: Rc<WordBook>, t: &TafPage, entries: Rc<Vec<Entry>>) -> gtk::Widge
     }
     outer.append(&head);
 
-    // Chat, Activity, Card, Setup, as the system's segmented control. Activity is the tab ported
-    // so far: the others are there, dimmed, until theirs are.
+    // Chat, Activity, Card, Setup, as the system's segmented control. Activity and Card are the
+    // tabs ported so far: Chat and Setup are there, dimmed, until theirs are.
     let tabs = gtk::Box::new(gtk::Orientation::Horizontal, 0);
     tabs.add_css_class("tafs-segmented");
     tabs.set_homogeneous(true);
     let mut first: Option<gtk::ToggleButton> = None;
+    let mut buttons = Vec::new();
     for (key, enabled) in [
         ("taf.section.chat", false),
         ("taf.section.activity", true),
-        ("taf.section.card", false),
+        ("taf.section.card", true),
         ("taf.section.setup", false),
     ] {
         let b = gtk::ToggleButton::with_label(&w.line(key).unwrap_or_default());
@@ -100,10 +106,11 @@ pub fn page(w: Rc<WordBook>, t: &TafPage, entries: Rc<Vec<Entry>>) -> gtk::Widge
         } else {
             first = Some(b.clone());
         }
-        b.set_active(enabled);
         b.set_sensitive(enabled);
         tabs.append(&b);
+        buttons.push(b);
     }
+    let (activity_tab, card_tab) = (buttons[1].clone(), buttons[2].clone());
     outer.append(&tabs);
 
     // The Card in front, one line above the activity.
@@ -115,7 +122,16 @@ pub fn page(w: Rc<WordBook>, t: &TafPage, entries: Rc<Vec<Entry>>) -> gtk::Widge
             active: t.card_active,
         };
         if let Ok(lines) = card_bar(&w, card, &meta, t.card_count, t.revoked) {
-            outer.append(&card_bar_widget(&lines, t.color));
+            // It opens the Card tab, and isn't there on it.
+            let bar = card_bar_widget(&lines, t.color);
+            let click = gtk::GestureClick::new();
+            let opens = card_tab.clone();
+            click.connect_released(move |_, _, _, _| opens.set_active(true));
+            bar.add_controller(click);
+            bar.set_cursor_from_name(Some("pointer"));
+            outer.append(&bar);
+            let bar2 = bar.clone();
+            card_tab.connect_toggled(move |b| bar2.set_visible(!b.is_active()));
         }
     }
 
@@ -212,9 +228,268 @@ pub fn page(w: Rc<WordBook>, t: &TafPage, entries: Rc<Vec<Entry>>) -> gtk::Widge
     scroller.set_hscrollbar_policy(gtk::PolicyType::Never);
     scroller.set_child(Some(&body));
     scroller.set_vexpand(true);
-    outer.append(&scroller);
+    let card_scroller = gtk::ScrolledWindow::new();
+    card_scroller.set_hscrollbar_policy(gtk::PolicyType::Never);
+    card_scroller.set_child(Some(&card_pane(&w, t)));
+    card_scroller.set_vexpand(true);
+    let panes = gtk::Stack::new();
+    panes.add_named(&scroller, Some("activity"));
+    panes.add_named(&card_scroller, Some("card"));
+    outer.append(&panes);
+    {
+        let panes = panes.clone();
+        activity_tab.connect_toggled(move |b| {
+            if b.is_active() {
+                panes.set_visible_child_name("activity");
+            }
+        });
+    }
+    {
+        let panes = panes.clone();
+        card_tab.connect_toggled(move |b| {
+            if b.is_active() {
+                panes.set_visible_child_name("card");
+            }
+        });
+    }
+    if t.opens_on_card {
+        card_tab.set_active(true);
+    } else {
+        activity_tab.set_active(true);
+    }
     crate::widgets::ground(&outer);
     outer.upcast()
+}
+
+/// The Card tab (`card(_:)`): the Cards as a wallet stack, the front Card's lines, and Revoke.
+fn card_pane(w: &Rc<WordBook>, t: &TafPage) -> gtk::Box {
+    let pane = gtk::Box::new(gtk::Orientation::Vertical, 16);
+    pane.set_margin_top(12);
+    pane.set_margin_bottom(12);
+    let front: Rc<RefCell<Option<String>>> = Rc::new(RefCell::new(None));
+    let stack_box = gtk::Box::new(gtk::Orientation::Vertical, 0);
+    stack_box.set_halign(gtk::Align::Center);
+    let lines_box = gtk::Box::new(gtk::Orientation::Vertical, 0);
+    pane.append(&stack_box);
+    pane.append(&lines_box);
+    let cards = Rc::new(t.cards.clone());
+    let (color, issued_by, revoked) = (t.color, t.issued_by.clone(), t.revoked);
+    let draw: Rc<RefCell<Option<Redraw>>> = Rc::new(RefCell::new(None));
+    *draw.borrow_mut() = Some(Rc::new({
+        let (w, stack_box, lines_box, cards, front, draw) = (
+            w.clone(),
+            stack_box.clone(),
+            lines_box.clone(),
+            cards.clone(),
+            front.clone(),
+            draw.clone(),
+        );
+        move || {
+            while let Some(c) = stack_box.first_child() {
+                stack_box.remove(&c);
+            }
+            while let Some(c) = lines_box.first_child() {
+                lines_box.remove(&c);
+            }
+            let order = tafs_core::cards::stack(&cards, front.borrow().as_deref());
+            let overlay = gtk::Overlay::new();
+            let n = order.len() as i32;
+            let base = gtk::Box::new(gtk::Orientation::Vertical, 0);
+            base.set_size_request(FACE_WIDTH, FACE_HEIGHT + (n - 1).max(0) * EDGE);
+            overlay.set_child(Some(&base));
+            for (i, (index, depth)) in order.iter().enumerate() {
+                let card = &cards[*index];
+                let face = face(&w, card, color, &issued_by, revoked, *depth);
+                face.set_margin_top(i as i32 * EDGE);
+                face.set_valign(gtk::Align::Start);
+                // Tapping a Card behind brings it forward.
+                let click = gtk::GestureClick::new();
+                let (front, draw, id) = (front.clone(), draw.clone(), card.id.clone());
+                click.connect_released(move |_, _, _, _| {
+                    *front.borrow_mut() = Some(id.clone());
+                    let f = draw.borrow().clone();
+                    if let Some(f) = f {
+                        f();
+                    }
+                });
+                face.add_controller(click);
+                overlay.add_overlay(&face);
+            }
+            stack_box.append(&overlay);
+            // All of the front Card's limits: the face shows the main one.
+            let shown = order.last().map(|(i, _)| &cards[*i]);
+            if let Some(card) = shown {
+                if !card.rules.is_empty() {
+                    let panel = crate::widgets::panel(false);
+                    for rule in &card.rules {
+                        let row = gtk::Box::new(gtk::Orientation::Horizontal, 12);
+                        let left = gtk::Box::new(gtk::Orientation::Vertical, 2);
+                        left.append(&text(&rule.label, 15, 600, &["tafs-ink"]));
+                        left.append(&text(
+                            &rule.outside(&w).unwrap_or_default(),
+                            12,
+                            400,
+                            &["tafs-dim"],
+                        ));
+                        row.append(&left);
+                        let summary = text(
+                            &rule.summary(&w).unwrap_or_default(),
+                            13,
+                            400,
+                            &["tafs-mono", if rule.never { "tafs-no" } else { "tafs-ink" }],
+                        );
+                        summary.set_hexpand(true);
+                        summary.set_xalign(1.0);
+                        summary.set_justify(gtk::Justification::Right);
+                        row.append(&summary);
+                        panel.append(&row);
+                    }
+                    lines_box.append(&panel);
+                }
+            }
+        }
+    }));
+    let f = draw.borrow().clone();
+    if let Some(f) = f {
+        f();
+    }
+    // Revoke, for the sample or whoever manages the taf (`manages`, not read yet, so a KIFF
+    // taf has none): there, dimmed, until revoking is ported with approvals.
+    if t.state != TafState::Revoked && t.sample {
+        let revoke = crate::widgets::outline(&w.line("taf.revoke").unwrap_or_default());
+        revoke.add_css_class("refuse");
+        revoke.set_sensitive(false);
+        pane.append(&revoke);
+    }
+    pane
+}
+
+/// A Card's face's size: a payment card's shape, at most 300 wide.
+const FACE_WIDTH: i32 = 300;
+const FACE_HEIGHT: i32 = 189;
+/// How much of a Card behind shows: `WalletLayout` places each 26 below the one before (the
+/// iPad's `CardStack.edge`, 40, isn't what it draws).
+const EDGE: i32 = 26;
+
+/// `TafCardFace`: its title and environment, its figure and words, its facts, who issued it and
+/// until when, white on the taf's colour (the dim colour when it isn't live).
+fn face(
+    w: &WordBook,
+    card: &tafs_core::cards::FullCard,
+    color: i64,
+    issued_by: &str,
+    revoked: bool,
+    depth: usize,
+) -> gtk::Overlay {
+    let v = gtk::Box::new(gtk::Orientation::Vertical, 6);
+    v.add_css_class("tafs-face");
+    v.add_css_class(&if card.live {
+        crate::style::avatar_class(color)
+    } else {
+        "dimfill".to_string()
+    });
+    if revoked || !card.active {
+        v.add_css_class("faded");
+    }
+    v.set_size_request(FACE_WIDTH, FACE_HEIGHT);
+    let top = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+    let title = one_line(&card.title, 12, 600, &["tafs-mono"]);
+    title.set_hexpand(true);
+    top.append(&title);
+    if let Some(env) = card.environment_label() {
+        let pill = gtk::Label::new(Some(&env));
+        pill.add_css_class("tafs-env-pill");
+        top.append(&pill);
+    }
+    v.append(&top);
+    let spacer = gtk::Box::new(gtk::Orientation::Vertical, 0);
+    spacer.set_vexpand(true);
+    v.append(&spacer);
+    if let Ok(Some((figure, words))) = card.totals.hero(w) {
+        let h = gtk::Box::new(gtk::Orientation::Vertical, 2);
+        h.append(&one_line(&figure, 34, 700, &[]));
+        h.append(&one_line(&words, 12, 500, &["tafs-face-words"]));
+        v.append(&h);
+    }
+    for fact in card.facts(w).unwrap_or_default() {
+        // One line, shrunk to 80% before it's cut (`minimumScaleFactor(0.8)`): a monospaced
+        // character is 0.6 of its size, and the face has 268 across inside its padding.
+        let fits = (f64::from(FACE_WIDTH - 32) / (0.6 * 11.0)) as usize;
+        let size = if fact.chars().count() > fits { 9 } else { 11 };
+        v.append(&one_line(
+            &fact,
+            size,
+            400,
+            &["tafs-mono", "tafs-face-words"],
+        ));
+    }
+    if card.rules.is_empty() {
+        v.append(&one_line(
+            &w.line("card.no_actions_short").unwrap_or_default(),
+            12,
+            400,
+            &["tafs-mono"],
+        ));
+    }
+    let spacer = gtk::Box::new(gtk::Orientation::Vertical, 0);
+    spacer.set_vexpand(true);
+    v.append(&spacer);
+    let foot = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+    let by = gtk::Box::new(gtk::Orientation::Vertical, 1);
+    by.append(&one_line(
+        &w.line("card.issued_by").unwrap_or_default(),
+        10,
+        400,
+        &["tafs-face-caption"],
+    ));
+    by.append(&one_line(issued_by, 12, 600, &[]));
+    by.set_hexpand(true);
+    foot.append(&by);
+    let (caption, date) = card.ends(w, revoked).unwrap_or_default();
+    let ends = gtk::Box::new(gtk::Orientation::Vertical, 1);
+    let c = one_line(&caption, 10, 400, &["tafs-face-caption"]);
+    c.set_xalign(1.0);
+    ends.append(&c);
+    let d = one_line(&date, 12, 600, &[]);
+    d.set_xalign(1.0);
+    ends.append(&d);
+    foot.append(&ends);
+    v.append(&foot);
+    // The ring at its top corner, and each Card behind a shade darker.
+    let o = gtk::Overlay::new();
+    o.set_child(Some(&v));
+    let ring = gtk::DrawingArea::new();
+    ring.set_can_target(false);
+    ring.set_draw_func(|_, cr, width, _| {
+        cr.set_source_rgba(1.0, 1.0, 1.0, 0.18);
+        cr.set_line_width(1.0);
+        cr.arc(
+            width as f64 - 65.0 + 35.0,
+            65.0 - 45.0,
+            65.0,
+            0.0,
+            std::f64::consts::TAU,
+        );
+        let _ = cr.stroke();
+    });
+    o.add_overlay(&ring);
+    let shade = tafs_core::cards::shade(depth);
+    if shade > 0.0 {
+        let dim = gtk::Box::new(gtk::Orientation::Vertical, 0);
+        dim.set_can_target(false);
+        dim.add_css_class("tafs-face-shade");
+        dim.set_opacity(shade);
+        o.add_overlay(&dim);
+    }
+    o.set_overflow(gtk::Overflow::Hidden);
+    o.add_css_class("tafs-face-clip");
+    o.set_size_request(FACE_WIDTH, FACE_HEIGHT);
+    o.set_halign(gtk::Align::Center);
+    let spoken = w
+        .get("taf.show_card", &[("title", &card.title)])
+        .unwrap_or_else(|_| card.title.clone());
+    o.update_property(&[gtk::accessible::Property::Label(&spoken)]);
+    o
 }
 
 /// `CardBar`: a small Card in the taf's colour with the Card's mark, its figure and words, its

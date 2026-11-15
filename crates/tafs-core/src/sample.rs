@@ -312,3 +312,148 @@ pub fn record(w: &WordBook, now: DateTime<Local>) -> Result<Vec<crate::record::E
     }
     Ok(out)
 }
+
+/// A sample taf's Card lines, as its template has them (`TafTemplates`).
+pub fn rules(w: &WordBook, key: &str) -> Result<Vec<crate::cards::Rule>, WordsError> {
+    use crate::cards::Rule;
+    let day = || Window::new(w, "calendar_day", None, None);
+    let week = || Window::new(w, "week", None, None);
+    let rule = |label: &str, window: Window| -> Result<Rule, WordsError> {
+        Ok(Rule::new(w.line(label)?, window))
+    };
+    let eur = |e: i64| Some(Money::eur_whole(e));
+    Ok(match key {
+        "refunds" => {
+            let mut a = rule("sample.refunds.rule.refunds", day()?)?;
+            a.per_action = eur(150);
+            a.per_window = eur(2_000);
+            let mut b = rule("sample.refunds.rule.credits", day()?)?;
+            b.per_action = eur(100);
+            b.per_window = eur(1_000);
+            let mut c = rule("sample.refunds.rule.payouts", day()?)?;
+            c.never = true;
+            c.holds = false;
+            vec![a, b, c]
+        }
+        "bill_pay" => {
+            let mut a = rule("sample.bill_pay.rule.bills", week()?)?;
+            a.per_action = eur(5_000);
+            a.per_window = eur(25_000);
+            let mut b = rule("sample.bill_pay.rule.wires", day()?)?;
+            b.always_ask = true;
+            let mut c = rule("sample.bill_pay.rule.bank_details", day()?)?;
+            c.never = true;
+            c.holds = false;
+            let mut d = rule("sample.bill_pay.rule.new_payees", day()?)?;
+            d.never = true;
+            d.holds = false;
+            vec![a, b, c, d]
+        }
+        "access" => {
+            let mut a = rule("sample.access.rule.approved_roles", day()?)?;
+            a.count_per_window = Some(40);
+            let mut b = rule("sample.access.rule.deactivations", day()?)?;
+            b.count_per_window = Some(20);
+            let mut c = rule("sample.access.rule.elevated", day()?)?;
+            c.always_ask = true;
+            let mut d = rule("sample.access.rule.admin_roles", day()?)?;
+            d.never = true;
+            d.holds = false;
+            let mut e = rule("sample.access.rule.deleting_users", day()?)?;
+            e.never = true;
+            e.holds = false;
+            vec![a, b, c, d, e]
+        }
+        "deploys" => {
+            let mut a = rule("sample.deploys.rule.deploys", day()?)?;
+            a.count_per_window = Some(10);
+            let mut b = rule("sample.deploys.rule.rollbacks", day()?)?;
+            b.count_per_window = Some(20);
+            let mut c = rule("sample.deploys.rule.migrations", day()?)?;
+            c.always_ask = true;
+            let mut d = rule("sample.deploys.rule.destroy_data", day()?)?;
+            d.never = true;
+            d.holds = false;
+            vec![a, b, c, d]
+        }
+        _ => {
+            let mut a = rule("sample.chargebacks.rule.evidence", day()?)?;
+            a.per_action = eur(500);
+            a.count_per_window = Some(50);
+            let mut b = rule("sample.chargebacks.rule.accepting_loss", week()?)?;
+            b.per_action = eur(100);
+            b.per_window = eur(500);
+            vec![a, b]
+        }
+    })
+}
+
+/// A sample taf's Cards. As the app has them: its one Card, merged from its template's lines,
+/// with what the sample's Record used (`TafCard.merged`). For a screenshot of Refunds' Card tab
+/// (`screenshot`), the three `-screen card` lists (`Screenshots.cards`): a live one with its
+/// total, a read-only one with its calls, and a test one.
+pub fn full_cards(
+    w: &WordBook,
+    key: &str,
+    screenshot: bool,
+) -> Result<Vec<crate::cards::FullCard>, WordsError> {
+    use crate::cards::{FullCard, Rule};
+    let day = || Window::new(w, "calendar_day", None, None);
+    if !(screenshot && key == "refunds") {
+        let name = w.line(&format!("sample.{key}.name"))?;
+        return Ok(vec![FullCard {
+            id: format!("sample-{key}"),
+            title: name,
+            environment: String::new(),
+            live: true,
+            active: true,
+            expires: None,
+            rules: rules(w, key)?,
+            totals: card(w, key)?,
+        }]);
+    }
+    let refunds = FullCard {
+        id: "sample-refunds".into(),
+        title: w.line("sample.card.refunds_stripe")?,
+        environment: String::new(),
+        live: true,
+        active: true,
+        expires: None,
+        rules: rules(w, "refunds")?.into_iter().take(2).collect(),
+        totals: Card {
+            total: Some(MoneyTotal::new(
+                Money::eur_whole(2_000),
+                Some(Money::eur_whole(480)),
+                day()?,
+            )),
+            calls: None,
+        },
+    };
+    let mut charges = Rule::new(w.line("sample.list_charges")?, day()?);
+    charges.count_per_window = Some(200);
+    let reads = FullCard {
+        id: "sample-reads".into(),
+        title: w.line("sample.card.read_stripe")?,
+        environment: String::new(),
+        live: true,
+        active: true,
+        expires: None,
+        rules: vec![charges, Rule::new(w.line("sample.look_up_charge")?, day()?)],
+        totals: Card {
+            total: None,
+            calls: Some(CallsTotal {
+                limit: 200,
+                used: Some(20),
+                window: day()?,
+            }),
+        },
+    };
+    let test = FullCard {
+        id: "sample-test".into(),
+        title: w.line("sample.refunds_stripe_test")?,
+        environment: "test".into(),
+        live: false,
+        ..refunds.clone()
+    };
+    Ok(vec![refunds, reads, test])
+}

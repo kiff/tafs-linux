@@ -528,3 +528,78 @@ pub fn overview_taf(t: &Taf) -> OverviewTaf {
         used_by: String::new(),
     }
 }
+
+/// A taf's Cards whole (`shownCards`): KIFF's, each on its own, in tafs cloud's order; else the
+/// one merged from the taf's lines, named after it.
+pub fn full_cards(
+    w: &WordBook,
+    h: &HomeTaf,
+    language: &str,
+) -> Result<Vec<crate::cards::FullCard>, WordsError> {
+    use crate::cards::{FullCard, Rule as CardRule};
+    let rule = |r: &Rule| -> Result<CardRule, WordsError> {
+        let mut out = CardRule::new(
+            r.label.clone(),
+            window(w, &r.window, r.window_words.as_ref())?,
+        );
+        out.per_action = r.per_action.as_ref().and_then(Amount::money);
+        out.per_window = r.per_window.as_ref().and_then(Amount::money);
+        out.count_per_window = r.count_per_window;
+        out.holds = r.outside != "refuse";
+        out.extra_room = r.extra_room.as_ref().and_then(Amount::money);
+        out.base_limit = r.base_limit.as_ref().and_then(Amount::money);
+        out.room_ends = r.room_window_end.map(ends_words);
+        Ok(out)
+    };
+    let date = |t: Option<DateTime<Utc>>| {
+        t.map(|t| long_date(language, t.with_timezone(&Local).date_naive()))
+    };
+    if let Some(cards) = h.card.cards.as_ref().filter(|c| !c.is_empty()) {
+        return cards
+            .iter()
+            .map(|c| {
+                let one = CardSummary {
+                    cards: Some(vec![c.clone()]),
+                    ..h.card.clone()
+                };
+                Ok(FullCard {
+                    id: c.id.clone(),
+                    title: c.title.clone(),
+                    environment: c.environment.clone(),
+                    live: c.live,
+                    active: c.active,
+                    expires: date(c.expires),
+                    rules: c.rules.iter().map(rule).collect::<Result<_, _>>()?,
+                    totals: shown_card(w, &one)?.unwrap_or_default(),
+                })
+            })
+            .collect();
+    }
+    Ok(vec![FullCard {
+        id: "merged".into(),
+        title: h.name.clone(),
+        environment: String::new(),
+        live: true,
+        active: h.card.active,
+        expires: date(h.card.expires),
+        rules: h.card.rules.iter().map(rule).collect::<Result<_, _>>()?,
+        totals: shown_card(
+            w,
+            &CardSummary {
+                cards: None,
+                ..h.card.clone()
+            },
+        )?
+        .unwrap_or_default(),
+    }])
+}
+
+/// `shown(date: .abbreviated, time: .omitted)` in a shipped language: "Dec 31, 2026".
+pub fn long_date(language: &str, day: chrono::NaiveDate) -> String {
+    use chrono::Datelike;
+    let short = crate::record::short_date(language, day);
+    match language {
+        "en" => format!("{short}, {}", day.year()),
+        _ => format!("{short} {}", day.year()),
+    }
+}
