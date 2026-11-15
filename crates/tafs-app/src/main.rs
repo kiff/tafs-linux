@@ -43,6 +43,8 @@ struct Cloud {
     account: Option<Account>,
     /// KIFF's activity, for the Record.
     activity: Vec<tafs_core::record::ActivityCall>,
+    /// "Did this happen?": the money calls KIFF can't prove (`unproven`).
+    unproven: Vec<tafs_core::unproven::Unproven>,
     /// What this person may do with each taf, by KIFF agent (`GET /v1/me/access`).
     access: std::collections::BTreeMap<String, tafs_core::access::Access>,
     /// Who each taf this person manages is shared with, in the Overview's words, by KIFF agent.
@@ -70,13 +72,15 @@ struct Options {
     usage: Option<String>,
     /// Synthetic answers for People & groups signed in with KIFF, for its screenshot.
     people: Option<String>,
+    /// With `--home`: KIFF's "Did this happen?" answer from a file, for its screenshot.
+    unproven: Option<String>,
     /// `--size WxH`: the window's size, for a screenshot of a narrower layout.
     size: Option<(i32, i32)>,
     screenshot: Option<String>,
 }
 
 const USAGE: &str = "tafs [--lang en|de|fr|es|it|pt|nl|pl] [--theme light|dark] [--sample] [--signed-in] [--view-only [--paired]]
-     [--home contract.json] [--usage answers.json] [--people answers.json] [--size WxH] [--page welcome|sign-in|pair|overview|needs-you|record|calendar|calendar-week|usage|connect-apps|account|kiff-account|time-zone|devices|people|taf|taf-card] [--screenshot out.png]";
+     [--home contract.json] [--usage answers.json] [--people answers.json] [--unproven answers.json] [--size WxH] [--page welcome|sign-in|pair|overview|needs-you|record|calendar|calendar-week|usage|connect-apps|account|kiff-account|time-zone|devices|people|taf|taf-card] [--screenshot out.png]";
 
 fn options() -> Result<Options, String> {
     let mut o = Options::default();
@@ -91,6 +95,7 @@ fn options() -> Result<Options, String> {
             "--home" => o.home = Some(value()?),
             "--usage" => o.usage = Some(value()?),
             "--people" => o.people = Some(value()?),
+            "--unproven" => o.unproven = Some(value()?),
             "--size" => {
                 let v = value()?;
                 let (w, h) = v.split_once('x').ok_or("--size takes WxH")?;
@@ -239,6 +244,7 @@ fn activate(app: &adw::Application, o: &Options) {
             held: vec![],
             account: None,
             activity: vec![],
+            unproven: unproven_file(o.unproven.as_deref()),
             access: Default::default(),
             used_by: Default::default(),
             reports: Default::default(),
@@ -412,6 +418,19 @@ impl App {
                     return Read::SignedOut;
                 }
                 let account = me.and_then(|a| Account::read(&a).ok());
+                // "Did this happen?", only for someone who may answer holds (`loadUnproven`).
+                // None read, none shown; a 401 there signs this computer out as anywhere.
+                let unproven = if account.as_ref().is_none_or(|a| a.allows("holds.answer")) {
+                    match kiff::did_this_happen(&token, &languages) {
+                        Ok(a) if signed_out(&a) => return Read::SignedOut,
+                        Ok(a) if a.status == 200 => {
+                            tafs_core::unproven::read_unproven(&a.body).unwrap_or_default()
+                        }
+                        _ => vec![],
+                    }
+                } else {
+                    vec![]
+                };
                 let Some(home) = home
                     .filter(|a| a.status == 200)
                     .and_then(|a| Home::read(&a.body))
@@ -434,6 +453,7 @@ impl App {
                     held,
                     account,
                     activity,
+                    unproven,
                     access,
                     used_by,
                     reports,
@@ -751,7 +771,12 @@ impl App {
             .unwrap_or_else(|e| fail(e));
         // Home's steps and Coach's waits, signed in.
         let needs_you = match &cloud {
-            Some(c) => tafs_core::needs_you::with_waits(needs_you, &c.home, model.may_use_coach),
+            Some(c) => tafs_core::needs_you::with_unproven(
+                tafs_core::needs_you::with_waits(needs_you, &c.home, model.may_use_coach),
+                words,
+                if may_answer { &c.unproven } else { &[] },
+            )
+            .unwrap_or_else(|e| fail(e)),
             None => needs_you,
         };
         let account_lines = tafs_core::account::lines(
@@ -1136,6 +1161,24 @@ fn kiff_model() -> SidebarModel {
         home_words: None,
         account_name: None,
         cloud_needs_you: None,
+    }
+}
+
+/// `--unproven`'s file, as KIFF answers `GET /v1/me/did-this-happen`. None given, none waiting;
+/// a file that can't be read stops the app, as a broken `--home` does.
+fn unproven_file(path: Option<&str>) -> Vec<tafs_core::unproven::Unproven> {
+    let Some(path) = path else {
+        return vec![];
+    };
+    match std::fs::read(path)
+        .ok()
+        .and_then(|b| tafs_core::unproven::read_unproven(&b))
+    {
+        Some(calls) => calls,
+        None => {
+            eprintln!("{path} isn't \"Did this happen?\" as KIFF answers it");
+            std::process::exit(2);
+        }
     }
 }
 

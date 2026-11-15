@@ -168,6 +168,24 @@ fn get(url: &str, token: &str, languages: &[&str]) -> Result<Answer, KiffError> 
     )
 }
 
+/// `GET /v1/me/did-this-happen` at KIFF as the session (`didThisHappen`): the money calls KIFF
+/// can't prove, newest first.
+pub fn did_this_happen(token: &str, languages: &[&str]) -> Result<Answer, KiffError> {
+    let url = format!("{KIFF_API}/v1/me/did-this-happen");
+    if !may_send_to(&url) {
+        return Err(KiffError::Unreadable);
+    }
+    let agent = agent();
+    Kiff::read(
+        agent
+            .get(&url)
+            .set("Accept", "application/json")
+            .set("Accept-Language", &accept_language(languages))
+            .set("Authorization", &format!("Bearer {token}"))
+            .call(),
+    )
+}
+
 /// `GET /v1/me/card-exceptions?status=held` at KIFF as the session (`heldCalls`).
 pub fn held(token: &str, languages: &[&str]) -> Result<Answer, KiffError> {
     let url = format!("{KIFF_API}/v1/me/card-exceptions?status=held");

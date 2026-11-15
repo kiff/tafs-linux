@@ -1,0 +1,28 @@
+{
+  "calls": [
+    {
+      "proposal": "prop_7f3a",
+      "agent": "agent_refunds",
+      "tool": "stripe.create_refund",
+      "title": "Refund a payment",
+      "status": "unknown",
+      "amount": 4000,
+      "unit": "EUR",
+      "scale": 2,
+      "at": "2026-11-15T09:12:00Z",
+      "words": "Refund a payment: 40.00 EUR to order #4821.",
+      "status_words": "Its answer was lost, so KIFF can't tell whether it went through."
+    },
+    {
+      "proposal": "prop_2c91",
+      "agent": "agent_bills",
+      "tool": "bank.pay_bill",
+      "title": "Pay a bill",
+      "status": "probation",
+      "amount": 84000,
+      "unit": "EUR",
+      "scale": 2,
+      "at": "2026-11-15T08:40:00Z"
+    }
+  ]
+}

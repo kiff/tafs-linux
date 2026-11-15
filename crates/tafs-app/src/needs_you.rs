@@ -1,5 +1,6 @@
-//! Needs you beside the sidebar (`NeedsYouView`): each held call's card (`HeldCallCard`), or
-//! "Nothing is waiting." with its hint.
+//! Needs you beside the sidebar (`NeedsYouView`): the tafs' steps, Coach's waits, "Did this
+//! happen?" (`DidThisHappenCard`), and each held call's card (`HeldCallCard`), or "Nothing is
+//! waiting." with its hint.
 
 use std::rc::Rc;
 
@@ -33,6 +34,10 @@ pub fn page(w: Rc<WordBook>, n: &NeedsYouLines) -> gtk::Widget {
     }
     for waiting in &n.coach {
         column.append(&coach_card(waiting, n.opens_coach));
+    }
+    // Money calls KIFF can't prove: the person says on the phone whether they happened.
+    for happened in &n.happened {
+        column.append(&happened_card(happened));
     }
     if let Some((nothing, hint)) = &n.empty {
         let p = panel(false);
@@ -116,6 +121,24 @@ fn coach_card(waiting: &tafs_core::waits::CoachWaiting, opens_coach: bool) -> gt
         aside.set_sensitive(false);
         p.append(&aside);
     }
+    p
+}
+
+/// `DidThisHappenCard`: an amber-edged panel with "Did this happen?" in amber, KIFF's words for
+/// the call (or its title and amount), why KIFF asks, and where No and Yes would be, that this
+/// device can't approve (`ApprovalGate`): both answers are signed like an approval.
+fn happened_card(h: &tafs_core::unproven::HappenedLines) -> gtk::Box {
+    let p = panel(true);
+    p.set_widget_name(&format!("happened.{}", h.proposal));
+    p.append(&text(&h.title, 13, 600, &["tafs-amber-text"]));
+    p.append(&text(&h.headline, 15, 600, &["tafs-ink"]));
+    if let Some(amount) = &h.amount {
+        p.append(&text(amount, 15, 400, &["tafs-ink"]));
+    }
+    if let Some(why) = &h.why {
+        p.append(&text(why, 13, 400, &["tafs-soft"]));
+    }
+    p.append(&text(&h.can_not_answer, 13, 400, &["tafs-soft"]));
     p
 }
 

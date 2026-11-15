@@ -305,6 +305,7 @@ fn home_with_steps_and_coachs_waits() {
         coach: vec![],
         set_all_aside: None,
         opens_coach: false,
+        happened: vec![],
         empty: Some(("Nothing is waiting.".into(), String::new())),
     };
     let lines = with_waits(empty, &home, false);
@@ -316,4 +317,32 @@ fn home_with_steps_and_coachs_waits() {
     // A step without its handoff fails Home, as the iPad's decoder does.
     answer["your_steps"] = serde_json::json!([{"what": "no handoff"}]);
     assert!(Home::read(&serde_json::to_vec(&answer).unwrap()).is_none());
+}
+
+#[test]
+fn did_this_happen_beside_the_rest() {
+    use tafs_core::needs_you::{with_unproven, NeedsYouLines};
+    use tafs_core::unproven::read_unproven;
+    let w = WordBook::load(&WordBook::default_root(), "en").unwrap();
+    let empty = || NeedsYouLines {
+        title: String::new(),
+        cards: vec![],
+        steps: vec![],
+        coach: vec![],
+        set_all_aside: None,
+        opens_coach: false,
+        happened: vec![],
+        empty: Some(("Nothing is waiting.".into(), String::new())),
+    };
+    // A call KIFF can't prove waits too: "Nothing is waiting." goes.
+    let calls =
+        read_unproven(br#"{"calls":[{"proposal":"p_1","title":"Refund a payment"}]}"#).unwrap();
+    let lines = with_unproven(empty(), &w, &calls).unwrap();
+    assert_eq!(lines.happened.len(), 1);
+    assert_eq!(lines.happened[0].headline, "Refund a payment");
+    assert_eq!(lines.empty, None);
+    // None waiting: nothing drawn, and "Nothing is waiting." stays.
+    let lines = with_unproven(empty(), &w, &[]).unwrap();
+    assert!(lines.happened.is_empty());
+    assert!(lines.empty.is_some());
 }

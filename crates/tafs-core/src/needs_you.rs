@@ -81,6 +81,8 @@ pub struct NeedsYouLines {
     pub set_all_aside: Option<crate::waits::CoachWaitingClear>,
     /// Coach's way in, for someone who may use Coach (`mayUseCoach`): else the line alone.
     pub opens_coach: bool,
+    /// "Did this happen?": money calls KIFF can't prove, after Coach's waits (`unproven`).
+    pub happened: Vec<crate::unproven::HappenedLines>,
     /// With nothing waiting: "Nothing is waiting." and its hint.
     pub empty: Option<(String, String)>,
 }
@@ -184,6 +186,7 @@ pub fn lines(
         coach: Vec::new(),
         set_all_aside: None,
         opens_coach: false,
+        happened: vec![],
         empty: held
             .is_empty()
             .then(|| -> Result<_, WordsError> {
@@ -221,6 +224,21 @@ pub fn with_waits(
         lines.empty = None;
     }
     lines
+}
+
+/// KIFF's "Did this happen?" calls beside the rest (`NeedsYouView`): after Coach's waits, before
+/// the held calls. Read only for someone who may answer holds (`loadUnproven`); "Nothing is
+/// waiting." only when none of them waits either.
+pub fn with_unproven(
+    mut lines: NeedsYouLines,
+    w: &WordBook,
+    calls: &[crate::unproven::Unproven],
+) -> Result<NeedsYouLines, WordsError> {
+    lines.happened = crate::unproven::lines(w, calls)?;
+    if !lines.happened.is_empty() {
+        lines.empty = None;
+    }
+    Ok(lines)
 }
 
 #[cfg(test)]

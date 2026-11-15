@@ -78,6 +78,23 @@ calls, in the iPad's order:
 reads Home: a step without its `handoff` fails Home; a Coach wait never does.
 `--home crates/tafs-app/fixtures/home-waits.json` (synthetic) draws them, CI's `needs-you-waits`.
 
+## Did this happen?
+
+A money call whose outcome KIFF can't prove (`DidThisHappenCard`): its answer was lost, the tool
+refused it with nothing showing it had no effect, or it's one of the first calls of a money
+operation on probation. Read from KIFF (`GET /v1/me/did-this-happen`, `tafs-core/unproven.rs`)
+only for someone who may answer holds (`holds.answer`), as `loadUnproven`; an answer that can't
+be read shows none, and a 401 signs this computer out. They come after Coach's waits and before
+the held calls, newest first, and "Nothing is waiting." shows only when none waits either.
+
+Each is an amber-edged panel: "Did this happen?" (13 semibold, amber), KIFF's words for the call
+as they are (15 semibold) or, before KIFF sent them, its title and amount; why KIFF asks, in its
+words (13, soft). No and Yes are signed like an approval, and this computer approves nothing (its
+key is in software), so where they'd be the card says "This device can't approve. Approve on
+another device signed in to your account." (`ApprovalGate`), as tafs-macos #76 does: it's
+answered on the phone. `--home shared/contracts/home.json --unproven
+crates/tafs-app/fixtures/unproven.json` (synthetic) draws two, CI's `needs-you-happened`.
+
 ## Not yet
 
 - **Answering from this computer:** KIFF takes an answer signed by the session's key. Until
@@ -85,6 +102,7 @@ reads Home: a step without its `handoff` fails Home; a Coach wait never does.
   The sample's answers come with the sample's Card checks: until then they're dimmed.
 - **Answering a step** (Done, Skip it: signed), **opening Coach** and **setting chats aside**:
   there, dimmed.
-- **"Did this happen?", Card unit requests, knocks:** with their reads.
-- **Alerts** (`AlertsCard`): Linux's notifications come in their own change.
+- **Card unit requests, knocks:** with their reads.
+- **Alerts** (`AlertsCard`): the iPad offers them only to a session holding an approval key, and a
+  Linux session never does; Linux's notifications come in their own change.
 - **Bringing a call into view** from its alert.
