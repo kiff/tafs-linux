@@ -16,8 +16,9 @@ first. What it says is `tafs-core/src/record.rs`, tested there; the page is
 - **Each day**, newest first: its heading ("TODAY · NOV 15", "YESTERDAY · NOV 14", else
   "FRIDAY · NOV 13"), monospaced 11 in capitals, with the money that moved that day ("€640
   spent", a sum for each currency). The day and month are the app's language's own
-  (`.dateTime.day().month(.abbreviated)`, `weekday(.wide)`), in this computer's time zone until
-  the account's is read.
+  (`.dateTime.day().month(.abbreviated)`, `weekday(.wide)`), in the account's time zone
+  ([app.md](app.md#time)). A line's time has the zone's short name after it when the account's
+  clock isn't this computer's ("14:05 JST").
 - **Each line** (`RecordRow`), on the panel with corners of 14: a dot in its kind's colour (green
   done, amber waiting, red stopped), the taf's colour and "Chargebacks · Accept dispute on #3342
   · €35" (14 semibold), its time (12, monospaced), and under it what became of it (13, soft):

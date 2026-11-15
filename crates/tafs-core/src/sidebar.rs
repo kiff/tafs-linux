@@ -203,7 +203,10 @@ impl SidebarModel {
                     "home.reason_answer_by",
                     &[
                         ("why", &call.reason),
-                        ("time", &short_time(call.expires_at)),
+                        (
+                            "time",
+                            &crate::account_time::zoned_short_time(&call.expires_at),
+                        ),
                     ],
                 )?,
             });
@@ -268,10 +271,9 @@ fn item(selection: Selection, title: String, symbol: &'static str) -> ScreenItem
     }
 }
 
-/// `shortTime`: the time of day as 14:05, in the account's zone. Until the account is read, it's
-/// this computer's.
+/// `shortTime`: the time of day as 14:05, in the account's zone (`account_time`).
 pub fn short_time(at: DateTime<Local>) -> String {
-    at.format("%H:%M").to_string()
+    crate::account_time::short_time(&at)
 }
 
 /// `AppModel.relevantNow`: a call of its waits, a step or a knock is open, or it ran or changed

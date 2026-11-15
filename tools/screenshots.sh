@@ -13,7 +13,7 @@ export XDG_CONFIG_HOME=$(mktemp -d)
 mkdir -p "$XDG_CONFIG_HOME/gtk-4.0"
 printf '[Settings]\ngtk-font-name=Inter 11\ngtk-hint-font-metrics=1\n' > "$XDG_CONFIG_HOME/gtk-4.0/settings.ini"
 missing=0
-for screen in welcome sign-in overview overview-home needs-you record taf taf-card taf-home taf-home-card usage account sidebar-sample view-only; do
+for screen in welcome sign-in overview overview-home needs-you record taf taf-card taf-home taf-home-card usage usage-kiff usage-kiff-member connect-apps account sidebar-sample view-only; do
   case $screen in
     welcome) opts=(--page welcome) ;;
     sign-in) opts=(--page sign-in) ;;
@@ -21,7 +21,10 @@ for screen in welcome sign-in overview overview-home needs-you record taf taf-ca
     overview-home) opts=(--home shared/contracts/home.json) ;;
     needs-you) opts=(--sample --signed-in --page needs-you) ;;
     account) opts=(--sample --signed-in --page account) ;;
+    connect-apps) opts=(--sample --signed-in --page connect-apps) ;;
     usage) opts=(--sample --signed-in --page usage) ;;
+    usage-kiff) opts=(--home shared/contracts/home.json --usage crates/tafs-app/fixtures/usage-kiff.json --page usage) ;;
+    usage-kiff-member) opts=(--home shared/contracts/home.json --usage crates/tafs-app/fixtures/usage-kiff-member.json --page usage) ;;
     record) opts=(--sample --signed-in --page record) ;;
     taf) opts=(--sample --signed-in --page taf) ;;
     taf-home) opts=(--home shared/contracts/home.json --page taf:taf-aaaa0000000000000000) ;;

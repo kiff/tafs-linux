@@ -463,6 +463,397 @@ pub fn sample_credits(w: &WordBook, previous: bool) -> Result<Credits, WordsErro
     })
 }
 
+/// Who bills the plan (`KIFFClient.Usage.Billing`): `apple`, `google`, `stripe` (KIFF),
+/// `contract`, or none.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct Billing {
+    pub source: String,
+    /// After a move from Solo in the App Store to Company: when Solo still renews with Apple.
+    pub apple_solo_until: Option<DateTime<FixedOffset>>,
+}
+
+/// A pack of credits as KIFF sells it (`Usage.Store.Pack`): only its id and KIFF's line are
+/// drawn here.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Pack {
+    pub id: String,
+    pub name: String,
+    pub line: String,
+    pub once: bool,
+}
+
+/// What the app sells (`Usage.Store`); its products are the App Store's.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct Store {
+    pub packs: Vec<Pack>,
+}
+
+impl Store {
+    /// `offered(firstMonth:)`: the First month pack first, only while it can be bought, then
+    /// the packs that can be bought again.
+    pub fn offered(&self, first_month: bool) -> Vec<&Pack> {
+        let mut listed: Vec<&Pack> = Vec::new();
+        if first_month {
+            listed.extend(self.packs.iter().find(|p| p.once));
+        }
+        listed.extend(self.packs.iter().filter(|p| !p.once));
+        listed
+    }
+}
+
+/// A member's request to the account's admins (`KIFFClient.PackRequest`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PackRequest {
+    pub id: String,
+    pub asked_by: String,
+    /// `raise` or `pack`; `pack` when KIFF doesn't say.
+    pub kind: String,
+    pub pack: Option<String>,
+    pub reason: String,
+    /// open, approved, declined, withdrawn or expired.
+    pub status: String,
+    pub created_at: DateTime<FixedOffset>,
+    pub expires_at: DateTime<FixedOffset>,
+    pub note: Option<String>,
+}
+
+/// KIFF's usage read for the account (`KIFFClient.Usage`, `GET /v1/me/usage`): its plan, who
+/// bills it, the store and members' requests. Every part reads on its own.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct KiffUsage {
+    /// `solo`, `team` (Company), `company` (an agreement), `internal`, or none.
+    pub plan: Option<String>,
+    pub billing: Option<Billing>,
+    pub store: Option<Store>,
+    /// Every open request for someone who manages billing; this person's own otherwise.
+    pub requests: Option<Vec<PackRequest>>,
+}
+
+/// `GET /v1/me/usage` at KIFF.
+pub const KIFF_USAGE_PATH: &str = "/v1/me/usage";
+
+impl KiffUsage {
+    /// KIFF's answer: none only when it isn't an object.
+    pub fn read(body: &[u8]) -> Option<KiffUsage> {
+        let v: Value = serde_json::from_slice(body).ok()?;
+        if !v.is_object() {
+            return None;
+        }
+        Some(KiffUsage {
+            plan: text(&v, "plan"),
+            billing: v.get("billing").filter(|b| b.is_object()).map(|b| Billing {
+                source: text(b, "source").unwrap_or_default(),
+                apple_solo_until: date(b, "apple_solo_until"),
+            }),
+            store: v.get("store").and_then(|s| {
+                // `solo_product` is required, as on the iPad.
+                text(s, "solo_product")?;
+                Some(Store {
+                    packs: each(s, "packs", |p| {
+                        text(p, "apple_product")?;
+                        Some(Pack {
+                            id: text(p, "id")?,
+                            name: text(p, "name")?,
+                            line: text(p, "line")?,
+                            once: flag(p, "once").unwrap_or(false),
+                        })
+                    }),
+                })
+            }),
+            requests: v.get("requests").and_then(Value::as_array).map(|_| {
+                each(&v, "requests", |r| {
+                    // `reason` and `note` must be strings when they're there.
+                    let optional = |k: &str| match r.get(k) {
+                        None | Some(Value::Null) => Some(None),
+                        Some(Value::String(t)) => Some(Some(t.clone())),
+                        Some(_) => None,
+                    };
+                    Some(PackRequest {
+                        id: text(r, "id")?,
+                        asked_by: text(r, "asked_by")?,
+                        kind: text(r, "kind").unwrap_or_else(|| "pack".into()),
+                        pack: text(r, "pack"),
+                        reason: optional("reason")?.unwrap_or_default(),
+                        status: text(r, "status")?,
+                        created_at: date(r, "created_at")?,
+                        expires_at: date(r, "expires_at")?,
+                        note: optional("note")?,
+                    })
+                })
+            }),
+        })
+    }
+}
+
+/// `UsageView.billingLine`: who bills the plan, in one line; none when no plan is billed.
+pub fn billing_line(w: &WordBook, u: &KiffUsage) -> Result<Option<String>, WordsError> {
+    let key = match u.billing.as_ref().map(|b| b.source.as_str()) {
+        Some("apple") => "billing.by_apple",
+        Some("google") => "billing.by_google_play",
+        Some("stripe") => "billing.by_kiff",
+        Some("contract") => "billing.by_agreement",
+        _ => return Ok(None),
+    };
+    w.line(key).map(Some)
+}
+
+/// `UsageView.soloStillRenews`: after a move to Company, while Solo still renews with Apple.
+pub fn solo_still_renews(w: &WordBook, u: &KiffUsage) -> Result<Option<String>, WordsError> {
+    let Some(b) = &u.billing else { return Ok(None) };
+    let (true, Some(until)) = (b.source == "stripe", b.apple_solo_until) else {
+        return Ok(None);
+    };
+    let day = crate::account_time::day(&until);
+    w.get(
+        "usage.company_billed_kiff_solo_bought",
+        &[("time", &long_date(w.language(), day))],
+    )
+    .map(Some)
+}
+
+/// `UsageView.asks`: what someone who doesn't manage billing asks an admin for: a raise on
+/// Company (`team`), a pack on Solo while packs are on sale; nothing on others. `true` is a raise.
+pub fn asks(u: &KiffUsage) -> Option<bool> {
+    match u.plan.as_deref() {
+        Some("team") => Some(true),
+        Some("solo") => match &u.store {
+            Some(s) if !s.offered(false).is_empty() => Some(false),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+/// `UsageView.waiting`: the member's own request still open.
+pub fn waiting(u: &KiffUsage, manages_billing: bool) -> Option<&PackRequest> {
+    if manages_billing {
+        return None;
+    }
+    u.requests.as_ref()?.iter().find(|r| r.status == "open")
+}
+
+/// `UsageView.askedLine`: the member's request while it waits.
+pub fn asked_line(w: &WordBook, r: &PackRequest) -> Result<String, WordsError> {
+    w.line(if r.kind == "raise" {
+        "billing.ask.asked_raise"
+    } else {
+        "billing.ask.asked_pack"
+    })
+}
+
+/// `UsageView.lastAnswer`: the member's latest answered request.
+pub fn last_answer(
+    w: &WordBook,
+    u: &KiffUsage,
+    manages_billing: bool,
+) -> Result<Option<String>, WordsError> {
+    if manages_billing {
+        return Ok(None);
+    }
+    let Some(r) = u.requests.as_ref().and_then(|r| r.first()) else {
+        return Ok(None);
+    };
+    let raise = r.kind == "raise";
+    Ok(Some(match r.status.as_str() {
+        "approved" => w.line(if raise {
+            "billing.ask.raised"
+        } else {
+            "billing.ask.added_pack"
+        })?,
+        "declined" => match r.note.as_deref() {
+            Some(note) if !note.is_empty() => {
+                w.get("billing.ask.declined_note", &[("note", note)])?
+            }
+            _ => w.line("billing.ask.declined")?,
+        },
+        "expired" => w.line("billing.ask.expired")?,
+        _ => return Ok(None),
+    }))
+}
+
+/// `UsageView.openRequests`: the open requests, for someone who manages billing.
+pub fn open_requests(u: &KiffUsage, manages_billing: bool) -> Vec<&PackRequest> {
+    if !manages_billing {
+        return Vec::new();
+    }
+    u.requests
+        .iter()
+        .flatten()
+        .filter(|r| r.status == "open")
+        .collect()
+}
+
+/// `UsageView.packLine`: a pack as KIFF sells it; "a pack of credits" without one, its id
+/// capitalised when it isn't on sale.
+pub fn pack_line(w: &WordBook, id: Option<&str>, u: &KiffUsage) -> Result<String, WordsError> {
+    let Some(id) = id else {
+        return w.line("usage.pack_credits");
+    };
+    Ok(u.store
+        .as_ref()
+        .and_then(|s| s.packs.iter().find(|p| p.id == id))
+        .map(|p| p.line.clone())
+        .unwrap_or_else(|| capitalized(id)))
+}
+
+/// Swift's `capitalized`: each word's first letter up, the rest down.
+fn capitalized(s: &str) -> String {
+    let mut out = String::new();
+    let mut start = true;
+    for c in s.chars() {
+        if c.is_alphanumeric() {
+            if start {
+                out.extend(c.to_uppercase());
+            } else {
+                out.extend(c.to_lowercase());
+            }
+            start = false;
+        } else {
+            out.push(c);
+            start = true;
+        }
+    }
+    out
+}
+
+/// `UsageView.requestLine`: an open request, as someone who manages billing reads it.
+pub fn request_line(w: &WordBook, r: &PackRequest, u: &KiffUsage) -> Result<String, WordsError> {
+    if r.kind == "raise" {
+        return w.line("billing.ask.someone_raise");
+    }
+    w.get(
+        "billing.ask.someone_pack",
+        &[("pack", &pack_line(w, r.pack.as_deref(), u)?)],
+    )
+}
+
+/// `Date.shown(date: .long)`: the long date in each shipped language ("December 31, 2026",
+/// "31 décembre 2026").
+pub fn long_date(language: &str, day: chrono::NaiveDate) -> String {
+    use chrono::Datelike;
+    let months: [&str; 12] = match language {
+        "fr" => [
+            "janvier",
+            "février",
+            "mars",
+            "avril",
+            "mai",
+            "juin",
+            "juillet",
+            "août",
+            "septembre",
+            "octobre",
+            "novembre",
+            "décembre",
+        ],
+        "de" => [
+            "Januar",
+            "Februar",
+            "März",
+            "April",
+            "Mai",
+            "Juni",
+            "Juli",
+            "August",
+            "September",
+            "Oktober",
+            "November",
+            "Dezember",
+        ],
+        "es" => [
+            "enero",
+            "febrero",
+            "marzo",
+            "abril",
+            "mayo",
+            "junio",
+            "julio",
+            "agosto",
+            "septiembre",
+            "octubre",
+            "noviembre",
+            "diciembre",
+        ],
+        "it" => [
+            "gennaio",
+            "febbraio",
+            "marzo",
+            "aprile",
+            "maggio",
+            "giugno",
+            "luglio",
+            "agosto",
+            "settembre",
+            "ottobre",
+            "novembre",
+            "dicembre",
+        ],
+        "pt" => [
+            "janeiro",
+            "fevereiro",
+            "março",
+            "abril",
+            "maio",
+            "junho",
+            "julho",
+            "agosto",
+            "setembro",
+            "outubro",
+            "novembro",
+            "dezembro",
+        ],
+        "nl" => [
+            "januari",
+            "februari",
+            "maart",
+            "april",
+            "mei",
+            "juni",
+            "juli",
+            "augustus",
+            "september",
+            "oktober",
+            "november",
+            "december",
+        ],
+        "pl" => [
+            "stycznia",
+            "lutego",
+            "marca",
+            "kwietnia",
+            "maja",
+            "czerwca",
+            "lipca",
+            "sierpnia",
+            "września",
+            "października",
+            "listopada",
+            "grudnia",
+        ],
+        _ => [
+            "January",
+            "February",
+            "March",
+            "April",
+            "May",
+            "June",
+            "July",
+            "August",
+            "September",
+            "October",
+            "November",
+            "December",
+        ],
+    };
+    let (d, m, y) = (day.day(), months[day.month0() as usize], day.year());
+    match language {
+        "en" => format!("{m} {d}, {y}"),
+        "de" => format!("{d}. {m} {y}"),
+        "es" | "pt" => format!("{d} de {m} de {y}"),
+        _ => format!("{d} {m} {y}"),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -542,5 +933,64 @@ mod tests {
         assert_eq!(tone("waiting"), Tone::No);
         assert_eq!(tone("warning"), Tone::Amber);
         assert_eq!(tone("anything"), Tone::Calm);
+    }
+
+    #[test]
+    fn kiffs_usage_reads_each_part_alone() {
+        let u = KiffUsage::read(
+            br#"{"plan":"solo","billing":{"source":"stripe","apple_solo_until":"2026-12-03T10:00:00Z"},"store":{"solo_product":"s","packs":[{"id":"rayo","name":"Rayo","line":"Rayo, 1,000 credits","apple_product":"p"},{"id":"bad"}]},"requests":[{"id":"r1","asked_by":"u","status":"open","created_at":"2026-11-01T00:00:00Z","expires_at":"2026-11-30T00:00:00Z"},{"id":"r2"}]}"#,
+        )
+        .unwrap();
+        assert_eq!(u.store.as_ref().unwrap().packs.len(), 1);
+        let requests = u.requests.as_ref().unwrap();
+        assert_eq!(requests.len(), 1);
+        assert_eq!(requests[0].kind, "pack");
+        assert_eq!(asks(&u), Some(false));
+        assert!(waiting(&u, false).is_some() && waiting(&u, true).is_none());
+        assert_eq!(open_requests(&u, true).len(), 1);
+        assert!(open_requests(&u, false).is_empty());
+        // A store without its Solo product isn't read; the rest still is.
+        let u = KiffUsage::read(br#"{"plan":"team","store":{"packs":[]},"billing":"x"}"#).unwrap();
+        assert_eq!(u.store, None);
+        assert_eq!(u.billing, None);
+        assert_eq!(asks(&u), Some(true));
+        assert_eq!(KiffUsage::read(b"[]"), None);
+    }
+
+    #[test]
+    fn the_first_month_pack_is_listed_first_and_only_while_offered() {
+        let pack = |id: &str, once| Pack {
+            id: id.into(),
+            name: id.into(),
+            line: id.into(),
+            once,
+        };
+        let s = Store {
+            packs: vec![pack("a", false), pack("first", true), pack("b", false)],
+        };
+        let ids = |f| {
+            s.offered(f)
+                .iter()
+                .map(|p| p.id.clone())
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(ids(true), ["first", "a", "b"]);
+        assert_eq!(ids(false), ["a", "b"]);
+    }
+
+    #[test]
+    fn capitalized_is_swifts() {
+        assert_eq!(capitalized("rayo"), "Rayo");
+        assert_eq!(capitalized("big-PACK two"), "Big-Pack Two");
+    }
+
+    #[test]
+    fn long_dates() {
+        let d = chrono::NaiveDate::from_ymd_opt(2026, 12, 3).unwrap();
+        assert_eq!(long_date("en", d), "December 3, 2026");
+        assert_eq!(long_date("fr", d), "3 décembre 2026");
+        assert_eq!(long_date("de", d), "3. Dezember 2026");
+        assert_eq!(long_date("pt", d), "3 de dezembro de 2026");
+        assert_eq!(long_date("pl", d), "3 grudnia 2026");
     }
 }

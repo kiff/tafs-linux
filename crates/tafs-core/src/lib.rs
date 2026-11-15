@@ -3,9 +3,11 @@
 //! No UI: the GTK app places what this says.
 
 pub mod account;
+pub mod account_time;
 pub mod activity;
 pub mod card;
 pub mod cards;
+pub mod connect;
 pub mod held;
 pub mod home;
 pub mod keys;

@@ -24,6 +24,15 @@ The app speaks the first of the person's languages that tafs ships (`LANGUAGE`, 
 `LC_MESSAGES`, `LANG`), otherwise English, as the iPad's `screenLanguages`. Every line comes from
 the words at the pin.
 
+## Time
+
+Every time the app draws is in the account's time zone (`AccountTime`,
+`tafs-core/src/account_time.rs`): signed in with KIFF, the zone `GET /v1/me` names (UTC when it
+names none, or one this computer doesn't know); in the sample, and before the account is read,
+this computer's. The day a line falls on ("Today", a Record day) is the account's day. Where the
+iPad adds the zone's short name (`zonedShortTime`: a held call's "answer by", a Record line's
+time), so does Linux, when the account's clock isn't this computer's at that moment ("14:05 JST").
+
 ## Options
 
 | Option | What |
@@ -39,7 +48,8 @@ the words at the pin.
 
 CI builds the app and saves the welcome, the sign-in, the Overview beside the sidebar (with the
 account's items), the Overview from the `home.json` contract, Needs you, the Record, Refunds'
-page and its Card tab, Plan & usage and Account over the sample, a tafs cloud taf's page and its Card tab from
+page and its Card tab, Plan & usage and Account over the sample, Plan & usage signed in with
+KIFF from synthetic answers (managing billing, and as a member), Connect apps, a tafs cloud taf's page and its Card tab from
 the contracts, the sidebar over the plain sample, and the view-only notice in en, fr and pt,
-light and dark: 84 pictures, as the `screenshots`
+light and dark: 102 pictures, as the `screenshots`
 artifact of the run. The job fails if any is missing.

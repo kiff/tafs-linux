@@ -257,12 +257,8 @@ fn row(w: &WordBook, data: &RecordData, e: &Entry) -> gtk::Box {
     let t = one_line(&named, 14, 600, &["tafs-ink"]);
     t.set_hexpand(true);
     head.append(&t);
-    let time = gtk::Label::new(Some(
-        &e.at
-            .with_timezone(&chrono::Local)
-            .format("%H:%M")
-            .to_string(),
-    ));
+    // `zonedShortTime`: with the account zone's name when it isn't this computer's.
+    let time = gtk::Label::new(Some(&tafs_core::account_time::zoned_short_time(&e.at)));
     time.add_css_class("tafs-mono");
     time.add_css_class("tafs-dim");
     time.add_css_class("tafs-time");

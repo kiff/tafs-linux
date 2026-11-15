@@ -152,7 +152,7 @@ pub fn lines(
                     ("taf", &holder),
                     ("what", &what),
                     ("reason", &call.reason),
-                    ("time", &call.expires_at.format("%H:%M").to_string()),
+                    ("time", &crate::account_time::short_time(&call.expires_at)),
                     ("nothing_sent", &w.line("needs_you.nothing_sent")?),
                 ],
             )?,

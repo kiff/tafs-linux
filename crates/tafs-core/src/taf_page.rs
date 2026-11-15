@@ -130,7 +130,7 @@ pub fn activity<'a>(
     kept.sort_by_key(|e| std::cmp::Reverse(e.at));
     let mut out: Vec<(chrono::NaiveDate, Vec<&Entry>)> = Vec::new();
     for e in kept {
-        let day = e.at.with_timezone(&Local).date_naive();
+        let day = crate::account_time::day(&e.at);
         match out.last_mut() {
             Some((d, lines)) if *d == day => lines.push(e),
             _ => out.push((day, vec![e])),
@@ -138,7 +138,7 @@ pub fn activity<'a>(
     }
     out.into_iter()
         .map(|(day, lines)| {
-            let title = day_title(w, day, now.date_naive())?;
+            let title = day_title(w, day, crate::account_time::day(&now))?;
             let title = match spent(w, &lines)? {
                 Some(sum) => format!("{title} · {sum}"),
                 None => title,

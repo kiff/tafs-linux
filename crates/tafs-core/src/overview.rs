@@ -2,7 +2,7 @@
 //! as the whole app's sidebar opens it (`showsCalendar` off: Calendar is a sidebar item).
 
 use crate::card::Card;
-use crate::sidebar::{short_time, HeldCall, Selection};
+use crate::sidebar::{HeldCall, Selection};
 use crate::words::{upper, WordBook, WordsError};
 
 /// One taf as the Overview reads it.
@@ -121,7 +121,10 @@ pub fn lines(
             title: format!("{} · {}", taf.name, call.summary),
             answer_by: w.get(
                 "needs_you.answer_by",
-                &[("time", &short_time(call.expires_at))],
+                &[(
+                    "time",
+                    &crate::account_time::zoned_short_time(&call.expires_at),
+                )],
             )?,
         });
     }

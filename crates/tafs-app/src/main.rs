@@ -1,6 +1,7 @@
 //! tafs for Linux: GTK 4 and libadwaita. The same product, account and words as the iPad app.
 
 mod account;
+mod connect;
 mod kiff;
 mod needs_you;
 mod overview;
@@ -51,11 +52,13 @@ struct Options {
     signed_in: bool,
     view_only: bool,
     home: Option<String>,
+    /// Synthetic answers for Plan & usage signed in with KIFF, for its screenshots.
+    usage: Option<String>,
     screenshot: Option<String>,
 }
 
 const USAGE: &str = "tafs [--lang en|de|fr|es|it|pt|nl|pl] [--theme light|dark] [--sample] [--signed-in] [--view-only]
-     [--home contract.json] [--page welcome|sign-in|overview|needs-you|record|calendar|usage|connect-apps|account|taf|taf-card] [--screenshot out.png]";
+     [--home contract.json] [--usage answers.json] [--page welcome|sign-in|overview|needs-you|record|calendar|usage|connect-apps|account|taf|taf-card] [--screenshot out.png]";
 
 fn options() -> Result<Options, String> {
     let mut o = Options::default();
@@ -68,6 +71,7 @@ fn options() -> Result<Options, String> {
             "--page" => o.page = Some(value()?),
             "--screenshot" => o.screenshot = Some(value()?),
             "--home" => o.home = Some(value()?),
+            "--usage" => o.usage = Some(value()?),
             "--sample" => o.sample = true,
             "--signed-in" => o.signed_in = true,
             "--view-only" => o.view_only = true,
@@ -178,6 +182,7 @@ fn activate(app: &adw::Application, o: &Options) {
         cloud: RefCell::new(None),
         problem: RefCell::new(None),
         home_file: o.home.as_ref().map(std::path::PathBuf::from),
+        usage_file: o.usage.as_ref().map(std::path::PathBuf::from),
         screenshot: o.screenshot.is_some(),
         on_card: o
             .page
@@ -254,6 +259,8 @@ struct App {
     problem: RefCell<Option<gtk::Label>>,
     /// `--home`'s contract file, for the screenshots' tafs cloud reads.
     home_file: Option<std::path::PathBuf>,
+    /// `--usage`'s file of synthetic answers.
+    usage_file: Option<std::path::PathBuf>,
     /// A screenshot: the sample's Refunds has the reference set's three Cards.
     screenshot: bool,
     /// `--page taf-card`: the taf opens on its Card tab.
@@ -280,6 +287,8 @@ impl App {
 
     /// The welcome (`OnboardingView`), with nothing kept.
     fn show_welcome(self: &Rc<Self>) {
+        // Signed out: no account, so this computer's zone.
+        tafs_core::account_time::use_zone(None);
         *self.kept.borrow_mut() = None;
         *self.cloud.borrow_mut() = None;
         *self.sign_out_error.borrow_mut() = None;
@@ -587,6 +596,13 @@ impl App {
     fn open_shell(self: &Rc<Self>, mode: Mode, view_only: bool, cloud: Option<Rc<Cloud>>) {
         let words = &self.words;
         *self.cloud.borrow_mut() = cloud.clone();
+        // `AccountTime.use`: signed in with KIFF, every time in the account's zone (UTC when
+        // KIFF says none); the sample, or no account read yet, this computer's.
+        let kiff_account = cloud.as_ref().and_then(|c| c.account.as_ref());
+        tafs_core::account_time::use_zone(match (mode, kiff_account) {
+            (Mode::Kiff, Some(a)) => Some(a.time_zone.as_deref().unwrap_or("UTC")),
+            _ => None,
+        });
         let at = chrono::Local::now();
         let fail = |e: tafs_core::words::WordsError| -> ! { panic!("{e}") };
         let (mut model, tafs, cloud_words) = match (mode, &cloud) {
@@ -661,8 +677,25 @@ impl App {
                 (Mode::Kiff, Some(kept)) => usage::UsageSource::Cloud {
                     token: kept.token.clone(),
                     languages: self.languages.clone(),
+                    manages_billing: cloud
+                        .as_deref()
+                        .and_then(|c| c.account.as_ref())
+                        .is_none_or(|a| a.allows("billing.manage")),
                 },
-                _ => usage::UsageSource::None,
+                _ => match &self.usage_file {
+                    Some(f) => usage::UsageSource::File(f.clone()),
+                    None => usage::UsageSource::None,
+                },
+            },
+            connect: match (mode, self.kept.borrow().as_ref()) {
+                (Mode::Sample, _) => connect::ConnectSource::Sample {
+                    screenshot: self.screenshot,
+                },
+                (Mode::Kiff, Some(kept)) => connect::ConnectSource::Cloud {
+                    token: kept.token.clone(),
+                    languages: self.languages.clone(),
+                },
+                _ => connect::ConnectSource::None,
             },
             cloud_names: Rc::new(
                 tafs.iter()
