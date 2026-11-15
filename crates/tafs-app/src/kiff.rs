@@ -14,15 +14,23 @@ pub struct Kiff {
     languages: Vec<&'static str>,
 }
 
+/// The app's HTTP: 15 s to connect, 30 s for an answer, and a redirect never carries a request
+/// on (KIFF's answers are read where they're sent). It goes through the proxy the desktop names
+/// (`HTTPS_PROXY`, as GNOME's own apps do) and trusts this computer's certificate authorities, so
+/// a network that requires a proxy reaches KIFF too.
+fn agent() -> ureq::Agent {
+    ureq::AgentBuilder::new()
+        .timeout_connect(Duration::from_secs(15))
+        .timeout(Duration::from_secs(30))
+        .redirects(0)
+        .user_agent("tafs-linux")
+        .try_proxy_from_env(true)
+        .build()
+}
+
 impl Kiff {
     pub fn new(languages: Vec<&'static str>) -> Kiff {
-        let agent = ureq::AgentBuilder::new()
-            .timeout_connect(Duration::from_secs(15))
-            .timeout(Duration::from_secs(30))
-            // A redirect never carries a request on: KIFF's answers are read where they're sent.
-            .redirects(0)
-            .user_agent("tafs-linux")
-            .build();
+        let agent = agent();
         Kiff {
             agent,
             base: KIFF_API.to_string(),
@@ -77,12 +85,7 @@ pub fn home(token: &str, languages: &[&str]) -> Result<Answer, KiffError> {
     if !may_send_to(&url) {
         return Err(KiffError::Unreadable);
     }
-    let agent = ureq::AgentBuilder::new()
-        .timeout_connect(Duration::from_secs(15))
-        .timeout(Duration::from_secs(30))
-        .redirects(0)
-        .user_agent("tafs-linux")
-        .build();
+    let agent = agent();
     Kiff::read(
         agent
             .get(&url)
@@ -154,12 +157,7 @@ fn get(url: &str, token: &str, languages: &[&str]) -> Result<Answer, KiffError> 
     if !may_send_to(url) {
         return Err(KiffError::Unreadable);
     }
-    let agent = ureq::AgentBuilder::new()
-        .timeout_connect(Duration::from_secs(15))
-        .timeout(Duration::from_secs(30))
-        .redirects(0)
-        .user_agent("tafs-linux")
-        .build();
+    let agent = agent();
     Kiff::read(
         agent
             .get(url)
@@ -176,12 +174,7 @@ pub fn held(token: &str, languages: &[&str]) -> Result<Answer, KiffError> {
     if !may_send_to(&url) {
         return Err(KiffError::Unreadable);
     }
-    let agent = ureq::AgentBuilder::new()
-        .timeout_connect(Duration::from_secs(15))
-        .timeout(Duration::from_secs(30))
-        .redirects(0)
-        .user_agent("tafs-linux")
-        .build();
+    let agent = agent();
     Kiff::read(
         agent
             .get(&url)

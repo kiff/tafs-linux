@@ -72,7 +72,7 @@ ports a file updates its line here.
 | :- | -: | :- |
 | HomeView.swift | 403 | The phone's Home. A wide screen uses HomeSplitView. |
 | TafsBar.swift | 121 | The phone's bar along the foot. A wide screen has the sidebar. |
-| PairComputerView.swift | 222 | The phone's side of pairing: the camera reads a computer's code. |
+| PairComputerView.swift | 222 | The phone's side of pairing: the camera reads a computer's code. The computer's side is tafs-macos's, ported in [pairing](pairing.md) (`pairing.rs`, `tafs-core/pairing.rs`). |
 | TafKnobRemote.swift | 64 | Keeps the remote above the phone's tab bar. |
 
 ## Shared pieces

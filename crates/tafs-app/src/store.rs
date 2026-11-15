@@ -62,6 +62,35 @@ pub fn save(session: &KeptSession, now: i64) -> Result<(), StoreError> {
     }
 }
 
+/// Whether the keyring takes a session, asked before a pairing shows its code
+/// (`SecretStore.checkWritable`, tafs-macos #30): the session kept is written over itself, or,
+/// with none, an empty item is written, read back and deleted. A keyring that refuses stops the
+/// pairing there: no code, no claim, and nothing for the phone to approve.
+pub fn check_writable(now: i64) -> Result<(), StoreError> {
+    if let Some(kept) = load(now) {
+        return save(&kept, now);
+    }
+    const PROBE: &[u8] = b"{}";
+    let back = run(async {
+        let keyring = oo7::Keyring::new().await?;
+        let _ = keyring.unlock().await;
+        keyring
+            .create_item(LABEL, &attributes(), PROBE, true)
+            .await?;
+        let mut found = false;
+        for item in keyring.search_items(&attributes()).await? {
+            found |= item.secret().await?.as_bytes() == PROBE;
+        }
+        keyring.delete(&attributes()).await?;
+        Ok(found)
+    })?;
+    if back {
+        Ok(())
+    } else {
+        Err(StoreError("read back"))
+    }
+}
+
 /// Forgets the session (sign out): the token and its key leave the keyring.
 pub fn clear() -> Result<(), StoreError> {
     run(async {
