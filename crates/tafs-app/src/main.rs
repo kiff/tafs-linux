@@ -51,11 +51,13 @@ struct Options {
     signed_in: bool,
     view_only: bool,
     home: Option<String>,
+    /// Synthetic answers for Plan & usage signed in with KIFF, for its screenshots.
+    usage: Option<String>,
     screenshot: Option<String>,
 }
 
 const USAGE: &str = "tafs [--lang en|de|fr|es|it|pt|nl|pl] [--theme light|dark] [--sample] [--signed-in] [--view-only]
-     [--home contract.json] [--page welcome|sign-in|overview|needs-you|record|calendar|usage|connect-apps|account|taf|taf-card] [--screenshot out.png]";
+     [--home contract.json] [--usage answers.json] [--page welcome|sign-in|overview|needs-you|record|calendar|usage|connect-apps|account|taf|taf-card] [--screenshot out.png]";
 
 fn options() -> Result<Options, String> {
     let mut o = Options::default();
@@ -68,6 +70,7 @@ fn options() -> Result<Options, String> {
             "--page" => o.page = Some(value()?),
             "--screenshot" => o.screenshot = Some(value()?),
             "--home" => o.home = Some(value()?),
+            "--usage" => o.usage = Some(value()?),
             "--sample" => o.sample = true,
             "--signed-in" => o.signed_in = true,
             "--view-only" => o.view_only = true,
@@ -178,6 +181,7 @@ fn activate(app: &adw::Application, o: &Options) {
         cloud: RefCell::new(None),
         problem: RefCell::new(None),
         home_file: o.home.as_ref().map(std::path::PathBuf::from),
+        usage_file: o.usage.as_ref().map(std::path::PathBuf::from),
         screenshot: o.screenshot.is_some(),
         on_card: o
             .page
@@ -254,6 +258,8 @@ struct App {
     problem: RefCell<Option<gtk::Label>>,
     /// `--home`'s contract file, for the screenshots' tafs cloud reads.
     home_file: Option<std::path::PathBuf>,
+    /// `--usage`'s file of synthetic answers.
+    usage_file: Option<std::path::PathBuf>,
     /// A screenshot: the sample's Refunds has the reference set's three Cards.
     screenshot: bool,
     /// `--page taf-card`: the taf opens on its Card tab.
@@ -661,8 +667,15 @@ impl App {
                 (Mode::Kiff, Some(kept)) => usage::UsageSource::Cloud {
                     token: kept.token.clone(),
                     languages: self.languages.clone(),
+                    manages_billing: cloud
+                        .as_deref()
+                        .and_then(|c| c.account.as_ref())
+                        .is_none_or(|a| a.allows("billing.manage")),
                 },
-                _ => usage::UsageSource::None,
+                _ => match &self.usage_file {
+                    Some(f) => usage::UsageSource::File(f.clone()),
+                    None => usage::UsageSource::None,
+                },
             },
             cloud_names: Rc::new(
                 tafs.iter()

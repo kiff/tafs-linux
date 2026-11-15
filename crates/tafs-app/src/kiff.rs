@@ -93,6 +93,16 @@ pub fn home(token: &str, languages: &[&str]) -> Result<Answer, KiffError> {
     )
 }
 
+/// `GET /v1/me/usage` at KIFF as the session (`usage()`): the plan, who bills it, the store and
+/// members' requests.
+pub fn usage(token: &str, languages: &[&str]) -> Result<Answer, KiffError> {
+    get(
+        &format!("{KIFF_API}{}", tafs_core::usage::KIFF_USAGE_PATH),
+        token,
+        languages,
+    )
+}
+
 /// `GET /v1/me` at KIFF as the session (`me`): the account, and how this session approves.
 pub fn me(token: &str, languages: &[&str]) -> Result<Answer, KiffError> {
     get(&format!("{KIFF_API}/v1/me"), token, languages)

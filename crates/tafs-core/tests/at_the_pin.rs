@@ -147,6 +147,29 @@ const LINES: &[(&str, &[&str])] = &[
     ("sample.list_charges", &[]),
     ("sample.look_up_charge", &[]),
     ("taf.revoke", &[]),
+    ("billing.by_apple", &[]),
+    ("billing.by_google_play", &[]),
+    ("billing.by_kiff", &[]),
+    ("billing.by_agreement", &[]),
+    ("billing.ask.asked_raise", &[]),
+    ("billing.ask.asked_pack", &[]),
+    ("billing.ask.raised", &[]),
+    ("billing.ask.added_pack", &[]),
+    ("billing.ask.declined", &[]),
+    ("billing.ask.declined_note", &["note"]),
+    ("billing.ask.expired", &[]),
+    ("billing.ask.someone_raise", &[]),
+    ("billing.ask.someone_pack", &["pack"]),
+    ("billing.plan_could_not_read_kiff", &["why"]),
+    ("usage.admin_answers", &["detail"]),
+    ("usage.company_billed_kiff_solo_bought", &["time"]),
+    ("usage.pack_credits", &[]),
+    ("usage.raise_limit_button", &[]),
+    ("usage.requests.title", &[]),
+    ("usage.requests.waiting", &[]),
+    ("usage.requests.withdraw", &[]),
+    ("usage.requests.ask_admin", &[]),
+    ("usage.requests.decline", &[]),
     ("usage.credits", &[]),
     ("usage.last_period", &[]),
     ("usage.this_period", &[]),
@@ -943,4 +966,38 @@ fn plan_and_usage_is_the_reference_sets() {
         sample_credits(&w, false).unwrap();
         sample_credits(&w, true).unwrap();
     }
+}
+
+#[test]
+fn kiffs_usage_lines_at_the_pin() {
+    use tafs_core::usage::{
+        asked_line, billing_line, last_answer, request_line, solo_still_renews, KiffUsage,
+    };
+    for lang in SHIPPED {
+        let w = book(lang);
+        let u = KiffUsage::read(
+            br#"{"plan":"solo","billing":{"source":"stripe","apple_solo_until":"2026-12-03T10:00:00Z"},"requests":[{"id":"r","asked_by":"u","kind":"pack","pack":"rayo","status":"declined","note":"Not now","created_at":"2026-11-01T00:00:00Z","expires_at":"2026-11-30T00:00:00Z"}]}"#,
+        )
+        .unwrap();
+        let r = &u.requests.as_ref().unwrap()[0];
+        assert!(billing_line(&w, &u).unwrap().is_some());
+        assert!(solo_still_renews(&w, &u).unwrap().unwrap().contains("2026"));
+        assert!(last_answer(&w, &u, false)
+            .unwrap()
+            .unwrap()
+            .contains("Not now"));
+        assert_eq!(last_answer(&w, &u, true).unwrap(), None);
+        asked_line(&w, r).unwrap();
+        // A pack that isn't on sale reads as its id, capitalised.
+        assert!(request_line(&w, r, &u).unwrap().contains("Rayo"));
+    }
+    let w = book("en");
+    let u = KiffUsage::read(br#"{"billing":{"source":"apple"}}"#).unwrap();
+    assert_eq!(
+        billing_line(&w, &u).unwrap().as_deref(),
+        Some("Billed by Apple")
+    );
+    assert_eq!(solo_still_renews(&w, &u).unwrap(), None);
+    let u = KiffUsage::read(br#"{"billing":{"source":""}}"#).unwrap();
+    assert_eq!(billing_line(&w, &u).unwrap(), None);
 }

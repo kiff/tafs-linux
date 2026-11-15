@@ -1,0 +1,30 @@
+{
+  "_comment": "Synthetic answers for Plan & usage's screenshots, as a member who doesn't manage billing (--usage). Made up, not from any account.",
+  "manages_billing": false,
+  "balance": {
+    "balance": {
+      "state": "waiting",
+      "why": "limit_reached",
+      "meter_pct": 100,
+      "words": "Company · the spend limit is reached",
+      "detail": "No new run starts until an admin raises it",
+      "credits_panel": false
+    }
+  },
+  "usage": {
+    "plan": "team",
+    "billing": { "source": "stripe" },
+    "requests": [
+      {
+        "id": "req-2",
+        "asked_by": "member-1",
+        "kind": "raise",
+        "reason": "Month-end refunds need more room.",
+        "status": "declined",
+        "note": "Not this month.",
+        "created_at": "2026-11-01T09:00:00Z",
+        "expires_at": "2026-11-30T23:59:59Z"
+      }
+    ]
+  }
+}

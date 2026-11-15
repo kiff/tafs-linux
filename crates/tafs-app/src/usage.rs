@@ -11,6 +11,10 @@ use tafs_core::usage::{
     answered, credits_path, sample_balance, sample_credits, taf_credits_path, tone, Balance,
     Credits, TafCredits, Tone, BALANCE_PATH,
 };
+use tafs_core::usage::{
+    asked_line, asks, billing_line, last_answer, open_requests, request_line, solo_still_renews,
+    waiting, KiffUsage,
+};
 use tafs_core::words::WordBook;
 
 use crate::widgets::{eyebrow, one_line, outline, panel, symbol, text};
@@ -24,7 +28,12 @@ pub enum UsageSource {
     Cloud {
         token: String,
         languages: Vec<&'static str>,
+        /// `managesBilling`: KIFF's `billing.manage`, none said counting as allowed.
+        manages_billing: bool,
     },
+    /// A file of synthetic answers (`--usage`, the screenshots signed in with KIFF): its
+    /// `balance`, `credits` and `usage`, and whether the person manages billing.
+    File(std::path::PathBuf),
     /// Nothing to read (signed out, or a screenshot of the contracts): the screen is empty.
     None,
 }
@@ -47,6 +56,9 @@ struct State {
     previous_read: bool,
     /// Which period the Credits panel shows.
     showing_previous: bool,
+    /// KIFF's usage read, and why it couldn't be read.
+    usage: Option<KiffUsage>,
+    usage_error: Option<String>,
 }
 
 type Redraw = Rc<dyn Fn()>;
@@ -69,7 +81,10 @@ fn cloud_read<T: Send + 'static>(
     what: &str,
     read: fn(&[u8]) -> Option<T>,
 ) -> Result<Option<T>, String> {
-    let UsageSource::Cloud { token, languages } = source else {
+    let UsageSource::Cloud {
+        token, languages, ..
+    } = source
+    else {
         return Ok(None);
     };
     match crate::kiff::cloud(token, languages, path) {
@@ -126,7 +141,7 @@ pub fn page(w: Rc<WordBook>, source: UsageSource, names: Names) -> gtk::Widget {
                     s.previous_read = true;
                     return;
                 }
-                UsageSource::None => {
+                UsageSource::None | UsageSource::File(_) => {
                     state.borrow_mut().previous_read = true;
                     return;
                 }
@@ -203,11 +218,16 @@ pub fn page(w: Rc<WordBook>, source: UsageSource, names: Names) -> gtk::Widget {
                 column.append(&p);
                 return;
             }
-            balance_panel(&column, &s);
+            balance_panel(&column, &s, kiff_billing(&source).is_some());
+            if let (Some(manages_billing), Some(u)) = (kiff_billing(&source), &s.usage) {
+                billing_panel(&w, &column, u);
+                ask_panel(&w, &column, u, manages_billing, &s);
+                requests_panel(&w, &column, u, manages_billing, &s);
+            }
             // Left out where tafs cloud says so: no plan and no run lately.
             let shows_credits = s.balance.as_ref().is_none_or(|b| b.balance.credits_panel);
             if shows_credits {
-                let kiff = matches!(source, UsageSource::Cloud { .. });
+                let kiff = kiff_billing(&source).is_some();
                 credits_panel(
                     &w,
                     &column,
@@ -218,6 +238,12 @@ pub fn page(w: Rc<WordBook>, source: UsageSource, names: Names) -> gtk::Widget {
                     &redraw,
                     &open_runs,
                 );
+            }
+            // KIFF's read failed: buying and requests wait on it, said once.
+            if let (Some(_), None, Some(why)) = (kiff_billing(&source), &s.usage, &s.usage_error) {
+                let p = panel(false);
+                p.append(&text(why, 14, 400, &["tafs-no"]));
+                column.append(&p);
             }
         }
     }));
@@ -230,6 +256,18 @@ pub fn page(w: Rc<WordBook>, source: UsageSource, names: Names) -> gtk::Widget {
             s.read = true;
         }
         UsageSource::None => state.borrow_mut().read = true,
+        UsageSource::File(path) => {
+            let v: serde_json::Value = std::fs::read(path)
+                .ok()
+                .and_then(|b| serde_json::from_slice(&b).ok())
+                .unwrap_or_default();
+            let part = |k: &str| serde_json::to_vec(&v[k]).unwrap_or_default();
+            let mut s = state.borrow_mut();
+            s.balance = Balance::read(&part("balance"));
+            s.credits = Credits::read(&part("credits"));
+            s.usage = KiffUsage::read(&part("usage"));
+            s.read = true;
+        }
         UsageSource::Cloud { .. } => {
             let (words, source, state, redraw) =
                 ((*w).clone(), source.clone(), state.clone(), redraw.clone());
@@ -239,12 +277,37 @@ pub fn page(w: Rc<WordBook>, source: UsageSource, names: Names) -> gtk::Widget {
                     let b = cloud_read(&words, &source, BALANCE_PATH, &what, Balance::read);
                     let what = words.line("usage.credits").unwrap_or_default();
                     let c = cloud_read(&words, &source, &credits_path(false), &what, Credits::read);
-                    (b, c)
+                    // KIFF's read, alongside: a failure says so once, under the credits.
+                    let u = match &source {
+                        UsageSource::Cloud {
+                            token, languages, ..
+                        } => match crate::kiff::usage(token, languages) {
+                            Ok(a) if (200..300).contains(&a.status) => KiffUsage::read(&a.body)
+                                .ok_or_else(|| {
+                                    tafs_core::signin::plain_words(&words, 200).unwrap_or_default()
+                                }),
+                            Ok(a) => Err(tafs_core::signin::refusal(&a, Some(&words))
+                                .words(&words)
+                                .unwrap_or_default()),
+                            Err(e) => Err(e.words(&words).unwrap_or_default()),
+                        }
+                        .map_err(|why| {
+                            words
+                                .get("billing.plan_could_not_read_kiff", &[("why", &why)])
+                                .unwrap_or(why)
+                        }),
+                        _ => Ok(KiffUsage::default()),
+                    };
+                    (b, c, u)
                 })
                 .await;
                 {
                     let mut s = state.borrow_mut();
-                    if let Ok((b, c)) = read {
+                    if let Ok((b, c, u)) = read {
+                        match u {
+                            Ok(u) => s.usage = Some(u),
+                            Err(e) => s.usage_error = Some(e),
+                        }
                         match b {
                             Ok(b) => s.balance = b,
                             Err(e) => s.balance_error = Some(e),
@@ -266,8 +329,9 @@ pub fn page(w: Rc<WordBook>, source: UsageSource, names: Names) -> gtk::Widget {
 }
 
 /// `BalancePanel`: the words, a bar at `meter_pct`, the detail and the warning; else why it
-/// couldn't be read. Raise the limit and buying wait for their ports.
-fn balance_panel(column: &gtk::Box, s: &State) {
+/// couldn't be read. Signed in with KIFF, tafs cloud's Raise offer under it, dimmed until
+/// raising (a signed call) is ported. Buying waits for a store.
+fn balance_panel(column: &gtk::Box, s: &State, kiff: bool) {
     let Some(b) = &s.balance else {
         if let Some(why) = &s.balance_error {
             let p = panel(false);
@@ -304,6 +368,11 @@ fn balance_panel(column: &gtk::Box, s: &State) {
         ));
     }
     column.append(&p);
+    if let (true, Some(raise)) = (kiff, &line.raise) {
+        let b = crate::widgets::primary(&raise.words);
+        b.set_sensitive(false);
+        column.append(&b);
+    }
 }
 
 /// The colour of tafs cloud's tone (`UsageView.color`), with its calm colour.
@@ -715,4 +784,129 @@ fn runs_page(
     load(false);
     crate::widgets::ground(&outer);
     outer.upcast()
+}
+
+/// `billingPanel`: who bills the plan, in one line; after a move from Solo in the App Store to
+/// Company, the line that Solo still renews with Apple. Manage and Cancel Solo open Apple's
+/// own subscriptions page, which only an Apple device has: Linux shows their lines alone.
+fn billing_panel(w: &WordBook, column: &gtk::Box, u: &KiffUsage) {
+    let Some(line) = billing_line(w, u).ok().flatten() else {
+        return;
+    };
+    let p = panel(false);
+    p.set_spacing(10);
+    p.append(&text(&line, 15, 400, &["tafs-ink"]));
+    if let Some(renews) = solo_still_renews(w, u).ok().flatten() {
+        p.append(&text(&renews, 14, 400, &["tafs-soft"]));
+    }
+    column.append(&p);
+}
+
+/// `askPanel`, for someone who doesn't manage billing: their request waiting, with Withdraw;
+/// else the last answer, and Ask an admin where the plan lets them ask. The buttons are there,
+/// dimmed, until asking is ported.
+fn ask_panel(w: &WordBook, column: &gtk::Box, u: &KiffUsage, manages_billing: bool, s: &State) {
+    if manages_billing {
+        return;
+    }
+    let l = |k: &str| w.line(k).unwrap_or_default();
+    if let Some(mine) = waiting(u, false) {
+        let p = panel(false);
+        p.append(&eyebrow(&l("usage.requests.waiting"), false));
+        let detail = asked_line(w, mine).unwrap_or_default();
+        p.append(&text(
+            &w.get("usage.admin_answers", &[("detail", &detail)])
+                .unwrap_or(detail),
+            15,
+            400,
+            &["tafs-ink"],
+        ));
+        let withdraw = outline(&l("usage.requests.withdraw"));
+        withdraw.set_sensitive(false);
+        p.append(&withdraw);
+        column.append(&p);
+        return;
+    }
+    if let Some(answer) = last_answer(w, u, false).ok().flatten() {
+        let p = panel(false);
+        p.append(&text(&answer, 14, 400, &["tafs-soft"]));
+        column.append(&p);
+    }
+    if asks(u).is_some() {
+        // In the primary style while the balance waits on it.
+        let waits = s.balance.as_ref().is_some_and(|b| b.balance.waiting());
+        let ask = if waits {
+            crate::widgets::primary(&l("usage.requests.ask_admin"))
+        } else {
+            outline(&l("usage.requests.ask_admin"))
+        };
+        ask.set_sensitive(false);
+        column.append(&ask);
+    }
+}
+
+/// `requestsPanel`, for someone who manages billing: members' open requests, in the amber,
+/// each its line and reason, then Raise the limit (where tafs cloud offers it) and Decline,
+/// dimmed until answering is ported. Approving a pack buys it in the App Store: none here.
+fn requests_panel(
+    w: &WordBook,
+    column: &gtk::Box,
+    u: &KiffUsage,
+    manages_billing: bool,
+    s: &State,
+) {
+    let open = open_requests(u, manages_billing);
+    if open.is_empty() {
+        return;
+    }
+    let l = |k: &str| w.line(k).unwrap_or_default();
+    let p = panel(false);
+    p.add_css_class("edge-amber");
+    p.append(&eyebrow(&l("usage.requests.title"), true));
+    for r in open {
+        let one = gtk::Box::new(gtk::Orientation::Vertical, 8);
+        one.append(&text(
+            &request_line(w, r, u).unwrap_or_default(),
+            15,
+            400,
+            &["tafs-ink"],
+        ));
+        if !r.reason.is_empty() {
+            one.append(&text(&r.reason, 14, 400, &["tafs-soft"]));
+        }
+        let buttons = gtk::Box::new(gtk::Orientation::Horizontal, 10);
+        let offers_raise = s
+            .balance
+            .as_ref()
+            .is_some_and(|b| b.balance.raise.is_some());
+        if r.kind == "raise" && offers_raise {
+            let raise = crate::widgets::primary(&l("usage.raise_limit_button"));
+            raise.set_sensitive(false);
+            buttons.append(&raise);
+        }
+        let decline = outline(&l("usage.requests.decline"));
+        decline.set_sensitive(false);
+        buttons.append(&decline);
+        one.append(&buttons);
+        p.append(&one);
+    }
+    column.append(&p);
+}
+
+/// Signed in with KIFF (or its synthetic file): whether the person manages billing. None for
+/// the sample and signed out, which draw no KIFF panel.
+fn kiff_billing(source: &UsageSource) -> Option<bool> {
+    match source {
+        UsageSource::Cloud {
+            manages_billing, ..
+        } => Some(*manages_billing),
+        UsageSource::File(path) => Some(
+            std::fs::read(path)
+                .ok()
+                .and_then(|b| serde_json::from_slice::<serde_json::Value>(&b).ok())
+                .and_then(|v| v["manages_billing"].as_bool())
+                .unwrap_or(true),
+        ),
+        _ => None,
+    }
 }
