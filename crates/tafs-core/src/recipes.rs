@@ -120,6 +120,21 @@ pub struct Recipes {
     pub labels: Option<Labels>,
 }
 
+/// Where an app's logo loads from (`TafsCloud.logoURL`): only ever tafs cloud, at
+/// `/v1/logos/{key}` with a key of 32 lowercase hex digits. Anything else is no logo, and the
+/// app's name stands alone.
+pub fn logo_url(path: Option<&str>) -> Option<String> {
+    let key = path?.strip_prefix("/v1/logos/")?;
+    if key.len() != 32
+        || !key
+            .bytes()
+            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+    {
+        return None;
+    }
+    Some(format!("{}/v1/logos/{key}", crate::home::TAFS_CLOUD))
+}
+
 /// One zone of a recipe's Card on its sheet (`Zone`).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Zone {
@@ -342,5 +357,32 @@ impl Recipes {
             .as_ref()
             .map(|l| l.hand.trim())
             .filter(|w| !w.is_empty())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_logo_loads_only_from_tafs_cloud_by_its_key() {
+        let key = "0123456789abcdef0123456789abcdef";
+        assert_eq!(
+            logo_url(Some(&format!("/v1/logos/{key}"))),
+            Some(format!("{}/v1/logos/{key}", crate::home::TAFS_CLOUD))
+        );
+        for bad in [
+            None,
+            Some("/v1/logos/stripe"),
+            Some("/v1/logos/0123456789ABCDEF0123456789ABCDEF"),
+            Some("/v1/logos/0123456789abcdef0123456789abcde"),
+            Some("/v1/logos/0123456789abcdef0123456789abcdef0"),
+            Some("/v1/logos/0123456789abcdef0123456789abcdeg"),
+            Some("https://evil.example/v1/logos/0123456789abcdef0123456789abcdef"),
+            Some("/v1/logos/../0123456789abcdef0123456789abcd"),
+            Some("v1/logos/0123456789abcdef0123456789abcdef"),
+        ] {
+            assert_eq!(logo_url(bad), None, "{bad:?}");
+        }
     }
 }
