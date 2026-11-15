@@ -579,8 +579,8 @@ pub enum ViewOnly {
     /// Signed in in the browser: it can be added with the phone. The function opens the pairing.
     CanPair(Rc<dyn Fn()>),
     /// Added with the phone already: its key is in software, so it still approves nothing, and
-    /// approvals go to the phone. No button: pairing again can't lift it (the PM's call, as
-    /// tafs-macos #90 on macOS 12).
+    /// approvals go to the phone. No button: pairing again can't lift it (as tafs-macos
+    /// #90 does on macOS 12).
     Paired,
 }
 
