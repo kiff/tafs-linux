@@ -67,7 +67,9 @@ impl<'de> Deserialize<'de> for YourStep {
 
 impl YourStep {
     /// `openLink`: the vendor's page only as tafs cloud vouched for it: an https link whose own
-    /// host is tafs cloud's `link_host`, with the button's words. Anything else is no button.
+    /// host is tafs cloud's `link_host`, with the button's words. Anything else is no button. The
+    /// link it gives is the parsed URL's own serialization, the one checked, as the iPad keeps and
+    /// opens its parsed `URL`.
     pub fn open_link(&self) -> Option<(String, String, String)> {
         let (link, host) = (self.link.as_ref()?, self.link_host.as_ref()?);
         let words = self.open.as_ref().filter(|w| !w.is_empty())?;
@@ -75,8 +77,10 @@ impl YourStep {
             return None;
         }
         let url = url::Url::parse(link).ok()?;
+        // What opens is the URL as checked, never the string as sent: another parser (GLib's,
+        // under the launcher) may read the raw string's host differently, as it does `\@`.
         (url.scheme().eq_ignore_ascii_case("https") && url.host_str()?.eq_ignore_ascii_case(host))
-            .then(|| (link.clone(), host.clone(), words.clone()))
+            .then(|| (url.as_str().to_string(), host.clone(), words.clone()))
     }
 }
 
@@ -160,6 +164,17 @@ mod tests {
             ..s.clone()
         };
         assert_eq!(other.open_link(), None);
+        // A backslash reads as a slash to the URL parser, and as part of the userinfo to GLib's:
+        // the link that opens is the one checked, so its host is the vouched one either way.
+        let tricky = YourStep {
+            link: Some("https://good.example\\@evil.example/x".into()),
+            link_host: Some("good.example".into()),
+            ..s.clone()
+        };
+        assert_eq!(
+            tricky.open_link().map(|(url, _, _)| url).as_deref(),
+            Some("https://good.example/@evil.example/x")
+        );
         let c: CoachWaiting = serde_json::from_str(
             r#"{"session":"s1","words":{"line":" Coach waits ","open":"Open Coach"}}"#,
         )

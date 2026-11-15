@@ -67,7 +67,8 @@ calls, in the iPad's order:
 - **A step a taf handed the person** (`YourStepCard`), in the amber: tafs cloud's title, the taf,
   what (16 semibold) and why (14, soft); the vendor's page when tafs cloud vouched for its link
   (an https link whose own host is tafs cloud's `link_host`; anything else is no button), which
-  opens in the browser, with that host under it; then Done and Skip it.
+  opens in the browser exactly as it was parsed and checked (never the string as sent), with that
+  host under it; then Done and Skip it.
 - **"Set all aside"** above two or more of Coach's waiting chats, when tafs cloud sends its words.
 - **A Coach chat waiting on the person** (`CoachWaitingCard`): tafs cloud's line with Coach's
   mark; Open Coach, for someone who may use Coach; Set aside, when tafs cloud sends its words.
