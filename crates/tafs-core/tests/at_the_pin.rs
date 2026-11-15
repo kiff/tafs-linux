@@ -147,6 +147,56 @@ const LINES: &[(&str, &[&str])] = &[
     ("sample.list_charges", &[]),
     ("sample.look_up_charge", &[]),
     ("taf.revoke", &[]),
+    ("calendar.today", &[]),
+    ("calendar.reading", &[]),
+    ("calendar.agenda", &[]),
+    ("calendar.view_picker", &[]),
+    ("calendar.choose_date", &[]),
+    ("calendar.mode.day", &[]),
+    ("calendar.mode.week", &[]),
+    ("calendar.mode.month", &[]),
+    ("calendar.previous_day", &[]),
+    ("calendar.next_day", &[]),
+    ("calendar.previous_week", &[]),
+    ("calendar.next_week", &[]),
+    ("calendar.previous_month", &[]),
+    ("calendar.next_month", &[]),
+    ("calendar.nothing_on_day", &[]),
+    ("calendar.nothing_this_week", &[]),
+    ("calendar.nothing_these_days", &[]),
+    ("calendar.weekday.mon", &[]),
+    ("calendar.weekday.tue", &[]),
+    ("calendar.weekday.wed", &[]),
+    ("calendar.weekday.thu", &[]),
+    ("calendar.weekday.fri", &[]),
+    ("calendar.weekday.sat", &[]),
+    ("calendar.weekday.sun", &[]),
+    ("calendar.month_name.january", &[]),
+    ("calendar.month_name.february", &[]),
+    ("calendar.month_name.march", &[]),
+    ("calendar.month_name.april", &[]),
+    ("calendar.month_name.may", &[]),
+    ("calendar.month_name.june", &[]),
+    ("calendar.month_name.july", &[]),
+    ("calendar.month_name.august", &[]),
+    ("calendar.month_name.september", &[]),
+    ("calendar.month_name.october", &[]),
+    ("calendar.month_name.november", &[]),
+    ("calendar.month_name.december", &[]),
+    ("calendar.month_title.january", &[]),
+    ("calendar.month_title.february", &[]),
+    ("calendar.month_title.march", &[]),
+    ("calendar.month_title.april", &[]),
+    ("calendar.month_title.may", &[]),
+    ("calendar.month_title.june", &[]),
+    ("calendar.month_title.july", &[]),
+    ("calendar.month_title.august", &[]),
+    ("calendar.month_title.september", &[]),
+    ("calendar.month_title.october", &[]),
+    ("calendar.month_title.november", &[]),
+    ("calendar.month_title.december", &[]),
+    ("calendar.slot_at", &["name", "first"]),
+    ("home.calendar_not_read", &["why"]),
     ("settings.devices.unnamed", &[]),
     ("settings.devices.this_device_title", &[]),
     ("settings.devices.sign_out", &[]),
@@ -1111,4 +1161,55 @@ fn devices_is_the_reference_sets() {
     );
     assert_eq!(devices[1].name.as_deref(), Some("tafs on iPhone"));
     assert_eq!(last_used(&w, None, now).unwrap(), "Not used yet");
+}
+
+#[test]
+fn calendar_titles_are_the_reference_sets() {
+    use tafs_core::calendar::{day_heading, title, Mode, State};
+    let w = book("en");
+    let s = |mode, selected: &str| State {
+        mode,
+        selected: selected.into(),
+    };
+    assert_eq!(
+        title(&w, &s(Mode::Day, "2026-11-15")).unwrap(),
+        "Sun 15 November 2026"
+    );
+    assert_eq!(
+        title(&w, &s(Mode::Week, "2026-11-15")).unwrap(),
+        "9 – 15 November 2026"
+    );
+    assert_eq!(
+        title(&w, &s(Mode::Week, "2026-12-01")).unwrap(),
+        "30 November – 6 December 2026"
+    );
+    assert_eq!(
+        title(&w, &s(Mode::Week, "2026-12-30")).unwrap(),
+        "28 December 2026 – 3 January 2027"
+    );
+    assert_eq!(
+        title(&w, &s(Mode::Month, "2026-11-15")).unwrap(),
+        "November 2026"
+    );
+    assert_eq!(day_heading(&w, "2026-11-05").unwrap(), "Thu 5 November");
+    // Every title, heading and count in every language.
+    for lang in SHIPPED {
+        let w = book(lang);
+        for mode in Mode::ALL {
+            for day in ["2026-11-15", "2026-12-01", "2026-12-30"] {
+                title(&w, &s(mode, day)).unwrap();
+            }
+            mode.title(&w).unwrap();
+        }
+        day_heading(&w, "2026-11-05").unwrap();
+        w.count("calendar.day_scheduled", 3, &[("day", "x")])
+            .unwrap();
+        w.count(
+            "calendar.slot_times",
+            2,
+            &[("name", "x"), ("first", "09:00")],
+        )
+        .unwrap();
+        w.count("calendar.times", 2, &[]).unwrap();
+    }
 }

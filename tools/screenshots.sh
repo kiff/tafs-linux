@@ -13,7 +13,7 @@ export XDG_CONFIG_HOME=$(mktemp -d)
 mkdir -p "$XDG_CONFIG_HOME/gtk-4.0"
 printf '[Settings]\ngtk-font-name=Inter 11\ngtk-hint-font-metrics=1\n' > "$XDG_CONFIG_HOME/gtk-4.0/settings.ini"
 missing=0
-for screen in welcome sign-in overview overview-home needs-you record taf taf-card taf-home taf-home-card usage usage-kiff usage-kiff-member connect-apps devices account sidebar-sample view-only; do
+for screen in welcome sign-in overview overview-home needs-you record taf taf-card taf-home taf-home-card usage usage-kiff usage-kiff-member connect-apps devices calendar calendar-week calendar-compact account sidebar-sample view-only; do
   case $screen in
     welcome) opts=(--page welcome) ;;
     sign-in) opts=(--page sign-in) ;;
@@ -21,6 +21,10 @@ for screen in welcome sign-in overview overview-home needs-you record taf taf-ca
     overview-home) opts=(--home shared/contracts/home.json) ;;
     needs-you) opts=(--sample --signed-in --page needs-you) ;;
     account) opts=(--sample --signed-in --page account) ;;
+    calendar) opts=(--sample --signed-in --page calendar) ;;
+    calendar-week) opts=(--sample --signed-in --page calendar-week) ;;
+    # An upright iPad's size: the compact layout, as the reference set's calendar.png.
+    calendar-compact) opts=(--sample --signed-in --page calendar --size 1032x1376) ;;
     devices) opts=(--sample --signed-in --page devices) ;;
     connect-apps) opts=(--sample --signed-in --page connect-apps) ;;
     usage) opts=(--sample --signed-in --page usage) ;;

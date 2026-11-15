@@ -39,6 +39,9 @@ pub struct Screens {
     pub connect: crate::connect::ConnectSource,
     /// Where Account › Devices reads.
     pub devices: crate::devices::DevicesSource,
+    /// Where the calendar reads, and the state a screenshot opens it in.
+    pub calendar: crate::calendar::CalendarSource,
+    pub calendar_first: tafs_core::calendar::State,
 }
 
 /// Builds the shell. `view_only` shows the notice that this computer can't approve yet.
@@ -60,6 +63,8 @@ pub fn build(
         cloud_names,
         connect,
         devices,
+        calendar,
+        calendar_first,
     } = screens;
     let entries = Rc::new(record.entries.clone());
     let lines = model.lines(&w).unwrap_or_else(|e| panic!("{e}"));
@@ -150,6 +155,29 @@ pub fn build(
                 Selection::Overview => crate::overview::page(&overview, open.clone()),
                 Selection::NeedsYou => crate::needs_you::page(w.clone(), &needs_you),
                 Selection::Record => crate::record::page(w.clone(), record.clone()),
+                Selection::Calendar => {
+                    // A taf's work opens its page, by tafs cloud's id.
+                    let known: Vec<String> =
+                        tafs.iter().filter_map(|t| t.cloud_id.clone()).collect();
+                    let by_cloud: Vec<(String, String)> = tafs
+                        .iter()
+                        .filter_map(|t| Some((t.cloud_id.clone()?, t.key.clone())))
+                        .collect();
+                    let open = open.clone();
+                    crate::calendar::page(
+                        w.clone(),
+                        calendar.clone(),
+                        Rc::new(crate::calendar::Opening {
+                            known,
+                            open: Rc::new(move |cloud: String| {
+                                if let Some((_, key)) = by_cloud.iter().find(|(c, _)| *c == cloud) {
+                                    open(Selection::Taf(key.clone()));
+                                }
+                            }),
+                        }),
+                        calendar_first.clone(),
+                    )
+                }
                 Selection::Devices => {
                     let open = open.clone();
                     crate::devices::page(

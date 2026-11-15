@@ -197,6 +197,29 @@ button.tafs-round-back { background-color: @tafs_panel; border-radius: 999px; mi
 button.tafs-text-button { background: none; border: none; box-shadow: none; padding: 4px 0; font-size: 17px; }
 button.tafs-text-button.refuse { color: @tafs_no; }
 
+/* The calendar. */
+button.tafs-chevron { background: none; border: none; box-shadow: none; color: @tafs_amber_text; padding: 4px; min-width: 0; min-height: 0; }
+button.tafs-today-pill { background: none; box-shadow: none; border: 1px solid alpha(@tafs_ink, 0.4); border-radius: 999px; min-height: 40px; padding: 0 16px; color: @tafs_ink; font-size: 15px; font-weight: 500; }
+button.tafs-today-pill.at-today { color: @tafs_soft; border-color: alpha(@tafs_ink, 0.2); }
+menubutton.tafs-date-pill > button { background-color: alpha(@tafs_ink, 0.06); background-image: none; border: none; box-shadow: none; border-radius: 999px; padding: 6px 14px; color: @tafs_ink; font-size: 17px; }
+.tafs-navigator { background-color: @tafs_panel; border-radius: 14px; padding: 14px; }
+button.tafs-day-cell { background: none; box-shadow: none; border: 1.5px solid transparent; border-radius: 8px; padding: 2px; min-height: 0; min-width: 0; }
+button.tafs-day-cell.selected { background-color: alpha(@tafs_amber, 0.18); }
+button.tafs-day-cell.today { border-color: @tafs_amber; }
+.tafs-out-of-month { color: alpha(@tafs_dim, 0.6); }
+.tafs-mark { min-width: 5px; min-height: 5px; border-radius: 999px; }
+.tafs-mark.on-amber { background-color: @tafs_amber_ink; }
+button.tafs-strip-cell { background-color: @tafs_panel; background-image: none; box-shadow: none; border: 1.5px solid transparent; border-radius: 12px; padding: 0; min-width: 0; }
+button.tafs-strip-cell.selected { background-color: @tafs_amber; }
+button.tafs-strip-cell.today { border-color: @tafs_amber; }
+.tafs-amber-ink { color: @tafs_amber_ink; }
+button.tafs-plain { background: none; border: none; box-shadow: none; padding: 0; min-height: 0; min-width: 0; }
+.tafs-hour { border-top: 1px solid @tafs_line; }
+.tafs-slot { border-radius: 6px; padding: 3px 6px; }
+.tafs-dot7 { min-width: 7px; min-height: 7px; border-radius: 999px; }
+.tafs-dot9 { min-width: 9px; min-height: 9px; border-radius: 999px; }
+.tafs-event { background-color: @tafs_panel; border-radius: 10px; padding: 10px; }
+
 .tafs-code { font-family: monospace; font-size: 34px; font-weight: 600; color: @tafs_ink; }
 .tafs-mono { font-family: monospace; }
 .tafs-notice { background-color: @tafs_panel; border-bottom: 1px solid @tafs_line; padding: 12px 24px; }
@@ -211,7 +234,7 @@ pub fn css(dark: bool) -> String {
     let mut avatars = String::new();
     for (i, hex) in TAF_COLORS.iter().enumerate() {
         avatars.push_str(&format!(
-            ".tafs-avatar.c{i}, .tafs-taf-dot.c{i}, .tafs-card-mini.c{i}, .tafs-face.c{i} {{ background-color: #{hex:06x}; }}\n"
+            ".tafs-avatar.c{i}, .tafs-taf-dot.c{i}, .tafs-card-mini.c{i}, .tafs-face.c{i}, .tafs-mark.c{i}, .tafs-dot7.c{i}, .tafs-dot9.c{i} {{ background-color: #{hex:06x}; }}\n.tafs-slot.c{i} {{ background-color: alpha(#{hex:06x}, 0.16); }}\n"
         ));
     }
     let shapes = SHAPES
