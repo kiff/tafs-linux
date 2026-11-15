@@ -360,6 +360,162 @@ impl Recipes {
     }
 }
 
+/// The strip under the tafs list (`Gallery.Strip`): shown or not, its title, its jobs in order.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct Strip {
+    pub shown: bool,
+    pub title: String,
+    pub ids: Vec<String>,
+}
+
+/// The gallery's own words (`Gallery.Words`).
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct GalleryWords {
+    pub title: String,
+    /// The heading over every job ("All jobs").
+    pub all: String,
+    pub own_words: String,
+    pub own_words_line: String,
+    /// Browsing, with nothing created ("Explore jobs").
+    pub explore: String,
+    /// The row under the strip ("See all jobs").
+    pub see_all: String,
+    /// A browsed job's only action ("Try it with Coach").
+    pub try_it: String,
+    /// The label over a job's sample.
+    pub sample: String,
+}
+
+/// Every ready-made job, at any time (`TafsCloud.Gallery`, `GET /v1/recipes/gallery`). Read as the
+/// iPad's decoder: everything forgiven; a category or a recipe that can't be read is left out on
+/// its own (`LenientItem`).
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct Gallery {
+    pub categories: Vec<Category>,
+    pub recipes: Vec<Recipe>,
+    pub strip: Strip,
+    pub words: GalleryWords,
+    pub labels: Option<Labels>,
+}
+
+// `said`: trimmed words, none when empty.
+fn said(w: &str) -> Option<&str> {
+    let w = w.trim();
+    (!w.is_empty()).then_some(w)
+}
+
+impl Gallery {
+    pub fn read(body: &[u8]) -> Option<Gallery> {
+        let v: Value = serde_json::from_slice(body).ok()?;
+        let o = v.as_object()?;
+        let lenient = |k: &str| -> Vec<Value> {
+            o.get(k)
+                .and_then(Value::as_array)
+                .cloned()
+                .unwrap_or_default()
+        };
+        let strip = o
+            .get("strip")
+            .and_then(Value::as_object)
+            .map(|s| Strip {
+                shown: lenient_bool(s, "shown"),
+                title: lenient_str(s, "title"),
+                ids: lenient_strings(s, "ids"),
+            })
+            .unwrap_or_default();
+        let words = o
+            .get("words")
+            .and_then(Value::as_object)
+            .map(|w| GalleryWords {
+                title: lenient_str(w, "title"),
+                all: lenient_str(w, "all"),
+                own_words: lenient_str(w, "own_words"),
+                own_words_line: lenient_str(w, "own_words_line"),
+                explore: lenient_str(w, "explore"),
+                see_all: lenient_str(w, "see_all"),
+                try_it: lenient_str(w, "try"),
+                sample: lenient_str(w, "sample"),
+            })
+            .unwrap_or_default();
+        Some(Gallery {
+            categories: lenient("categories").iter().filter_map(category).collect(),
+            recipes: lenient("recipes").iter().filter_map(recipe).collect(),
+            strip,
+            words,
+            labels: o.get("labels").and_then(labels),
+        })
+    }
+
+    /// `asRecipes`: drawn as Home's list is, its sheet with the gallery's labels, else
+    /// `fallback`'s (from `/v1/recipes`).
+    pub fn as_recipes(&self, fallback: Option<&Labels>) -> Recipes {
+        Recipes {
+            categories: self.categories.clone(),
+            recipes: self.recipes.clone(),
+            shown: true,
+            home: None,
+            labels: self.labels.clone().or_else(|| fallback.cloned()),
+        }
+    }
+
+    /// `stripRecipes`: the strip's jobs in tafs cloud's order, an id it doesn't list skipped;
+    /// none when tafs cloud doesn't show it.
+    pub fn strip_recipes(&self) -> Vec<&Recipe> {
+        if !self.strip.shown {
+            return vec![];
+        }
+        self.strip
+            .ids
+            .iter()
+            .filter_map(|id| self.recipes.iter().find(|r| &r.id == id))
+            .collect()
+    }
+
+    /// `seeAll`: "See all jobs", else "All jobs"; none when tafs cloud sends neither or the strip
+    /// already shows every job.
+    pub fn see_all(&self) -> Option<&str> {
+        if self.recipes.len() <= self.strip_recipes().len() {
+            return None;
+        }
+        said(&self.words.see_all).or_else(|| said(&self.words.all))
+    }
+
+    /// `explore`: Home's row that opens the jobs to browse; none when tafs cloud sends no words
+    /// for it or lists no job.
+    pub fn explore(&self) -> Option<&str> {
+        if self.recipes.is_empty() {
+            return None;
+        }
+        said(&self.words.explore)
+    }
+
+    /// `title(browse:)`: browsing, "Explore jobs" where tafs cloud sends it; else its title.
+    pub fn title(&self, browse: bool) -> &str {
+        browse
+            .then(|| said(&self.words.explore))
+            .flatten()
+            .unwrap_or(&self.words.title)
+    }
+
+    /// `handWords(browse:labels:)`: browsing, "Try it with Coach"; else the sheet's own.
+    pub fn hand_words<'a>(&'a self, browse: bool, labels: Option<&'a Labels>) -> Option<&'a str> {
+        browse
+            .then(|| said(&self.words.try_it))
+            .flatten()
+            .or_else(|| labels.and_then(|l| said(&l.hand)))
+    }
+
+    /// `sampleLabel`.
+    pub fn sample_label(&self) -> Option<&str> {
+        said(&self.words.sample)
+    }
+
+    /// `category(of:)`, for a recipe's colour.
+    pub fn category_of(&self, r: &Recipe) -> Option<&Category> {
+        self.categories.iter().find(|c| c.id == r.category)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

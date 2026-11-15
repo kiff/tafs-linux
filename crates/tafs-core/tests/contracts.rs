@@ -567,3 +567,90 @@ fn recipes_for_home_with_no_taf() {
     assert!(r.labels.is_none());
     assert!(!r.home_lists_recipes());
 }
+
+#[test]
+fn the_jobs_gallery() {
+    use tafs_core::recipes::{Gallery, Labels};
+    let answer = serde_json::json!({
+        "categories": [
+            {"id": "money", "title": "Money"},
+            {"title": "no id"},
+            "not even an object"
+        ],
+        "recipes": [
+            {"id": "r1", "title": "Refunds", "category": "money", "headline": "Refunds wait days"},
+            {"id": "r2", "title": "Chargebacks", "category": "money"},
+            {"id": "r3", "category": "money"},
+            {"id": "r4", "title": "Bad line", "category": "money", "line": 4}
+        ],
+        "strip": {"shown": true, "title": "Jobs to try", "ids": ["r2", "gone", "r1"]},
+        "words": {"title": "New taf", "all": "All jobs", "own_words": "Say it in your own words",
+                  "explore": "  Explore jobs  ", "see_all": "", "try": "Try it with Coach",
+                  "sample": "What it reported"},
+        "labels": {"allows": "Does on its own", "hand": "Hand it to Coach"}
+    });
+    let g = Gallery::read(&serde_json::to_vec(&answer).unwrap()).expect("reads");
+    // A category or a recipe that can't be read is left out on its own; the rest stay.
+    assert_eq!(g.categories.len(), 1);
+    assert_eq!(
+        g.recipes.iter().map(|r| r.id.as_str()).collect::<Vec<_>>(),
+        ["r1", "r2"]
+    );
+    // The strip in tafs cloud's order, an id the gallery doesn't list skipped.
+    assert_eq!(
+        g.strip_recipes()
+            .iter()
+            .map(|r| r.id.as_str())
+            .collect::<Vec<_>>(),
+        ["r2", "r1"]
+    );
+    // The strip shows every job: no "See all".
+    assert_eq!(g.see_all(), None);
+    assert_eq!(g.explore(), Some("Explore jobs"));
+    assert_eq!(g.title(true), "Explore jobs");
+    assert_eq!(g.title(false), "New taf");
+    assert_eq!(
+        g.hand_words(true, g.labels.as_ref()),
+        Some("Try it with Coach")
+    );
+    assert_eq!(
+        g.hand_words(false, g.labels.as_ref()),
+        Some("Hand it to Coach")
+    );
+    assert_eq!(g.sample_label(), Some("What it reported"));
+    assert_eq!(g.category_of(&g.recipes[0]).unwrap().title, "Money");
+    // As recipes: its own labels, else the fallback's.
+    let fallback = Labels {
+        hand: "Fallback".into(),
+        ..Default::default()
+    };
+    assert_eq!(
+        g.as_recipes(Some(&fallback)).hand_words(),
+        Some("Hand it to Coach")
+    );
+    let mut no_labels = g.clone();
+    no_labels.labels = None;
+    assert_eq!(
+        no_labels.as_recipes(Some(&fallback)).hand_words(),
+        Some("Fallback")
+    );
+
+    // A strip that hides, or shows fewer than all: "See all jobs", else "All jobs".
+    let mut fewer = answer.clone();
+    fewer["strip"]["ids"] = serde_json::json!(["r1"]);
+    let g = Gallery::read(&serde_json::to_vec(&fewer).unwrap()).unwrap();
+    assert_eq!(g.see_all(), Some("All jobs"));
+    fewer["words"]["see_all"] = serde_json::json!("See all jobs");
+    let g = Gallery::read(&serde_json::to_vec(&fewer).unwrap()).unwrap();
+    assert_eq!(g.see_all(), Some("See all jobs"));
+    fewer["strip"]["shown"] = serde_json::json!(false);
+    let g = Gallery::read(&serde_json::to_vec(&fewer).unwrap()).unwrap();
+    assert!(g.strip_recipes().is_empty());
+
+    // Everything forgiven: words and strip that can't be read are empty; no jobs, no Explore row.
+    let g = Gallery::read(br#"{"words": 3, "strip": "x", "recipes": "x"}"#).unwrap();
+    assert_eq!(g.words.title, "");
+    assert!(!g.strip.shown);
+    assert_eq!(g.explore(), None);
+    assert!(Gallery::read(b"[]").is_none());
+}
