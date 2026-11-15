@@ -49,8 +49,8 @@ P-256, DER, standard base64) over `kiff.pair.claim.v1\n{nonce}\n{sha256 hex of t
   happened (offline).
 - The answer is the session (`access_token`, `expires_in`, `tenant`, `subject`, `device_id`). It
   is kept **view-only** whatever the answer says (`pairing::kept`): this computer's key is in
-  software, and KIFF lets a software key approve nothing; the claim's answer doesn't weigh the key
-  store yet. The view-only notice is then drawn from KIFF's `/v1/me` (`approval_mode`), as for any
+  software, and KIFF lets a software key approve nothing. KIFF answers `view` for a software key;
+  this keeps it so whatever the answer says. The view-only notice is then drawn from KIFF's `/v1/me` (`approval_mode`), as for any
   session.
 
 ## The session

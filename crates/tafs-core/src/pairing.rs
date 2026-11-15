@@ -219,8 +219,8 @@ pub fn claim(
 
 /// The session a pairing keeps, bound to the key the phone approved. It is kept **view-only**
 /// whatever the claim's answer says: this computer's key is in software (the code said
-/// `key_store: software`), and KIFF lets a software key approve nothing; the claim's answer
-/// doesn't weigh the key store yet. The view-only notice is then drawn from KIFF's `/v1/me`, as
+/// `key_store: software`), and KIFF lets a software key approve nothing. KIFF answers `view` for
+/// a software key; this keeps it so whatever the answer says. The view-only notice is then drawn from KIFF's `/v1/me`, as
 /// for any session.
 pub fn kept(token: &DeviceToken, key: &DeviceKey, now: i64) -> KeptSession {
     KeptSession {
