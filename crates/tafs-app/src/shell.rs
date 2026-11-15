@@ -168,7 +168,7 @@ pub fn build(
             let title = title_of(&w, &lines, &model_tafs, &s);
             let page = match s {
                 Selection::Overview => crate::overview::page(&overview, open.clone()),
-                Selection::NeedsYou => crate::needs_you::page(w.clone(), &needs_you),
+                Selection::NeedsYou => crate::needs_you::page(w.clone(), &needs_you, open.clone()),
                 Selection::Record => crate::record::page(w.clone(), record.clone()),
                 Selection::Calendar => {
                     // A taf's work opens its page, by tafs cloud's id.

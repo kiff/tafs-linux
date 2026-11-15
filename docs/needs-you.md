@@ -109,6 +109,19 @@ dimmed: Coach isn't ported, and Dismiss is signed like a refusal, which this com
 sign. `--home crates/tafs-app/fixtures/home-waits.json` (synthetic) draws one, CI's
 `needs-you-waits`.
 
+## Knocks
+
+A knock at a taf's door waits for its owner too. Home's tafs carry their doors (`doors`:
+`DoorLight`'s app, open, resting and knocks; a field missing or of the wrong kind reads as nothing
+to show, and a door that isn't an object fails Home, as the iPad's keyed decoder does). After the
+held calls, each taf whose doors' knocks add up to more than none has a row, in the tafs' own
+order: an amber-edged panel with its avatar (32), name (14 semibold), "Someone knocked at its door.
+Nothing was done." or "{count} knocks at its doors. Nothing was done." (14, soft), and a chevron.
+It opens the taf's page, whose Activity opens first, where knocks are answered; a screen reader
+hears "Opens {taf}, where you answer it". A knock also makes its taf relevant now in the sidebar
+(`relevantNow`). "Nothing is waiting." shows only when none knocks either.
+`--home crates/tafs-app/fixtures/home-waits.json` (synthetic) draws one, CI's `needs-you-waits`.
+
 ## Not yet
 
 - **Answering from this computer:** KIFF takes an answer signed by the session's key. Until
@@ -116,7 +129,8 @@ sign. `--home crates/tafs-app/fixtures/home-waits.json` (synthetic) draws one, C
   The sample's answers come with the sample's Card checks: until then they're dimmed.
 - **Answering a step** (Done, Skip it: signed), **opening Coach** and **setting chats aside**:
   there, dimmed.
-- **Knocks:** with their read.
+- **Answering a knock** on the taf's Activity, and the doors' lights on its avatar's rim: with
+  the Doors screen.
 - **Discussing a Card unit request with Coach, and dismissing it:** there, dimmed.
 - **Alerts** (`AlertsCard`): the iPad offers them only to a session holding an approval key, and a
   Linux session never does; Linux's notifications come in their own change.
