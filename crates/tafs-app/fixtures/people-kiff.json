@@ -1,32 +1,112 @@
 {
-  "_comment": "Synthetic answers for People & groups' screenshot signed in with KIFF (--people). Made up, not from any account.",
+  "_comment": "Synthetic answers for People & groups', the KIFF account's and the time zone picker's screenshots signed in with KIFF (--people). Made up, not from any account.",
   "account": {
     "tenant_id": "t-synthetic",
     "tenant_slug": "acme",
     "tenant_display_name": "Acme",
     "email": "owner@example.test",
-    "capabilities": ["members.manage", "holds.answer"]
+    "capabilities": [
+      "members.manage",
+      "holds.answer"
+    ],
+    "time_zone": "Europe/Paris"
   },
   "groups": {
     "groups": [
-      { "id": "g-finance", "name": "Finance", "members": [
-        { "subject": "u-sam", "role": "member" },
-        { "subject": "u-owner", "role": "manager" },
-        { "subject": "u-lee", "role": "member" }
-      ], "agents": ["rae"] },
-      { "id": "g-everyone", "name": "Everyone", "everyone": true, "members": [
-        { "subject": "u-owner", "role": "member" },
-        { "subject": "u-sam", "role": "member" },
-        { "subject": "u-lee", "role": "member" }
-      ], "agents": [] }
+      {
+        "id": "g-finance",
+        "name": "Finance",
+        "members": [
+          {
+            "subject": "u-sam",
+            "role": "member"
+          },
+          {
+            "subject": "u-owner",
+            "role": "manager"
+          },
+          {
+            "subject": "u-lee",
+            "role": "member"
+          }
+        ],
+        "agents": [
+          "rae"
+        ]
+      },
+      {
+        "id": "g-everyone",
+        "name": "Everyone",
+        "everyone": true,
+        "members": [
+          {
+            "subject": "u-owner",
+            "role": "member"
+          },
+          {
+            "subject": "u-sam",
+            "role": "member"
+          },
+          {
+            "subject": "u-lee",
+            "role": "member"
+          }
+        ],
+        "agents": []
+      }
     ]
   },
   "members": {
     "members": [
-      { "subject": "u-owner", "role": "owner", "status": "active", "email": "owner@example.test", "you": true },
-      { "subject": "u-sam", "role": "member", "status": "active", "email": "sam@example.test" },
-      { "subject": "u-lee", "role": "member", "status": "active", "email": "lee@example.test" },
-      { "subject": "u-new", "role": "member", "status": "invited", "email": "new@example.test" }
+      {
+        "subject": "u-owner",
+        "role": "owner",
+        "status": "active",
+        "email": "owner@example.test",
+        "you": true
+      },
+      {
+        "subject": "u-sam",
+        "role": "member",
+        "status": "active",
+        "email": "sam@example.test"
+      },
+      {
+        "subject": "u-lee",
+        "role": "member",
+        "status": "active",
+        "email": "lee@example.test"
+      },
+      {
+        "subject": "u-new",
+        "role": "member",
+        "status": "invited",
+        "email": "new@example.test"
+      }
+    ]
+  },
+  "zones": {
+    "zones": [
+      {
+        "id": "Europe/London",
+        "title": "London (UTC+0)"
+      },
+      {
+        "id": "Europe/Paris",
+        "title": "Paris (UTC+1)"
+      },
+      {
+        "id": "Europe/Berlin",
+        "title": "Berlin (UTC+1)"
+      },
+      {
+        "id": "America/New_York",
+        "title": "New York (UTC−5)"
+      },
+      {
+        "id": "Asia/Tokyo",
+        "title": "Tokyo (UTC+9)"
+      }
     ]
   }
 }

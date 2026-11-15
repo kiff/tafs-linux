@@ -147,6 +147,14 @@ const LINES: &[(&str, &[&str])] = &[
     ("sample.list_charges", &[]),
     ("sample.look_up_charge", &[]),
     ("taf.revoke", &[]),
+    ("settings.find_time_zone", &[]),
+    ("settings.account_id", &[]),
+    ("settings.time_zone.uses_this", &[]),
+    ("export.row", &[]),
+    ("export.own_chats_each_taf_coach", &[]),
+    ("settings.delete_account.row", &[]),
+    ("sign_in.deletes_every_taf_runs_chats", &[]),
+    ("settings.use_device_zone", &["device", "identifier"]),
     ("people.add_group", &[]),
     ("people.new_group", &[]),
     ("people.everyone_group", &[]),
@@ -1268,4 +1276,54 @@ fn people_lines_at_the_pin() {
         uses(&w, &group(true), &[]).unwrap();
         group(true).shown_name(&w).unwrap();
     }
+}
+
+#[test]
+fn kiff_account_lines_at_the_pin() {
+    use tafs_core::account::{kiff_account_lines, Account};
+    let account = Account {
+        tenant_id: "t".into(),
+        slug: "acme".into(),
+        display_name: Some("Acme".into()),
+        email: Some("rae@acme.test".into()),
+        time_zone: Some("Europe/Paris".into()),
+        capabilities: None,
+        approval_mode: None,
+    };
+    let w = book("en");
+    let lines = kiff_account_lines(&w, &account, "America/New_York").unwrap();
+    let rows: Vec<(&str, &str)> = lines
+        .rows
+        .iter()
+        .map(|(a, b)| (a.as_str(), b.as_str()))
+        .collect();
+    assert_eq!(
+        rows,
+        [
+            ("KIFF account", "Acme"),
+            ("Account id", "acme"),
+            ("Signed in as", "rae@acme.test")
+        ]
+    );
+    assert_eq!(lines.zone, "Europe/Paris");
+    assert_eq!(
+        lines.use_this_zone.as_deref(),
+        Some("Use this computer's: America/New_York")
+    );
+    // The same zone here: no line to use it. No zone from KIFF: UTC.
+    assert_eq!(
+        kiff_account_lines(&w, &account, "Europe/Paris")
+            .unwrap()
+            .use_this_zone,
+        None
+    );
+    let utc = Account {
+        time_zone: None,
+        ..account.clone()
+    };
+    assert_eq!(kiff_account_lines(&w, &utc, "UTC").unwrap().zone, "UTC");
+    for lang in SHIPPED {
+        kiff_account_lines(&book(lang), &account, "Asia/Tokyo").unwrap();
+    }
+    assert!(!tafs_core::account_time::local_identifier().is_empty());
 }

@@ -27,3 +27,4 @@ pub mod taf_page;
 pub mod theme;
 pub mod usage;
 pub mod words;
+pub mod zones;

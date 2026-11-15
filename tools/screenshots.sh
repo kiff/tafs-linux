@@ -13,7 +13,7 @@ export XDG_CONFIG_HOME=$(mktemp -d)
 mkdir -p "$XDG_CONFIG_HOME/gtk-4.0"
 printf '[Settings]\ngtk-font-name=Inter 11\ngtk-hint-font-metrics=1\n' > "$XDG_CONFIG_HOME/gtk-4.0/settings.ini"
 missing=0
-for screen in welcome sign-in overview overview-home needs-you record taf taf-card taf-home taf-home-card usage usage-kiff usage-kiff-member connect-apps devices people calendar calendar-week calendar-compact account sidebar-sample view-only; do
+for screen in welcome sign-in overview overview-home needs-you record taf taf-card taf-home taf-home-card usage usage-kiff usage-kiff-member connect-apps devices people kiff-account time-zone calendar calendar-week calendar-compact account sidebar-sample view-only; do
   case $screen in
     welcome) opts=(--page welcome) ;;
     sign-in) opts=(--page sign-in) ;;
@@ -26,6 +26,8 @@ for screen in welcome sign-in overview overview-home needs-you record taf taf-ca
     # An upright iPad's size: the compact layout, as the reference set's calendar.png.
     calendar-compact) opts=(--sample --signed-in --page calendar --size 1032x1376) ;;
     devices) opts=(--sample --signed-in --page devices) ;;
+    kiff-account) opts=(--home shared/contracts/home.json --people crates/tafs-app/fixtures/people-kiff.json --page kiff-account) ;;
+    time-zone) opts=(--home shared/contracts/home.json --people crates/tafs-app/fixtures/people-kiff.json --page time-zone) ;;
     people) opts=(--home shared/contracts/home.json --people crates/tafs-app/fixtures/people-kiff.json --page people) ;;
     connect-apps) opts=(--sample --signed-in --page connect-apps) ;;
     usage) opts=(--sample --signed-in --page usage) ;;
