@@ -13,7 +13,7 @@ export XDG_CONFIG_HOME=$(mktemp -d)
 mkdir -p "$XDG_CONFIG_HOME/gtk-4.0"
 printf '[Settings]\ngtk-font-name=Inter 11\ngtk-hint-font-metrics=1\n' > "$XDG_CONFIG_HOME/gtk-4.0/settings.ini"
 missing=0
-for screen in welcome sign-in overview overview-home needs-you record account sidebar-sample view-only; do
+for screen in welcome sign-in overview overview-home needs-you record taf account sidebar-sample view-only; do
   case $screen in
     welcome) opts=(--page welcome) ;;
     sign-in) opts=(--page sign-in) ;;
@@ -22,6 +22,7 @@ for screen in welcome sign-in overview overview-home needs-you record account si
     needs-you) opts=(--sample --signed-in --page needs-you) ;;
     account) opts=(--sample --signed-in --page account) ;;
     record) opts=(--sample --signed-in --page record) ;;
+    taf) opts=(--sample --signed-in --page taf) ;;
     sidebar-sample) opts=(--sample) ;;
     view-only) opts=(--view-only) ;;
   esac

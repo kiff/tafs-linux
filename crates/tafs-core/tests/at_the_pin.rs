@@ -110,6 +110,19 @@ const LINES: &[(&str, &[&str])] = &[
     ("record.no_longer_waiting", &[]),
     ("record.nothing_sent", &[]),
     ("record.on.it", &[]),
+    ("taf.section.chat", &[]),
+    ("taf.section.activity", &[]),
+    ("taf.section.card", &[]),
+    ("taf.section.setup", &[]),
+    ("taf.state.working", &[]),
+    ("taf.state.waiting", &[]),
+    ("taf.state.ready", &[]),
+    ("taf.state.paused", &[]),
+    ("taf.state.stopped", &[]),
+    ("taf.state.halted", &[]),
+    ("taf.halt.part_held", &[]),
+    ("record.filter.held", &[]),
+    ("record.filter.refused", &[]),
     ("settings.your_account", &[]),
     ("settings.mode", &[]),
     ("settings.mode_kiff", &[]),
@@ -668,4 +681,80 @@ fn kiffs_activity_reads_as_the_ipad_shows_it() {
         entries[2].row_detail(&w, false).unwrap(),
         "no longer waiting · nothing sent"
     );
+}
+
+#[test]
+fn the_sample_refunds_page_is_the_reference_sets() {
+    use tafs_core::taf_page::{activity, card_bar, ActivityFilter, CardMeta, TafState};
+    let w = book("en");
+    let now = Local.with_ymd_and_hms(2026, 11, 15, 2, 56, 0).unwrap();
+    let record = sample::record(&w, now).unwrap();
+    let days = activity(&w, &record, "refunds", ActivityFilter::All, now).unwrap();
+    assert_eq!(days.len(), 1);
+    assert_eq!(days[0].title, "Today · Nov 15");
+    let lines: Vec<(String, String)> = days[0]
+        .lines
+        .iter()
+        .map(|e| {
+            (
+                e.title_with_amount(&w).unwrap(),
+                e.row_detail(&w, true).unwrap(),
+            )
+        })
+        .collect();
+    let got: Vec<(&str, &str)> = lines
+        .iter()
+        .map(|(a, b)| (a.as_str(), b.as_str()))
+        .collect();
+    assert_eq!(
+        got,
+        [
+            ("Credit on account #2290", "€25, within the Card"),
+            ("Refund order #4471", "€40, within the Card"),
+            ("Refunds started", "Card issued by You"),
+        ]
+    );
+    let titles: Vec<String> = ActivityFilter::ALL
+        .iter()
+        .map(|f| f.title(&w).unwrap())
+        .collect();
+    assert_eq!(titles, ["All", "Done", "Held", "Refused"]);
+    assert_eq!(
+        activity(&w, &record, "refunds", ActivityFilter::Done, now).unwrap()[0]
+            .lines
+            .len(),
+        2
+    );
+    assert!(activity(&w, &record, "refunds", ActivityFilter::Held, now)
+        .unwrap()
+        .is_empty());
+    assert_eq!(
+        activity(&w, &record, "deploys", ActivityFilter::Held, now).unwrap()[0]
+            .lines
+            .len(),
+        1
+    );
+    let card = sample::card(&w, "refunds").unwrap();
+    let meta = CardMeta {
+        title: "Refunds",
+        environment: "",
+        live: true,
+        active: true,
+    };
+    let bar = card_bar(&w, &card, &meta, 1, false).unwrap();
+    assert_eq!(
+        (bar.line.as_str(), bar.details.as_str()),
+        ("€1,960 left today of €2,000", "Refunds")
+    );
+    let test_card = CardMeta {
+        title: "Refunds",
+        environment: "test",
+        live: false,
+        active: true,
+    };
+    assert_eq!(
+        card_bar(&w, &card, &test_card, 3, false).unwrap().details,
+        "Refunds · Test · 3 Cards"
+    );
+    assert_eq!(TafState::Working.label(&w).unwrap(), "Working");
 }

@@ -41,7 +41,7 @@ pub fn page(w: Rc<WordBook>, n: &NeedsYouLines) -> gtk::Widget {
 
 /// `HeldCallCard`: an amber-edged panel with the taf, its countdown, the amount, what it asks,
 /// why it's held, the taf's own words, its details, and what can be done.
-fn held_card(w: &Rc<WordBook>, c: &CardLines) -> gtk::Box {
+pub fn held_card(w: &Rc<WordBook>, c: &CardLines) -> gtk::Box {
     let p = panel(true);
     let face = gtk::Box::new(gtk::Orientation::Vertical, 12);
     let head = gtk::Box::new(gtk::Orientation::Horizontal, 10);

@@ -16,5 +16,6 @@ pub mod sample;
 pub mod session;
 pub mod sidebar;
 pub mod signin;
+pub mod taf_page;
 pub mod theme;
 pub mod words;

@@ -147,6 +147,18 @@ button.tafs-chip-button.selected { background-color: @tafs_ink; color: @tafs_on_
 .tafs-time { font-size: 12px; }
 button.tafs-reads { background: none; box-shadow: none; border: none; color: @tafs_ok; font-size: 13px; font-weight: 400; padding: 0 4px; min-height: 0; }
 
+/* A taf's page: the state chip (its colour on its colour at 15%), the Card bar, the small Card. */
+.tafs-state-chip { font-size: 12px; font-weight: 500; border-radius: 999px; padding: 4px 10px; }
+.tafs-state-chip.ok { color: @tafs_ok; background-color: alpha(@tafs_ok, 0.15); }
+.tafs-state-chip.amber { color: @tafs_amber; background-color: alpha(@tafs_amber, 0.15); }
+.tafs-state-chip.no { color: @tafs_no; background-color: alpha(@tafs_no, 0.15); }
+.tafs-state-chip.soft { color: @tafs_soft; background-color: alpha(@tafs_soft, 0.15); }
+.tafs-card-bar { background-color: @tafs_panel; border: 1px solid @tafs_line; border-radius: 14px; padding: 9px 14px; }
+.tafs-card-mini { border-radius: 5px; color: alpha(white, 0.9); }
+.tafs-card-mini.dimfill { background-color: @tafs_dim; }
+.tafs-card-mini.faded { opacity: 0.4; }
+.tafs-segmented button.segment:disabled { opacity: 0.4; }
+
 .tafs-code { font-family: monospace; font-size: 34px; font-weight: 600; color: @tafs_ink; }
 .tafs-mono { font-family: monospace; }
 .tafs-notice { background-color: @tafs_panel; border-bottom: 1px solid @tafs_line; padding: 12px 24px; }
@@ -161,7 +173,7 @@ pub fn css(dark: bool) -> String {
     let mut avatars = String::new();
     for (i, hex) in TAF_COLORS.iter().enumerate() {
         avatars.push_str(&format!(
-            ".tafs-avatar.c{i}, .tafs-taf-dot.c{i} {{ background-color: #{hex:06x}; }}\n"
+            ".tafs-avatar.c{i}, .tafs-taf-dot.c{i}, .tafs-card-mini.c{i} {{ background-color: #{hex:06x}; }}\n"
         ));
     }
     let shapes = SHAPES

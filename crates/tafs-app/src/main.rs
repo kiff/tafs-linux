@@ -9,6 +9,7 @@ mod shell;
 mod sign_in;
 mod store;
 mod style;
+mod taf;
 mod welcome;
 mod widgets;
 
@@ -53,7 +54,7 @@ struct Options {
 }
 
 const USAGE: &str = "tafs [--lang en|de|fr|es|it|pt|nl|pl] [--theme light|dark] [--sample] [--signed-in] [--view-only]
-     [--home contract.json] [--page welcome|sign-in|overview|needs-you|record|calendar|usage|connect-apps|account] [--screenshot out.png]";
+     [--home contract.json] [--page welcome|sign-in|overview|needs-you|record|calendar|usage|connect-apps|account|taf] [--screenshot out.png]";
 
 fn options() -> Result<Options, String> {
     let mut o = Options::default();
@@ -108,6 +109,8 @@ fn selection_of(page: Option<&str>) -> Selection {
         Some("usage") => Selection::Usage,
         Some("connect-apps") => Selection::ConnectApps,
         Some("account") => Selection::Account,
+        // The sample's Refunds, as the reference set's taf.png opens it.
+        Some("taf") => Selection::Taf("refunds".into()),
         _ => Selection::Overview,
     }
 }
@@ -358,6 +361,94 @@ impl App {
         });
     }
 
+    /// Each taf's page: the sample's tafs with their Cards and states, else Home's.
+    fn taf_pages(
+        &self,
+        mode: Mode,
+        model: &SidebarModel,
+        cloud: Option<&Cloud>,
+        may_answer: bool,
+        at: chrono::DateTime<chrono::Local>,
+    ) -> Vec<taf::TafPage> {
+        let w = &self.words;
+        let holders: Vec<tafs_core::needs_you::Holder> = model
+            .tafs
+            .iter()
+            .map(|(t, _)| tafs_core::needs_you::Holder {
+                key: &t.key,
+                name: &t.name,
+                initial: &t.initial,
+                color: t.color_index,
+            })
+            .collect();
+        // A taf's held calls, as Needs you draws them.
+        let held_of = |key: &str| -> Vec<tafs_core::needs_you::CardLines> {
+            let calls: Vec<_> = model
+                .held
+                .iter()
+                .filter(|c| c.taf == key)
+                .cloned()
+                .collect();
+            tafs_core::needs_you::lines(w, &calls, &holders, may_answer, at)
+                .map(|l| l.cards)
+                .unwrap_or_default()
+        };
+        match (mode, cloud) {
+            (Mode::Sample, _) => model
+                .tafs
+                .iter()
+                .map(|(t, _)| {
+                    let waits = model.held.iter().any(|c| c.taf == t.key);
+                    taf::TafPage {
+                        key: t.key.clone(),
+                        name: t.name.clone(),
+                        initial: t.initial.clone(),
+                        color: t.color_index,
+                        state: if waits {
+                            tafs_core::taf_page::TafState::Waiting
+                        } else {
+                            tafs_core::taf_page::TafState::Working
+                        },
+                        attention: false,
+                        card: sample::card(w, &t.key).ok(),
+                        card_title: t.name.clone(),
+                        card_environment: String::new(),
+                        card_live: true,
+                        card_active: true,
+                        card_count: 1,
+                        revoked: false,
+                        held: held_of(&t.key),
+                        sample: true,
+                    }
+                })
+                .collect(),
+            (_, Some(c)) => c
+                .home
+                .tafs
+                .iter()
+                .filter_map(|h| tafs_core::home::taf(w, h).ok())
+                .map(|t| taf::TafPage {
+                    held: held_of(&t.key),
+                    initial: tafs_core::sidebar::initial(&t.name),
+                    key: t.key,
+                    name: t.name,
+                    color: t.color_index,
+                    state: t.state,
+                    attention: t.attention,
+                    card: t.card,
+                    card_title: t.card_title,
+                    card_environment: t.card_environment,
+                    card_live: t.card_live,
+                    card_active: t.card_active,
+                    card_count: t.card_count,
+                    revoked: t.revoked,
+                    sample: false,
+                })
+                .collect(),
+            _ => vec![],
+        }
+    }
+
     /// The Record's lines: the sample's, or KIFF's activity for the tafs Home lists, by the
     /// agent each call was made as. Its chips are every taf.
     fn record_data(
@@ -510,11 +601,13 @@ impl App {
         let actions: Rc<dyn Fn(AccountAction)> =
             Rc::new(move |action| me.act(action, mode, view_only));
         let record = Rc::new(self.record_data(mode, &model, cloud.as_deref(), at));
+        let tafs = Rc::new(self.taf_pages(mode, &model, cloud.as_deref(), may_answer, at));
         let screens = shell::Screens {
             overview,
             needs_you,
             account: account_lines,
             record,
+            tafs,
             actions,
         };
         let shell = shell::build(

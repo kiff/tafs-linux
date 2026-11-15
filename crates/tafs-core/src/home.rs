@@ -295,6 +295,17 @@ pub struct Taf {
     pub last_change: Option<DateTime<Utc>>,
     /// tafs cloud runs it.
     pub cloud: bool,
+    /// Its state (`TafState`), and whether tafs cloud flags what went wrong (`attention`).
+    pub state: crate::taf_page::TafState,
+    pub attention: bool,
+    /// The Card in front's title, environment, whether it's live and active; how many Cards; and
+    /// whether the taf's Card is revoked.
+    pub card_title: String,
+    pub card_environment: String,
+    pub card_live: bool,
+    pub card_active: bool,
+    pub card_count: usize,
+    pub revoked: bool,
 }
 
 fn window(w: &WordBook, raw: &str, words: Option<&WindowWords>) -> Result<Window, WordsError> {
@@ -346,6 +357,8 @@ pub fn taf(w: &WordBook, h: &HomeTaf) -> Result<Taf, WordsError> {
         (!text("taf").is_empty() && !text("session").is_empty() && !text("words").is_empty())
             .then(|| text("words").to_string())
     });
+    // The Card in front: KIFF's first, else the one merged from the taf's lines, named after it.
+    let front = h.card.cards.as_ref().and_then(|c| c.first());
     Ok(Taf {
         key: h
             .id
@@ -361,6 +374,21 @@ pub fn taf(w: &WordBook, h: &HomeTaf) -> Result<Taf, WordsError> {
         last_run: h.last_run,
         last_change: lenient_time(&h.last_change),
         cloud: h.id.is_some(),
+        state: crate::taf_page::TafState::from_cloud(&h.state, h.unscheduled == Some(true)),
+        attention: Work::read(&h.work).is_some_and(|w| w.attention && !w.line.trim().is_empty()),
+        card_title: front
+            .map(|c| c.title.clone())
+            .unwrap_or_else(|| h.name.clone()),
+        card_environment: front.map(|c| c.environment.clone()).unwrap_or_default(),
+        card_live: front.is_none_or(|c| c.live),
+        card_active: front.map_or(h.card.active, |c| c.active),
+        card_count: h
+            .card
+            .cards
+            .as_ref()
+            .filter(|c| !c.is_empty())
+            .map_or(1, Vec::len),
+        revoked: !h.card.active,
     })
 }
 
