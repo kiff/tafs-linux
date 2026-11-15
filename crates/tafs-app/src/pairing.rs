@@ -369,8 +369,9 @@ pub fn present(
                         return Err(Stopped::Cancelled);
                     }
                     let now = chrono::Utc::now().timestamp();
-                    // The new session and its key are kept first.
-                    let kept = KeptSession::from_token(&token, &key, now);
+                    // The new session and its key are kept first, view-only: a software key
+                    // approves nothing (`pairing::kept`).
+                    let kept = pairing::kept(&token, &key, now);
                     if let Err(refused) = crate::store::save(&kept, now) {
                         eprintln!("the keyring refused the session: {}", refused.0);
                         let _ = Kiff::new(vec![]).sign_out(&token.access_token);

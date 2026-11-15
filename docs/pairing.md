@@ -47,9 +47,11 @@ P-256, DER, standard base64) over `kiff.pair.claim.v1\n{nonce}\n{sha256 hex of t
   code**; anything else is "This computer wasn't added: {why}. Show a new code and try again."
   with **Try again**, where why is KIFF's own code (`invalid_proof`) or the app's line for what
   happened (offline).
-- The answer is the session (`access_token`, `expires_in`, `tenant`, `subject`, `device_id`). A
-  phone signed this computer in as `kind: passkey`, so the session approves on the phone or with
-  a passkey: it isn't view-only. KIFF's own `approval_mode`, when it sends one, wins.
+- The answer is the session (`access_token`, `expires_in`, `tenant`, `subject`, `device_id`). It
+  is kept **view-only** whatever the answer says (`pairing::kept`): this computer's key is in
+  software, and KIFF lets a software key approve nothing; the claim's answer doesn't weigh the key
+  store yet. The view-only notice is then drawn from KIFF's `/v1/me` (`approval_mode`), as for any
+  session.
 
 ## The session
 
@@ -81,4 +83,4 @@ computer's certificate authorities, so a network that requires a proxy reaches K
 
 `cargo test -p tafs-core pairing`: base32 against RFC 4648's vectors, the check code, the code's
 exact text, the nonce, the proof verified with the public key, the claim's body, every answer the
-contract names, the wait's pace, its end with the code, and a cancel. No test reaches the network.
+contract names, a paired session kept view-only whatever the answer says, the wait's pace, its end with the code, and a cancel. No test reaches the network.

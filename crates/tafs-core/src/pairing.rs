@@ -18,6 +18,7 @@ use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
 use crate::keys::DeviceKey;
+use crate::session::{ApprovalMode, KeptSession};
 use crate::signin::{refusal, Cancelled, Clock, DeviceToken, KiffError, Stopped, Transport};
 use crate::words::WordBook;
 
@@ -197,12 +198,7 @@ pub fn claim(
     let bytes = serde_json::to_vec(body).map_err(|_| KiffError::Unreadable)?;
     let answer = t.post("/v1/pair/claim", &bytes)?;
     if (200..300).contains(&answer.status) {
-        let mut token: DeviceToken =
-            serde_json::from_slice(&answer.body).map_err(|_| KiffError::Unreadable)?;
-        // A phone signed this computer in as `kind: passkey`: its approvals go to the phone or a
-        // passkey, so it isn't view-only. KIFF's own word wins when it gives one.
-        token.approval_mode.get_or_insert_with(|| "passkey".into());
-        return Ok(token);
+        return serde_json::from_slice(&answer.body).map_err(|_| KiffError::Unreadable);
     }
     match refusal(&answer, w) {
         KiffError::Server {
@@ -218,6 +214,18 @@ pub fn claim(
             }),
         },
         other => Err(other),
+    }
+}
+
+/// The session a pairing keeps, bound to the key the phone approved. It is kept **view-only**
+/// whatever the claim's answer says: this computer's key is in software (the code said
+/// `key_store: software`), and KIFF lets a software key approve nothing; the claim's answer
+/// doesn't weigh the key store yet. The view-only notice is then drawn from KIFF's `/v1/me`, as
+/// for any session.
+pub fn kept(token: &DeviceToken, key: &DeviceKey, now: i64) -> KeptSession {
+    KeptSession {
+        approval_mode: ApprovalMode::View,
+        ..KeptSession::from_token(token, key, now)
     }
 }
 
@@ -440,14 +448,42 @@ mod tests {
         assert_eq!(token.tenant.as_deref(), Some("t_1"));
         assert_eq!(token.subject.as_deref(), Some("u_1"));
         assert_eq!(token.expires_in, 7776000);
-        // Paired, it approves on the phone or with a passkey: not view-only.
-        assert_eq!(token.approval_mode.as_deref(), Some("passkey"));
+        // KIFF's word, as it said it: none here.
+        assert_eq!(token.approval_mode, None);
         let sent = t.sent.borrow();
         assert_eq!(sent[0].0, "/v1/pair/claim");
         assert_eq!(
             sent[0].1,
             json!({ "nonce": "n", "pub": "PUB", "proof": "PROOF" })
         );
+    }
+
+    #[test]
+    fn a_paired_software_key_keeps_the_view_only_notice() {
+        let key = DeviceKey::generate();
+        for mode in [None, Some("view"), Some("passkey"), Some("key")] {
+            let body = match mode {
+                Some(m) => {
+                    format!(r#"{{"access_token":"tok","expires_in":60,"approval_mode":"{m}"}}"#)
+                }
+                None => r#"{"access_token":"tok","expires_in":60}"#.to_string(),
+            };
+            let t = Script::new(vec![Ok(Answer {
+                status: 200,
+                body: body.into_bytes(),
+            })]);
+            let token = claim(&t, &claim_body("n", "p", "q"), None).unwrap();
+            assert_eq!(token.approval_mode.as_deref(), mode);
+            let session = kept(&token, &key, 1_000);
+            assert_eq!(session.approval_mode, ApprovalMode::View, "{mode:?}");
+            assert!(session.approval_mode.is_view_only());
+            assert_eq!(session.token, "tok");
+            assert_eq!(session.expires_at, 1_060);
+            assert_eq!(
+                session.key().unwrap().public_spki_der(),
+                key.public_spki_der()
+            );
+        }
     }
 
     #[test]
