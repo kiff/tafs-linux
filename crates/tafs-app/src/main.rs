@@ -286,6 +286,8 @@ impl App {
 
     /// The welcome (`OnboardingView`), with nothing kept.
     fn show_welcome(self: &Rc<Self>) {
+        // Signed out: no account, so this computer's zone.
+        tafs_core::account_time::use_zone(None);
         *self.kept.borrow_mut() = None;
         *self.cloud.borrow_mut() = None;
         *self.sign_out_error.borrow_mut() = None;
@@ -593,6 +595,13 @@ impl App {
     fn open_shell(self: &Rc<Self>, mode: Mode, view_only: bool, cloud: Option<Rc<Cloud>>) {
         let words = &self.words;
         *self.cloud.borrow_mut() = cloud.clone();
+        // `AccountTime.use`: signed in with KIFF, every time in the account's zone (UTC when
+        // KIFF says none); the sample, or no account read yet, this computer's.
+        let kiff_account = cloud.as_ref().and_then(|c| c.account.as_ref());
+        tafs_core::account_time::use_zone(match (mode, kiff_account) {
+            (Mode::Kiff, Some(a)) => Some(a.time_zone.as_deref().unwrap_or("UTC")),
+            _ => None,
+        });
         let at = chrono::Local::now();
         let fail = |e: tafs_core::words::WordsError| -> ! { panic!("{e}") };
         let (mut model, tafs, cloud_words) = match (mode, &cloud) {

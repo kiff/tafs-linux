@@ -603,7 +603,7 @@ pub fn solo_still_renews(w: &WordBook, u: &KiffUsage) -> Result<Option<String>, 
     let (true, Some(until)) = (b.source == "stripe", b.apple_solo_until) else {
         return Ok(None);
     };
-    let day = until.with_timezone(&chrono::Local).date_naive();
+    let day = crate::account_time::day(&until);
     w.get(
         "usage.company_billed_kiff_solo_bought",
         &[("time", &long_date(w.language(), day))],

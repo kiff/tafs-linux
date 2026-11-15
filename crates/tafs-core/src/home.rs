@@ -331,7 +331,7 @@ pub fn taf(w: &WordBook, h: &HomeTaf) -> Result<Taf, WordsError> {
             (Some(words), _) => words.clone(),
             (None, Some(t)) => w.get(
                 "taf.now.next_run",
-                &[("time", &t.with_timezone(&Local).format("%H:%M").to_string())],
+                &[("time", &crate::account_time::short_time(t))],
             )?,
             (None, None) => w.line("taf.now.running")?,
         },
@@ -464,14 +464,13 @@ fn shown_card(w: &WordBook, c: &CardSummary) -> Result<Option<Card>, WordsError>
     Ok(Some(Card::default()))
 }
 
-/// `endsWords`: the time alone today, else its date with it, here (until the account's zone
-/// is read).
+/// `endsWords`: the time alone today, else its date with it, in the account's zone.
 fn ends_words(t: DateTime<Utc>) -> String {
-    let local = t.with_timezone(&Local);
-    if local.date_naive() == Local::now().date_naive() {
-        local.format("%H:%M").to_string()
+    use crate::account_time::{day, local, short_time};
+    if day(&t) == day(&Utc::now()) {
+        short_time(&t)
     } else {
-        local.format("%Y-%m-%d %H:%M").to_string()
+        local(&t).format("%Y-%m-%d %H:%M").to_string()
     }
 }
 
@@ -521,9 +520,7 @@ pub fn overview_taf(t: &Taf) -> OverviewTaf {
         cloud: t.cloud.then(|| CloudRun {
             report: None,
             error: None,
-            last_run: t
-                .last_run
-                .map(|x| x.with_timezone(&Local).format("%H:%M").to_string()),
+            last_run: t.last_run.map(|x| crate::account_time::short_time(&x)),
         }),
         used_by: String::new(),
     }
@@ -551,9 +548,8 @@ pub fn full_cards(
         out.room_ends = r.room_window_end.map(ends_words);
         Ok(out)
     };
-    let date = |t: Option<DateTime<Utc>>| {
-        t.map(|t| long_date(language, t.with_timezone(&Local).date_naive()))
-    };
+    let date =
+        |t: Option<DateTime<Utc>>| t.map(|t| long_date(language, crate::account_time::day(&t)));
     if let Some(cards) = h.card.cards.as_ref().filter(|c| !c.is_empty()) {
         return cards
             .iter()

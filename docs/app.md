@@ -24,6 +24,15 @@ The app speaks the first of the person's languages that tafs ships (`LANGUAGE`, 
 `LC_MESSAGES`, `LANG`), otherwise English, as the iPad's `screenLanguages`. Every line comes from
 the words at the pin.
 
+## Time
+
+Every time the app draws is in the account's time zone (`AccountTime`,
+`tafs-core/src/account_time.rs`): signed in with KIFF, the zone `GET /v1/me` names (UTC when it
+names none, or one this computer doesn't know); in the sample, and before the account is read,
+this computer's. The day a line falls on ("Today", a Record day) is the account's day. Where the
+iPad adds the zone's short name (`zonedShortTime`: a held call's "answer by", a Record line's
+time), so does Linux, when the account's clock isn't this computer's at that moment ("14:05 JST").
+
 ## Options
 
 | Option | What |

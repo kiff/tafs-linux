@@ -750,8 +750,7 @@ fn runs_page(
                 let p = panel(false);
                 for run in &mine.items {
                     // `CreditsRunRow`: tafs cloud's words, semibold when counted, and when it
-                    // ended, in this computer's time zone until `AccountTime` is ported. A run's request
-                    // opens with its port.
+                    // ended, in the account's time zone. A run's request opens with its port.
                     let row = gtk::Box::new(gtk::Orientation::Vertical, 2);
                     row.append(&text(
                         &run.words,
@@ -760,7 +759,7 @@ fn runs_page(
                         &[if run.counted { "tafs-ink" } else { "tafs-soft" }],
                     ));
                     row.append(&one_line(
-                        &tafs_core::sidebar::short_time(run.at.with_timezone(&chrono::Local)),
+                        &tafs_core::account_time::short_time(&run.at),
                         13,
                         400,
                         &["tafs-dim"],

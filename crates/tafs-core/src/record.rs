@@ -586,12 +586,12 @@ pub fn days<'a>(
     kept.sort_by_key(|e| std::cmp::Reverse(e.at));
     let mut out: Vec<(chrono::NaiveDate, Day)> = Vec::new();
     for e in kept {
-        let day = e.at.with_timezone(&Local).date_naive();
+        let day = crate::account_time::day(&e.at);
         if out.last().map(|(d, _)| *d) != Some(day) {
             out.push((
                 day,
                 Day {
-                    title: day_title(w, day, now.date_naive())?,
+                    title: day_title(w, day, crate::account_time::day(&now))?,
                     lines: vec![],
                     reads: vec![],
                 },
