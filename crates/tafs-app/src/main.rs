@@ -719,6 +719,11 @@ impl App {
         let may_answer = account.as_ref().is_none_or(|a| a.allows("holds.answer"));
         let needs_you = tafs_core::needs_you::lines(words, &model.held, &holders, may_answer, at)
             .unwrap_or_else(|e| fail(e));
+        // Home's steps and Coach's waits, signed in.
+        let needs_you = match &cloud {
+            Some(c) => tafs_core::needs_you::with_waits(needs_you, &c.home, model.may_use_coach),
+            None => needs_you,
+        };
         let account_lines = tafs_core::account::lines(
             words,
             mode,

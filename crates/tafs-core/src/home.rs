@@ -260,6 +260,15 @@ pub struct Home {
     pub headline: Value,
     #[serde(default)]
     pub setting_up: Option<Vec<Value>>,
+    /// Steps its tafs handed the person (`your_steps`).
+    #[serde(default)]
+    pub your_steps: Option<Vec<crate::waits::YourStep>>,
+    /// Coach's chats waiting on the person (`coach_waiting`), oldest first.
+    #[serde(default)]
+    pub coach_waiting: Option<Vec<crate::waits::CoachWaiting>>,
+    /// "Set all aside" (`coach_waiting_clear`).
+    #[serde(default)]
+    pub coach_waiting_clear: Option<crate::waits::CoachWaitingClear>,
 }
 
 impl Home {

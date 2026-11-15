@@ -59,11 +59,31 @@ session (`heldCalls`), and each call as the iPad shows it (`KIFFMapping.held`):
 The held calls also feed the sidebar's NEEDS YOU and the Overview's, Needs you's count where
 tafs cloud sends none, and Your tafs (a taf a call waits on is relevant now, and comes first).
 
+## Steps and Coach's waits
+
+Signed in, Home's (`your_steps`, `coach_waiting`, `coach_waiting_clear`) come before the held
+calls, in the iPad's order:
+
+- **A step a taf handed the person** (`YourStepCard`), in the amber: tafs cloud's title, the taf,
+  what (16 semibold) and why (14, soft); the vendor's page when tafs cloud vouched for its link
+  (an https link whose own host is tafs cloud's `link_host`; anything else is no button), which
+  opens in the browser, with that host under it; then Done and Skip it.
+- **"Set all aside"** above two or more of Coach's waiting chats, when tafs cloud sends its words.
+- **A Coach chat waiting on the person** (`CoachWaitingCard`): tafs cloud's line with Coach's
+  mark; Open Coach, for someone who may use Coach; Set aside, when tafs cloud sends its words.
+  One without its chat or either line isn't listed.
+
+"Nothing is waiting." shows only when no step, Coach chat or held call waits. Read as the iPad
+reads Home: a step without its `handoff` fails Home; a Coach wait never does.
+`--home crates/tafs-app/fixtures/home-waits.json` (synthetic) draws them, CI's `needs-you-waits`.
+
 ## Not yet
 
 - **Answering from this computer:** KIFF takes an answer signed by the session's key. Until
   this app signs answers (and approves with a passkey), a call from KIFF is answered in KIFF.
   The sample's answers come with the sample's Card checks: until then they're dimmed.
-- **Steps, Coach's waiting chats, "Did this happen?", Card unit requests, knocks:** with their reads.
+- **Answering a step** (Done, Skip it: signed), **opening Coach** and **setting chats aside**:
+  there, dimmed.
+- **"Did this happen?", Card unit requests, knocks:** with their reads.
 - **Alerts** (`AlertsCard`): Linux's notifications come in their own change.
 - **Bringing a call into view** from its alert.

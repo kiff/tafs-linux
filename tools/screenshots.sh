@@ -13,13 +13,14 @@ export XDG_CONFIG_HOME=$(mktemp -d)
 mkdir -p "$XDG_CONFIG_HOME/gtk-4.0"
 printf '[Settings]\ngtk-font-name=Inter 11\ngtk-hint-font-metrics=1\n' > "$XDG_CONFIG_HOME/gtk-4.0/settings.ini"
 missing=0
-for screen in welcome sign-in overview overview-home needs-you record taf taf-card taf-home taf-home-card usage usage-kiff usage-kiff-member connect-apps devices people kiff-account time-zone calendar calendar-week calendar-compact account sidebar-sample view-only; do
+for screen in welcome sign-in overview overview-home needs-you needs-you-waits record taf taf-card taf-home taf-home-card usage usage-kiff usage-kiff-member connect-apps devices people kiff-account time-zone calendar calendar-week calendar-compact account sidebar-sample view-only; do
   case $screen in
     welcome) opts=(--page welcome) ;;
     sign-in) opts=(--page sign-in) ;;
     overview) opts=(--sample --signed-in) ;;
     overview-home) opts=(--home shared/contracts/home.json) ;;
     needs-you) opts=(--sample --signed-in --page needs-you) ;;
+    needs-you-waits) opts=(--home crates/tafs-app/fixtures/home-waits.json --page needs-you) ;;
     account) opts=(--sample --signed-in --page account) ;;
     calendar) opts=(--sample --signed-in --page calendar) ;;
     calendar-week) opts=(--sample --signed-in --page calendar-week) ;;

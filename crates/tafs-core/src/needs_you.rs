@@ -73,6 +73,14 @@ pub struct CardLines {
 pub struct NeedsYouLines {
     pub title: String,
     pub cards: Vec<CardLines>,
+    /// Steps the tafs handed the person (`yourSteps`), from Home.
+    pub steps: Vec<crate::waits::YourStep>,
+    /// Coach's chats waiting on the person (`coachWaiting`), the usable ones.
+    pub coach: Vec<crate::waits::CoachWaiting>,
+    /// "Set all aside" above two or more of them (`setAllAside`).
+    pub set_all_aside: Option<crate::waits::CoachWaitingClear>,
+    /// Coach's way in, for someone who may use Coach (`mayUseCoach`): else the line alone.
+    pub opens_coach: bool,
     /// With nothing waiting: "Nothing is waiting." and its hint.
     pub empty: Option<(String, String)>,
 }
@@ -172,6 +180,10 @@ pub fn lines(
     }
     Ok(NeedsYouLines {
         title: w.line("needs_you.title")?,
+        steps: Vec::new(),
+        coach: Vec::new(),
+        set_all_aside: None,
+        opens_coach: false,
         empty: held
             .is_empty()
             .then(|| -> Result<_, WordsError> {
@@ -183,6 +195,32 @@ pub fn lines(
             .transpose()?,
         cards,
     })
+}
+
+/// Home's steps and Coach's waits beside the held calls: Coach's only when usable, "Set all aside"
+/// only with two or more; "Nothing is waiting." only when none of them waits either.
+pub fn with_waits(
+    mut lines: NeedsYouLines,
+    home: &crate::home::Home,
+    may_use_coach: bool,
+) -> NeedsYouLines {
+    lines.opens_coach = may_use_coach;
+    lines.steps = home.your_steps.clone().unwrap_or_default();
+    lines.coach = home
+        .coach_waiting
+        .clone()
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|c| c.usable())
+        .collect();
+    lines.set_all_aside = home
+        .coach_waiting_clear
+        .clone()
+        .filter(|c| c.usable() && lines.coach.len() > 1);
+    if !lines.steps.is_empty() || !lines.coach.is_empty() {
+        lines.empty = None;
+    }
+    lines
 }
 
 #[cfg(test)]

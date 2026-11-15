@@ -20,6 +20,20 @@ pub fn page(w: Rc<WordBook>, n: &NeedsYouLines) -> gtk::Widget {
     let title = text(&n.title, 34, 700, &["tafs-ink"]);
     title.set_width_chars(16);
     column.append(&title);
+    // In the iPad's order: the steps the tafs handed the person, then Coach's chats waiting on them.
+    for step in &n.steps {
+        column.append(&step_card(step));
+    }
+    if let Some(clear) = &n.set_all_aside {
+        // Setting chats aside is the person's act: there, dimmed, until it's ported.
+        let b = outline(&clear.button);
+        b.add_css_class("tafs-amber-text");
+        b.set_sensitive(false);
+        column.append(&b);
+    }
+    for waiting in &n.coach {
+        column.append(&coach_card(waiting, n.opens_coach));
+    }
     if let Some((nothing, hint)) = &n.empty {
         let p = panel(false);
         p.append(&text(nothing, 15, 600, &["tafs-ink"]));
@@ -37,6 +51,72 @@ pub fn page(w: Rc<WordBook>, n: &NeedsYouLines) -> gtk::Widget {
     scroller.set_vexpand(true);
     crate::widgets::ground(&scroller);
     scroller.upcast()
+}
+
+/// `YourStepCard`: tafs cloud's title, the taf, what and why, the vendor's page when tafs cloud
+/// vouched for its link (it opens in the browser, with where it really goes under it), and Done or
+/// Skip it, signed: there, dimmed, until this computer can sign an answer.
+fn step_card(step: &tafs_core::waits::YourStep) -> gtk::Box {
+    let p = panel(true);
+    p.set_spacing(10);
+    if !step.title.is_empty() {
+        p.append(&crate::widgets::eyebrow(&step.title, false));
+    }
+    if let Some((_, name)) = step.taf.as_ref().filter(|(_, n)| !n.is_empty()) {
+        p.append(&text(name, 14, 600, &["tafs-ink"]));
+    }
+    p.append(&text(&step.what, 16, 600, &["tafs-ink"]));
+    if !step.why.is_empty() {
+        p.append(&text(&step.why, 14, 400, &["tafs-soft"]));
+    }
+    if let Some((url, host, words)) = step.open_link() {
+        let v = gtk::Box::new(gtk::Orientation::Vertical, 4);
+        let open = outline(&words);
+        open.connect_clicked(move |b| {
+            let launcher = gtk::UriLauncher::new(&url);
+            let window = b.root().and_downcast::<gtk::Window>();
+            launcher.launch(window.as_ref(), gtk::gio::Cancellable::NONE, |_| {});
+        });
+        v.append(&open);
+        v.append(&text(&host, 12, 400, &["tafs-mono", "tafs-dim"]));
+        p.append(&v);
+    }
+    let row = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+    row.set_homogeneous(true);
+    let done = crate::widgets::primary(&step.done);
+    done.set_sensitive(false);
+    row.append(&done);
+    let skip = outline(&step.skip);
+    skip.set_sensitive(false);
+    row.append(&skip);
+    p.append(&row);
+    p
+}
+
+/// `CoachWaitingCard`: tafs cloud's line with Coach's mark, then Open Coach and Set aside, both
+/// there, dimmed, until Coach and setting aside are ported.
+fn coach_card(waiting: &tafs_core::waits::CoachWaiting, opens_coach: bool) -> gtk::Box {
+    let p = panel(true);
+    let line = gtk::Box::new(gtk::Orientation::Horizontal, 10);
+    let mark = crate::widgets::symbol("tafs-sparkle-symbolic", 15);
+    mark.add_css_class("tafs-amber-text");
+    line.append(&mark);
+    let words = text(&waiting.line, 14, 600, &["tafs-ink"]);
+    words.set_hexpand(true);
+    line.append(&words);
+    p.append(&line);
+    // Its way in only for someone who may use Coach: else the line alone.
+    if opens_coach {
+        let open = crate::widgets::primary(&waiting.open);
+        open.set_sensitive(false);
+        p.append(&open);
+    }
+    if !waiting.set_aside.is_empty() {
+        let aside = outline(&waiting.set_aside);
+        aside.set_sensitive(false);
+        p.append(&aside);
+    }
+    p
 }
 
 /// `HeldCallCard`: an amber-edged panel with the taf, its countdown, the amount, what it asks,
