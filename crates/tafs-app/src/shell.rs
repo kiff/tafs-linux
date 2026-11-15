@@ -5,6 +5,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use gtk::prelude::*;
+use tafs_core::account::AccountLines;
 use tafs_core::needs_you::NeedsYouLines;
 use tafs_core::overview::OverviewLines;
 use tafs_core::sidebar::{Selection, SidebarLines, SidebarModel};
@@ -22,15 +23,28 @@ pub struct Shell {
     pub root: gtk::Box,
 }
 
+/// The screens ported so far, as they read now, and what Account's actions do.
+pub struct Screens {
+    pub overview: OverviewLines,
+    pub needs_you: NeedsYouLines,
+    pub account: AccountLines,
+    pub actions: Rc<dyn Fn(tafs_core::account::Action)>,
+}
+
 /// Builds the shell. `view_only` shows the notice that this computer can't approve yet.
 pub fn build(
     w: Rc<WordBook>,
     model: &SidebarModel,
-    overview: OverviewLines,
-    needs_you: NeedsYouLines,
+    screens: Screens,
     view_only: bool,
     first: Selection,
 ) -> Shell {
+    let Screens {
+        overview,
+        needs_you,
+        account,
+        actions,
+    } = screens;
     let lines = model.lines(&w).unwrap_or_else(|e| panic!("{e}"));
     let root = gtk::Box::new(gtk::Orientation::Horizontal, 0);
     crate::widgets::ground(&root);
@@ -67,8 +81,15 @@ pub fn build(
     };
     let overview = Rc::new(overview);
     let needs_you = Rc::new(needs_you);
+    let account = Rc::new(account);
     let select: Rc<dyn Fn(Selection)> = {
-        let (open, overview, needs_you) = (open.clone(), overview.clone(), needs_you.clone());
+        let (open, overview, needs_you, account, actions) = (
+            open.clone(),
+            overview.clone(),
+            needs_you.clone(),
+            account.clone(),
+            actions.clone(),
+        );
         let (w, stack, selection, rows, list, account_icon, lines) = (
             w.clone(),
             stack.clone(),
@@ -108,6 +129,16 @@ pub fn build(
             let page = match s {
                 Selection::Overview => crate::overview::page(&overview, open.clone()),
                 Selection::NeedsYou => crate::needs_you::page(w.clone(), &needs_you),
+                Selection::Account => {
+                    let open = open.clone();
+                    crate::account::page(
+                        &account,
+                        &crate::account::Actions {
+                            act: actions.clone(),
+                            open: Rc::new(move |_, title| open(Selection::Titled(title))),
+                        },
+                    )
+                }
                 _ => screen_page(&title).upcast::<gtk::Widget>(),
             };
             stack.add_child(&page);
@@ -376,6 +407,7 @@ fn title_of(
         Selection::Overview => l("home.overview.title"),
         Selection::Account => lines.account.clone(),
         Selection::Coach => l("coach.coach_mode"),
+        Selection::Titled(title) => title.clone(),
         Selection::Taf(key) | Selection::Held { taf: key, .. } => tafs
             .iter()
             .find(|(k, _)| k == key)

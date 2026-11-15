@@ -61,3 +61,33 @@ pub fn save(session: &KeptSession, now: i64) -> Result<(), StoreError> {
         _ => Err(StoreError("read back")),
     }
 }
+
+/// Forgets the session (sign out): the token and its key leave the keyring.
+pub fn clear() -> Result<(), StoreError> {
+    run(async {
+        let keyring = oo7::Keyring::new().await?;
+        keyring.delete(&attributes()).await
+    })
+}
+
+/// The theme chosen in Account (`ThemePreference`, the iPad's `tafs.theme`): `light`, `dark` or
+/// `system`, kept in the user's config folder. Anything else reads as system.
+pub fn theme() -> String {
+    std::fs::read_to_string(theme_path())
+        .ok()
+        .map(|s| s.trim().to_string())
+        .filter(|s| s == "light" || s == "dark")
+        .unwrap_or_else(|| "system".into())
+}
+
+pub fn set_theme(choice: &str) {
+    let path = theme_path();
+    if let Some(dir) = path.parent() {
+        let _ = std::fs::create_dir_all(dir);
+    }
+    let _ = std::fs::write(path, choice);
+}
+
+fn theme_path() -> std::path::PathBuf {
+    gtk::glib::user_config_dir().join("tafs").join("theme")
+}

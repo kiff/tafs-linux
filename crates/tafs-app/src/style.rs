@@ -117,6 +117,22 @@ separator.tafs-line { background-color: @tafs_line; min-height: 1px; }
 .tafs-details title, .tafs-details > title > label { color: @tafs_blue; font-size: 13px; font-weight: 600; }
 button.tafs-outline.refuse { color: @tafs_no; border-color: alpha(@tafs_no, 0.4); }
 
+/* Account: the iPad's grouped list, a panel with corners of 26, rows 17 in the ink, a line between. */
+list.tafs-group { background-color: @tafs_panel; border-radius: 26px; padding: 0 20px; }
+list.tafs-group > row { padding: 14px 0; min-height: 24px; background: none; border-bottom: 1px solid @tafs_line; }
+list.tafs-group > row:last-child { border-bottom: none; }
+list.tafs-group > row:hover { background: none; }
+button.tafs-row-button { background: none; box-shadow: none; border: none; padding: 0; min-height: 0; font-size: 17px; font-weight: 400; }
+button.tafs-row-button > label { margin: 0; }
+button.tafs-row-button.amber { color: @tafs_amber; }
+button.tafs-row-button.amber-text { color: @tafs_amber_text; }
+button.tafs-row-button.no { color: @tafs_no; }
+button.tafs-row-button:disabled { opacity: 0.4; }
+/* The system's segmented control: a capsule track in the system grey, the chosen segment a capsule on it. */
+.tafs-segmented { background-color: alpha(#767680, 0.12); border-radius: 17px; padding: 2px; }
+.tafs-segmented button.segment { background: none; background-image: none; box-shadow: none; border: none; border-radius: 15px; min-height: 28px; font-size: 13px; font-weight: 500; color: @tafs_ink; }
+.tafs-segmented button.segment:checked { background-color: @tafs_panel; box-shadow: 0 1px 3px alpha(black, 0.12); }
+
 .tafs-code { font-family: monospace; font-size: 34px; font-weight: 600; color: @tafs_ink; }
 .tafs-mono { font-family: monospace; }
 .tafs-notice { background-color: @tafs_panel; border-bottom: 1px solid @tafs_line; padding: 12px 24px; }
@@ -139,7 +155,13 @@ pub fn css(dark: bool) -> String {
         .replace("BRAND1", &format!("#{:06x}", BRAND[1]))
         .replace("BRAND2", &format!("#{:06x}", BRAND[2]))
         .replace("AVATARS", &avatars);
-    colours(dark) + &shapes
+    let dark_controls = if dark {
+        // In dark, the track at 24% and the chosen segment the system's #636366, so it stands out.
+        ".tafs-segmented { background-color: alpha(#767680, 0.24); }\n.tafs-segmented button.segment:checked { background-color: #636366; }\n"
+    } else {
+        ""
+    };
+    colours(dark) + &shapes + dark_controls
 }
 
 /// The avatar's colour class for a taf's colour index (`Theme.tafColor`).

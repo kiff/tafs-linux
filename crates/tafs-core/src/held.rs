@@ -302,7 +302,10 @@ pub fn money_reason(w: &WordBook, e: &CardException) -> Result<Option<String>, W
     if amount.unit.as_deref() != Some(unit) {
         return Ok(None);
     }
-    let cap = Money::new(limit, Some(unit), b.scale.unwrap_or(amount.scale)).formatted(w)?;
+    let Some(cap) = Money::new(limit, Some(unit), b.scale.unwrap_or(amount.scale)) else {
+        return Ok(None);
+    };
+    let cap = cap.formatted(w)?;
     let shown = amount.formatted(w)?;
     Ok(match b.outcome.as_str() {
         "per_action_exceeded" => Some(w.get(
@@ -433,7 +436,8 @@ pub fn amount(e: &CardException) -> Option<Money> {
         .find(|(k, _)| units.contains_key(&k.to_lowercase()))
     {
         let unit = units[&key.to_lowercase()];
-        return Some(Money::new(*value, Some(&unit.unit), unit.scale));
+        // A scale that can't be read: no amount shown, never a wrong one.
+        return Money::new(*value, Some(&unit.unit), unit.scale);
     }
     let summed: Vec<String> = e
         .breaches
@@ -445,7 +449,7 @@ pub fn amount(e: &CardException) -> Option<Money> {
     parameters
         .iter()
         .find(|(k, _)| summed.contains(&k.to_lowercase()))
-        .map(|(_, v)| Money::new(*v, None, 0))
+        .and_then(|(_, v)| Money::new(*v, None, 0))
 }
 
 /// `summed`: "sum(amount_cents)" → "amount_cents".

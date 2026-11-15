@@ -19,6 +19,8 @@ pub enum Selection {
     Account,
     /// Coach mode, from its button at the foot.
     Coach,
+    /// A screen Account opens, by its title, until it's ported.
+    Titled(String),
     /// A taf, by its key.
     Taf(String),
     /// A held call, on its taf's page.

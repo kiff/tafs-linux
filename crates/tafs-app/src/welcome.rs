@@ -8,6 +8,8 @@ use crate::widgets::{mascot, outline, primary, text};
 
 pub struct Welcome {
     pub root: gtk::Box,
+    /// Why the welcome is open, when it's not the first time: KIFF ended the session.
+    pub problem: gtk::Label,
     pub sign_in: gtk::Button,
     pub sample: gtk::Button,
 }
@@ -57,6 +59,10 @@ pub fn build(w: &WordBook) -> Welcome {
     spacer.set_vexpand(true);
     root.append(&spacer);
 
+    let problem = text("", 14, 400, &["tafs-no"]);
+    problem.set_visible(false);
+    root.append(&problem);
+
     let buttons = gtk::Box::new(gtk::Orientation::Vertical, 10);
     let sign_in = primary(&l("sign_in.with_kiff"));
     let sample = outline(&l("sample.try_it"));
@@ -64,6 +70,7 @@ pub fn build(w: &WordBook) -> Welcome {
     buttons.append(&sample);
     root.append(&buttons);
     Welcome {
+        problem,
         root,
         sign_in,
         sample,

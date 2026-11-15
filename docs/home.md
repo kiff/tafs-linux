@@ -113,7 +113,8 @@ your phone." and Add this computer (dimmed: pairing comes in its own change).
 
 - **What each row opens:** each screen but the Overview shows its title until it's ported.
 - **The Overview's reads:** who uses each taf (`shares`, `refreshPeople`).
-- **Reading Home again:** it's read once, after signing in or at launch; a 401 isn't told apart yet.
+- **Reading Home again:** it's read once, after signing in or at launch. A 401 there signs this
+  computer out ([sign-in](sign-in.md)).
 - **Its order:** tafs cloud's, until the Record and the chats are read for the iPad's most-recent
   order (`listedTafs`).
 - **Held calls, steps and knocks** from KIFF: until they're read, Your tafs is what ran or changed.

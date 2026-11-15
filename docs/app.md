@@ -9,11 +9,11 @@ another language or a `{hole}`.
 - **Signed out:** the welcome ([sign-in](sign-in.md)), and Sign in with KIFF over it.
 - **Signed in, or in the sample:** one sidebar for the whole app, as on the iPad
   ([the sidebar](home.md)), and the chosen screen beside it: the Overview first, and
-  [Needs you](needs-you.md). Screens not
+  [Needs you](needs-you.md), and [Account](account.md) from the sidebar's foot. Screens not
   ported yet show their title only, in the [port checklist](port-checklist.md)'s order.
 
 The colours are the iPad's `Theme.swift`, light and dark, and follow the desktop's appearance
-(libadwaita's `StyleManager`). The type is the desktop's own font; the iPad's rounded titles are
+(libadwaita's `StyleManager`), or the theme chosen in Account. The type is the desktop's own font; the iPad's rounded titles are
 its bold. The SF Symbols are the app's own symbolic icons, drawn for the nearest look
 (`assets/icons`), and the mascot is the iPad's.
 
@@ -37,6 +37,6 @@ the words at the pin.
 | `--screenshot out.png` | save the window (1280×800, at 2×) as a PNG and quit. It never reads or writes the keyring, and its sign-in shows a code without reaching KIFF |
 
 CI builds the app and saves the welcome, the sign-in, the Overview beside the sidebar (with the
-account's items), the Overview from the `home.json` contract, Needs you over the sample, the sidebar over the plain sample,
-and the view-only notice in en, fr and pt, light and dark: 42 pictures, as the `screenshots`
+account's items), the Overview from the `home.json` contract, Needs you and Account over the sample, the sidebar over the plain sample,
+and the view-only notice in en, fr and pt, light and dark: 48 pictures, as the `screenshots`
 artifact of the run. The job fails if any is missing.
