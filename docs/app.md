@@ -47,10 +47,10 @@ time), so does Linux, when the account's clock isn't this computer's at that mom
 | `--screenshot out.png` | save the window (1280×800, at 2×) as a PNG and quit. It never reads or writes the keyring, and its sign-in shows a code without reaching KIFF |
 
 CI builds the app and saves the welcome, the sign-in, the Overview beside the sidebar (with the
-account's items), the Overview from the `home.json` contract, Needs you, the Record, Refunds'
+account's items), the Overview from the `home.json` contract, Needs you (and with synthetic steps and Coach's waits), the Record, Refunds'
 page and its Card tab, Plan & usage and Account over the sample, Plan & usage signed in with
 KIFF from synthetic answers (managing billing, and as a member), Connect apps, Devices, People & groups, the KIFF account and its time zone picker (from synthetic answers), the
 calendar's Day and Week (and Day at an upright iPad's size, `--size 1032x1376`), a tafs cloud
 taf's page and its Card tab from the contracts, the sidebar over the plain sample, and the
-view-only notice in en, fr and pt, light and dark: 144 pictures, as the `screenshots`
+view-only notice in en, fr and pt, light and dark: 150 pictures, as the `screenshots`
 artifact of the run. The job fails if any is missing.

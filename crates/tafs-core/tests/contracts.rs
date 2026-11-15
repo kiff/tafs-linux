@@ -284,3 +284,36 @@ fn a_tafs_runs_and_its_report_read_as_the_ipad_reads_them() {
         "Evidence went on the disputes; one waits for you."
     );
 }
+
+#[test]
+fn home_with_steps_and_coachs_waits() {
+    use tafs_core::needs_you::{with_waits, NeedsYouLines};
+    let mut answer: Value = serde_json::from_slice(&contract("home.json")).unwrap();
+    answer["your_steps"] = serde_json::json!([{"handoff": "h1", "what": "Upload the receipt"}]);
+    answer["coach_waiting"] = serde_json::json!([
+        {"session": "c1", "words": {"line": "Coach waits", "open": "Open Coach"}},
+        {"session": "c2", "words": {"line": "Coach asks", "open": "Open Coach"}},
+        {"session": "", "words": {"line": "no chat", "open": "Open Coach"}},
+        "not even an object"
+    ]);
+    answer["coach_waiting_clear"] = serde_json::json!({"words": {"button": "Set all aside", "title": "Set 2 aside?", "yes": "Set aside"}});
+    let home = Home::read(&serde_json::to_vec(&answer).unwrap()).expect("Home reads");
+    let empty = NeedsYouLines {
+        title: String::new(),
+        cards: vec![],
+        steps: vec![],
+        coach: vec![],
+        set_all_aside: None,
+        opens_coach: false,
+        empty: Some(("Nothing is waiting.".into(), String::new())),
+    };
+    let lines = with_waits(empty, &home, false);
+    assert_eq!(lines.steps.len(), 1);
+    // Coach's waits that can't be drawn are left out, and never fail Home.
+    assert_eq!(lines.coach.len(), 2);
+    assert!(lines.set_all_aside.is_some());
+    assert_eq!(lines.empty, None);
+    // A step without its handoff fails Home, as the iPad's decoder does.
+    answer["your_steps"] = serde_json::json!([{"what": "no handoff"}]);
+    assert!(Home::read(&serde_json::to_vec(&answer).unwrap()).is_none());
+}
