@@ -1,0 +1,119 @@
+{
+  "about": "Synthetic: the pinned recipes-home.json's answer with four made-up recipes in three categories, for Home's recipes screenshot (--recipes). Made up, not from any account.",
+  "answer": {
+    "shown": true,
+    "filtered": false,
+    "suggestions": {
+      "show": true,
+      "reason": "on",
+      "words": "Suggestions show in a new conversation with Coach until the account's first taf is live."
+    },
+    "home": {
+      "shown": true,
+      "words": "Pick a job for your first taf.",
+      "own_words": {
+        "title": "Say it in your own words",
+        "line": "Coach builds the taf with you."
+      }
+    },
+    "labels": {
+      "allows": "Does on its own",
+      "holds": "Asks you first",
+      "never": "Never does",
+      "hand": "Hand it to Coach"
+    },
+    "categories": [
+      {
+        "id": "money",
+        "title": "Money",
+        "color": {
+          "light": "#B45309",
+          "dark": "#F59E0B"
+        }
+      },
+      {
+        "id": "support",
+        "title": "Support",
+        "color": {
+          "light": "#1D4ED8",
+          "dark": "#60A5FA"
+        }
+      },
+      {
+        "id": "ops",
+        "title": "Operations"
+      }
+    ],
+    "recipes": [
+      {
+        "id": "refunds",
+        "title": "Refunds",
+        "category": "money",
+        "headline": "Refund requests sit for days",
+        "line": "A taf refunds what your Card allows and asks you about the rest.",
+        "say": "Set up a taf that handles refund requests.",
+        "today": "Today: about 3 hours a week of copy and paste.",
+        "card": {
+          "allows": [
+            "Refund up to €50 an order"
+          ],
+          "holds": [
+            "Refunds over €50"
+          ],
+          "never": [
+            "Change a price"
+          ]
+        },
+        "apps": [
+          {
+            "name": "Stripe",
+            "logo": "/v1/logos/stripe"
+          },
+          {
+            "name": "Gmail"
+          }
+        ],
+        "proved": "Proved on a test shop."
+      },
+      {
+        "id": "chargebacks",
+        "title": "Chargebacks",
+        "category": "money",
+        "headline": "Chargebacks lapse before anyone answers",
+        "line": "Gathers the evidence and drafts the answer for you to send.",
+        "say": "Set up a taf for chargebacks.",
+        "apps": [
+          {
+            "name": "Stripe"
+          }
+        ]
+      },
+      {
+        "id": "inbox",
+        "title": "Inbox",
+        "category": "support",
+        "headline": "Customers wait for answers you already know",
+        "line": "Answers the questions your help pages cover.",
+        "say": "Set up a taf for the support inbox.",
+        "apps": [
+          {
+            "name": "Zendesk"
+          }
+        ]
+      },
+      {
+        "id": "deploys",
+        "title": "Deploys",
+        "category": "ops",
+        "headline": "Releases wait for someone to press go",
+        "line": "Ships what passed its checks, and asks before a migration.",
+        "say": "Set up a taf for deploys.",
+        "apps": [
+          {
+            "name": "GitHub"
+          }
+        ]
+      }
+    ]
+  }
+}

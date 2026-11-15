@@ -96,6 +96,24 @@ pub fn home(token: &str, languages: &[&str]) -> Result<Answer, KiffError> {
     )
 }
 
+/// `GET /v1/recipes` at tafs cloud as the session (`TafsCloud.recipes`): the jobs Home lists with
+/// no taf yet.
+pub fn recipes(token: &str, languages: &[&str]) -> Result<Answer, KiffError> {
+    let url = format!("{}/v1/recipes", tafs_core::home::TAFS_CLOUD);
+    if !may_send_to(&url) {
+        return Err(KiffError::Unreadable);
+    }
+    let agent = agent();
+    Kiff::read(
+        agent
+            .get(&url)
+            .set("Accept", "application/json")
+            .set("Accept-Language", &accept_language(languages))
+            .set("Authorization", &format!("Bearer {token}"))
+            .call(),
+    )
+}
+
 /// A read at KIFF as the session, by its path (People & groups).
 pub fn kiff_get(token: &str, languages: &[&str], path: &str) -> Result<Answer, KiffError> {
     get(&format!("{KIFF_API}{path}"), token, languages)

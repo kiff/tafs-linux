@@ -29,6 +29,7 @@ ports a file updates its line here.
 | CalendarView.swift | 434 | Calendar: Day, Week, Month | Both layouts by `CalendarLayout.of`: the header with Today, previous and next, the title, the date picker and the views; the navigator, the month's cells, the strip, the time slots, the day's list and the agenda; tafs cloud's halted and "more" words; opening a taf (`calendar.rs`, `tafs-core/calendar.rs`) | Pull to refresh |
 | PeopleViews.swift | 291 | People & groups, naming a group, adding someone | `PeopleGroupsView`'s list: the account's line, each group's name, `uses`, people `managersFirst` with `PersonBadge`, `managesGroup`, the 20-second read (`people.rs`, `tafs-core/people.rs`) | Every change, signed: + Group, rename, delete, Add someone (dimmed), remove and change a role; `GroupNameSheet`, `AddToGroupSheet` |
 | YourStepCard.swift | 46 | A step a taf handed its owner | The card whole, with the vouched link opening in the browser (`needs_you.rs`, `tafs-core/waits.rs`) | Done and Skip it (signed: dimmed) |
+| HomeRecipes.swift | 242 | Home with no taf: the recipes | `HomeRecipes` whole: tafs cloud's line, the category chips in their colours narrowing the list, each category's recipes (`RecipeRow`: headline, line, apps by name, the colour's edge); `OwnWordsRow`; `RecipeSheet` whole; `TafsCloud.Recipes` read as its decoders (`recipes.rs`, `tafs-core/recipes.rs`) | The apps' logos; Coach, which "Say it in your own words" and "Hand it to Coach" open (both there, dimmed) |
 | HomeSplitView.swift | 584 | The sidebar for the whole app and what it opens | The brand, the screens with Needs you's count, NEEDS YOU's held calls, Your tafs relevant now, Coach and Account at the foot, the chosen row's fill (`shell.rs`, `tafs-core/sidebar.rs`) | What each row opens (title only until each screen is ported); Shared with you; Other agents; tafs being set up and Discard; the recipes strip and Explore; + New and its gallery; the halt-all row (sidebar without `tab`); Unreachable and Plan lines at the foot; Home read from tafs cloud |
 
 ## Not started
@@ -48,7 +49,6 @@ ports a file updates its line here.
 | DriveViews.swift | 73 | Coach asks to drive the app | |
 | ExportChatsView.swift | 82 | Export my chats | |
 | HaltScreen.swift | 176 | A halt of one taf or every taf | |
-| HomeRecipes.swift | 242 | Home with no taf: the recipes | |
 | MicButton.swift | 122 | The mic in a chat's message bar | |
 | NotificationSettingsView.swift | 138 | Account › Alerts | |
 | PairSignInView.swift | 104 | Signing in from another phone | KIFF/Pairing |

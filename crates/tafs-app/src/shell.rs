@@ -44,6 +44,9 @@ pub struct Screens {
     pub people_known: Rc<crate::people::Known>,
     /// Where the time zones are read.
     pub zones: crate::zones::ZonesSource,
+    /// Home with no taf, when tafs cloud lists its recipes (`homeListsRecipes`): they take the
+    /// Overview's place.
+    pub recipes: Option<Rc<crate::recipes::RecipesPane>>,
     /// Where the calendar reads, and the state a screenshot opens it in.
     pub calendar: crate::calendar::CalendarSource,
     pub calendar_first: tafs_core::calendar::State,
@@ -73,6 +76,7 @@ pub fn build(
         people,
         people_known,
         zones,
+        recipes,
     } = screens;
     let entries = Rc::new(record.entries.clone());
     let lines = model.lines(&w).unwrap_or_else(|e| panic!("{e}"));
@@ -167,7 +171,10 @@ pub fn build(
             }
             let title = title_of(&w, &lines, &model_tafs, &s);
             let page = match s {
-                Selection::Overview => crate::overview::page(&overview, open.clone()),
+                Selection::Overview => match &recipes {
+                    Some(pane) => crate::recipes::page(pane.clone()),
+                    None => crate::overview::page(&overview, open.clone()),
+                },
                 Selection::NeedsYou => crate::needs_you::page(w.clone(), &needs_you, open.clone()),
                 Selection::Record => crate::record::page(w.clone(), record.clone()),
                 Selection::Calendar => {

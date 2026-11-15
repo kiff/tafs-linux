@@ -1,0 +1,20 @@
+{
+  "about": "Synthetic: the pinned home.json's answer with no taf, for Home's recipes screenshot (--home with --recipes). Made up, not from any account.",
+  "answer": {
+    "tafs": [],
+    "headline": {
+      "words": "0 tafs working."
+    },
+    "setting_up": [],
+    "others": [],
+    "removing": [],
+    "limits": {
+      "text": 2000,
+      "trial_idle_days": 7
+    },
+    "needs_you": {
+      "count": 0,
+      "words": "Nothing needs you."
+    }
+  }
+}
