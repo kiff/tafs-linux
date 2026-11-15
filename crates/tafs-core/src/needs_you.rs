@@ -68,6 +68,20 @@ pub struct CardLines {
     pub sentence: String,
 }
 
+/// A Card unit request's panel (`CardUnitExceptionPanel`): tafs cloud's title, words and history;
+/// "Discuss with Coach" for someone who may use Coach and manages its taf; and Dismiss, which is
+/// signed like a refusal.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CardUnitLines {
+    pub id: String,
+    pub title: String,
+    pub words: String,
+    pub history: String,
+    /// The Coach button's words, when it's offered (`canDiscuss`).
+    pub discuss: Option<String>,
+    pub dismiss: String,
+}
+
 /// The screen's lines.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NeedsYouLines {
@@ -83,6 +97,8 @@ pub struct NeedsYouLines {
     pub opens_coach: bool,
     /// "Did this happen?": money calls KIFF can't prove, after Coach's waits (`unproven`).
     pub happened: Vec<crate::unproven::HappenedLines>,
+    /// Card unit requests, after "Did this happen?" (`cardUnitExceptions`).
+    pub card_units: Vec<CardUnitLines>,
     /// With nothing waiting: "Nothing is waiting." and its hint.
     pub empty: Option<(String, String)>,
 }
@@ -187,6 +203,7 @@ pub fn lines(
         set_all_aside: None,
         opens_coach: false,
         happened: vec![],
+        card_units: vec![],
         empty: held
             .is_empty()
             .then(|| -> Result<_, WordsError> {
@@ -200,12 +217,15 @@ pub fn lines(
     })
 }
 
-/// Home's steps and Coach's waits beside the held calls: Coach's only when usable, "Set all aside"
-/// only with two or more; "Nothing is waiting." only when none of them waits either.
+/// Home's steps, Coach's waits and Card unit requests beside the held calls: Coach's only when
+/// usable, "Set all aside" only with two or more; a request's Coach button only for someone who
+/// may use Coach and manages its taf (`manages`, by tafs cloud taf id); "Nothing is waiting." only
+/// when none of them waits either.
 pub fn with_waits(
     mut lines: NeedsYouLines,
     home: &crate::home::Home,
     may_use_coach: bool,
+    manages: &dyn Fn(&str) -> bool,
 ) -> NeedsYouLines {
     lines.opens_coach = may_use_coach;
     lines.steps = home.your_steps.clone().unwrap_or_default();
@@ -220,7 +240,20 @@ pub fn with_waits(
         .coach_waiting_clear
         .clone()
         .filter(|c| c.usable() && lines.coach.len() > 1);
-    if !lines.steps.is_empty() || !lines.coach.is_empty() {
+    lines.card_units = home
+        .card_unit_exceptions
+        .iter()
+        .flatten()
+        .map(|ask| CardUnitLines {
+            id: ask.id.clone(),
+            title: ask.title.clone(),
+            words: ask.words.clone(),
+            history: ask.history.clone(),
+            discuss: (may_use_coach && manages(&ask.taf)).then(|| ask.action_title.clone()),
+            dismiss: ask.dismiss_title.clone(),
+        })
+        .collect();
+    if !lines.steps.is_empty() || !lines.coach.is_empty() || !lines.card_units.is_empty() {
         lines.empty = None;
     }
     lines

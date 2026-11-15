@@ -39,6 +39,9 @@ pub fn page(w: Rc<WordBook>, n: &NeedsYouLines) -> gtk::Widget {
     for happened in &n.happened {
         column.append(&happened_card(happened));
     }
+    for ask in &n.card_units {
+        column.append(&card_unit_panel(ask));
+    }
     if let Some((nothing, hint)) = &n.empty {
         let p = panel(false);
         p.append(&text(nothing, 15, 600, &["tafs-ink"]));
@@ -139,6 +142,32 @@ fn happened_card(h: &tafs_core::unproven::HappenedLines) -> gtk::Box {
         p.append(&text(why, 13, 400, &["tafs-soft"]));
     }
     p.append(&text(&h.can_not_answer, 13, 400, &["tafs-soft"]));
+    p
+}
+
+/// `CardUnitExceptionPanel`: tafs cloud's title (16 semibold), words (14, soft) and history (12,
+/// dim); its Coach button for someone who may use Coach and manages the taf; and Dismiss in red,
+/// which is signed like a refusal. Both there, dimmed: Coach isn't ported, and this computer can't
+/// sign.
+fn card_unit_panel(ask: &tafs_core::needs_you::CardUnitLines) -> gtk::Box {
+    let p = panel(false);
+    p.set_widget_name(&format!("card-unit.{}", ask.id));
+    p.append(&text(&ask.title, 16, 600, &["tafs-ink"]));
+    p.append(&text(&ask.words, 14, 400, &["tafs-soft"]));
+    p.append(&text(&ask.history, 12, 400, &["tafs-dim"]));
+    if let Some(discuss) = &ask.discuss {
+        let b = gtk::Button::with_label(discuss);
+        b.add_css_class("tafs-link");
+        b.set_halign(gtk::Align::Start);
+        b.set_sensitive(false);
+        p.append(&b);
+    }
+    let dismiss = gtk::Button::with_label(&ask.dismiss);
+    dismiss.add_css_class("tafs-link");
+    dismiss.add_css_class("tafs-no");
+    dismiss.set_halign(gtk::Align::Start);
+    dismiss.set_sensitive(false);
+    p.append(&dismiss);
     p
 }
 

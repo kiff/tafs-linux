@@ -1,5 +1,5 @@
 {
-  "about": "Synthetic: the pinned home.json's answer with a step and two Coach chats waiting, for Needs you's screenshot (--home). Made up, not from any account.",
+  "about": "Synthetic: the pinned home.json's answer with a step, two Coach chats and a Card unit request waiting, for Needs you's screenshot (--home). Made up, not from any account.",
   "answer": {
     "tafs": [
       {
@@ -205,6 +205,21 @@
         "yes": "Set aside",
         "no": "Keep them"
       }
-    }
+    },
+    "card_unit_exceptions": [
+      {
+        "id": "exc-example",
+        "kind": "card_unit",
+        "taf": "taf-aaaa0000000000000000",
+        "name": "Rae",
+        "title": "Rae needs a USD limit",
+        "words": "this action gets work in USD. Its Card only allows EUR. Add a USD limit?",
+        "history": "Tried 4 times since 28 Oct · last 09:00",
+        "action_title": "Add a USD limit to this action",
+        "dismiss_title": "Dismiss",
+        "can_approve_once": false,
+        "coach_text": "Add a USD limit to this action for Rae. Its Card only allows EUR. Read its current Card first and ask me to approve the change."
+      }
+    ]
   }
 }

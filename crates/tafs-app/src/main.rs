@@ -772,7 +772,22 @@ impl App {
         // Home's steps and Coach's waits, signed in.
         let needs_you = match &cloud {
             Some(c) => tafs_core::needs_you::with_unproven(
-                tafs_core::needs_you::with_waits(needs_you, &c.home, model.may_use_coach),
+                tafs_core::needs_you::with_waits(
+                    needs_you,
+                    &c.home,
+                    model.may_use_coach,
+                    // `canDiscuss`'s `manages`: the tafs cloud taf's KIFF agent, as access reads it.
+                    &|taf: &str| {
+                        c.home
+                            .tafs
+                            .iter()
+                            .chain(&c.home.others)
+                            .find(|t| t.id.as_deref() == Some(taf))
+                            .is_some_and(|t| {
+                                tafs_core::access::manages(c.access.get(&t.kiff_agent))
+                            })
+                    },
+                ),
                 words,
                 if may_answer { &c.unproven } else { &[] },
             )
