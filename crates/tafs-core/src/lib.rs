@@ -2,6 +2,7 @@
 //! Words, KIFF's sign-in, the kept session, the device key, the theme and the sidebar.
 //! No UI: the GTK app places what this says.
 
+pub mod access;
 pub mod account;
 pub mod account_time;
 pub mod activity;

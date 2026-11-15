@@ -89,8 +89,16 @@ draws the sidebar and the Overview again from it (`TafsCloud.home`). The read is
 - **Your tafs:** those relevant now (a call of its waits, or it ran or changed in the last 24
   hours). With tafs but none relevant now, there's no Your tafs: they're all on the Overview.
 - **Needs you's count** is tafs cloud's, and so are its words.
-- **Last result:** when it last ran ("Last ran at 09:00"), else "Nothing yet", until its report
-  is read.
+- **Last result:** the first line of its last run's report (`GET /v1/tafs/{id}/runs`, then the
+  latest run with a session, `GET /v1/tafs/{id}/runs/{session}`), else that run's error, else
+  why the runs couldn't be read, else when it last ran ("Last ran at 09:00"), else "Nothing yet".
+- **Who uses each taf** this person manages (`manages`, from KIFF's `GET /v1/me/access`): its
+  shares (`GET /v1/agents/{agent}/grants`) named by group (KIFF's `GET /v1/groups`) or person
+  (`GET /v1/tenant/members`), with how many people ("Support, lee@example.test · 3 people"), or
+  "Not shared". Someone who only uses a taf doesn't see who else does.
+
+These reads follow Home's after signing in or at launch, each on its own: one that fails leaves
+its part out.
 
 `--home shared/contracts/home.json` reads a contract instead (CI's `overview-home`).
 
@@ -112,13 +120,11 @@ your phone." and Add this computer (dimmed: pairing comes in its own change).
 ## Not yet
 
 - **What each row opens:** each screen but the Overview shows its title until it's ported.
-- **The Overview's reads:** who uses each taf (`shares`, `refreshPeople`).
 - **Reading Home again:** it's read once, after signing in or at launch. A 401 there signs this
   computer out ([sign-in](sign-in.md)).
 - **Its order:** tafs cloud's, until the Record and the chats are read for the iPad's most-recent
   order (`listedTafs`).
 - **Held calls, steps and knocks** from KIFF: until they're read, Your tafs is what ran or changed.
-- **Each taf's runs and report** (`loadReport`), for the Overview's last result.
 - **The account's name** under Account, and its zone for times: from KIFF's account read.
 - **A room's end on a later day** shows its date as 2026-11-16 00:00, not in the language's words
   yet.

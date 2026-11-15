@@ -29,10 +29,11 @@ the page is `crates/tafs-app/src/taf.rs`.
   cut), "No actions" when it has no limits, then "Issued by" who and when it ends ("Ends" or
   "Until", "No end date"). Under the stack, every limit of the front Card (`CardLines`): its
   label (15 semibold), what happens outside it (12, dim), and its summary (monospaced 13, at the
-  end, red when never allowed). Then Revoke, in red, dimmed until it's ported. The Card bar opens
-  this tab, and isn't shown on it.
-- **Who issued a Card** (`issuer(of:)`): "You" in the sample. For a KIFF taf, the account's name,
-  else "The account", since who manages a taf isn't read yet.
+  end, red when never allowed). Then Revoke, in red, dimmed until it's ported, in the sample and
+  for a taf this person manages (`manages`, KIFF's `GET /v1/me/access`). The Card bar opens this
+  tab, and isn't shown on it.
+- **Who issued a Card** (`issuer(of:)`): "You" in the sample and for a taf this person manages;
+  for any other KIFF taf, the account's name, else "The account".
 
 `--page taf` opens the sample's Refunds, as `taf.png`; `--page taf-card` opens it on its Card
 tab, with the reference set's three Cards, as `taf-card.png`; `--page taf-card:<id>` opens a taf
@@ -64,7 +65,7 @@ it's absent. `--home shared/contracts/home.json --page taf:<id>` reads `taf-acti
   each is ported.
 - **On the Card tab:** tafs cloud's time zone lines, each item's totals (`eachItem`), How this is
   counted (`CountedView`), what's pending, the unit words and Connect again, the halt row,
-  Versions, Usage; Revoke itself (dimmed), and Revoke for a KIFF taf its owner manages.
+  Versions, Usage; Revoke itself (dimmed).
 - **Above a tafs cloud taf's Activity:** its doors' knocks, Card unit requests, its work
   (`WorkPanel`), its runs (`RunsPanel`, `RetainedRuns`); and the next step's buttons (Connect it
   again, Ask Coach), shown as their words for now; a call's receipt; "All apps" for a selection.

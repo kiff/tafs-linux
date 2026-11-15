@@ -37,6 +37,8 @@ pub struct TafPage {
     pub held: Vec<CardLines>,
     /// The sample draws its Activity from the Record; a tafs cloud taf's is its own read.
     pub sample: bool,
+    /// This person manages the taf (`manages`, KIFF's access read).
+    pub manages: bool,
     /// Its Cards whole, for the Card tab, and who issued them (`issuer(of:)`).
     pub cards: Vec<tafs_core::cards::FullCard>,
     pub issued_by: String,
@@ -353,9 +355,9 @@ fn card_pane(w: &Rc<WordBook>, t: &TafPage) -> gtk::Box {
     if let Some(f) = f {
         f();
     }
-    // Revoke, for the sample or whoever manages the taf (`manages`, not read yet, so a KIFF
-    // taf has none): there, dimmed, until revoking is ported with approvals.
-    if t.state != TafState::Revoked && t.sample {
+    // Revoke, for the sample or whoever manages the taf (`manages`, from KIFF's access read):
+    // there, dimmed, until revoking is ported with approvals.
+    if t.state != TafState::Revoked && (t.sample || t.manages) {
         let revoke = crate::widgets::outline(&w.line("taf.revoke").unwrap_or_default());
         revoke.add_css_class("refuse");
         revoke.set_sensitive(false);

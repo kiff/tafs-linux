@@ -147,6 +147,8 @@ const LINES: &[(&str, &[&str])] = &[
     ("sample.list_charges", &[]),
     ("sample.look_up_charge", &[]),
     ("taf.revoke", &[]),
+    ("people.not_shared", &[]),
+    ("report.runs_not_loaded", &["why"]),
     ("settings.find_time_zone", &[]),
     ("settings.account_id", &[]),
     ("settings.time_zone.uses_this", &[]),
@@ -1326,4 +1328,63 @@ fn kiff_account_lines_at_the_pin() {
         kiff_account_lines(&book(lang), &account, "Asia/Tokyo").unwrap();
     }
     assert!(!tafs_core::account_time::local_identifier().is_empty());
+}
+
+#[test]
+fn who_uses_a_taf_at_the_pin() {
+    use tafs_core::access::{used_by, Share};
+    use tafs_core::people::{Group, Member, Person};
+    let group = Group {
+        id: "g".into(),
+        name: "Support".into(),
+        everyone: false,
+        members: vec![
+            Member {
+                subject: "a".into(),
+                role: "member".into(),
+            },
+            Member {
+                subject: "b".into(),
+                role: "manager".into(),
+            },
+        ],
+        agents: vec![],
+    };
+    let person = Person {
+        subject: "c".into(),
+        role: "member".into(),
+        status: "active".into(),
+        email: Some("lee@example.test".into()),
+        you: false,
+    };
+    let shares = [
+        Share {
+            group: Some("g".into()),
+            subject: None,
+        },
+        Share {
+            group: None,
+            subject: Some("c".into()),
+        },
+        Share {
+            group: None,
+            subject: Some("a".into()),
+        },
+    ];
+    let w = book("en");
+    // People counted once, however they're shared with.
+    assert_eq!(
+        used_by(
+            &w,
+            &shares,
+            std::slice::from_ref(&group),
+            std::slice::from_ref(&person)
+        )
+        .unwrap(),
+        "Support, lee@example.test, a · 3 people"
+    );
+    assert_eq!(used_by(&w, &[], &[], &[]).unwrap(), "Not shared");
+    for lang in SHIPPED {
+        used_by(&book(lang), &shares, std::slice::from_ref(&group), &[]).unwrap();
+    }
 }
