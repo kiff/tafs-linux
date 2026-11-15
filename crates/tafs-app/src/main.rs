@@ -10,6 +10,7 @@ mod needs_you;
 mod overview;
 mod pairing;
 mod people;
+mod recipes;
 mod record;
 mod shell;
 mod sign_in;
@@ -45,6 +46,8 @@ struct Cloud {
     activity: Vec<tafs_core::record::ActivityCall>,
     /// "Did this happen?": the money calls KIFF can't prove (`unproven`).
     unproven: Vec<tafs_core::unproven::Unproven>,
+    /// The recipes Home lists with no taf (`recipes`); none read, none listed.
+    recipes: Option<tafs_core::recipes::Recipes>,
     /// What this person may do with each taf, by KIFF agent (`GET /v1/me/access`).
     access: std::collections::BTreeMap<String, tafs_core::access::Access>,
     /// Who each taf this person manages is shared with, in the Overview's words, by KIFF agent.
@@ -74,13 +77,15 @@ struct Options {
     people: Option<String>,
     /// With `--home`: KIFF's "Did this happen?" answer from a file, for its screenshot.
     unproven: Option<String>,
+    /// With `--home`: tafs cloud's recipes answer from a file, for Home with no taf.
+    recipes: Option<String>,
     /// `--size WxH`: the window's size, for a screenshot of a narrower layout.
     size: Option<(i32, i32)>,
     screenshot: Option<String>,
 }
 
 const USAGE: &str = "tafs [--lang en|de|fr|es|it|pt|nl|pl] [--theme light|dark] [--sample] [--signed-in] [--view-only [--paired]]
-     [--home contract.json] [--usage answers.json] [--people answers.json] [--unproven answers.json] [--size WxH] [--page welcome|sign-in|pair|overview|needs-you|record|calendar|calendar-week|usage|connect-apps|account|kiff-account|time-zone|devices|people|taf|taf-card] [--screenshot out.png]";
+     [--home contract.json] [--usage answers.json] [--people answers.json] [--unproven answers.json] [--recipes answers.json] [--size WxH] [--page welcome|sign-in|pair|recipe:<id>|overview|needs-you|record|calendar|calendar-week|usage|connect-apps|account|kiff-account|time-zone|devices|people|taf|taf-card] [--screenshot out.png]";
 
 fn options() -> Result<Options, String> {
     let mut o = Options::default();
@@ -96,6 +101,7 @@ fn options() -> Result<Options, String> {
             "--usage" => o.usage = Some(value()?),
             "--people" => o.people = Some(value()?),
             "--unproven" => o.unproven = Some(value()?),
+            "--recipes" => o.recipes = Some(value()?),
             "--size" => {
                 let v = value()?;
                 let (w, h) = v.split_once('x').ok_or("--size takes WxH")?;
@@ -245,6 +251,7 @@ fn activate(app: &adw::Application, o: &Options) {
             account: None,
             activity: vec![],
             unproven: unproven_file(o.unproven.as_deref()),
+            recipes: recipes_file(o.recipes.as_deref()),
             access: Default::default(),
             used_by: Default::default(),
             reports: Default::default(),
@@ -256,7 +263,24 @@ fn activate(app: &adw::Application, o: &Options) {
     });
     match (o.page.as_deref(), kept) {
         _ if o.sample => app_state.open_shell(Mode::Sample, false, None),
-        _ if from_file.is_some() => app_state.open_shell(Mode::Kiff, o.view_only, from_file),
+        _ if from_file.is_some() => {
+            app_state.open_shell(Mode::Kiff, o.view_only, from_file.clone());
+            // `--page recipe:<id>`: Home's recipe opens its sheet, for its screenshot.
+            if let (Some(id), Some(c)) = (
+                o.page.as_deref().and_then(|p| p.strip_prefix("recipe:")),
+                from_file.as_deref(),
+            ) {
+                if let Some(r) = c.recipes.as_ref() {
+                    if let Some(recipe) = r.recipes.iter().find(|x| x.id == id) {
+                        let pane = recipes::RecipesPane {
+                            recipes: r.clone(),
+                            may_use_coach: true,
+                        };
+                        recipes::sheet(&pane, recipe, &window);
+                    }
+                }
+            }
+        }
         _ if o.view_only => app_state.open_shell(Mode::Kiff, true, None),
         (Some("welcome") | Some("sign-in") | Some("pair"), _) | (_, None) => {
             app_state.show_welcome();
@@ -448,12 +472,18 @@ impl App {
                     .and_then(|a| tafs_core::record::read_activity(&a.body))
                     .unwrap_or_default();
                 let (access, used_by, reports) = taf_reads(&words, &token, &languages, &home);
+                // `loadRecipes`: read with the rest; one that can't be read lists none.
+                let recipes = kiff::recipes(&token, &languages)
+                    .ok()
+                    .filter(|a| a.status == 200)
+                    .and_then(|a| tafs_core::recipes::Recipes::read(&a.body));
                 Read::Cloud(Box::new(Cloud {
                     home,
                     held,
                     account,
                     activity,
                     unproven,
+                    recipes,
                     access,
                     used_by,
                     reports,
@@ -739,6 +769,12 @@ impl App {
             }
             (_, None) => (kiff_model(), vec![], None),
         };
+        // tafs cloud's line for a Home with no taf, under Your tafs (`recipes.homeWords`).
+        model.home_words = cloud
+            .as_ref()
+            .and_then(|c| c.recipes.as_ref())
+            .and_then(|r| r.home_words())
+            .map(str::to_string);
         let account = cloud.as_ref().and_then(|c| c.account.clone());
         if let Some(a) = &account {
             model.account_name = Some(a.name());
@@ -848,6 +884,20 @@ impl App {
                     Some(f) => usage::UsageSource::File(f.clone()),
                     None => usage::UsageSource::None,
                 },
+            },
+            // `homeListsRecipes`: signed in with KIFF, Home read, no taf, and tafs cloud lists them.
+            recipes: match (mode, cloud.as_deref()) {
+                (Mode::Kiff, Some(c)) if model.tafs.is_empty() => c
+                    .recipes
+                    .clone()
+                    .filter(|r| r.home_lists_recipes())
+                    .map(|recipes| {
+                        Rc::new(recipes::RecipesPane {
+                            recipes,
+                            may_use_coach: model.may_use_coach,
+                        })
+                    }),
+                _ => None,
             },
             zones: match (mode, self.kept.borrow().as_ref(), &self.people_file) {
                 (Mode::Kiff, Some(kept), _) => zones::ZonesSource::Cloud {
@@ -1196,6 +1246,25 @@ fn kiff_model() -> SidebarModel {
         home_words: None,
         account_name: None,
         cloud_needs_you: None,
+    }
+}
+
+/// `--recipes`'s file, as tafs cloud answers `GET /v1/recipes` (a contract file's `answer`, or the
+/// answer itself). None given, none listed; a file that can't be read stops the app.
+fn recipes_file(path: Option<&str>) -> Option<tafs_core::recipes::Recipes> {
+    let path = path?;
+    let body = std::fs::read(path).ok();
+    let answer = body.as_deref().and_then(|b| {
+        let v: serde_json::Value = serde_json::from_slice(b).ok()?;
+        let a = v.get("answer").cloned().unwrap_or(v);
+        serde_json::to_vec(&a).ok()
+    });
+    match answer.and_then(|a| tafs_core::recipes::Recipes::read(&a)) {
+        Some(r) => Some(r),
+        None => {
+            eprintln!("{path} isn't the recipes as tafs cloud answers them");
+            std::process::exit(2);
+        }
     }
 }
 

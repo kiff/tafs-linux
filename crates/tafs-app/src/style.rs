@@ -2,6 +2,7 @@
 //! components' shapes (`Components.swift`: `Panel`, `PrimaryLook`, `OutlineLook`, `Eyebrow`,
 //! `TafAvatar`). The appearance follows the desktop's setting, or `--theme`.
 
+use gtk::prelude::*;
 use tafs_core::theme::{taf_color, Tone, BRAND, PALETTE, TAF_COLORS};
 
 /// The colours as `@define-color`, for one appearance.
@@ -136,6 +137,7 @@ button.tafs-row-button:disabled { opacity: 0.4; }
 /* The Record: chips (the chosen one inverts), day headings, rows on the panel with corners of 14. */
 button.tafs-chip-button { background-color: @tafs_panel; background-image: none; color: @tafs_soft; border: 1px solid @tafs_line; border-radius: 999px; padding: 5px 11px; min-height: 0; font-size: 13px; font-weight: 400; box-shadow: none; }
 button.tafs-chip-button.selected { background-color: @tafs_ink; color: @tafs_on_fill; border-color: @tafs_ink; }
+button.tafs-chip-button:checked { background-color: @tafs_ink; color: @tafs_on_fill; border-color: @tafs_ink; }
 .tafs-taf-dot { border-radius: 4px; min-width: 8px; min-height: 8px; }
 .tafs-day { font-family: monospace; font-size: 11px; font-weight: 500; color: @tafs_dim; }
 .tafs-record-row { background-color: @tafs_panel; border: 1px solid @tafs_line; border-radius: 14px; padding: 14px; }
@@ -263,6 +265,40 @@ pub fn avatar_class(index: i64) -> String {
     let hex = taf_color(index);
     let i = TAF_COLORS.iter().position(|c| *c == hex).unwrap_or(0);
     format!("c{i}")
+}
+
+/// A rule for one named widget, at the app's priority: the colour tafs cloud sends for a thing
+/// (a recipe's category) has no class of its own. `color` is `#RRGGBB`, read and checked.
+fn name_rule(widget: &impl IsA<gtk::Widget>, rule: &str) {
+    let provider = gtk::CssProvider::new();
+    provider.load_from_string(rule);
+    gtk::style_context_add_provider_for_display(
+        &widget.display(),
+        &provider,
+        gtk::STYLE_PROVIDER_PRIORITY_APPLICATION + 1,
+    );
+}
+
+/// A category's chip in its colour (`RecipeHome.chip`): its words and edge in it, and its fill
+/// once picked.
+pub fn tint_chip(chip: &gtk::ToggleButton, color: &str) {
+    let name = chip.widget_name();
+    name_rule(
+        chip,
+        &format!(
+            "button#{name} {{ color: {color}; border-color: {color}; }} \
+             button#{name}:checked {{ background-color: {color}; color: @tafs_on_fill; border-color: {color}; }}"
+        ),
+    );
+}
+
+/// A recipe's card edge in its category's colour (`RecipeRow`'s 4-wide leading bar).
+pub fn tint_edge(card: &gtk::Box, color: &str) {
+    let name = card.widget_name();
+    name_rule(
+        card,
+        &format!("#{name} {{ box-shadow: inset 4px 0 0 {color}; }}"),
+    );
 }
 
 /// Loads the style sheet, and loads it again when the appearance changes.
