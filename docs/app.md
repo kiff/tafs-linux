@@ -43,14 +43,14 @@ time), so does Linux, when the account's clock isn't this computer's at that mom
 | `--signed-in` | with `--sample`: the account's items too, as the iPad's reference set draws them |
 | `--home contract.json` | the account's screens from a contract file's Home (`shared/contracts/home.json`), in place of tafs cloud |
 | `--view-only` | a signed-in session KIFF says is view-only, with no tafs read |
-| `--page …` | `welcome`, `sign-in`, or a screen beside the sidebar: `needs-you`, `record`, `calendar`, `usage`, `connect-apps`, `account`, `taf` (the sample's Refunds), or `taf:<id>` (a taf by its key) |
-| `--screenshot out.png` | save the window (1280×800, at 2×) as a PNG and quit. It never reads or writes the keyring, and its sign-in shows a code without reaching KIFF |
+| `--page …` | `welcome`, `sign-in`, `pair` (adding this computer with a phone), or a screen beside the sidebar: `needs-you`, `record`, `calendar`, `usage`, `connect-apps`, `account`, `taf` (the sample's Refunds), or `taf:<id>` (a taf by its key) |
+| `--screenshot out.png` | save the window (1280×800, at 2×) as a PNG and quit. It never reads or writes the keyring, and its sign-in and pairing show a code without reaching KIFF |
 
-CI builds the app and saves the welcome, the sign-in, the Overview beside the sidebar (with the
+CI builds the app and saves the welcome, the sign-in, the pairing, the Overview beside the sidebar (with the
 account's items), the Overview from the `home.json` contract, Needs you (and with synthetic steps and Coach's waits), the Record, Refunds'
 page and its Card tab, Plan & usage and Account over the sample, Plan & usage signed in with
 KIFF from synthetic answers (managing billing, and as a member), Connect apps, Devices, People & groups, the KIFF account and its time zone picker (from synthetic answers), the
 calendar's Day and Week (and Day at an upright iPad's size, `--size 1032x1376`), a tafs cloud
 taf's page and its Card tab from the contracts, the sidebar over the plain sample, and the
-view-only notice in en, fr and pt, light and dark: 150 pictures, as the `screenshots`
+view-only notice in en, fr and pt, light and dark: 156 pictures, as the `screenshots`
 artifact of the run. The job fails if any is missing.

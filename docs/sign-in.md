@@ -10,7 +10,8 @@ there; the screen is `crates/tafs-app/src/sign_in.rs`.
 The mascot (96), "tafs" (48 bold), the lead (16, soft), and its three points: Inside the Card,
 Outside it, Revoked, each with a dot in green, amber and red. At the foot, Sign in with KIFF (the
 brand's button) and Try it with sample data (the outlined one), which opens the
-[sidebar](home.md) over the sample.
+[sidebar](home.md) over the sample. Under them, tafs-macos's line: "Already use tafs on your
+phone? Add this computer with it.", which opens the [pairing](pairing.md).
 
 ## The flow
 
@@ -42,7 +43,7 @@ with the view-only notice when KIFF's `approval_mode` says `view` (or says nothi
 | Waiting | YOUR CODE in its amber-edged panel, Open KIFF to approve, the link with Copy, "Waiting for your approval…" |
 | Stopped | why, in plain words by status (`PlainError`): offline, busy, down, or "The sign-in code expired. Start again.", and Try again |
 
-Under them, "Sign in with your other phone" (dimmed: pairing comes in its own change), and the
+Under them, "Sign in with your other phone" (dimmed: it opens the iPad's `PairSignInView`, a phone signing in from another phone, not this computer's [pairing](pairing.md)), and the
 terms line, Terms and Privacy policy linked (`kiff.dev/tafs/terms`, `/tafs/privacy`), saying "(in
 English)" outside English. Cancel closes it and stops the poll.
 

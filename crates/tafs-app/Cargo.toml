@@ -11,7 +11,7 @@ tafs-core = { path = "../tafs-core" }
 serde_json.workspace = true
 gtk = { version = "0.9", package = "gtk4", features = ["v4_14"] }
 adw = { version = "0.7", package = "libadwaita", features = ["v1_5"] }
-ureq = { version = "2", features = ["json"] }
+ureq = { version = "2", features = ["json", "native-certs"] }
 oo7 = { version = "0.7", default-features = false, features = ["native_crypto", "async-std"] }
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 futures-lite = "2"

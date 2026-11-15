@@ -54,7 +54,7 @@ pub fn build(
     w: Rc<WordBook>,
     model: &SidebarModel,
     screens: Screens,
-    view_only: bool,
+    view_only: Option<Rc<dyn Fn()>>,
     first: Selection,
 ) -> Shell {
     let Screens {
@@ -82,8 +82,8 @@ pub fn build(
     let detail = gtk::Box::new(gtk::Orientation::Vertical, 0);
     detail.set_hexpand(true);
     crate::widgets::ground(&detail);
-    if view_only {
-        detail.append(&view_only_notice(&w));
+    if let Some(add) = view_only {
+        detail.append(&view_only_notice(&w, add));
     }
     let stack = gtk::Stack::new();
     stack.set_vexpand(true);
@@ -574,8 +574,9 @@ fn screen_page(title: &str) -> gtk::Box {
     b
 }
 
-/// This computer can't approve until it's added with the phone (the pairing words).
-fn view_only_notice(w: &WordBook) -> gtk::Box {
+/// This computer can't approve until it's added with the phone (the pairing words). `add` opens
+/// the pairing.
+fn view_only_notice(w: &WordBook, add_this: Rc<dyn Fn()>) -> gtk::Box {
     let device = w.line("device.linux").unwrap_or_default();
     let b = gtk::Box::new(gtk::Orientation::Horizontal, 16);
     b.add_css_class("tafs-notice");
@@ -604,8 +605,7 @@ fn view_only_notice(w: &WordBook) -> gtk::Box {
     );
     add.set_hexpand(false);
     add.set_valign(gtk::Align::Center);
-    // Pairing comes in its own change.
-    add.set_sensitive(false);
+    add.connect_clicked(move |_| add_this());
     b.append(&add);
     b
 }

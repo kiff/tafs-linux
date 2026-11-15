@@ -8,6 +8,7 @@ mod kiff;
 mod kiff_account;
 mod needs_you;
 mod overview;
+mod pairing;
 mod people;
 mod record;
 mod shell;
@@ -73,7 +74,7 @@ struct Options {
 }
 
 const USAGE: &str = "tafs [--lang en|de|fr|es|it|pt|nl|pl] [--theme light|dark] [--sample] [--signed-in] [--view-only]
-     [--home contract.json] [--usage answers.json] [--people answers.json] [--size WxH] [--page welcome|sign-in|overview|needs-you|record|calendar|calendar-week|usage|connect-apps|account|kiff-account|time-zone|devices|people|taf|taf-card] [--screenshot out.png]";
+     [--home contract.json] [--usage answers.json] [--people answers.json] [--size WxH] [--page welcome|sign-in|pair|overview|needs-you|record|calendar|calendar-week|usage|connect-apps|account|kiff-account|time-zone|devices|people|taf|taf-card] [--screenshot out.png]";
 
 fn options() -> Result<Options, String> {
     let mut o = Options::default();
@@ -247,11 +248,15 @@ fn activate(app: &adw::Application, o: &Options) {
         _ if o.sample => app_state.open_shell(Mode::Sample, false, None),
         _ if from_file.is_some() => app_state.open_shell(Mode::Kiff, o.view_only, from_file),
         _ if o.view_only => app_state.open_shell(Mode::Kiff, true, None),
-        (Some("welcome") | Some("sign-in"), _) | (_, None) => {
+        (Some("welcome") | Some("sign-in") | Some("pair"), _) | (_, None) => {
             app_state.show_welcome();
             if o.page.as_deref() == Some("sign-in") {
                 // A screenshot shows a code without reaching KIFF.
                 app_state.present_sign_in(screenshot.then(|| sign_in::preview(lang)));
+            }
+            if o.page.as_deref() == Some("pair") {
+                // A screenshot shows a code made here, never claimed.
+                app_state.present_pairing(screenshot);
             }
         }
         (_, Some(kept)) => app_state.open_account(kept),
@@ -341,6 +346,25 @@ impl App {
         welcome
             .sample
             .connect_clicked(move |_| me.open_shell(Mode::Sample, false, None));
+        let me = self.clone();
+        welcome
+            .pair
+            .connect_clicked(move |_| me.present_pairing(false));
+    }
+
+    /// Adding this computer with a phone, over what's open. A session kept here (view-only) is
+    /// the one the new one replaces. `preview`: a code made here, for a screenshot.
+    fn present_pairing(self: &Rc<Self>, preview: bool) {
+        let me = self.clone();
+        let done: Rc<dyn Fn(KeptSession)> = Rc::new(move |kept| me.open_account(kept));
+        pairing::present(
+            &self.window,
+            self.words.clone(),
+            self.languages.clone(),
+            self.kept.borrow().clone(),
+            done,
+            preview,
+        );
     }
 
     /// Sign in with KIFF over what's open.
@@ -842,11 +866,16 @@ impl App {
             tafs,
             actions,
         };
+        // View-only: the notice's "Add this computer" pairs it, replacing the session it has.
+        let add: Option<Rc<dyn Fn()>> = view_only.then(|| {
+            let me = self.clone();
+            Rc::new(move || me.present_pairing(false)) as Rc<dyn Fn()>
+        });
         let shell = shell::build(
             words.clone(),
             &model,
             screens,
-            view_only,
+            add,
             self.first.borrow().clone(),
         );
         self.window.set_content(Some(&shell.root));

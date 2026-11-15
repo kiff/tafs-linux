@@ -115,7 +115,7 @@ held. `--signed-in` draws it with the account's items, as the reference set's `o
 
 When KIFF says the session is view-only, the screen beside the sidebar opens with "View only":
 "This computer shows your tafs, Needs you and the Record. It can't approve until you add it with
-your phone." and Add this computer (dimmed: pairing comes in its own change).
+your phone." and **Add this computer**, which opens the [pairing](pairing.md).
 
 ## Not yet
 

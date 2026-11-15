@@ -153,8 +153,8 @@ pub fn present(
     let try_again = outline(&l("common.try_again"));
     content.append(&try_again);
 
-    // A person who already uses tafs on their phone pairs this computer from it instead. Pairing
-    // comes in its own change: until then the button is there, dimmed.
+    // The iPad's "Sign in with your other phone" opens `PairSignInView`, a phone signing in from
+    // another phone: not ported, so it's there, dimmed. This computer pairs from the welcome.
     let pair = outline(&l("sign_in.pair_start"));
     pair.set_sensitive(false);
     content.append(&pair);

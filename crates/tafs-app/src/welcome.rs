@@ -12,6 +12,8 @@ pub struct Welcome {
     pub problem: gtk::Label,
     pub sign_in: gtk::Button,
     pub sample: gtk::Button,
+    /// "Already use tafs on your phone? Add this computer with it." (tafs-macos's welcome).
+    pub pair: gtk::Button,
 }
 
 pub fn build(w: &WordBook) -> Welcome {
@@ -66,14 +68,27 @@ pub fn build(w: &WordBook) -> Welcome {
     let buttons = gtk::Box::new(gtk::Orientation::Vertical, 10);
     let sign_in = primary(&l("sign_in.with_kiff"));
     let sample = outline(&l("sample.try_it"));
+    let device = l("device.linux");
+    let pair = gtk::Button::with_label(
+        &w.get("pair.from_sign_in", &[("device", &device)])
+            .unwrap_or_else(|e| panic!("{e}")),
+    );
+    pair.add_css_class("tafs-link");
+    pair.set_halign(gtk::Align::Start);
+    if let Some(label) = pair.child().and_downcast::<gtk::Label>() {
+        label.set_wrap(true);
+        label.set_xalign(0.0);
+    }
     buttons.append(&sign_in);
     buttons.append(&sample);
+    buttons.append(&pair);
     root.append(&buttons);
     Welcome {
         problem,
         root,
         sign_in,
         sample,
+        pair,
     }
 }
 
