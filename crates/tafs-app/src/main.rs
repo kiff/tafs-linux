@@ -54,7 +54,7 @@ struct Options {
 }
 
 const USAGE: &str = "tafs [--lang en|de|fr|es|it|pt|nl|pl] [--theme light|dark] [--sample] [--signed-in] [--view-only]
-     [--home contract.json] [--page welcome|sign-in|overview|needs-you|record|calendar|usage|connect-apps|account|taf] [--screenshot out.png]";
+     [--home contract.json] [--page welcome|sign-in|overview|needs-you|record|calendar|usage|connect-apps|account|taf|taf-card] [--screenshot out.png]";
 
 fn options() -> Result<Options, String> {
     let mut o = Options::default();
@@ -110,9 +110,12 @@ fn selection_of(page: Option<&str>) -> Selection {
         Some("connect-apps") => Selection::ConnectApps,
         Some("account") => Selection::Account,
         // The sample's Refunds, as the reference set's taf.png opens it.
-        Some("taf") => Selection::Taf("refunds".into()),
+        Some("taf") | Some("taf-card") => Selection::Taf("refunds".into()),
         // With `--home`, the contract's first taf.
         Some(other) if other.starts_with("taf:") => Selection::Taf(other["taf:".len()..].into()),
+        Some(other) if other.starts_with("taf-card:") => {
+            Selection::Taf(other["taf-card:".len()..].into())
+        }
         _ => Selection::Overview,
     }
 }
@@ -174,6 +177,11 @@ fn activate(app: &adw::Application, o: &Options) {
         cloud: RefCell::new(None),
         problem: RefCell::new(None),
         home_file: o.home.as_ref().map(std::path::PathBuf::from),
+        screenshot: o.screenshot.is_some(),
+        on_card: o
+            .page
+            .as_deref()
+            .is_some_and(|p| p == "taf-card" || p.starts_with("taf-card:")),
     });
 
     // What opens: the sample when asked, else the kept session, else the welcome. A screenshot
@@ -245,6 +253,10 @@ struct App {
     problem: RefCell<Option<gtk::Label>>,
     /// `--home`'s contract file, for the screenshots' tafs cloud reads.
     home_file: Option<std::path::PathBuf>,
+    /// A screenshot: the sample's Refunds has the reference set's three Cards.
+    screenshot: bool,
+    /// `--page taf-card`: the taf opens on its Card tab.
+    on_card: bool,
 }
 
 /// What reading the account came to.
@@ -410,6 +422,12 @@ impl App {
             }
             _ => taf::ActivitySource::None,
         };
+        // `issuer(of:)`: who manages a taf isn't read yet, so a KIFF taf's Cards are the account's.
+        let issuer = cloud
+            .and_then(|c| c.account.as_ref())
+            .map(|a| a.name())
+            .or_else(|| w.line("card.issued_by_account").ok())
+            .unwrap_or_default();
         match (mode, cloud) {
             (Mode::Sample, _) => model
                 .tafs
@@ -436,6 +454,9 @@ impl App {
                         revoked: false,
                         held: held_of(&t.key),
                         sample: true,
+                        cards: sample::full_cards(w, &t.key, self.screenshot).unwrap_or_default(),
+                        issued_by: w.line("common.you").unwrap_or_default(),
+                        opens_on_card: self.on_card,
                         cloud_id: None,
                         source: taf::ActivitySource::None,
                     }
@@ -445,8 +466,11 @@ impl App {
                 .home
                 .tafs
                 .iter()
-                .filter_map(|h| tafs_core::home::taf(w, h).ok())
-                .map(|t| taf::TafPage {
+                .filter_map(|h| {
+                    let cards = tafs_core::home::full_cards(w, h, w.language()).ok()?;
+                    Some((tafs_core::home::taf(w, h).ok()?, cards))
+                })
+                .map(|(t, cards)| taf::TafPage {
                     held: held_of(&t.key),
                     initial: tafs_core::sidebar::initial(&t.name),
                     cloud_id: t.cloud.then(|| t.key.clone()),
@@ -463,6 +487,9 @@ impl App {
                     card_count: t.card_count,
                     revoked: t.revoked,
                     sample: false,
+                    cards,
+                    issued_by: issuer.clone(),
+                    opens_on_card: self.on_card,
                     source: source.clone(),
                 })
                 .collect(),

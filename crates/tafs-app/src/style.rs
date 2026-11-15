@@ -163,6 +163,16 @@ button.tafs-reads { background: none; box-shadow: none; border: none; color: @ta
 button.tafs-filter-bordered { background-color: alpha(@tafs_soft, 0.12); background-image: none; color: @tafs_soft; border: none; border-radius: 8px; padding: 5px 12px; min-height: 0; font-size: 15px; font-weight: 400; box-shadow: none; }
 button.tafs-filter-bordered.selected { background-color: alpha(@tafs_amber_text, 0.15); color: @tafs_amber_text; }
 
+/* A Card's face: white on its colour, corners of 18; each Card behind a shade darker. */
+.tafs-face { color: white; border-radius: 18px; padding: 16px; }
+.tafs-face.dimfill { background-color: @tafs_dim; }
+.tafs-face.faded { opacity: 0.4; }
+.tafs-face-words { opacity: 0.9; }
+.tafs-face-caption { opacity: 0.75; }
+.tafs-face-shade { background-color: black; border-radius: 18px; }
+.tafs-face-clip { border-radius: 18px; box-shadow: 0 -2px 4px alpha(black, 0.16); }
+.tafs-env-pill { font-family: monospace; font-size: 10px; font-weight: 600; letter-spacing: 0.6px; background-color: alpha(white, 0.22); border-radius: 999px; padding: 2px 6px; color: white; }
+
 .tafs-code { font-family: monospace; font-size: 34px; font-weight: 600; color: @tafs_ink; }
 .tafs-mono { font-family: monospace; }
 .tafs-notice { background-color: @tafs_panel; border-bottom: 1px solid @tafs_line; padding: 12px 24px; }
@@ -177,7 +187,7 @@ pub fn css(dark: bool) -> String {
     let mut avatars = String::new();
     for (i, hex) in TAF_COLORS.iter().enumerate() {
         avatars.push_str(&format!(
-            ".tafs-avatar.c{i}, .tafs-taf-dot.c{i}, .tafs-card-mini.c{i} {{ background-color: #{hex:06x}; }}\n"
+            ".tafs-avatar.c{i}, .tafs-taf-dot.c{i}, .tafs-card-mini.c{i}, .tafs-face.c{i} {{ background-color: #{hex:06x}; }}\n"
         ));
     }
     let shapes = SHAPES

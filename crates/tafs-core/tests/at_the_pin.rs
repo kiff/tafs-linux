@@ -123,6 +123,30 @@ const LINES: &[(&str, &[&str])] = &[
     ("taf.halt.part_held", &[]),
     ("record.filter.held", &[]),
     ("record.filter.refused", &[]),
+    ("card.rule.never", &[]),
+    ("card.rule.always_asks", &[]),
+    ("card.rule.up_to_each", &["amount"]),
+    ("card.rule.at_most_each", &["amount"]),
+    ("card.rule.at_most_each_refused_above", &["amount"]),
+    ("card.asks_you", &["formatted", "sum_label"]),
+    ("card.window.in_total_window", &["window"]),
+    ("card.extra_room", &["extra", "window"]),
+    ("card.extra_room_until", &["extra", "ends"]),
+    ("card.outside_held", &[]),
+    ("card.outside_refused", &[]),
+    ("card.issued_by", &[]),
+    ("card.ends", &[]),
+    ("card.until", &[]),
+    ("card.ended", &[]),
+    ("card.revoked", &[]),
+    ("card.no_end_date", &[]),
+    ("card.no_actions_short", &[]),
+    ("sample.card.refunds_stripe", &[]),
+    ("sample.card.read_stripe", &[]),
+    ("sample.refunds_stripe_test", &[]),
+    ("sample.list_charges", &[]),
+    ("sample.look_up_charge", &[]),
+    ("taf.revoke", &[]),
     ("settings.your_account", &[]),
     ("settings.mode", &[]),
     ("settings.mode_kiff", &[]),
@@ -757,4 +781,91 @@ fn the_sample_refunds_page_is_the_reference_sets() {
         "Refunds · Test · 3 Cards"
     );
     assert_eq!(TafState::Working.label(&w).unwrap(), "Working");
+}
+
+#[test]
+fn refunds_card_tab_is_the_reference_sets() {
+    use tafs_core::cards::stack;
+    let w = book("en");
+    let cards = sample::full_cards(&w, "refunds", true).unwrap();
+    let titles: Vec<&str> = cards.iter().map(|c| c.title.as_str()).collect();
+    assert_eq!(
+        titles,
+        ["Refunds · Stripe", "Read Stripe", "Refunds · Stripe test"]
+    );
+    // The furthest back on top: the test Card, then Read Stripe, then Refunds · Stripe in front.
+    let order: Vec<&str> = stack(&cards, None)
+        .iter()
+        .map(|(i, _)| cards[*i].title.as_str())
+        .collect();
+    assert_eq!(
+        order,
+        ["Refunds · Stripe test", "Read Stripe", "Refunds · Stripe"]
+    );
+    assert_eq!(cards[2].environment_label().as_deref(), Some("TEST"));
+    let front = &cards[0];
+    assert_eq!(
+        front.totals.hero(&w).unwrap(),
+        Some(("€1,520".into(), "left today of €2,000".into()))
+    );
+    assert_eq!(
+        front.facts(&w).unwrap(),
+        ["up to €150 each; more asks you first", "2 tools"]
+    );
+    assert_eq!(
+        front.ends(&w, false).unwrap(),
+        ("Ends".into(), "No end date".into())
+    );
+    let lines: Vec<(String, String, String)> = front
+        .rules
+        .iter()
+        .map(|r| {
+            (
+                r.label.clone(),
+                r.outside(&w).unwrap(),
+                r.summary(&w).unwrap(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        lines,
+        [
+            (
+                "Refunds".into(),
+                "Outside: held for you".into(),
+                "up to €150 each; more asks you first · €2,000 in total a day, then it asks you"
+                    .into()
+            ),
+            (
+                "Credits".into(),
+                "Outside: held for you".into(),
+                "up to €100 each; more asks you first · €1,000 in total a day, then it asks you"
+                    .into()
+            ),
+        ]
+    );
+    assert_eq!(
+        cards[1].totals.hero(&w).unwrap(),
+        Some(("180".into(), "calls left today of 200".into()))
+    );
+    // The app's own sample: Refunds' one Card, its payouts never.
+    let own = sample::full_cards(&w, "refunds", false).unwrap();
+    assert_eq!(own.len(), 1);
+    assert_eq!(own[0].rules[2].summary(&w).unwrap(), "never");
+    assert_eq!(own[0].rules[2].outside(&w).unwrap(), "Outside: refused");
+    let deploys = sample::full_cards(&w, "deploys", false).unwrap();
+    let summaries: Vec<String> = deploys[0]
+        .rules
+        .iter()
+        .map(|r| r.summary(&w).unwrap())
+        .collect();
+    assert_eq!(
+        summaries,
+        [
+            "10 calls a day, then it asks you",
+            "20 calls a day, then it asks you",
+            "always asks you",
+            "never"
+        ]
+    );
 }

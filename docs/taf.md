@@ -20,7 +20,23 @@ the page is `crates/tafs-app/src/taf.rs`.
   `taf.halt.part_held`), then its lines by day, newest first, each day's heading with what was
   spent, each line as the Record's without its taf. "Nothing yet." with All, else "Nothing here."
 
-`--page taf` opens the sample's Refunds, as `taf.png`.
+- **Card** (`card(_:)`): the taf's Cards as a wallet stack (`CardStack`), the front one whole and
+  each one behind showing its top 26 (`WalletLayout`), a shade darker the deeper it is; tapping one
+  brings it forward. Each face (`TafCardFace`, 300×189, corners of 18) is white on the taf's
+  colour, the dim colour when it isn't live, faded when revoked or not active: its title
+  (monospaced 12 semibold) and its environment as a pill when it isn't production, the main
+  limit's figure (34 bold) and words, its facts (monospaced 11, one line, smaller before it's
+  cut), "No actions" when it has no limits, then "Issued by" who and when it ends ("Ends" or
+  "Until", "No end date"). Under the stack, every limit of the front Card (`CardLines`): its
+  label (15 semibold), what happens outside it (12, dim), and its summary (monospaced 13, at the
+  end, red when never allowed). Then Revoke, in red, dimmed until it's ported. The Card bar opens
+  this tab, and isn't shown on it.
+- **Who issued a Card** (`issuer(of:)`): "You" in the sample. For a KIFF taf, the account's name,
+  else "The account", since who manages a taf isn't read yet.
+
+`--page taf` opens the sample's Refunds, as `taf.png`; `--page taf-card` opens it on its Card
+tab, with the reference set's three Cards, as `taf-card.png`; `--page taf-card:<id>` opens a taf
+of `--home` on it.
 
 ## A tafs cloud taf's Activity
 
@@ -44,10 +60,13 @@ it's absent. `--home shared/contracts/home.json --page taf:<id>` reads `taf-acti
 
 ## Not yet
 
-- **The page opens on Activity**, the tab ported so far; the iPad opens on Chat. Chat, Card and
-  Setup are there, dimmed, until each is ported, and the Card bar opens nothing yet.
+- **The page opens on Activity**; the iPad opens on Chat. Chat and Setup are there, dimmed, until
+  each is ported.
+- **On the Card tab:** tafs cloud's time zone lines, each item's totals (`eachItem`), How this is
+  counted (`CountedView`), what's pending, the unit words and Connect again, the halt row,
+  Versions, Usage; Revoke itself (dimmed), and Revoke for a KIFF taf its owner manages.
 - **Above a tafs cloud taf's Activity:** its doors' knocks, Card unit requests, its work
   (`WorkPanel`), its runs (`RunsPanel`, `RetainedRuns`); and the next step's buttons (Connect it
   again, Ask Coach), shown as their words for now; a call's receipt; "All apps" for a selection.
 - **The line under the head:** its version and who it's shared with (`headerLine`, `ShareLine`).
-- **The side column** on a wide window, Revoke, Remove, and folding the head while scrolling.
+- **The side column** on a wide window, Remove, and folding the head while scrolling.
