@@ -147,6 +147,25 @@ const LINES: &[(&str, &[&str])] = &[
     ("sample.list_charges", &[]),
     ("sample.look_up_charge", &[]),
     ("taf.revoke", &[]),
+    ("connect.apps.search", &[]),
+    ("connect.apps.yours", &[]),
+    ("connect.apps.discover", &[]),
+    ("connect.apps.column_app", &[]),
+    ("connect.apps.column_how", &[]),
+    ("connect.apps.column_whose", &[]),
+    ("connect.apps.column_status", &[]),
+    ("connect.apps.connect", &[]),
+    ("connect.apps.not_listed", &[]),
+    ("connect.apps.used_by", &["tafs"]),
+    ("connect.apps_connect_taf_make_one", &[]),
+    ("connect.apps_not_read", &["why"]),
+    ("connect.more_apps", &[]),
+    ("connect.more_apps_could_not_listed", &["why"]),
+    ("connect.how.key", &[]),
+    ("connect.how.sign_in", &[]),
+    ("connect.status.connected", &[]),
+    ("connect.sign_in_again", &[]),
+    ("common.loading", &[]),
     ("billing.by_apple", &[]),
     ("billing.by_google_play", &[]),
     ("billing.by_kiff", &[]),
@@ -1000,4 +1019,58 @@ fn kiffs_usage_lines_at_the_pin() {
     assert_eq!(solo_still_renews(&w, &u).unwrap(), None);
     let u = KiffUsage::read(br#"{"billing":{"source":""}}"#).unwrap();
     assert_eq!(billing_line(&w, &u).unwrap(), None);
+}
+
+#[test]
+fn connect_apps_is_the_reference_sets() {
+    use tafs_core::connect::{split, ConnectApps, Row};
+    let file = WordBook::default_root().join("../../ios/Tafs/Samples/connect-apps.json");
+    let apps = ConnectApps::read(&std::fs::read(file).expect("run tools/sync.sh first")).unwrap();
+    let (yours, discover) = split(&apps.apps);
+    let names = |a: &[&tafs_core::connect::App]| -> Vec<String> {
+        a.iter().map(|a| a.display_name().to_string()).collect()
+    };
+    assert_eq!(names(&yours), ["Gmail", "Stripe"]);
+    assert_eq!(
+        names(&discover),
+        ["Google Sheets", "Slack", "Qonto", "HubSpot"]
+    );
+    assert!(apps.by_key);
+    let w = book("en");
+    let gmail = Row::new(&w, yours[0], &[]).unwrap();
+    assert_eq!(
+        (
+            gmail.how.as_str(),
+            gmail.whose.as_deref(),
+            gmail.status.as_deref()
+        ),
+        ("Sign in", Some("Yours"), Some("Connected"))
+    );
+    // The sample's `used_by` is plain names, which tafs cloud's form isn't: no "Used by", as on
+    // the iPad's reference picture.
+    assert_eq!(gmail.used_by, None);
+    assert_eq!(Row::new(&w, discover[2], &[]).unwrap().how, "With a key");
+    // A taf's names, listed as each language lists them.
+    use tafs_core::words::list;
+    let names: Vec<String> = ["Refunds", "Chargebacks", "Deploys"]
+        .map(String::from)
+        .to_vec();
+    assert_eq!(list("en", &names[..2]), "Refunds and Chargebacks");
+    assert_eq!(list("en", &names), "Refunds, Chargebacks, and Deploys");
+    assert_eq!(list("fr", &names), "Refunds, Chargebacks et Deploys");
+    assert_eq!(list("de", &names[..1]), "Refunds");
+    let used = Row::new(
+        &w,
+        &tafs_core::connect::ConnectApps::read(
+            br#"{"apps":[{"entry":"a","state":"connected","used_by":[{"taf":"t1","name":"Refunds"},{"taf":"t2","name":"Chargebacks"}]}]}"#,
+        )
+        .unwrap()
+        .apps[0],
+        &[],
+    )
+    .unwrap();
+    assert_eq!(
+        used.used_by.as_deref(),
+        Some("Used by Refunds and Chargebacks")
+    );
 }

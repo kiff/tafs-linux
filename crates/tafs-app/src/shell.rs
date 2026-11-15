@@ -35,6 +35,8 @@ pub struct Screens {
     /// Where Plan & usage reads, and tafs cloud's tafs by id for their runs' title.
     pub usage: crate::usage::UsageSource,
     pub cloud_names: crate::usage::Names,
+    /// Where Connect apps reads.
+    pub connect: crate::connect::ConnectSource,
 }
 
 /// Builds the shell. `view_only` shows the notice that this computer can't approve yet.
@@ -54,6 +56,7 @@ pub fn build(
         actions,
         usage,
         cloud_names,
+        connect,
     } = screens;
     let entries = Rc::new(record.entries.clone());
     let lines = model.lines(&w).unwrap_or_else(|e| panic!("{e}"));
@@ -143,6 +146,14 @@ pub fn build(
                 Selection::Overview => crate::overview::page(&overview, open.clone()),
                 Selection::NeedsYou => crate::needs_you::page(w.clone(), &needs_you),
                 Selection::Record => crate::record::page(w.clone(), record.clone()),
+                Selection::ConnectApps => {
+                    let open = open.clone();
+                    crate::connect::page(
+                        w.clone(),
+                        connect.clone(),
+                        Rc::new(move || open(Selection::Coach)),
+                    )
+                }
                 Selection::Usage => {
                     crate::usage::page(w.clone(), usage.clone(), cloud_names.clone())
                 }

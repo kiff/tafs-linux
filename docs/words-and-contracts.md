@@ -1,7 +1,8 @@
 # Words and contracts
 
 Both come from kiff/tafs at the commit in `shared-pin.json`. `tools/sync.sh` puts them in
-`shared/` (`shared/app/strings`, `shared/contracts`), never in git.
+`shared/` (`shared/app/strings`, `shared/contracts`), never in git, with one of the iPad's own
+samples: `ios/Tafs/Samples/connect-apps.json`, the reference set's Connect apps.
 
 `WordBook::load(root, language)` reads `app/strings/<language>/*.json`, the files the iPad's
 `Words.swift` is generated from:

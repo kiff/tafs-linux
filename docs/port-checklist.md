@@ -24,6 +24,7 @@ ports a file updates its line here.
 | TafPresentationViews.swift | 492 | A taf's Activity list and its rows, from tafs cloud; its runs and work | `TafActivityList`'s held calls, filters, groups, pages and foot; `SourceActivityRow`; `NextStepRow` as its words (`taf.rs`, `tafs-core/activity.rs`) | `TafKnocksPanel`, Card unit requests, `WorkPanel`, `RunsPanel`, `RetainedRuns`; the next step's buttons; a row's receipt |
 | UsageView.swift | 348 | Plan & usage: the balance, buying, who bills, members' requests | `UsageView`'s title, loading and order; `BalancePanel`'s edge, words, `Meter`, detail, warning and why it couldn't be read; the Credits panel shown or left out; KIFF's usage read with `billingPanel`'s lines, `askPanel` and `requestsPanel` with their buttons dimmed, and why KIFF couldn't be read (`usage.rs`, `tafs-core/usage.rs`) | Raise the limit (`ApprovalGate`), declining and the read after it; Ask an admin (`AskAdminView`) and Withdraw; buying packs and Solo, and approving a pack (the store); Manage and Cancel Solo (Apple's page); `planMessage`; refreshing in place |
 | CreditsViews.swift | 181 | The credits the account's tafs used, and one taf's runs | `CreditsPanel` whole: both periods, its errors, each taf's row (opening its runs at KIFF), Coach, not counted, the note; `TafCreditsView` with More runs; `CreditsRunRow`'s words and time (`usage.rs`, `tafs-core/usage.rs`) | A run's request (`KnobRequestDetail`); pull to refresh (Try again instead) |
+| ConnectAppsView.swift | 1128 | Connect apps, a connected app's detail, connecting's approval | `ConnectAppsView`'s list: the search, Yours and Discover (`split`, `keys`), the table (`ConnectColumns`) with each row (`ConnectRow`), "Make one first", More apps, Not listed? Ask Coach (`connect.rs`, `tafs-core/connect.rs`) | Connecting (dimmed: `connectableTafs` needs who manages a taf), "Which taf?", `ConnectApprovalSheet`; `AppConnectionsView`, `ConnectionDetailView`, Disconnect and Clear; logos; the narrow window's one-line rows |
 | HomeSplitView.swift | 584 | The sidebar for the whole app and what it opens | The brand, the screens with Needs you's count, NEEDS YOU's held calls, Your tafs relevant now, Coach and Account at the foot, the chosen row's fill (`shell.rs`, `tafs-core/sidebar.rs`) | What each row opens (title only until each screen is ported); Shared with you; Other agents; tafs being set up and Discard; the recipes strip and Explore; + New and its gallery; the halt-all row (sidebar without `tab`); Unreachable and Plan lines at the foot; Home read from tafs cloud |
 
 ## Not started
@@ -38,7 +39,6 @@ ports a file updates its line here.
 | CalendarView.swift | 434 | Calendar: Day, Week, Month | CalendarModel |
 | CoachMode.swift | 131 | Coach mode over the app | |
 | CoachToolsStep.swift | 255 | Coach's tools still to give | |
-| ConnectAppsView.swift | 1128 | Connect apps | |
 | DeleteAccountView.swift | 60 | Deleting the account | |
 | DevicesView.swift | 69 | Account › Devices | |
 | DiscardSettingUp.swift | 35 | Discard a taf being set up | |
@@ -90,6 +90,8 @@ ports a file updates its line here.
 | KIFF/PlainError.swift | `signin::plain_words` |
 | KIFF/TafsCloud.swift | `Home`, `HomeTaf`, `NeedsYou`, `home()` (`tafs-core/home.rs`, `kiff::home`) |
 | KIFF/KIFFClient.swift (usage) | `Usage` (`Billing`, `Store`, `Pack`, `offered`), `PackRequest`, `usage()`; `managesBilling` (`tafs-core/usage.rs`, `kiff::usage`) |
+| KIFF/TafsCloud+Knob.swift | `ConnectApps`, `App`, `connectApps(_:provider:cursor:)`, `loadMoreConnectApps`'s merge (`tafs-core/connect.rs`) |
+| Design/Words.swift | `Words.list` (`words::list`) |
 | KIFF/TafsCloud.swift (usage) | `Balance`, `Credits`, `TafCredits`, `LenientItem`, `balance()`, `credits(previous:)`, `credits(taf:previous:after:)` (`tafs-core/usage.rs`, `kiff::cloud`) |
 | App/AppModel.swift (usage) | `refreshUsage`'s tafs cloud reads, `readPreviousCredits`, `readTafCredits`, `creditsWords`, `showsCreditsPanel`, `sampleBalance`, `sampleCredits` (`usage.rs`) |
 | KIFF/TafsCloud+Work.swift | `Health`, `TafWork.Summary`, read leniently (`home.rs`) |
@@ -102,4 +104,4 @@ ports a file updates its line here.
 
 ## Coverage
 
-Ported 1, partial 10, not started 35, not for Linux 4: the 50 view files at the pin.
+Ported 1, partial 11, not started 34, not for Linux 4: the 50 view files at the pin.

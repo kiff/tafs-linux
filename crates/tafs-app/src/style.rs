@@ -182,6 +182,16 @@ button.tafs-filter-bordered.selected { background-color: alpha(@tafs_amber_text,
 button.tafs-panel-link { background-color: @tafs_panel; background-image: none; border: 1px solid @tafs_line; border-radius: 18px; padding: 16px; box-shadow: none; }
 button.tafs-back { background: none; border: none; box-shadow: none; color: @tafs_amber_text; padding: 4px 8px; }
 
+/* Connect apps: the inset list's group, its buttons as rows, the search, a Connect as wide as its words. */
+.tafs-group { background-color: @tafs_panel; border-radius: 18px; padding: 0 16px; }
+button.tafs-list-button { background-color: @tafs_panel; background-image: none; border: none; border-radius: 18px; padding: 16px; box-shadow: none; color: @tafs_amber_text; font-size: 17px; font-weight: 400; }
+button.tafs-list-button label { font-size: 17px; }
+button.tafs-list-button > label { margin: 0; }
+entry.tafs-search, .tafs-search { border-radius: 999px; min-height: 36px; }
+button.tafs-outline.compact { min-height: 30px; padding: 8px 16px; }
+button.tafs-list-button label { margin: 0; }
+.tafs-ok { color: @tafs_ok; }
+
 .tafs-code { font-family: monospace; font-size: 34px; font-weight: 600; color: @tafs_ink; }
 .tafs-mono { font-family: monospace; }
 .tafs-notice { background-color: @tafs_panel; border-bottom: 1px solid @tafs_line; padding: 12px 24px; }

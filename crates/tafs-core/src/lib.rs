@@ -7,6 +7,7 @@ pub mod account_time;
 pub mod activity;
 pub mod card;
 pub mod cards;
+pub mod connect;
 pub mod held;
 pub mod home;
 pub mod keys;

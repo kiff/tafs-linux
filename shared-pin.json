@@ -1,5 +1,9 @@
 {
   "repo": "kiff/tafs",
   "commit": "d14217f1b47b438a024ecc29efb8e6bd32c426db",
-  "paths": ["app/strings", "contracts"]
+  "paths": [
+    "app/strings",
+    "contracts",
+    "ios/Tafs/Samples/connect-apps.json"
+  ]
 }

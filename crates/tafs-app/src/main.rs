@@ -1,6 +1,7 @@
 //! tafs for Linux: GTK 4 and libadwaita. The same product, account and words as the iPad app.
 
 mod account;
+mod connect;
 mod kiff;
 mod needs_you;
 mod overview;
@@ -685,6 +686,16 @@ impl App {
                     Some(f) => usage::UsageSource::File(f.clone()),
                     None => usage::UsageSource::None,
                 },
+            },
+            connect: match (mode, self.kept.borrow().as_ref()) {
+                (Mode::Sample, _) => connect::ConnectSource::Sample {
+                    screenshot: self.screenshot,
+                },
+                (Mode::Kiff, Some(kept)) => connect::ConnectSource::Cloud {
+                    token: kept.token.clone(),
+                    languages: self.languages.clone(),
+                },
+                _ => connect::ConnectSource::None,
             },
             cloud_names: Rc::new(
                 tafs.iter()

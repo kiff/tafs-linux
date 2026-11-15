@@ -266,6 +266,30 @@ pub fn placeholders(line: &str) -> Vec<String> {
     out
 }
 
+/// `Words.list`: names joined as the language lists them (`ListFormatter`, CLDR's "and" list):
+/// "Refunds", "Refunds and Chargebacks", "A, B, and C" in English; "A, B et C" in French.
+pub fn list(language: &str, names: &[String]) -> String {
+    let and = match language {
+        "fr" => "et",
+        "de" => "und",
+        "es" => "y",
+        "it" | "pt" => "e",
+        "nl" => "en",
+        "pl" => "i",
+        _ => "and",
+    };
+    match names {
+        [] => String::new(),
+        [one] => one.clone(),
+        [a, b] => format!("{a} {and} {b}"),
+        [rest @ .., last] => {
+            // English alone puts a comma before its "and".
+            let comma = if language == "en" { "," } else { "" };
+            format!("{}{comma} {and} {last}", rest.join(", "))
+        }
+    }
+}
+
 /// Text in capitals by the language's own rules, as the iPad's `Eyebrow` (`uppercased()`).
 pub fn upper(text: &str) -> String {
     text.to_uppercase()
