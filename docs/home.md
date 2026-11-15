@@ -117,6 +117,12 @@ When KIFF says the session is view-only, the screen beside the sidebar opens wit
 "This computer shows your tafs, Needs you and the Record. It can't approve until you add it with
 your phone." and **Add this computer**, which opens the [pairing](pairing.md).
 
+Once the computer is paired, it's still view-only (its key is in software, and KIFF lets a
+software key approve nothing), so pairing again can't lift it. The notice then says "This computer
+can't sign approvals itself. Approve on your phone, or with a passkey." (`pair.added_passkey`) and
+has no button: the PM's call, as tafs-macos #90 did on macOS 12. The kept session says it was
+paired (`KeptSession.paired`); a session kept before that reads as not paired.
+
 ## Not yet
 
 - **What each row opens:** each screen but the Overview shows its title until it's ported.

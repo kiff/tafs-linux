@@ -55,6 +55,10 @@ pub struct KeptSession {
     pub expires_at: i64,
     /// The device key the session is bound to, PKCS#8 DER in base64.
     pub device_key: String,
+    /// Added with a phone (a pairing): its key is in software, so it stays view-only and its
+    /// approvals go to the phone. A session kept before this was known reads as not paired.
+    #[serde(default)]
+    pub paired: bool,
 }
 
 impl std::fmt::Debug for KeptSession {
@@ -87,6 +91,7 @@ impl KeptSession {
             approval_mode: ApprovalMode::from_kiff(token.approval_mode.as_deref()),
             expires_at: now + lasts,
             device_key: base64::engine::general_purpose::STANDARD.encode(key.to_pkcs8()),
+            paired: false,
         }
     }
 
@@ -168,6 +173,24 @@ mod tests {
         other.host = "api.kiff.dev.evil.com".into();
         assert!(KeptSession::read(&other.to_json(), 0).is_none());
         assert!(!format!("{kept:?}").contains("secret-token"));
+    }
+
+    #[test]
+    fn a_paired_session_is_kept_as_paired_and_an_older_one_reads_as_not() {
+        let key = DeviceKey::generate();
+        let signed_in = KeptSession::from_token(&token(Some("view")), &key, 1_000);
+        assert!(!signed_in.paired);
+        let paired = KeptSession {
+            paired: true,
+            ..signed_in.clone()
+        };
+        assert!(KeptSession::read(&paired.to_json(), 1_050).unwrap().paired);
+        // A session kept before `paired` was written reads as not paired.
+        let mut older: serde_json::Value = serde_json::from_str(&signed_in.to_json()).unwrap();
+        older.as_object_mut().unwrap().remove("paired");
+        let back = KeptSession::read(&older.to_string(), 1_050).unwrap();
+        assert!(!back.paired);
+        assert_eq!(back, signed_in);
     }
 
     #[test]

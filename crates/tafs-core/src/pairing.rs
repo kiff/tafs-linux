@@ -225,6 +225,7 @@ pub fn claim(
 pub fn kept(token: &DeviceToken, key: &DeviceKey, now: i64) -> KeptSession {
     KeptSession {
         approval_mode: ApprovalMode::View,
+        paired: true,
         ..KeptSession::from_token(token, key, now)
     }
 }
@@ -477,6 +478,8 @@ mod tests {
             let session = kept(&token, &key, 1_000);
             assert_eq!(session.approval_mode, ApprovalMode::View, "{mode:?}");
             assert!(session.approval_mode.is_view_only());
+            // Paired: the notice says approvals go to the phone, with nothing to add.
+            assert!(session.paired);
             assert_eq!(session.token, "tok");
             assert_eq!(session.expires_at, 1_060);
             assert_eq!(

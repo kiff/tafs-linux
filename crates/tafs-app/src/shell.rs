@@ -54,7 +54,7 @@ pub fn build(
     w: Rc<WordBook>,
     model: &SidebarModel,
     screens: Screens,
-    view_only: Option<Rc<dyn Fn()>>,
+    view_only: Option<ViewOnly>,
     first: Selection,
 ) -> Shell {
     let Screens {
@@ -82,8 +82,8 @@ pub fn build(
     let detail = gtk::Box::new(gtk::Orientation::Vertical, 0);
     detail.set_hexpand(true);
     crate::widgets::ground(&detail);
-    if let Some(add) = view_only {
-        detail.append(&view_only_notice(&w, add));
+    if let Some(why) = view_only {
+        detail.append(&view_only_notice(&w, why));
     }
     let stack = gtk::Stack::new();
     stack.set_vexpand(true);
@@ -574,9 +574,20 @@ fn screen_page(title: &str) -> gtk::Box {
     b
 }
 
-/// This computer can't approve until it's added with the phone (the pairing words). `add` opens
-/// the pairing.
-fn view_only_notice(w: &WordBook, add_this: Rc<dyn Fn()>) -> gtk::Box {
+/// Why this computer is view-only, for the notice beside the sidebar.
+pub enum ViewOnly {
+    /// Signed in in the browser: it can be added with the phone. The function opens the pairing.
+    CanPair(Rc<dyn Fn()>),
+    /// Added with the phone already: its key is in software, so it still approves nothing, and
+    /// approvals go to the phone. No button: pairing again can't lift it (the PM's call, as
+    /// tafs-macos #90 on macOS 12).
+    Paired,
+}
+
+/// This computer is view-only (the pairing words): before it's paired, "It can't approve until you
+/// add it with your phone." and Add this computer; once paired, "This computer can't sign
+/// approvals itself. Approve on your phone, or with a passkey." and nothing to press.
+fn view_only_notice(w: &WordBook, why: ViewOnly) -> gtk::Box {
     let device = w.line("device.linux").unwrap_or_default();
     let b = gtk::Box::new(gtk::Orientation::Horizontal, 16);
     b.add_css_class("tafs-notice");
@@ -588,9 +599,12 @@ fn view_only_notice(w: &WordBook, add_this: Rc<dyn Fn()>) -> gtk::Box {
         600,
         &["tafs-ink"],
     ));
+    let lead_key = match why {
+        ViewOnly::CanPair(_) => "pair.view_only.lead",
+        ViewOnly::Paired => "pair.added_passkey",
+    };
     let lead = text(
-        &w.get("pair.view_only.lead", &[("device", &device)])
-            .unwrap_or_default(),
+        &w.get(lead_key, &[("device", &device)]).unwrap_or_default(),
         13,
         400,
         &["tafs-soft"],
@@ -599,6 +613,9 @@ fn view_only_notice(w: &WordBook, add_this: Rc<dyn Fn()>) -> gtk::Box {
     lead.set_width_chars(40);
     v.append(&lead);
     b.append(&v);
+    let ViewOnly::CanPair(add_this) = why else {
+        return b;
+    };
     let add = outline(
         &w.get("pair.view_only.add", &[("device", &device)])
             .unwrap_or_default(),

@@ -11,7 +11,8 @@ signs this computer's key. The iPad has no computer side to port (it has the pho
 
 - **The welcome**, under its buttons: "Already use tafs on your phone? Add this computer with it."
 - **The view-only notice** beside the sidebar: **Add this computer**. The pairing replaces the
-  view-only session (below).
+  view-only session (below). Once paired, the notice has no button and says approvals go to the
+  phone ([home](home.md)).
 - `--page pair` opens it over the welcome; with `--screenshot` its code is made here and never
   claimed.
 
@@ -50,7 +51,8 @@ P-256, DER, standard base64) over `kiff.pair.claim.v1\n{nonce}\n{sha256 hex of t
 - The answer is the session (`access_token`, `expires_in`, `tenant`, `subject`, `device_id`). It
   is kept **view-only** whatever the answer says (`pairing::kept`): this computer's key is in
   software, and KIFF lets a software key approve nothing. KIFF answers `view` for a software key;
-  this keeps it so whatever the answer says. The view-only notice is then drawn from KIFF's `/v1/me` (`approval_mode`), as for any
+  this keeps it so whatever the answer says. It is also kept as paired
+  (`KeptSession.paired`), so the notice says approvals go to the phone, with no button. The view-only notice is then drawn from KIFF's `/v1/me` (`approval_mode`), as for any
   session.
 
 ## The session
