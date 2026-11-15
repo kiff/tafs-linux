@@ -190,3 +190,24 @@ mod tests {
         assert!(clear.usable());
     }
 }
+
+/// A Card unit request (`TafsCloud.CardUnitException`, `card_unit_exceptions` on Home): a taf asked
+/// for more of a Card's unit than it allows, and tafs cloud's words for it. Every field is the
+/// iPad's `let`, so one missing fails Home, as the iPad's synthesized decoder does.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize)]
+pub struct CardUnitException {
+    pub id: String,
+    pub kind: String,
+    /// The tafs cloud taf it's for.
+    pub taf: String,
+    pub name: String,
+    pub title: String,
+    pub words: String,
+    pub history: String,
+    /// "Discuss with Coach": for someone who may use Coach and manages the taf.
+    pub action_title: String,
+    pub coach_text: String,
+    /// "Dismiss": signed like a refusal.
+    pub dismiss_title: String,
+    pub can_approve_once: bool,
+}

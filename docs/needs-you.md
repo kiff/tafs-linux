@@ -95,6 +95,20 @@ another device signed in to your account." (`ApprovalGate`), as tafs-macos #76 d
 answered on the phone. `--home shared/contracts/home.json --unproven
 crates/tafs-app/fixtures/unproven.json` (synthetic) draws two, CI's `needs-you-happened`.
 
+## Card unit requests
+
+A taf asked for more of a Card's unit than the Card allows (`CardUnitExceptionPanel`), from tafs
+cloud's Home (`card_unit_exceptions`). Every field is required, as the iPad's synthesized decoder
+reads them, so one missing fails Home. They come after "Did this happen?", and "Nothing is
+waiting." shows only when none waits either.
+
+Each is a panel: tafs cloud's title (16 semibold), words (14, soft) and history (12, dim); its
+Coach button (`action_title`) only for someone who may use Coach and manages the taf (`canDiscuss`:
+the access read's `manage` for the taf's KIFF agent); then Dismiss in red. Both are there,
+dimmed: Coach isn't ported, and Dismiss is signed like a refusal, which this computer can't
+sign. `--home crates/tafs-app/fixtures/home-waits.json` (synthetic) draws one, CI's
+`needs-you-waits`.
+
 ## Not yet
 
 - **Answering from this computer:** KIFF takes an answer signed by the session's key. Until
@@ -102,7 +116,8 @@ crates/tafs-app/fixtures/unproven.json` (synthetic) draws two, CI's `needs-you-h
   The sample's answers come with the sample's Card checks: until then they're dimmed.
 - **Answering a step** (Done, Skip it: signed), **opening Coach** and **setting chats aside**:
   there, dimmed.
-- **Card unit requests, knocks:** with their reads.
+- **Knocks:** with their read.
+- **Discussing a Card unit request with Coach, and dismissing it:** there, dimmed.
 - **Alerts** (`AlertsCard`): the iPad offers them only to a session holding an approval key, and a
   Linux session never does; Linux's notifications come in their own change.
 - **Bringing a call into view** from its alert.

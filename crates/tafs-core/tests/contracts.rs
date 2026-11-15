@@ -306,9 +306,10 @@ fn home_with_steps_and_coachs_waits() {
         set_all_aside: None,
         opens_coach: false,
         happened: vec![],
+        card_units: vec![],
         empty: Some(("Nothing is waiting.".into(), String::new())),
     };
-    let lines = with_waits(empty, &home, false);
+    let lines = with_waits(empty, &home, false, &|_| false);
     assert_eq!(lines.steps.len(), 1);
     // Coach's waits that can't be drawn are left out, and never fail Home.
     assert_eq!(lines.coach.len(), 2);
@@ -332,6 +333,7 @@ fn did_this_happen_beside_the_rest() {
         set_all_aside: None,
         opens_coach: false,
         happened: vec![],
+        card_units: vec![],
         empty: Some(("Nothing is waiting.".into(), String::new())),
     };
     // A call KIFF can't prove waits too: "Nothing is waiting." goes.
@@ -345,4 +347,51 @@ fn did_this_happen_beside_the_rest() {
     let lines = with_unproven(empty(), &w, &[]).unwrap();
     assert!(lines.happened.is_empty());
     assert!(lines.empty.is_some());
+}
+
+#[test]
+fn card_unit_requests_from_home() {
+    use tafs_core::needs_you::{with_waits, NeedsYouLines};
+    let mut answer: Value = serde_json::from_slice(&contract("home.json")).unwrap();
+    let ask = serde_json::json!({
+        "id": "exc-1", "kind": "card_unit", "taf": "taf-aaaa0000000000000000", "name": "Rae",
+        "title": "Rae needs a USD limit", "words": "Its Card only allows EUR.",
+        "history": "Tried 4 times", "action_title": "Add a USD limit", "dismiss_title": "Dismiss",
+        "can_approve_once": false, "coach_text": "Add a USD limit for Rae."
+    });
+    answer["card_unit_exceptions"] = serde_json::json!([ask]);
+    let home = Home::read(&serde_json::to_vec(&answer).unwrap()).expect("Home reads");
+    let empty = || NeedsYouLines {
+        title: String::new(),
+        cards: vec![],
+        steps: vec![],
+        coach: vec![],
+        set_all_aside: None,
+        opens_coach: false,
+        happened: vec![],
+        card_units: vec![],
+        empty: Some(("Nothing is waiting.".into(), String::new())),
+    };
+    // Someone who may use Coach and manages the taf: its Coach button; and "Nothing is waiting." goes.
+    let lines = with_waits(empty(), &home, true, &|taf| {
+        taf == "taf-aaaa0000000000000000"
+    });
+    assert_eq!(lines.card_units.len(), 1);
+    let unit = &lines.card_units[0];
+    assert_eq!(unit.title, "Rae needs a USD limit");
+    assert_eq!(unit.words, "Its Card only allows EUR.");
+    assert_eq!(unit.history, "Tried 4 times");
+    assert_eq!(unit.discuss.as_deref(), Some("Add a USD limit"));
+    assert_eq!(unit.dismiss, "Dismiss");
+    assert_eq!(lines.empty, None);
+    // Not managing it, or not using Coach: no Coach button.
+    let lines = with_waits(empty(), &home, true, &|_| false);
+    assert_eq!(lines.card_units[0].discuss, None);
+    let lines = with_waits(empty(), &home, false, &|_| true);
+    assert_eq!(lines.card_units[0].discuss, None);
+    // Each field is the iPad's `let`: one missing fails Home, as its synthesized decoder does.
+    let mut broken = ask.clone();
+    broken.as_object_mut().unwrap().remove("history");
+    answer["card_unit_exceptions"] = serde_json::json!([broken]);
+    assert!(Home::read(&serde_json::to_vec(&answer).unwrap()).is_none());
 }

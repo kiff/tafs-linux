@@ -260,6 +260,9 @@ pub struct Home {
     pub headline: Value,
     #[serde(default)]
     pub setting_up: Option<Vec<Value>>,
+    /// Card unit requests (`card_unit_exceptions`).
+    #[serde(default)]
+    pub card_unit_exceptions: Option<Vec<crate::waits::CardUnitException>>,
     /// Steps its tafs handed the person (`your_steps`).
     #[serde(default)]
     pub your_steps: Option<Vec<crate::waits::YourStep>>,
