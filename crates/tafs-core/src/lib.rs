@@ -3,10 +3,12 @@
 //! No UI: the GTK app places what this says.
 
 pub mod card;
+pub mod held;
 pub mod home;
 pub mod keys;
 pub mod language;
 pub mod money;
+pub mod needs_you;
 pub mod overview;
 pub mod sample;
 pub mod session;

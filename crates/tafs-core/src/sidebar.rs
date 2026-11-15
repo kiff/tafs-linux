@@ -49,16 +49,7 @@ pub struct ScreenItem {
     pub accessible: String,
 }
 
-/// A held call (`HeldCall`), as the sidebar shows it.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct HeldCall {
-    pub id: String,
-    pub taf: String,
-    pub summary: String,
-    /// Why it's held, the Card's words ("Schema migrations: always asks you").
-    pub reason: String,
-    pub expires_at: DateTime<Local>,
-}
+pub use crate::held::HeldCall;
 
 /// A taf, as the sidebar's row shows it (`tafRow`).
 #[derive(Debug, Clone, PartialEq, Eq)]

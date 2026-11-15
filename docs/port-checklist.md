@@ -17,6 +17,7 @@ ports a file updates its line here.
 | :- | -: | :- | :- | :- |
 | SignInView.swift | 333 | `SignInView`: Sign in with KIFF. Also `SettingsView`, `PlanRow`, `AccountView`, `AccountLines` (Account) | `SignInView` whole: the code, Open KIFF, the link and Copy, the wait, the problem and Try again, the terms line (`sign_in.rs`, `tafs-core/signin.rs`) | "Sign in with your other phone" is there, dimmed: it opens `PairSignInView`. Account's screens (`SettingsView` and the rest) |
 | ShareViews.swift | 405 | Sharing a taf (`ShareSheet`, `SharedWithLine` and the rest), and the Overview (`OverviewView`) | `OverviewView` whole: the title, NEEDS YOU and what else waits, the grid with `cardLine` and `lastResult` (`overview.rs`, `tafs-core/overview.rs`, `card.rs`) | The Overview's reads: who uses each taf (`shares`) and each taf's report (`loadReport`), with Home from tafs cloud. Sharing itself |
+| NeedsYouView.swift | 603 | Needs you: held calls, "Did this happen?", steps, Coach's waits, knocks, alerts | `NeedsYouView`'s held calls and its empty state; `HeldCallCard`'s face, countdown, taf's words, details, expired and someone-answers states, and Answer in KIFF (`needs_you.rs`, `tafs-core/needs_you.rs`, `held.rs`) | Answering here (approve, extra room, next steps, refuse, Allow from now on, install); `DidThisHappenCard`, `AlertsCard`, `CoachWaitingCard`, `SetAllAsideButton`; knocks; scrolling to a call |
 | HomeSplitView.swift | 584 | The sidebar for the whole app and what it opens | The brand, the screens with Needs you's count, NEEDS YOU's held calls, Your tafs relevant now, Coach and Account at the foot, the chosen row's fill (`shell.rs`, `tafs-core/sidebar.rs`) | What each row opens (title only until each screen is ported); Shared with you; Other agents; tafs being set up and Discard; the recipes strip and Explore; + New and its gallery; the halt-all row (sidebar without `tab`); Unreachable and Plan lines at the foot; Home read from tafs cloud |
 
 ## Not started
@@ -43,7 +44,6 @@ ports a file updates its line here.
 | HaltScreen.swift | 176 | A halt of one taf or every taf | |
 | HomeRecipes.swift | 242 | Home with no taf: the recipes | |
 | MicButton.swift | 122 | The mic in a chat's message bar | |
-| NeedsYouView.swift | 603 | Needs you, and "Did this happen?" | Models (HeldCall) |
 | NotificationSettingsView.swift | 138 | Account › Alerts | |
 | PairSignInView.swift | 104 | Signing in from another phone | KIFF/Pairing |
 | PeopleViews.swift | 291 | People and groups | |
@@ -85,7 +85,8 @@ ports a file updates its line here.
 | KIFF/PlainError.swift | `signin::plain_words` |
 | KIFF/TafsCloud.swift | `Home`, `HomeTaf`, `NeedsYou`, `home()` (`tafs-core/home.rs`, `kiff::home`) |
 | KIFF/TafsCloud+Work.swift | `Health`, `TafWork.Summary`, read leniently (`home.rs`) |
-| KIFF/KIFFMapping.swift | `taf`, `money`, `window` (`home.rs`) |
+| KIFF/KIFFMapping.swift | `taf`, `money`, `window` (`home.rs`); `held`, `says`, `toolWords`, `name`, `reasonBreach`, `moneyReason`, `countReason`, `ordinal`, `details`, `amount`, `tafWords`, `outcomeText` (`held.rs`) |
+| KIFF/KIFFClient.swift (held) | `CardException`, `heldCalls`, `answerPage` (`held.rs`, `needs_you.rs`, `kiff::held`) |
 | App/AppModel.swift | `startSignIn`, `finishSignIn`, `transient`, `relevantNow`, `needsYouCount`, `accountLabel`, `coachAvailable`, `propose`'s held call (the sample's) |
 | Services/ThisDevice.swift | `signin::PLATFORM`, `KIFF_KIND` |
 | Services/TafTemplates.swift | `tafs-core/sample.rs`: the five sample tafs and their held calls |
@@ -93,4 +94,4 @@ ports a file updates its line here.
 
 ## Coverage
 
-Ported 1, partial 3, not started 42, not for Linux 4: the 50 view files at the pin.
+Ported 1, partial 4, not started 41, not for Linux 4: the 50 view files at the pin.

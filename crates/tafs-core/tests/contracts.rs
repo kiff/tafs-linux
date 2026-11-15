@@ -119,3 +119,70 @@ fn each_state_in_the_apps_words() {
     let h: home::HomeTaf = serde_json::from_value(t.clone()).unwrap();
     assert_eq!(home::taf(&w, &h).unwrap().now, "Finish setting up Rae");
 }
+
+#[test]
+fn a_held_call_from_kiff_reads_as_the_ipad_shows_it() {
+    use tafs_core::held::{held, read_held};
+    use tafs_core::needs_you::{lines, Answers, Holder};
+    let w = en();
+    let body = br#"{"exceptions":[{"id":"exc_1","subject":"rae","action":"stripe_create_refund","entity_id":"tc_9","status":"held",
+        "breaches":[{"outcome":"per_action_exceeded","reason":"over","limit":10000,"quantity":"sum(amount)","unit":"EUR","scale":2}],
+        "parameters":{"amount":15000},"parameter_units":{"amount":{"unit":"EUR","scale":2}},"reason":null,"units_unavailable":false,
+        "next_steps":[],"created_at":"2026-11-15T12:00:00Z","expires_at":"2026-11-15T12:10:00.000Z","accounting_version":3,
+        "title":"Refund a payment","arguments":{"amount":15000,"payment_intent":"pi_123","kiff_about":"Order 1042"},
+        "taf_about":"Order 1042","taf_reason":"Box arrived\ncrushed","can_approve_once":true}]}"#;
+    let calls = read_held(body).expect("KIFF's held calls read");
+    let call = held(&w, &calls[0], "taf-rae").unwrap();
+    assert_eq!(call.summary, "Refund a payment");
+    assert_eq!(call.amount.as_ref().unwrap().formatted(&w).unwrap(), "€150");
+    assert_eq!(call.reason, "€150 is over the €100 limit for one call");
+    assert_eq!(call.details, ["payment_intent: pi_123"]);
+    assert_eq!(call.taf_reason.as_deref(), Some("Box arrived crushed"));
+    let rae = [Holder {
+        key: "taf-rae",
+        name: "Rae",
+        initial: "R",
+        color: 0,
+    }];
+    let n = lines(
+        &w,
+        std::slice::from_ref(&call),
+        &rae,
+        true,
+        call.expires_at - chrono::Duration::seconds(577),
+    )
+    .unwrap();
+    assert_eq!(n.cards[0].remaining, "9:37 left");
+    assert_eq!(n.cards[0].holder, "Rae");
+    match &n.cards[0].answers {
+        Answers::InKiff { page, button, .. } => {
+            assert_eq!(page, "https://app.kiff.dev/needs-you/exc_1?lang=en");
+            assert_eq!(button, "Answer in KIFF");
+        }
+        other => panic!("{other:?}"),
+    }
+    // Lapsed: words, not buttons that can't work.
+    let late = lines(&w, std::slice::from_ref(&call), &rae, true, call.expires_at).unwrap();
+    assert!(matches!(late.cards[0].answers, Answers::Expired(_)));
+    assert_eq!(late.cards[0].remaining, "expired");
+    // A held call missing a field the iPad requires fails the read.
+    assert!(read_held(br#"{"exceptions":[{"id":"x"}]}"#).is_none());
+}
+
+#[test]
+fn a_count_over_its_limit_names_which_call_this_would_be() {
+    use tafs_core::held::{held, read_held};
+    let w = en();
+    let body = br#"{"exceptions":[{"id":"exc_2","subject":"rae","action":"send_email","entity_id":"e1","status":"held",
+        "breaches":[{"outcome":"limit_reached","reason":null,"limit":20,"quantity":"count","unit":null,"scale":null,"used":20,"draw":1,"window":"calendar_day"}],
+        "parameters":null,"reason":null,"parameter_units":null,"units_unavailable":null,"next_steps":null,
+        "created_at":"2026-11-15T12:00:00Z","expires_at":null,"accounting_version":null}]}"#;
+    let calls = read_held(body).unwrap();
+    let call = held(&w, &calls[0], "taf-rae").unwrap();
+    assert_eq!(call.reason, "20 calls a day: this would be the 21st");
+    assert_eq!(call.summary, "send email e1");
+    assert_eq!(
+        call.expires_at,
+        calls[0].created_at.with_timezone(&Local) + chrono::Duration::minutes(10)
+    );
+}

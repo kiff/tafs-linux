@@ -108,6 +108,15 @@ button.tafs-held-row { background-color: @tafs_raised; background-image: none; b
 button.tafs-held-row:hover { background-color: shade(@tafs_raised, 0.97); }
 separator.tafs-line { background-color: @tafs_line; min-height: 1px; }
 
+/* A held call: the reason as an amber chip, the countdown monospaced 12, the taf's words on a wash. */
+.tafs-chip { font-size: 12px; font-weight: 500; color: @tafs_amber_text; background-color: alpha(@tafs_amber, 0.14); border-radius: 999px; padding: 5px 10px; }
+.tafs-countdown { font-size: 12px; }
+.tafs-taf-says { background-color: alpha(@tafs_soft, 0.08); border-radius: 10px; padding: 10px; }
+.tafs-taf-says .taf-about { font-size: 15px; font-weight: 600; }
+.tafs-taf-says .taf-reason { font-size: 14px; }
+.tafs-details title, .tafs-details > title > label { color: @tafs_blue; font-size: 13px; font-weight: 600; }
+button.tafs-outline.refuse { color: @tafs_no; border-color: alpha(@tafs_no, 0.4); }
+
 .tafs-code { font-family: monospace; font-size: 34px; font-weight: 600; color: @tafs_ink; }
 .tafs-mono { font-family: monospace; }
 .tafs-notice { background-color: @tafs_panel; border-bottom: 1px solid @tafs_line; padding: 12px 24px; }

@@ -280,6 +280,8 @@ impl Home {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Taf {
     pub key: String,
+    /// Its holder in KIFF (`kiff_agent`): what KIFF's held calls name.
+    pub agent: String,
     pub name: String,
     pub color_index: i64,
     /// What it's doing, in the app's words or tafs cloud's (`taf.now`).
@@ -349,6 +351,7 @@ pub fn taf(w: &WordBook, h: &HomeTaf) -> Result<Taf, WordsError> {
             .id
             .clone()
             .unwrap_or_else(|| format!("agent:{}", h.kiff_agent)),
+        agent: h.kiff_agent.clone(),
         name: h.name.clone(),
         color_index: h.color,
         now: finish_words.unwrap_or(now),

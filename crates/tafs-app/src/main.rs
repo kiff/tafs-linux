@@ -1,6 +1,7 @@
 //! tafs for Linux: GTK 4 and libadwaita. The same product, account and words as the iPad app.
 
 mod kiff;
+mod needs_you;
 mod overview;
 mod shell;
 mod sign_in;
@@ -13,6 +14,7 @@ use std::rc::Rc;
 
 use adw::prelude::*;
 use gtk::{gio, glib};
+use tafs_core::held::CardException;
 use tafs_core::home::Home;
 use tafs_core::language;
 use tafs_core::sample;
@@ -20,8 +22,14 @@ use tafs_core::session::KeptSession;
 use tafs_core::sidebar::{Mode, Selection, SidebarModel};
 use tafs_core::words::{WordBook, SHIPPED};
 
-/// Opens the shell: over the sample or the account, view-only or not, with Home once read.
-type OpenShell = dyn Fn(Mode, bool, Option<Rc<Home>>);
+/// What the account's screens are drawn from: Home from tafs cloud, and KIFF's held calls.
+struct Cloud {
+    home: Home,
+    held: Vec<CardException>,
+}
+
+/// Opens the shell: over the sample or the account, view-only or not, with what's been read.
+type OpenShell = dyn Fn(Mode, bool, Option<Rc<Cloud>>);
 
 /// The window's size, a laptop's, as the screenshots are saved.
 const WIDTH: i32 = 1280;
@@ -156,40 +164,60 @@ fn activate(app: &adw::Application, o: &Options) {
     let open_shell: Rc<OpenShell> = {
         let (window, words, page) = (window.clone(), words.clone(), o.page.clone());
         let signed_in = o.signed_in;
-        Rc::new(move |mode: Mode, view_only: bool, home: Option<Rc<Home>>| {
-            let at = chrono::Local::now();
-            let fail = |e: tafs_core::words::WordsError| -> ! { panic!("{e}") };
-            let (model, tafs, cloud_words) = match (mode, &home) {
-                (Mode::Sample, _) => (
-                    sample::sidebar(&words, at, signed_in).unwrap_or_else(|e| fail(e)),
-                    sample::overview(&words, at).unwrap_or_else(|e| fail(e)),
-                    None,
-                ),
-                (_, Some(h)) => {
-                    let (model, tafs) = home_model(&words, h, at).unwrap_or_else(|e| fail(e));
-                    (model, tafs, h.needs_you.as_ref().map(|n| n.words.clone()))
-                }
-                (_, None) => (kiff_model(), vec![], None),
-            };
-            let count = model.needs_you_count();
-            let needs_you = match cloud_words {
-                Some(words) => words,
-                None => {
-                    tafs_core::overview::needs_you_words(&words, count).unwrap_or_else(|e| fail(e))
-                }
-            };
-            let overview =
-                tafs_core::overview::lines(&words, &tafs, &model.held, count, &needs_you)
-                    .unwrap_or_else(|e| fail(e));
-            let shell = shell::build(
-                words.clone(),
-                &model,
-                overview,
-                view_only,
-                selection_of(page.as_deref()),
-            );
-            window.set_content(Some(&shell.root));
-        })
+        Rc::new(
+            move |mode: Mode, view_only: bool, cloud: Option<Rc<Cloud>>| {
+                let at = chrono::Local::now();
+                let fail = |e: tafs_core::words::WordsError| -> ! { panic!("{e}") };
+                let (model, tafs, cloud_words) = match (mode, &cloud) {
+                    (Mode::Sample, _) => (
+                        sample::sidebar(&words, at, signed_in).unwrap_or_else(|e| fail(e)),
+                        sample::overview(&words, at).unwrap_or_else(|e| fail(e)),
+                        None,
+                    ),
+                    (_, Some(c)) => {
+                        let (model, tafs) =
+                            home_model(&words, &c.home, &c.held, at).unwrap_or_else(|e| fail(e));
+                        (
+                            model,
+                            tafs,
+                            c.home.needs_you.as_ref().map(|n| n.words.clone()),
+                        )
+                    }
+                    (_, None) => (kiff_model(), vec![], None),
+                };
+                let count = model.needs_you_count();
+                let needs_you = match cloud_words {
+                    Some(words) => words,
+                    None => tafs_core::overview::needs_you_words(&words, count)
+                        .unwrap_or_else(|e| fail(e)),
+                };
+                let overview =
+                    tafs_core::overview::lines(&words, &tafs, &model.held, count, &needs_you)
+                        .unwrap_or_else(|e| fail(e));
+                let holders: Vec<tafs_core::needs_you::Holder> = model
+                    .tafs
+                    .iter()
+                    .map(|(t, _)| tafs_core::needs_you::Holder {
+                        key: &t.key,
+                        name: &t.name,
+                        initial: &t.initial,
+                        color: t.color_index,
+                    })
+                    .collect();
+                let needs_you =
+                    tafs_core::needs_you::lines(&words, &model.held, &holders, true, at)
+                        .unwrap_or_else(|e| fail(e));
+                let shell = shell::build(
+                    words.clone(),
+                    &model,
+                    overview,
+                    needs_you,
+                    view_only,
+                    selection_of(page.as_deref()),
+                );
+                window.set_content(Some(&shell.root));
+            },
+        )
     };
     // Signed in: the shell at once, then Home from tafs cloud, drawn again once it's read. An
     // answer that can't be read, or isn't a 200, leaves it as it was.
@@ -201,22 +229,31 @@ fn activate(app: &adw::Application, o: &Options) {
             let (open_shell, languages, token) =
                 (open_shell.clone(), languages.clone(), kept.token.clone());
             glib::spawn_future_local(async move {
-                let answer = gio::spawn_blocking(move || kiff::home(&token, &languages))
-                    .await
-                    .ok()
-                    .and_then(Result::ok);
-                if let Some(home) = answer
-                    .filter(|a| a.status == 200)
-                    .and_then(|a| Home::read(&a.body))
-                {
-                    open_shell(Mode::Kiff, view_only, Some(Rc::new(home)));
+                let read = gio::spawn_blocking(move || {
+                    let home = kiff::home(&token, &languages)
+                        .ok()
+                        .filter(|a| a.status == 200)
+                        .and_then(|a| Home::read(&a.body))?;
+                    // KIFF's held calls: none read, none shown, and Home still is.
+                    let held = kiff::held(&token, &languages)
+                        .ok()
+                        .filter(|a| a.status == 200)
+                        .and_then(|a| tafs_core::held::read_held(&a.body))
+                        .unwrap_or_default();
+                    Some(Cloud { home, held })
+                })
+                .await
+                .ok()
+                .flatten();
+                if let Some(cloud) = read {
+                    open_shell(Mode::Kiff, view_only, Some(Rc::new(cloud)));
                 }
             });
         })
     };
 
     let from_file = o.home.as_deref().map(|path| match read_contract(path) {
-        Some(h) => Rc::new(h),
+        Some(home) => Rc::new(Cloud { home, held: vec![] }),
         None => {
             eprintln!("{path} isn't Home as tafs cloud answers it");
             std::process::exit(2);
@@ -291,26 +328,53 @@ fn read_contract(path: &str) -> Option<Home> {
     Home::read(&serde_json::to_vec(file.get("answer")?).ok()?)
 }
 
-/// The account's sidebar and Overview from Home: its tafs in tafs cloud's order, Your tafs
-/// those relevant now, and tafs cloud's count of what waits.
+/// The account's sidebar and Overview from Home and KIFF's held calls: the tafs a call waits on
+/// first, then in tafs cloud's order (`waitingFirst`), Your tafs those relevant now, and tafs
+/// cloud's count of what waits.
 fn home_model(
     w: &WordBook,
     h: &Home,
+    exceptions: &[CardException],
     at: chrono::DateTime<chrono::Local>,
 ) -> Result<(SidebarModel, Vec<tafs_core::overview::OverviewTaf>), tafs_core::words::WordsError> {
-    let mut rows = Vec::new();
-    let mut overview = Vec::new();
-    for t in &h.tafs {
-        let taf = tafs_core::home::taf(w, t)?;
-        rows.push((
-            tafs_core::home::row(&taf),
-            tafs_core::home::relevant(&taf, false, at),
-        ));
-        overview.push(tafs_core::home::overview_taf(&taf));
+    let tafs: Vec<tafs_core::home::Taf> = h
+        .tafs
+        .iter()
+        .map(|t| tafs_core::home::taf(w, t))
+        .collect::<Result<_, _>>()?;
+    // Each held call on its taf, by the KIFF agent it's held for.
+    let mut held = Vec::new();
+    for e in exceptions {
+        let key = tafs
+            .iter()
+            .find(|t| t.agent == e.subject)
+            .map(|t| t.key.clone())
+            .unwrap_or_else(|| format!("agent:{}", e.subject));
+        held.push(tafs_core::held::held(w, e, &key)?);
     }
+    let waits = |t: &tafs_core::home::Taf| held.iter().any(|c| c.taf == t.key);
+    let ordered: Vec<&tafs_core::home::Taf> = tafs
+        .iter()
+        .filter(|t| waits(t))
+        .chain(tafs.iter().filter(|t| !waits(t)))
+        .collect();
+    let rows = ordered
+        .iter()
+        .map(|t| {
+            (
+                tafs_core::home::row(t),
+                tafs_core::home::relevant(t, waits(t), at),
+            )
+        })
+        .collect();
+    let overview = ordered
+        .iter()
+        .map(|t| tafs_core::home::overview_taf(t))
+        .collect();
     let model = SidebarModel {
         list_loaded: true,
         tafs: rows,
+        held,
         cloud_needs_you: h.needs_you.as_ref().map(|n| n.count),
         ..kiff_model()
     };

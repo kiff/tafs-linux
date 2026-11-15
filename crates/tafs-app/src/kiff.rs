@@ -93,6 +93,28 @@ pub fn home(token: &str, languages: &[&str]) -> Result<Answer, KiffError> {
     )
 }
 
+/// `GET /v1/me/card-exceptions?status=held` at KIFF as the session (`heldCalls`).
+pub fn held(token: &str, languages: &[&str]) -> Result<Answer, KiffError> {
+    let url = format!("{KIFF_API}/v1/me/card-exceptions?status=held");
+    if !may_send_to(&url) {
+        return Err(KiffError::Unreadable);
+    }
+    let agent = ureq::AgentBuilder::new()
+        .timeout_connect(Duration::from_secs(15))
+        .timeout(Duration::from_secs(30))
+        .redirects(0)
+        .user_agent("tafs-linux")
+        .build();
+    Kiff::read(
+        agent
+            .get(&url)
+            .set("Accept", "application/json")
+            .set("Accept-Language", &accept_language(languages))
+            .set("Authorization", &format!("Bearer {token}"))
+            .call(),
+    )
+}
+
 impl Transport for Kiff {
     fn post(&self, path: &str, body: &[u8]) -> Result<Answer, KiffError> {
         let url = format!("{}{}", self.base, path);

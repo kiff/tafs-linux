@@ -5,6 +5,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use gtk::prelude::*;
+use tafs_core::needs_you::NeedsYouLines;
 use tafs_core::overview::OverviewLines;
 use tafs_core::sidebar::{Selection, SidebarLines, SidebarModel};
 use tafs_core::words::WordBook;
@@ -26,6 +27,7 @@ pub fn build(
     w: Rc<WordBook>,
     model: &SidebarModel,
     overview: OverviewLines,
+    needs_you: NeedsYouLines,
     view_only: bool,
     first: Selection,
 ) -> Shell {
@@ -64,8 +66,9 @@ pub fn build(
         })
     };
     let overview = Rc::new(overview);
+    let needs_you = Rc::new(needs_you);
     let select: Rc<dyn Fn(Selection)> = {
-        let (open, overview) = (open.clone(), overview.clone());
+        let (open, overview, needs_you) = (open.clone(), overview.clone(), needs_you.clone());
         let (w, stack, selection, rows, list, account_icon, lines) = (
             w.clone(),
             stack.clone(),
@@ -104,6 +107,7 @@ pub fn build(
             let title = title_of(&w, &lines, &model_tafs, &s);
             let page = match s {
                 Selection::Overview => crate::overview::page(&overview, open.clone()),
+                Selection::NeedsYou => crate::needs_you::page(w.clone(), &needs_you),
                 _ => screen_page(&title).upcast::<gtk::Widget>(),
             };
             stack.add_child(&page);

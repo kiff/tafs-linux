@@ -23,27 +23,53 @@ pub const TAFS: [(&str, i64); 5] = [
 
 pub fn held(w: &WordBook, held_at: DateTime<Local>) -> Result<Vec<HeldCall>, WordsError> {
     let lapses = held_at + Duration::minutes(10);
+    let call = |id: &str,
+                taf: &str,
+                summary: String,
+                amount: Option<Money>,
+                context: String,
+                reason: String,
+                next: String| HeldCall {
+        id: id.into(),
+        taf: taf.into(),
+        summary,
+        amount,
+        context,
+        reason,
+        expires_at: lapses,
+        kiff_id: None,
+        approvable_once: true,
+        accounting_version: None,
+        next_steps: vec![next],
+        details: vec![],
+        taf_about: None,
+        taf_reason: None,
+    };
     Ok(vec![
-        HeldCall {
-            id: "sample-deploys-migration".into(),
-            taf: "deploys".into(),
-            summary: w.line("sample.deploys.migration")?,
-            reason: w.get(
+        call(
+            "sample-deploys-migration",
+            "deploys",
+            w.line("sample.deploys.migration")?,
+            None,
+            w.line("sample.deploys.migration_why")?,
+            w.get(
                 "card.check.always_asks",
                 &[("rule", &w.line("sample.deploys.rule.migrations")?)],
             )?,
-            expires_at: lapses,
-        },
-        HeldCall {
-            id: "sample-bill-pay-atlas".into(),
-            taf: "bill_pay".into(),
-            summary: w.line("sample.bill_pay.pay_atlas")?,
-            reason: w.get(
+            w.line("sample.deploys.next_step")?,
+        ),
+        call(
+            "sample-bill-pay-atlas",
+            "bill_pay",
+            w.line("sample.bill_pay.pay_atlas")?,
+            Some(Money::eur_whole(8_400)),
+            w.line("sample.bill_pay.pay_atlas_why")?,
+            w.get(
                 "card.check.over_each",
                 &[("amount", &euros(5_000, w.language()))],
             )?,
-            expires_at: lapses,
-        },
+            w.line("sample.bill_pay.next_step")?,
+        ),
     ])
 }
 
