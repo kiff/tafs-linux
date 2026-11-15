@@ -48,7 +48,9 @@ your account until you sign in again. Your tafs keep working.", Sign out in red,
 Then (`AppModel.signOut`):
 
 - `POST /v1/auth/device/logout` with the session alone. A 401 means KIFF had already ended it.
-- Signed out at KIFF, the keyring forgets the session and its key, and the welcome opens.
+- Signed out at KIFF, the keyring forgets the session and its key, and the welcome opens. A
+  keyring that refuses to forget is tried again; if it still refuses, the token it keeps is one
+  KIFF has ended, so the next launch's reads get a 401 and forget it.
 - When KIFF can't be reached, nothing is forgotten: Account opens again with "Not signed out at
   KIFF yet: … Try again, or sign this computer out from another device's Devices."
 

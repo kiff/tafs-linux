@@ -345,7 +345,7 @@ impl App {
 
     /// KIFF ended the session: forgotten here with its key, and the welcome says so.
     fn signed_out_by_kiff(self: &Rc<Self>) {
-        let _ = store::clear();
+        forget_kept();
         self.show_welcome();
         if let Ok(words) = self.words.line("error.signed_out") {
             self.welcome_problem(&words);
@@ -485,7 +485,7 @@ impl App {
             .unwrap_or(Err(tafs_core::signin::KiffError::Unreadable));
             match result {
                 Ok(()) => {
-                    let _ = store::clear();
+                    forget_kept();
                     me.show_welcome();
                 }
                 Err(e) => {
@@ -497,6 +497,20 @@ impl App {
                 }
             }
         });
+    }
+}
+
+/// Forgets the kept session and its key, tried twice. A keyring that still refuses is said in
+/// the log by its fixed word; the token it keeps is one KIFF has ended, so the next launch's
+/// reads get a 401 and forget it again.
+fn forget_kept() {
+    if let Err(first) = store::clear() {
+        if let Err(again) = store::clear() {
+            eprintln!(
+                "the keyring kept the ended session: {} ({})",
+                again.0, first.0
+            );
+        }
     }
 }
 
