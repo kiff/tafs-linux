@@ -59,8 +59,22 @@ sample opens the sign-in over it.
 
 ## Not yet
 
-- **The rows' screens:** Alerts and Time zone open their titles until each is ported. KIFF
-  account, People & groups, Devices, Connect apps and Plan & usage open their screens.
+- **The rows' screens:** Alerts opens its title until it's ported. KIFF account, People &
+  groups, Devices, Time zone, Connect apps and Plan & usage open their screens.
+
+## Time zone
+
+Account › Time zone (`TimeZonePicker`, `crates/tafs-app/src/zones.rs`, `tafs-core/src/zones.rs`),
+from Account's row or the KIFF account's: "Use this computer's: {identifier}", then tafs cloud's
+zones (`GET /v1/time-zones?q=…`, every character of what was typed escaped but a letter or a
+digit) for what the person types in "Find a time zone", read again a moment after the last key,
+only the newest search's answer kept; the account's zone checked. Why the zones couldn't be read,
+in red, under the first row. Read as strictly as the iPad's decoder: a zone without its `id` or
+`title` fails the read.
+
+Not yet: **choosing a zone** and **using this computer's** are the owner's act, signed
+(`tafs.time-zone.v1`) and then a signed setup call to KIFF: Use this computer's is there, dimmed,
+and the rows don't choose, until this computer can sign it.
 
 ## KIFF account
 
@@ -70,7 +84,7 @@ button, then the account's name, its id when it isn't its name, and who is signe
 when this computer is in another zone, "Use this computer's: {identifier}" (this computer's zone
 by `TZ`, else `/etc/localtime`), and "Holds' deadlines, Activity, the Record and what your tafs
 write use this time zone."; Export my chats with what it exports; and Delete account with what it
-deletes, for whoever may (`account.delete`). The time zone row doesn't open its picker yet; using
+deletes, for whoever may (`account.delete`). The time zone row opens its picker; using
 this computer's zone (a signed setup call), exporting and deleting are there, dimmed.
 
 ## People & groups

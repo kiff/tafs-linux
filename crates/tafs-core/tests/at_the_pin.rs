@@ -147,6 +147,7 @@ const LINES: &[(&str, &[&str])] = &[
     ("sample.list_charges", &[]),
     ("sample.look_up_charge", &[]),
     ("taf.revoke", &[]),
+    ("settings.find_time_zone", &[]),
     ("settings.account_id", &[]),
     ("settings.time_zone.uses_this", &[]),
     ("export.row", &[]),

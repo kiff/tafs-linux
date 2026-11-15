@@ -54,7 +54,12 @@ fn row_button(words: &str, class: &str) -> gtk::Button {
     b
 }
 
-pub fn page(w: Rc<WordBook>, account: Option<Account>, back: Rc<dyn Fn()>) -> gtk::Widget {
+pub fn page(
+    w: Rc<WordBook>,
+    account: Option<Account>,
+    back: Rc<dyn Fn()>,
+    open_zone: Rc<dyn Fn()>,
+) -> gtk::Widget {
     let l = |k: &str| w.line(k).unwrap_or_default();
     let column = gtk::Box::new(gtk::Orientation::Vertical, 10);
     column.set_margin_start(16);
@@ -84,7 +89,16 @@ pub fn page(w: Rc<WordBook>, account: Option<Account>, back: Rc<dyn Fn()>) -> gt
             column.append(&g);
             // A Card's day ends at midnight here, and every time the person reads is in it.
             let g = group();
-            g.append(&labeled(&l("settings.time_zone_title"), &lines.zone));
+            // The zone opens its picker (`NavigationLink`), with a chevron.
+            let zone_row = labeled(&l("settings.time_zone_title"), &lines.zone);
+            let chevron = symbol("go-next-symbolic", 13);
+            chevron.add_css_class("tafs-dim");
+            zone_row.append(&chevron);
+            let zone_button = gtk::Button::new();
+            zone_button.set_child(Some(&zone_row));
+            zone_button.add_css_class("tafs-plain");
+            zone_button.connect_clicked(move |_| open_zone());
+            g.append(&zone_button);
             if let Some(use_this) = &lines.use_this_zone {
                 g.append(&line());
                 g.append(&row_button(use_this, "tafs-amber-text"));

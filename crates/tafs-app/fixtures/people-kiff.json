@@ -1,5 +1,5 @@
 {
-  "_comment": "Synthetic answers for People & groups' and the KIFF account's screenshots signed in with KIFF (--people). Made up, not from any account.",
+  "_comment": "Synthetic answers for People & groups', the KIFF account's and the time zone picker's screenshots signed in with KIFF (--people). Made up, not from any account.",
   "account": {
     "tenant_id": "t-synthetic",
     "tenant_slug": "acme",
@@ -82,6 +82,30 @@
         "role": "member",
         "status": "invited",
         "email": "new@example.test"
+      }
+    ]
+  },
+  "zones": {
+    "zones": [
+      {
+        "id": "Europe/London",
+        "title": "London (UTC+0)"
+      },
+      {
+        "id": "Europe/Paris",
+        "title": "Paris (UTC+1)"
+      },
+      {
+        "id": "Europe/Berlin",
+        "title": "Berlin (UTC+1)"
+      },
+      {
+        "id": "America/New_York",
+        "title": "New York (UTC−5)"
+      },
+      {
+        "id": "Asia/Tokyo",
+        "title": "Tokyo (UTC+9)"
       }
     ]
   }

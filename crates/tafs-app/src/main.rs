@@ -18,6 +18,7 @@ mod taf;
 mod usage;
 mod welcome;
 mod widgets;
+mod zones;
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -66,7 +67,7 @@ struct Options {
 }
 
 const USAGE: &str = "tafs [--lang en|de|fr|es|it|pt|nl|pl] [--theme light|dark] [--sample] [--signed-in] [--view-only]
-     [--home contract.json] [--usage answers.json] [--people answers.json] [--size WxH] [--page welcome|sign-in|overview|needs-you|record|calendar|calendar-week|usage|connect-apps|account|kiff-account|devices|people|taf|taf-card] [--screenshot out.png]";
+     [--home contract.json] [--usage answers.json] [--people answers.json] [--size WxH] [--page welcome|sign-in|overview|needs-you|record|calendar|calendar-week|usage|connect-apps|account|kiff-account|time-zone|devices|people|taf|taf-card] [--screenshot out.png]";
 
 fn options() -> Result<Options, String> {
     let mut o = Options::default();
@@ -134,6 +135,7 @@ fn selection_of(page: Option<&str>) -> Selection {
         Some("devices") => Selection::Devices,
         Some("people") => Selection::People,
         Some("kiff-account") => Selection::KiffAccount,
+        Some("time-zone") => Selection::TimeZone,
         // The sample's Refunds, as the reference set's taf.png opens it.
         Some("taf") | Some("taf-card") => Selection::Taf("refunds".into()),
         // With `--home`, the contract's first taf.
@@ -712,6 +714,14 @@ impl App {
                     Some(f) => usage::UsageSource::File(f.clone()),
                     None => usage::UsageSource::None,
                 },
+            },
+            zones: match (mode, self.kept.borrow().as_ref(), &self.people_file) {
+                (Mode::Kiff, Some(kept), _) => zones::ZonesSource::Cloud {
+                    token: kept.token.clone(),
+                    languages: self.languages.clone(),
+                },
+                (Mode::Kiff, None, Some(f)) => zones::ZonesSource::File(f.clone()),
+                _ => zones::ZonesSource::None,
             },
             people: match (mode, self.kept.borrow().as_ref(), &self.people_file) {
                 (Mode::Kiff, Some(kept), _) => people::PeopleSource::Cloud {

@@ -42,6 +42,8 @@ pub struct Screens {
     /// Where People & groups reads, and what it knows besides.
     pub people: crate::people::PeopleSource,
     pub people_known: Rc<crate::people::Known>,
+    /// Where the time zones are read.
+    pub zones: crate::zones::ZonesSource,
     /// Where the calendar reads, and the state a screenshot opens it in.
     pub calendar: crate::calendar::CalendarSource,
     pub calendar_first: tafs_core::calendar::State,
@@ -70,6 +72,7 @@ pub fn build(
         calendar_first,
         people,
         people_known,
+        zones,
     } = screens;
     let entries = Rc::new(record.entries.clone());
     let lines = model.lines(&w).unwrap_or_else(|e| panic!("{e}"));
@@ -150,6 +153,7 @@ pub fn build(
                     | Selection::Devices
                     | Selection::People
                     | Selection::KiffAccount
+                    | Selection::TimeZone
             );
             account_icon.set_icon_name(Some(icon_for(if account_open {
                 "person.crop.circle.fill"
@@ -191,9 +195,23 @@ pub fn build(
                 }
                 Selection::KiffAccount => {
                     let open = open.clone();
+                    let to_zone = open.clone();
                     crate::kiff_account::page(
                         w.clone(),
                         people_known.account.clone(),
+                        Rc::new(move || open(Selection::Account)),
+                        Rc::new(move || to_zone(Selection::TimeZone)),
+                    )
+                }
+                Selection::TimeZone => {
+                    let open = open.clone();
+                    crate::zones::page(
+                        w.clone(),
+                        zones.clone(),
+                        people_known
+                            .account
+                            .as_ref()
+                            .map(|a| a.time_zone.clone().unwrap_or_else(|| "UTC".into())),
                         Rc::new(move || open(Selection::Account)),
                     )
                 }
@@ -245,6 +263,7 @@ pub fn build(
                                     tafs_core::account::Screen::KiffAccount => {
                                         Selection::KiffAccount
                                     }
+                                    tafs_core::account::Screen::TimeZone => Selection::TimeZone,
                                     tafs_core::account::Screen::ConnectApps => {
                                         Selection::ConnectApps
                                     }
@@ -526,6 +545,7 @@ fn title_of(
         Selection::Devices => l("settings.devices.title"),
         Selection::People => l("people.title"),
         Selection::KiffAccount => l("settings.kiff_account"),
+        Selection::TimeZone => l("settings.time_zone_title"),
         Selection::Titled(title) => title.clone(),
         Selection::Taf(key) | Selection::Held { taf: key, .. } => tafs
             .iter()
