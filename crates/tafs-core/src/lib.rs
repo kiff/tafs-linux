@@ -11,6 +11,7 @@ pub mod language;
 pub mod money;
 pub mod needs_you;
 pub mod overview;
+pub mod record;
 pub mod sample;
 pub mod session;
 pub mod sidebar;

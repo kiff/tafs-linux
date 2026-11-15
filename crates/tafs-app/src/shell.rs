@@ -28,6 +28,7 @@ pub struct Screens {
     pub overview: OverviewLines,
     pub needs_you: NeedsYouLines,
     pub account: AccountLines,
+    pub record: Rc<crate::record::RecordData>,
     pub actions: Rc<dyn Fn(tafs_core::account::Action)>,
 }
 
@@ -43,6 +44,7 @@ pub fn build(
         overview,
         needs_you,
         account,
+        record,
         actions,
     } = screens;
     let lines = model.lines(&w).unwrap_or_else(|e| panic!("{e}"));
@@ -83,12 +85,13 @@ pub fn build(
     let needs_you = Rc::new(needs_you);
     let account = Rc::new(account);
     let select: Rc<dyn Fn(Selection)> = {
-        let (open, overview, needs_you, account, actions) = (
+        let (open, overview, needs_you, account, actions, record) = (
             open.clone(),
             overview.clone(),
             needs_you.clone(),
             account.clone(),
             actions.clone(),
+            record.clone(),
         );
         let (w, stack, selection, rows, list, account_icon, lines) = (
             w.clone(),
@@ -129,6 +132,7 @@ pub fn build(
             let page = match s {
                 Selection::Overview => crate::overview::page(&overview, open.clone()),
                 Selection::NeedsYou => crate::needs_you::page(w.clone(), &needs_you),
+                Selection::Record => crate::record::page(w.clone(), record.clone()),
                 Selection::Account => {
                     let open = open.clone();
                     crate::account::page(

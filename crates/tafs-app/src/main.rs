@@ -4,6 +4,7 @@ mod account;
 mod kiff;
 mod needs_you;
 mod overview;
+mod record;
 mod shell;
 mod sign_in;
 mod store;
@@ -31,6 +32,8 @@ struct Cloud {
     held: Vec<CardException>,
     /// The KIFF account (`GET /v1/me`), once read.
     account: Option<Account>,
+    /// KIFF's activity, for the Record.
+    activity: Vec<tafs_core::record::ActivityCall>,
 }
 
 /// The window's size, a laptop's, as the screenshots are saved.
@@ -180,6 +183,7 @@ fn activate(app: &adw::Application, o: &Options) {
             home,
             held: vec![],
             account: None,
+            activity: vec![],
         }),
         None => {
             eprintln!("{path} isn't Home as tafs cloud answers it");
@@ -299,9 +303,14 @@ impl App {
                 let me = kiff::me(&token, &languages).ok();
                 let home = kiff::home(&token, &languages).ok();
                 let held = kiff::held(&token, &languages).ok();
+                let activity = kiff::activity(&token, &languages).ok();
                 // KIFF ended the session (a 401 on any of them: the computer removed in Devices,
                 // the account gone): this computer is signed out (`forgetSession`).
-                if [&me, &home, &held].into_iter().flatten().any(signed_out) {
+                if [&me, &home, &held, &activity]
+                    .into_iter()
+                    .flatten()
+                    .any(signed_out)
+                {
                     return Read::SignedOut;
                 }
                 let account = me.and_then(|a| Account::read(&a).ok());
@@ -316,10 +325,16 @@ impl App {
                     .filter(|a| a.status == 200)
                     .and_then(|a| tafs_core::held::read_held(&a.body))
                     .unwrap_or_default();
+                // KIFF's activity: none read, an empty Record, and the rest still is.
+                let activity = activity
+                    .filter(|a| a.status == 200)
+                    .and_then(|a| tafs_core::record::read_activity(&a.body))
+                    .unwrap_or_default();
                 Read::Cloud(Box::new(Cloud {
                     home,
                     held,
                     account,
+                    activity,
                 }))
             })
             .await
@@ -341,6 +356,82 @@ impl App {
                 Read::Nothing => {}
             }
         });
+    }
+
+    /// The Record's lines: the sample's, or KIFF's activity for the tafs Home lists, by the
+    /// agent each call was made as. Its chips are every taf.
+    fn record_data(
+        &self,
+        mode: Mode,
+        model: &SidebarModel,
+        cloud: Option<&Cloud>,
+        at: chrono::DateTime<chrono::Local>,
+    ) -> record::RecordData {
+        // The chips in the tafs' own order (`model.tafs`): the sample's as it made them
+        // (`TafTemplates.all`), else tafs cloud's, not the sidebar's waiting-first order.
+        let mut tafs: Vec<record::Taf> = model
+            .tafs
+            .iter()
+            .map(|(t, _)| record::Taf {
+                key: t.key.clone(),
+                name: t.name.clone(),
+                color: t.color_index,
+            })
+            .collect();
+        let order: Vec<String> = match (mode, cloud) {
+            (Mode::Sample, _) => ["refunds", "bill_pay", "access", "deploys", "chargebacks"]
+                .map(String::from)
+                .to_vec(),
+            (_, Some(c)) => c
+                .home
+                .tafs
+                .iter()
+                .map(|t| {
+                    t.id.clone()
+                        .unwrap_or_else(|| format!("agent:{}", t.kiff_agent))
+                })
+                .collect(),
+            _ => vec![],
+        };
+        tafs.sort_by_key(|t| order.iter().position(|k| *k == t.key).unwrap_or(usize::MAX));
+        let entries = match (mode, cloud) {
+            (Mode::Sample, _) => sample::record(&self.words, at).unwrap_or_default(),
+            (_, Some(c)) => {
+                let agents: Vec<(String, String)> = c
+                    .home
+                    .tafs
+                    .iter()
+                    .map(|t| {
+                        (
+                            t.kiff_agent.clone(),
+                            t.id.clone()
+                                .unwrap_or_else(|| format!("agent:{}", t.kiff_agent)),
+                        )
+                    })
+                    .collect();
+                let taf_of = |actor: &str| {
+                    agents
+                        .iter()
+                        .find(|(a, _)| a == actor)
+                        .map(|(_, k)| k.clone())
+                };
+                tafs_core::record::record(&self.words, &c.activity, &taf_of).unwrap_or_default()
+            }
+            _ => vec![],
+        };
+        // `isWaiting`: the sample's held lines wait; KIFF's while KIFF still holds their call.
+        let still_held: Vec<String> = model
+            .held
+            .iter()
+            .filter_map(|c| c.proposal_id.clone().or_else(|| c.kiff_id.clone()))
+            .map(|id| tafs_core::record::record_id(&id))
+            .collect();
+        let kiff = mode == Mode::Kiff;
+        record::RecordData {
+            entries,
+            tafs,
+            waiting: Rc::new(move |e| !kiff || still_held.contains(&e.id)),
+        }
     }
 
     /// KIFF ended the session: forgotten here with its key, and the welcome says so.
@@ -418,10 +509,12 @@ impl App {
         let me = self.clone();
         let actions: Rc<dyn Fn(AccountAction)> =
             Rc::new(move |action| me.act(action, mode, view_only));
+        let record = Rc::new(self.record_data(mode, &model, cloud.as_deref(), at));
         let screens = shell::Screens {
             overview,
             needs_you,
             account: account_lines,
+            record,
             actions,
         };
         let shell = shell::build(

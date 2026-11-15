@@ -98,6 +98,15 @@ pub fn me(token: &str, languages: &[&str]) -> Result<Answer, KiffError> {
     get(&format!("{KIFF_API}/v1/me"), token, languages)
 }
 
+/// `GET /v1/me/activity?limit=100` at KIFF as the session (`activity`): the Record.
+pub fn activity(token: &str, languages: &[&str]) -> Result<Answer, KiffError> {
+    get(
+        &format!("{KIFF_API}/v1/me/activity?limit=100"),
+        token,
+        languages,
+    )
+}
+
 /// A GET as the session, to KIFF's API or tafs cloud only, with no redirect followed.
 fn get(url: &str, token: &str, languages: &[&str]) -> Result<Answer, KiffError> {
     if !may_send_to(url) {
