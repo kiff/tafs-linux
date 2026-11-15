@@ -80,7 +80,7 @@ ports a file updates its line here.
 | iPad file | Linux |
 | :- | :- |
 | Design/Theme.swift | `tafs-core/theme.rs`, `style.rs`: every colour, light and dark, the brand sweep and the taf colours |
-| Design/Components.swift | `widgets.rs`: `TafAvatar`, `Eyebrow`, `PrimaryLook`, `OutlineLook`, `Panel`, `PanelLink`, `Legal`, `shortTime`; `Meter` (`usage.rs`). Not yet: `StateChip`, `DoorRim`, `UnreachableLine` and the rest |
+| Design/Components.swift | `widgets.rs`: `TafAvatar`, `Eyebrow`, `PrimaryLook`, `OutlineLook`, `Panel`, `PanelLink`, `Legal`, `shortTime`; `Meter` (`usage.rs`). Not yet: `AccountTime` (every time on Linux is in this computer's zone), `StateChip`, `DoorRim`, `UnreachableLine` and the rest |
 | KIFF/KIFFClient.swift | `tafs-core/signin.rs`, `kiff.rs`: `DeviceStart`, `DeviceToken`, `startDeviceSignIn`, `pollDeviceToken`, `signOut`, `fingerprint`, the refusal's reading, `acceptLanguage`, `screenLanguages` |
 | KIFF/KIFFClient.swift (activity) | `ActivityCall`, `activity()` (`record.rs`, `kiff::activity`) |
 | KIFF/KIFFMapping.swift (record) | `record`, `executed`, `counted`, `isCurrency`, `recordID` (`record.rs`) |

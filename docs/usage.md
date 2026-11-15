@@ -26,8 +26,8 @@ It reads each time it opens: until then a panel with a spinner, at the screen's 
 - **A taf's runs** (`TafCreditsView`), from `GET /v1/usage/credits/tafs/{id}` for the period
   shown: its name as the title and Plan & usage to go back, the taf's `words`, then its runs,
   newest first, each tafs cloud's words (semibold when counted, soft when not) and when it ended
-  in this computer's time; More runs reads the next page (`after`) while there is one, none
-  twice. When nothing could be read, why, and Try again.
+  (in this computer's time zone for now); More runs reads the next page (`after`) while there
+  is one, none twice. When nothing could be read, why, and Try again.
 
 A read that fails keeps what was read before and says why: tafs cloud's own `words` when it
 sends them, else "{what} couldn't be read: {why}". A tafs cloud without a read (404) shows
@@ -46,3 +46,5 @@ it, as `usage.png`.
 - **A run's request** (`KnobRequestDetail`): a run's row doesn't open yet.
 - **Refreshing in place**: the iPad pulls to refresh; here the screen reads again when it opens,
   and a taf's runs have Try again.
+- **The account's time zone** (`AccountTime`): a run's time is in this computer's zone, as every
+  time on Linux is so far; the iPad draws it in the account's.

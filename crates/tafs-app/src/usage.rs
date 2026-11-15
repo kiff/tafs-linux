@@ -681,7 +681,8 @@ fn runs_page(
                 let p = panel(false);
                 for run in &mine.items {
                     // `CreditsRunRow`: tafs cloud's words, semibold when counted, and when it
-                    // ended, in this computer's time. A run's request opens with its port.
+                    // ended, in this computer's time zone until `AccountTime` is ported. A run's request
+                    // opens with its port.
                     let row = gtk::Box::new(gtk::Orientation::Vertical, 2);
                     row.append(&text(
                         &run.words,
