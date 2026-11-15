@@ -147,6 +147,29 @@ const LINES: &[(&str, &[&str])] = &[
     ("sample.list_charges", &[]),
     ("sample.look_up_charge", &[]),
     ("taf.revoke", &[]),
+    ("usage.credits", &[]),
+    ("usage.last_period", &[]),
+    ("usage.this_period", &[]),
+    ("usage.last_period_credits_could_not", &[]),
+    ("usage.more_runs", &[]),
+    ("usage.runs_could_not_read_pull", &[]),
+    ("usage.the_balance", &[]),
+    ("work.its_runs", &[]),
+    ("sample.credits.balance_detail", &[]),
+    ("sample.credits.balance_words", &[]),
+    ("sample.credits.invoices_last", &[]),
+    ("sample.credits.invoices_this", &[]),
+    ("sample.credits.last_period", &[]),
+    ("sample.credits.not_counted", &[]),
+    ("sample.credits.not_counted_coach", &[]),
+    ("sample.credits.not_counted_failed", &[]),
+    ("sample.credits.not_counted_trials", &[]),
+    ("sample.credits.note", &[]),
+    ("sample.credits.plan_line", &[]),
+    ("sample.credits.refunds_last", &[]),
+    ("sample.credits.refunds_this", &[]),
+    ("sample.credits.this_period", &[]),
+    ("common.could_not_read_why", &["what", "why"]),
     ("settings.your_account", &[]),
     ("settings.mode", &[]),
     ("settings.mode_kiff", &[]),
@@ -868,4 +891,56 @@ fn refunds_card_tab_is_the_reference_sets() {
             "never"
         ]
     );
+}
+
+#[test]
+fn plan_and_usage_is_the_reference_sets() {
+    use tafs_core::usage::{sample_balance, sample_credits};
+    let w = book("en");
+    let b = sample_balance(&w).unwrap().balance;
+    assert_eq!(b.words, "Solo · 260 of 500 credits left this period");
+    assert_eq!(b.meter_pct, Some(48));
+    assert_eq!(
+        b.detail.as_deref(),
+        Some("Then 900 in packs, which never expire")
+    );
+    assert!(b.credits_panel && !b.waiting() && b.raise.is_none() && b.buy.is_none());
+    let c = sample_credits(&w, false).unwrap();
+    assert_eq!(c.words, "This period: 1,240 credits used · ends on 30 Nov");
+    let tafs: Vec<&str> = c.tafs.iter().map(|t| t.words.as_str()).collect();
+    assert_eq!(
+        tafs,
+        [
+            "Refunds · 820 credits · 41 runs",
+            "Overdue invoices · 420 credits · 28 runs"
+        ]
+    );
+    let not = c.shows_not_counted().unwrap();
+    assert_eq!(not.words, "Not counted: 9 runs");
+    let lines: Vec<&str> = not.lines.iter().map(|l| l.words.as_str()).collect();
+    assert_eq!(
+        lines,
+        [
+            "Coach, within its fair use · 6 runs",
+            "Trials of a new version · 2 runs",
+            "Failed on our side · 1 run"
+        ]
+    );
+    assert_eq!(
+        c.note.as_deref(),
+        Some("Each run counts once, when it ends, in whole credits.")
+    );
+    let last = sample_credits(&w, true).unwrap();
+    assert_eq!(
+        last.words,
+        "Last period: 2,310 credits used · 1 Oct to 31 Oct"
+    );
+    assert!(last.shows_not_counted().is_none());
+    // Every language has the sample's lines.
+    for lang in SHIPPED {
+        let w = book(lang);
+        sample_balance(&w).unwrap();
+        sample_credits(&w, false).unwrap();
+        sample_credits(&w, true).unwrap();
+    }
 }

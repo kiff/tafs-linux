@@ -10,6 +10,7 @@ mod sign_in;
 mod store;
 mod style;
 mod taf;
+mod usage;
 mod welcome;
 mod widgets;
 
@@ -655,6 +656,19 @@ impl App {
             needs_you,
             account: account_lines,
             record,
+            usage: match (mode, self.kept.borrow().as_ref()) {
+                (Mode::Sample, _) => usage::UsageSource::Sample,
+                (Mode::Kiff, Some(kept)) => usage::UsageSource::Cloud {
+                    token: kept.token.clone(),
+                    languages: self.languages.clone(),
+                },
+                _ => usage::UsageSource::None,
+            },
+            cloud_names: Rc::new(
+                tafs.iter()
+                    .filter_map(|t| Some((t.cloud_id.clone()?, t.name.clone())))
+                    .collect(),
+            ),
             tafs,
             actions,
         };

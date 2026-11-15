@@ -173,6 +173,15 @@ button.tafs-filter-bordered.selected { background-color: alpha(@tafs_amber_text,
 .tafs-face-clip { border-radius: 18px; box-shadow: 0 -2px 4px alpha(black, 0.16); }
 .tafs-env-pill { font-family: monospace; font-size: 10px; font-weight: 600; letter-spacing: 0.6px; background-color: alpha(white, 0.22); border-radius: 999px; padding: 2px 6px; color: white; }
 
+/* Plan & usage: a panel's edge in its tone at 50%, the meter's fill, a panel that opens. */
+.tafs-panel.edge-no { border-color: alpha(@tafs_no, 0.5); }
+.tafs-panel.edge-amber { border-color: alpha(@tafs_amber, 0.5); }
+.tafs-meter.ok { color: @tafs_ok; }
+.tafs-meter.amber { color: @tafs_amber_text; }
+.tafs-meter.no { color: @tafs_no; }
+button.tafs-panel-link { background-color: @tafs_panel; background-image: none; border: 1px solid @tafs_line; border-radius: 18px; padding: 16px; box-shadow: none; }
+button.tafs-back { background: none; border: none; box-shadow: none; color: @tafs_amber_text; padding: 4px 8px; }
+
 .tafs-code { font-family: monospace; font-size: 34px; font-weight: 600; color: @tafs_ink; }
 .tafs-mono { font-family: monospace; }
 .tafs-notice { background-color: @tafs_panel; border-bottom: 1px solid @tafs_line; padding: 12px 24px; }

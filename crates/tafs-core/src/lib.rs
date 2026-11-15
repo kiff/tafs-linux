@@ -20,4 +20,5 @@ pub mod sidebar;
 pub mod signin;
 pub mod taf_page;
 pub mod theme;
+pub mod usage;
 pub mod words;
