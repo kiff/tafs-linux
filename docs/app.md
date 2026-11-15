@@ -45,8 +45,9 @@ time), so does Linux, when the account's clock isn't this computer's at that mom
 | `--view-only` | a signed-in session KIFF says is view-only, with no tafs read |
 | `--unproven answers.json` | with `--home`: KIFF's "Did this happen?" answer from a file, in place of KIFF |
 | `--recipes answers.json` | with `--home`: tafs cloud's recipes answer from a file, for Home with no taf ([recipes](recipes.md)) |
+| `--gallery answers.json` | with `--home`: tafs cloud's gallery answer from a file, for Explore jobs and the strip |
 | `--paired` | with `--view-only`: a computer already added with the phone, whose notice says approvals go to the phone |
-| `--page …` | `welcome`, `sign-in`, `pair` (adding this computer with a phone), `recipe:<id>` (with `--home` and `--recipes`: that recipe's sheet), or a screen beside the sidebar: `needs-you`, `record`, `calendar`, `usage`, `connect-apps`, `account`, `taf` (the sample's Refunds), or `taf:<id>` (a taf by its key) |
+| `--page …` | `welcome`, `sign-in`, `pair` (adding this computer with a phone), `recipe:<id>` (with `--home` and `--recipes`: that recipe's sheet), `gallery` (with `--home` and `--gallery`: the gallery), or a screen beside the sidebar: `needs-you`, `record`, `calendar`, `usage`, `connect-apps`, `account`, `taf` (the sample's Refunds), or `taf:<id>` (a taf by its key) |
 | `--screenshot out.png` | save the window (1280×800, at 2×) as a PNG and quit. It never reads or writes the keyring, and its sign-in and pairing show a code without reaching KIFF |
 
 CI builds the app and saves the welcome, the sign-in, the pairing, the Overview beside the sidebar (with the
@@ -54,6 +55,6 @@ account's items), the Overview from the `home.json` contract, Needs you (and wit
 page and its Card tab, Plan & usage and Account over the sample, Plan & usage signed in with
 KIFF from synthetic answers (managing billing, and as a member), Connect apps, Devices, People & groups, the KIFF account and its time zone picker (from synthetic answers), the
 calendar's Day and Week (and Day at an upright iPad's size, `--size 1032x1376`), a tafs cloud
-taf's page and its Card tab from the contracts, the sidebar over the plain sample, and Home with no taf and a recipe's sheet, the
-view-only notice (and once paired) in en, fr and pt, light and dark: 180 pictures, as the `screenshots`
+taf's page and its Card tab from the contracts, the sidebar over the plain sample, and Home with no taf and a recipe's sheet, the strip and the gallery, the
+view-only notice (and once paired) in en, fr and pt, light and dark: 192 pictures, as the `screenshots`
 artifact of the run. The job fails if any is missing.

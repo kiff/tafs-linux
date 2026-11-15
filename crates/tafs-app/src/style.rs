@@ -228,6 +228,7 @@ button.tafs-row-button { background: none; border: none; box-shadow: none; paddi
 button.tafs-row-button.tafs-amber-text { color: @tafs_amber_text; }
 button.tafs-row-button.tafs-no { color: @tafs_no; }
 button.tafs-link.tafs-no { color: @tafs_no; }
+.tafs-strip-bar { background-color: @tafs_line; border-radius: 999px; }
 
 .tafs-code { font-family: monospace; font-size: 34px; font-weight: 600; color: @tafs_ink; }
 .tafs-mono { font-family: monospace; }
@@ -299,6 +300,12 @@ pub fn tint_edge(card: &gtk::Box, color: &str) {
         card,
         &format!("#{name} {{ box-shadow: inset 4px 0 0 {color}; }}"),
     );
+}
+
+/// A strip job's 4-wide bar in its category's colour.
+pub fn tint_bar(bar: &gtk::Box, color: &str) {
+    let name = bar.widget_name();
+    name_rule(bar, &format!("#{name} {{ background-color: {color}; }}"));
 }
 
 /// Loads the style sheet, and loads it again when the appearance changes.

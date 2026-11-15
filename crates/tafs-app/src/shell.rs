@@ -44,6 +44,8 @@ pub struct Screens {
     pub people_known: Rc<crate::people::Known>,
     /// Where the time zones are read.
     pub zones: crate::zones::ZonesSource,
+    /// The jobs' gallery, signed in with KIFF: "Explore jobs" and, with tafs, the strip.
+    pub gallery: Option<Rc<crate::recipes::GalleryPane>>,
     /// Home with no taf, when tafs cloud lists its recipes (`homeListsRecipes`): they take the
     /// Overview's place.
     pub recipes: Option<Rc<crate::recipes::RecipesPane>>,
@@ -77,6 +79,7 @@ pub fn build(
         people_known,
         zones,
         recipes,
+        gallery,
     } = screens;
     let entries = Rc::new(record.entries.clone());
     let lines = model.lines(&w).unwrap_or_else(|e| panic!("{e}"));
@@ -98,7 +101,9 @@ pub fn build(
 
     let selection: Rc<RefCell<Option<Selection>>> = Rc::new(RefCell::new(None));
     let rows: Rc<RefCell<Vec<(gtk::ListBoxRow, Selection)>>> = Rc::new(RefCell::new(Vec::new()));
-    let (sidebar, list, account_icon, account_button, coach_button) = sidebar(&w, &lines, &rows);
+    let has_tafs = !model.tafs.is_empty();
+    let (sidebar, list, account_icon, account_button, coach_button) =
+        sidebar(&w, &lines, &rows, gallery.as_ref(), has_tafs);
     root.append(&sidebar);
     root.append(&detail);
 
@@ -335,6 +340,8 @@ fn sidebar(
     w: &WordBook,
     lines: &SidebarLines,
     rows: &Rc<RefCell<Vec<(gtk::ListBoxRow, Selection)>>>,
+    gallery: Option<&Rc<crate::recipes::GalleryPane>>,
+    has_tafs: bool,
 ) -> (
     gtk::Box,
     gtk::ListBox,
@@ -454,6 +461,62 @@ fn sidebar(
             let l = text(none, 13, 400, &["tafs-dim"]);
             let row = sidebar_row(&l, 0);
             add(row, None);
+        }
+    }
+
+    // The jobs, to browse with nothing created: with or without tafs, once tafs cloud sends the
+    // row's words (`ExploreRow`).
+    if let Some(pane) = gallery {
+        if let Some(words) = pane.gallery.explore() {
+            let b = gtk::Button::new();
+            let h = gtk::Box::new(gtk::Orientation::Horizontal, 10);
+            h.append(&symbol("view-grid-symbolic", 15));
+            h.append(&one_line(words, 14, 600, &["tafs-ink"]));
+            b.set_child(Some(&h));
+            b.add_css_class("tafs-plain");
+            b.set_widget_name("home.explore");
+            let pane = pane.clone();
+            b.connect_clicked(move |b| crate::recipes::gallery(&pane, b));
+            add(sidebar_row(&b, 44), None);
+        }
+        // A few jobs the account doesn't run yet, where tafs cloud shows them (`RecipeStrip`):
+        // each opens its sheet; "See all jobs" opens them all.
+        let strip = pane.gallery.strip_recipes();
+        if has_tafs && !strip.is_empty() {
+            if !pane.gallery.strip.title.trim().is_empty() {
+                add(section(&pane.gallery.strip.title, false), None);
+            }
+            for recipe in strip {
+                let h = gtk::Box::new(gtk::Orientation::Horizontal, 10);
+                let bar = gtk::Box::new(gtk::Orientation::Vertical, 0);
+                bar.set_size_request(4, 28);
+                bar.set_valign(gtk::Align::Center);
+                bar.add_css_class("tafs-strip-bar");
+                if let Some(color) = crate::recipes::strip_tint(pane, recipe) {
+                    bar.set_widget_name(&format!("strip-{}", recipe.id));
+                    crate::style::tint_bar(&bar, &color);
+                }
+                h.append(&bar);
+                let lead = text(recipe.lead(), 14, 400, &["tafs-ink"]);
+                lead.set_lines(2);
+                lead.set_ellipsize(gtk::pango::EllipsizeMode::End);
+                h.append(&lead);
+                let b = gtk::Button::new();
+                b.set_child(Some(&h));
+                b.add_css_class("tafs-plain");
+                let (pane, recipe) = (pane.clone(), recipe.clone());
+                b.connect_clicked(move |b| crate::recipes::strip_sheet(&pane, &recipe, b));
+                add(sidebar_row(&b, 40), None);
+            }
+            if let Some(words) = pane.gallery.see_all() {
+                let b = gtk::Button::new();
+                b.set_child(Some(&one_line(words, 14, 600, &["tafs-ink"])));
+                b.add_css_class("tafs-plain");
+                b.set_widget_name("home.recipe-strip.all");
+                let pane = pane.clone();
+                b.connect_clicked(move |b| crate::recipes::gallery(&pane, b));
+                add(sidebar_row(&b, 44), None);
+            }
         }
     }
 

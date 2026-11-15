@@ -48,6 +48,8 @@ struct Cloud {
     unproven: Vec<tafs_core::unproven::Unproven>,
     /// The recipes Home lists with no taf (`recipes`); none read, none listed.
     recipes: Option<tafs_core::recipes::Recipes>,
+    /// Every ready-made job (`gallery`); none read, no Explore row and no strip.
+    gallery: Option<tafs_core::recipes::Gallery>,
     /// What this person may do with each taf, by KIFF agent (`GET /v1/me/access`).
     access: std::collections::BTreeMap<String, tafs_core::access::Access>,
     /// Who each taf this person manages is shared with, in the Overview's words, by KIFF agent.
@@ -79,13 +81,15 @@ struct Options {
     unproven: Option<String>,
     /// With `--home`: tafs cloud's recipes answer from a file, for Home with no taf.
     recipes: Option<String>,
+    /// With `--home`: tafs cloud's gallery answer from a file, for the Explore row and the strip.
+    gallery: Option<String>,
     /// `--size WxH`: the window's size, for a screenshot of a narrower layout.
     size: Option<(i32, i32)>,
     screenshot: Option<String>,
 }
 
 const USAGE: &str = "tafs [--lang en|de|fr|es|it|pt|nl|pl] [--theme light|dark] [--sample] [--signed-in] [--view-only [--paired]]
-     [--home contract.json] [--usage answers.json] [--people answers.json] [--unproven answers.json] [--recipes answers.json] [--size WxH] [--page welcome|sign-in|pair|recipe:<id>|overview|needs-you|record|calendar|calendar-week|usage|connect-apps|account|kiff-account|time-zone|devices|people|taf|taf-card] [--screenshot out.png]";
+     [--home contract.json] [--usage answers.json] [--people answers.json] [--unproven answers.json] [--recipes answers.json] [--gallery answers.json] [--size WxH] [--page welcome|sign-in|pair|recipe:<id>|gallery|overview|needs-you|record|calendar|calendar-week|usage|connect-apps|account|kiff-account|time-zone|devices|people|taf|taf-card] [--screenshot out.png]";
 
 fn options() -> Result<Options, String> {
     let mut o = Options::default();
@@ -102,6 +106,7 @@ fn options() -> Result<Options, String> {
             "--people" => o.people = Some(value()?),
             "--unproven" => o.unproven = Some(value()?),
             "--recipes" => o.recipes = Some(value()?),
+            "--gallery" => o.gallery = Some(value()?),
             "--size" => {
                 let v = value()?;
                 let (w, h) = v.split_once('x').ok_or("--size takes WxH")?;
@@ -252,6 +257,7 @@ fn activate(app: &adw::Application, o: &Options) {
             activity: vec![],
             unproven: unproven_file(o.unproven.as_deref()),
             recipes: recipes_file(o.recipes.as_deref()),
+            gallery: gallery_file(o.gallery.as_deref()),
             access: Default::default(),
             used_by: Default::default(),
             reports: Default::default(),
@@ -265,6 +271,20 @@ fn activate(app: &adw::Application, o: &Options) {
         _ if o.sample => app_state.open_shell(Mode::Sample, false, None),
         _ if from_file.is_some() => {
             app_state.open_shell(Mode::Kiff, o.view_only, from_file.clone());
+            // `--page gallery`: the jobs' gallery, browsing, for its screenshot.
+            if o.page.as_deref() == Some("gallery") {
+                if let Some(g) = from_file.as_deref().and_then(|c| c.gallery.clone()) {
+                    let pane = recipes::GalleryPane {
+                        labels: from_file
+                            .as_deref()
+                            .and_then(|c| c.recipes.as_ref())
+                            .and_then(|r| r.labels.clone()),
+                        gallery: g,
+                        may_use_coach: true,
+                    };
+                    recipes::gallery(&pane, &window);
+                }
+            }
             // `--page recipe:<id>`: Home's recipe opens its sheet, for its screenshot.
             if let (Some(id), Some(c)) = (
                 o.page.as_deref().and_then(|p| p.strip_prefix("recipe:")),
@@ -275,6 +295,8 @@ fn activate(app: &adw::Application, o: &Options) {
                         let pane = recipes::RecipesPane {
                             recipes: r.clone(),
                             may_use_coach: true,
+                            hand_words: None,
+                            sample_label: None,
                         };
                         recipes::sheet(&pane, recipe, &window);
                     }
@@ -477,6 +499,11 @@ impl App {
                     .ok()
                     .filter(|a| a.status == 200)
                     .and_then(|a| tafs_core::recipes::Recipes::read(&a.body));
+                // `loadGallery`: a read that fails leaves none.
+                let gallery = kiff::gallery(&token, &languages)
+                    .ok()
+                    .filter(|a| a.status == 200)
+                    .and_then(|a| tafs_core::recipes::Gallery::read(&a.body));
                 Read::Cloud(Box::new(Cloud {
                     home,
                     held,
@@ -484,6 +511,7 @@ impl App {
                     activity,
                     unproven,
                     recipes,
+                    gallery,
                     access,
                     used_by,
                     reports,
@@ -885,6 +913,17 @@ impl App {
                     None => usage::UsageSource::None,
                 },
             },
+            // The gallery, signed in with KIFF once read: Explore jobs, and with tafs the strip.
+            gallery: match (mode, cloud.as_deref()) {
+                (Mode::Kiff, Some(c)) => c.gallery.clone().map(|gallery| {
+                    Rc::new(recipes::GalleryPane {
+                        gallery,
+                        labels: c.recipes.as_ref().and_then(|r| r.labels.clone()),
+                        may_use_coach: model.may_use_coach,
+                    })
+                }),
+                _ => None,
+            },
             // `homeListsRecipes`: signed in with KIFF, Home read, no taf, and tafs cloud lists them.
             recipes: match (mode, cloud.as_deref()) {
                 (Mode::Kiff, Some(c)) if model.tafs.is_empty() => c
@@ -895,6 +934,8 @@ impl App {
                         Rc::new(recipes::RecipesPane {
                             recipes,
                             may_use_coach: model.may_use_coach,
+                            hand_words: None,
+                            sample_label: None,
                         })
                     }),
                 _ => None,
@@ -1263,6 +1304,23 @@ fn recipes_file(path: Option<&str>) -> Option<tafs_core::recipes::Recipes> {
         Some(r) => Some(r),
         None => {
             eprintln!("{path} isn't the recipes as tafs cloud answers them");
+            std::process::exit(2);
+        }
+    }
+}
+
+/// `--gallery`'s file, as tafs cloud answers `GET /v1/recipes/gallery` (a contract file's
+/// `answer`, or the answer itself). None given, none; a file that can't be read stops the app.
+fn gallery_file(path: Option<&str>) -> Option<tafs_core::recipes::Gallery> {
+    let path = path?;
+    let answer = std::fs::read(path).ok().and_then(|b| {
+        let v: serde_json::Value = serde_json::from_slice(&b).ok()?;
+        serde_json::to_vec(&v.get("answer").cloned().unwrap_or(v)).ok()
+    });
+    match answer.and_then(|a| tafs_core::recipes::Gallery::read(&a)) {
+        Some(g) => Some(g),
+        None => {
+            eprintln!("{path} isn't the gallery as tafs cloud answers it");
             std::process::exit(2);
         }
     }

@@ -17,6 +17,11 @@ use crate::widgets::{eyebrow, panel, primary, symbol, text};
 pub struct RecipesPane {
     pub recipes: Recipes,
     pub may_use_coach: bool,
+    /// The sheet's button words where the gallery says them ("Try it with Coach" while
+    /// browsing); none, the sheet's own (`labels.hand`).
+    pub hand_words: Option<String>,
+    /// The label over a job's sample, the gallery's; none when it sends none.
+    pub sample_label: Option<String>,
 }
 
 /// A recipe's category colour (`RecipeTint`), as a CSS colour for this appearance; none without
@@ -266,10 +271,17 @@ pub fn sheet(pane: &RecipesPane, recipe: &Recipe, parent: &impl IsA<gtk::Widget>
     }
     if !recipe.sample.is_empty() {
         let p = panel(false);
+        if let Some(label) = &pane.sample_label {
+            p.append(&eyebrow(label, false));
+        }
         p.append(&text(&recipe.sample, 14, 400, &["tafs-ink"]));
         column.append(&p);
     }
-    if let (true, Some(words)) = (pane.may_use_coach, pane.recipes.hand_words()) {
+    let words = pane
+        .hand_words
+        .as_deref()
+        .or_else(|| pane.recipes.hand_words());
+    if let (true, Some(words)) = (pane.may_use_coach, words) {
         let hand = primary(words);
         hand.set_sensitive(false);
         column.append(&hand);
@@ -293,4 +305,73 @@ pub fn sheet(pane: &RecipesPane, recipe: &Recipe, parent: &impl IsA<gtk::Widget>
     dialog.set_content_height(640);
     dialog.set_title(recipe.lead());
     dialog.present(Some(parent));
+}
+
+/// The jobs' gallery and how it was opened (`RecipeGallerySheet`): browsing ("Explore jobs", and
+/// the row under the strip), the only way Linux opens it until + New starts a taf with Coach.
+pub struct GalleryPane {
+    pub gallery: tafs_core::recipes::Gallery,
+    /// The sheet's words from `/v1/recipes`, for a gallery that sends none.
+    pub labels: Option<tafs_core::recipes::Labels>,
+    pub may_use_coach: bool,
+}
+
+impl GalleryPane {
+    /// The gallery as Home's list, browsing: each job's sheet read only, with "Try it with Coach"
+    /// as its one action.
+    fn browsing(&self) -> RecipesPane {
+        let recipes = self.gallery.as_recipes(self.labels.as_ref());
+        RecipesPane {
+            hand_words: self
+                .gallery
+                .hand_words(true, recipes.labels.as_ref())
+                .map(str::to_string),
+            sample_label: self.gallery.sample_label().map(str::to_string),
+            recipes,
+            may_use_coach: self.may_use_coach,
+        }
+    }
+}
+
+/// `RecipeGallerySheet`, browsing: its title ("Explore jobs"), "All jobs" over every job, and
+/// Home's list of them; Close at the top.
+pub fn gallery(pane: &GalleryPane, parent: &impl IsA<gtk::Widget>) {
+    let browsing = Rc::new(pane.browsing());
+    let column = gtk::Box::new(gtk::Orientation::Vertical, 0);
+    if let Some(all) = Some(pane.gallery.words.all.trim()).filter(|a| !a.is_empty()) {
+        let heading = eyebrow(all, false);
+        heading.set_margin_start(24);
+        heading.set_margin_top(16);
+        column.append(&heading);
+    }
+    let list = page(browsing);
+    list.set_vexpand(true);
+    column.append(&list);
+    let header = adw::HeaderBar::new();
+    header.set_title_widget(Some(&gtk::Label::new(Some(pane.gallery.title(true)))));
+    let toolbar = adw::ToolbarView::new();
+    toolbar.add_top_bar(&header);
+    toolbar.set_content(Some(&column));
+    crate::widgets::ground(&toolbar);
+    let dialog = adw::Dialog::new();
+    dialog.set_child(Some(&toolbar));
+    dialog.set_content_width(680);
+    dialog.set_content_height(720);
+    dialog.set_title(pane.gallery.title(true));
+    dialog.present(Some(parent));
+}
+
+/// A job from the strip opens its sheet, browsing.
+pub fn strip_sheet(pane: &GalleryPane, recipe: &Recipe, parent: &impl IsA<gtk::Widget>) {
+    sheet(&pane.browsing(), recipe, parent);
+}
+
+/// The category colour of a strip's job, for its 4-wide bar; the line's colour without one.
+pub fn strip_tint(pane: &GalleryPane, recipe: &Recipe) -> Option<String> {
+    let color = pane.gallery.category_of(recipe)?.color?;
+    let dark = adw::StyleManager::default().is_dark();
+    Some(format!(
+        "#{:06X}",
+        if dark { color.dark } else { color.light }
+    ))
 }
