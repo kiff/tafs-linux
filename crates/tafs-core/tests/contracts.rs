@@ -260,3 +260,27 @@ fn a_tafs_cloud_tafs_activity_reads_as_sent() {
     answer.as_object_mut().unwrap().remove("revision");
     assert!(ActivityPage::read(&serde_json::to_vec(&answer).unwrap()).is_none());
 }
+
+#[test]
+fn a_tafs_runs_and_its_report_read_as_the_ipad_reads_them() {
+    use tafs_core::access::{latest_session, read_report, read_runs};
+    let runs = read_runs(&contract("taf-runs.json")).expect("taf-runs.json reads");
+    assert_eq!(runs.len(), 2);
+    assert_eq!(latest_session(&runs), Ok("sess3".into()));
+    assert_eq!(
+        runs[1].error.as_deref(),
+        Some("The taf stopped before it finished: the app didn't answer.")
+    );
+    let (status, text) = read_report(&contract("taf-run-report.json")).expect("the report reads");
+    assert_eq!(status, "idle");
+    // The Overview's last result is the report's first line.
+    let cloud = overview::CloudRun {
+        report: Some(text),
+        error: None,
+        last_run: None,
+    };
+    assert_eq!(
+        overview::last_result(&en(), Some(&cloud)).unwrap(),
+        "Evidence went on the disputes; one waits for you."
+    );
+}

@@ -42,6 +42,12 @@ struct Cloud {
     account: Option<Account>,
     /// KIFF's activity, for the Record.
     activity: Vec<tafs_core::record::ActivityCall>,
+    /// What this person may do with each taf, by KIFF agent (`GET /v1/me/access`).
+    access: std::collections::BTreeMap<String, tafs_core::access::Access>,
+    /// Who each taf this person manages is shared with, in the Overview's words, by KIFF agent.
+    used_by: std::collections::BTreeMap<String, String>,
+    /// Each tafs cloud taf's last run, by its id.
+    reports: std::collections::BTreeMap<String, tafs_core::access::RunReport>,
 }
 
 /// The window's size, a laptop's, as the screenshots are saved.
@@ -228,6 +234,9 @@ fn activate(app: &adw::Application, o: &Options) {
             held: vec![],
             account: None,
             activity: vec![],
+            access: Default::default(),
+            used_by: Default::default(),
+            reports: Default::default(),
         }),
         None => {
             eprintln!("{path} isn't Home as tafs cloud answers it");
@@ -355,6 +364,7 @@ impl App {
         *self.kept.borrow_mut() = Some(kept.clone());
         self.open_shell(Mode::Kiff, view_only, None);
         let (me, languages, token) = (self.clone(), self.languages.clone(), kept.token.clone());
+        let words: WordBook = (*self.words).clone();
         glib::spawn_future_local(async move {
             let read = gio::spawn_blocking(move || {
                 let signed_out = |a: &tafs_core::signin::Answer| a.status == 401;
@@ -388,11 +398,15 @@ impl App {
                     .filter(|a| a.status == 200)
                     .and_then(|a| tafs_core::record::read_activity(&a.body))
                     .unwrap_or_default();
+                let (access, used_by, reports) = taf_reads(&words, &token, &languages, &home);
                 Read::Cloud(Box::new(Cloud {
                     home,
                     held,
                     account,
                     activity,
+                    access,
+                    used_by,
+                    reports,
                 }))
             })
             .await
@@ -492,6 +506,7 @@ impl App {
                         revoked: false,
                         held: held_of(&t.key),
                         sample: true,
+                        manages: false,
                         cards: sample::full_cards(w, &t.key, self.screenshot).unwrap_or_default(),
                         issued_by: w.line("common.you").unwrap_or_default(),
                         opens_on_card: self.on_card,
@@ -508,7 +523,8 @@ impl App {
                     let cards = tafs_core::home::full_cards(w, h, w.language()).ok()?;
                     Some((tafs_core::home::taf(w, h).ok()?, cards))
                 })
-                .map(|(t, cards)| taf::TafPage {
+                .map(|(t, cards)| (tafs_core::access::manages(c.access.get(&t.agent)), t, cards))
+                .map(|(manages, t, cards)| taf::TafPage {
                     held: held_of(&t.key),
                     initial: tafs_core::sidebar::initial(&t.name),
                     cloud_id: t.cloud.then(|| t.key.clone()),
@@ -525,8 +541,14 @@ impl App {
                     card_count: t.card_count,
                     revoked: t.revoked,
                     sample: false,
+                    manages,
                     cards,
-                    issued_by: issuer.clone(),
+                    // `issuer(of:)`: whoever manages the taf sees who issued it; else the account.
+                    issued_by: if manages {
+                        w.line("common.you").unwrap_or_default()
+                    } else {
+                        issuer.clone()
+                    },
                     opens_on_card: self.on_card,
                     source: source.clone(),
                 })
@@ -640,8 +662,25 @@ impl App {
                 None,
             ),
             (_, Some(c)) => {
-                let (model, tafs) =
+                let (model, mut tafs) =
                     home_model(words, &c.home, &c.held, at).unwrap_or_else(|e| fail(e));
+                // Who uses each taf this person manages, and each tafs cloud taf's last run.
+                for o in tafs.iter_mut() {
+                    let agent = c
+                        .home
+                        .tafs
+                        .iter()
+                        .filter_map(|h| tafs_core::home::taf(words, h).ok())
+                        .find(|t| t.key == o.key)
+                        .map(|t| t.agent);
+                    if let Some(u) = agent.and_then(|a| c.used_by.get(&a)) {
+                        o.used_by = u.clone();
+                    }
+                    if let (Some(run), Some(r)) = (o.cloud.as_mut(), c.reports.get(&o.key)) {
+                        run.report = Some(r.text.clone());
+                        run.error = r.error.clone();
+                    }
+                }
                 (
                     model,
                     tafs,
@@ -945,6 +984,98 @@ fn home_model(
         ..kiff_model()
     };
     Ok((model, overview))
+}
+
+/// The reads the Overview and a taf's Card tab add to Home's (`refreshAccess`, `shares`,
+/// `loadReport`): this person's access to each taf; for each taf they manage, who it's shared
+/// with; and each tafs cloud taf's last run. Each stands alone: one that fails leaves its part out.
+type TafReads = (
+    std::collections::BTreeMap<String, tafs_core::access::Access>,
+    std::collections::BTreeMap<String, String>,
+    std::collections::BTreeMap<String, tafs_core::access::RunReport>,
+);
+
+fn taf_reads(w: &WordBook, token: &str, languages: &[&'static str], home: &Home) -> TafReads {
+    use tafs_core::access::*;
+    let ok = |a: Result<tafs_core::signin::Answer, _>| {
+        a.ok().filter(|a| a.status == 200).map(|a| a.body)
+    };
+    let tafs: Vec<tafs_core::home::Taf> = home
+        .tafs
+        .iter()
+        .filter_map(|h| tafs_core::home::taf(w, h).ok())
+        .collect();
+    let access = ok(kiff::kiff_get(token, languages, ACCESS_PATH))
+        .and_then(|b| read_access(&b))
+        .unwrap_or_default();
+    let managed: Vec<&tafs_core::home::Taf> = tafs
+        .iter()
+        .filter(|t| manages(access.get(&t.agent)))
+        .collect();
+    let mut used = std::collections::BTreeMap::new();
+    if !managed.is_empty() {
+        let groups = ok(kiff::kiff_get(
+            token,
+            languages,
+            tafs_core::people::GROUPS_PATH,
+        ))
+        .and_then(|b| tafs_core::people::Group::read_all(&b))
+        .unwrap_or_default();
+        let people = ok(kiff::kiff_get(
+            token,
+            languages,
+            tafs_core::people::PEOPLE_PATH,
+        ))
+        .and_then(|b| tafs_core::people::Person::read_all(&b))
+        .unwrap_or_default();
+        let (groups, people) = tafs_core::people::arrange(groups, people);
+        for t in managed {
+            if let Some(shares) = ok(kiff::kiff_get(token, languages, &shares_path(&t.agent)))
+                .and_then(|b| read_shares(&b))
+            {
+                if let Ok(line) = used_by(w, &shares, &groups, &people) {
+                    used.insert(t.agent.clone(), line);
+                }
+            }
+        }
+    }
+    let mut reports = std::collections::BTreeMap::new();
+    for t in tafs.iter().filter(|t| t.cloud) {
+        let not_loaded = |why: String| RunReport {
+            text: String::new(),
+            error: Some(
+                w.get("report.runs_not_loaded", &[("why", &why)])
+                    .unwrap_or(why),
+            ),
+        };
+        let read = || -> Result<RunReport, String> {
+            let a = kiff::cloud(token, languages, &runs_path(&t.key))
+                .map_err(|e| e.words(w).unwrap_or_default())?;
+            if a.status != 200 {
+                return Err(tafs_core::signin::refusal(&a, Some(w))
+                    .words(w)
+                    .unwrap_or_default());
+            }
+            let runs = read_runs(&a.body)
+                .ok_or_else(|| tafs_core::signin::plain_words(w, 200).unwrap_or_default())?;
+            let session = match latest_session(&runs) {
+                Ok(s) => s,
+                Err(none) => return Ok(none),
+            };
+            let a = kiff::cloud(token, languages, &report_path(&t.key, &session))
+                .map_err(|e| e.words(w).unwrap_or_default())?;
+            if a.status != 200 {
+                return Err(tafs_core::signin::refusal(&a, Some(w))
+                    .words(w)
+                    .unwrap_or_default());
+            }
+            let (_, text) = read_report(&a.body)
+                .ok_or_else(|| tafs_core::signin::plain_words(w, 200).unwrap_or_default())?;
+            Ok(RunReport { text, error: None })
+        };
+        reports.insert(t.key.clone(), read().unwrap_or_else(not_loaded));
+    }
+    (access, used, reports)
 }
 
 /// The signed-in account's sidebar until Home is read from tafs cloud: no tafs listed yet.
