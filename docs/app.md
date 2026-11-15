@@ -49,7 +49,7 @@ time), so does Linux, when the account's clock isn't this computer's at that mom
 CI builds the app and saves the welcome, the sign-in, the Overview beside the sidebar (with the
 account's items), the Overview from the `home.json` contract, Needs you, the Record, Refunds'
 page and its Card tab, Plan & usage and Account over the sample, Plan & usage signed in with
-KIFF from synthetic answers (managing billing, and as a member), Connect apps, a tafs cloud taf's page and its Card tab from
+KIFF from synthetic answers (managing billing, and as a member), Connect apps, Devices, a tafs cloud taf's page and its Card tab from
 the contracts, the sidebar over the plain sample, and the view-only notice in en, fr and pt,
-light and dark: 102 pictures, as the `screenshots`
+light and dark: 108 pictures, as the `screenshots`
 artifact of the run. The job fails if any is missing.

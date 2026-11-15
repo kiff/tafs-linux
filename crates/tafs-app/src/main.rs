@@ -2,6 +2,7 @@
 
 mod account;
 mod connect;
+mod devices;
 mod kiff;
 mod needs_you;
 mod overview;
@@ -58,7 +59,7 @@ struct Options {
 }
 
 const USAGE: &str = "tafs [--lang en|de|fr|es|it|pt|nl|pl] [--theme light|dark] [--sample] [--signed-in] [--view-only]
-     [--home contract.json] [--usage answers.json] [--page welcome|sign-in|overview|needs-you|record|calendar|usage|connect-apps|account|taf|taf-card] [--screenshot out.png]";
+     [--home contract.json] [--usage answers.json] [--page welcome|sign-in|overview|needs-you|record|calendar|usage|connect-apps|account|devices|taf|taf-card] [--screenshot out.png]";
 
 fn options() -> Result<Options, String> {
     let mut o = Options::default();
@@ -114,6 +115,7 @@ fn selection_of(page: Option<&str>) -> Selection {
         Some("usage") => Selection::Usage,
         Some("connect-apps") => Selection::ConnectApps,
         Some("account") => Selection::Account,
+        Some("devices") => Selection::Devices,
         // The sample's Refunds, as the reference set's taf.png opens it.
         Some("taf") | Some("taf-card") => Selection::Taf("refunds".into()),
         // With `--home`, the contract's first taf.
@@ -686,6 +688,16 @@ impl App {
                     Some(f) => usage::UsageSource::File(f.clone()),
                     None => usage::UsageSource::None,
                 },
+            },
+            devices: match (mode, self.kept.borrow().as_ref()) {
+                (Mode::Sample, _) => devices::DevicesSource::Sample {
+                    screenshot: self.screenshot,
+                },
+                (Mode::Kiff, Some(kept)) => devices::DevicesSource::Cloud {
+                    token: kept.token.clone(),
+                    languages: self.languages.clone(),
+                },
+                _ => devices::DevicesSource::None,
             },
             connect: match (mode, self.kept.borrow().as_ref()) {
                 (Mode::Sample, _) => connect::ConnectSource::Sample {

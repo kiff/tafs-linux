@@ -192,6 +192,11 @@ button.tafs-outline.compact { min-height: 30px; padding: 8px 16px; }
 button.tafs-list-button label { margin: 0; }
 .tafs-ok { color: @tafs_ok; }
 
+/* Devices: the round back button, a text button in red. */
+button.tafs-round-back { background-color: @tafs_panel; border-radius: 999px; min-width: 44px; min-height: 44px; padding: 0; box-shadow: none; border: none; color: @tafs_ink; }
+button.tafs-text-button { background: none; border: none; box-shadow: none; padding: 4px 0; font-size: 17px; }
+button.tafs-text-button.refuse { color: @tafs_no; }
+
 .tafs-code { font-family: monospace; font-size: 34px; font-weight: 600; color: @tafs_ink; }
 .tafs-mono { font-family: monospace; }
 .tafs-notice { background-color: @tafs_panel; border-bottom: 1px solid @tafs_line; padding: 12px 24px; }
