@@ -5,7 +5,9 @@
 
 use chrono::{DateTime, Duration, Local};
 
+use crate::card::{CallsTotal, Card, EuroTotal, Window};
 use crate::money::euros;
+use crate::overview::OverviewTaf;
 use crate::sidebar::{initial, relevant_now, HeldCall, Mode, SidebarModel, TafRow};
 use crate::words::{WordBook, WordsError};
 
@@ -94,4 +96,78 @@ pub fn sidebar(
         account_name: None,
         cloud_needs_you: None,
     })
+}
+
+/// Each sample taf's Card in front, as the sample's Record has used it (`TafCard.merged`: the
+/// first rule with a money total, else the first with a count; what its allowed calls drew).
+pub fn card(w: &WordBook, key: &str) -> Result<Card, WordsError> {
+    let day = || Window::new(w, "calendar_day", None, None);
+    let week = || Window::new(w, "week", None, None);
+    Ok(match key {
+        // Deploys: its deploy, 1 of 10 today.
+        "deploys" => Card {
+            calls: Some(CallsTotal {
+                limit: 10,
+                used: Some(1),
+                window: day()?,
+            }),
+            total: None,
+        },
+        // Bill pay: Northwind's €1,240 of €25,000 this week.
+        "bill_pay" => Card {
+            total: Some(EuroTotal {
+                limit: 25_000,
+                used: Some(1_240),
+                window: week()?,
+            }),
+            calls: None,
+        },
+        // Refunds: #4471's €40 of €2,000 today.
+        "refunds" => Card {
+            total: Some(EuroTotal {
+                limit: 2_000,
+                used: Some(40),
+                window: day()?,
+            }),
+            calls: None,
+        },
+        // Chargebacks: #3342's €35 accepted, of €500 this week.
+        "chargebacks" => Card {
+            total: Some(EuroTotal {
+                limit: 500,
+                used: Some(35),
+                window: week()?,
+            }),
+            calls: None,
+        },
+        // Access: Ana's role, 1 of 40 today.
+        _ => Card {
+            calls: Some(CallsTotal {
+                limit: 40,
+                used: Some(1),
+                window: day()?,
+            }),
+            total: None,
+        },
+    })
+}
+
+/// The Overview's tafs over the sample, in the list's order: a call waits on the first two.
+pub fn overview(w: &WordBook, now: DateTime<Local>) -> Result<Vec<OverviewTaf>, WordsError> {
+    let model = sidebar(w, now, false)?;
+    let mut out = Vec::new();
+    for (row, _) in model.tafs {
+        out.push(OverviewTaf {
+            card: Some(card(w, &row.key)?),
+            key: row.key,
+            name: row.name,
+            initial: row.initial,
+            color_index: row.color_index,
+            now: row.now,
+            // tafs cloud doesn't run the sample's tafs: no last result ("–").
+            cloud: None,
+            used_by: String::new(),
+        });
+    }
+    Ok(out)
 }

@@ -45,6 +45,20 @@ const LINES: &[(&str, &[&str])] = &[
     ("pair.view_only.lead", &["device"]),
     ("pair.view_only.add", &["device"]),
     ("home.overview.title", &[]),
+    ("home.overview.subtitle", &[]),
+    ("home.overview.column_taf", &[]),
+    ("home.overview.column_now", &[]),
+    ("home.overview.column_card", &[]),
+    ("home.overview.column_last_result", &[]),
+    ("home.overview.each_line_opens", &[]),
+    ("home.no_tafs", &[]),
+    ("needs_you.answer_by", &["time"]),
+    ("needs_you.nothing", &[]),
+    ("people.last_ran", &["time"]),
+    ("overview.nothing_yet", &[]),
+    ("card.hero.left_of_note", &["window", "limit", "note"]),
+    ("card.hero.use_unavailable_note", &["label", "note"]),
+    ("card.hero.calls_use_unavailable", &["window"]),
     ("needs_you.title", &[]),
     ("needs_you.tab_label", &["n"]),
     ("record.title", &[]),
@@ -188,4 +202,132 @@ fn the_sidebar_reads_in_every_language() {
         assert_eq!(lines.screens.len(), 5, "{lang}");
         assert_eq!(lines.held.len(), 2, "{lang}");
     }
+}
+
+#[test]
+fn the_sample_overview_is_the_reference_sets() {
+    use tafs_core::overview;
+    let w = book("en");
+    let now = Local.with_ymd_and_hms(2026, 11, 15, 2, 52, 0).unwrap();
+    let model = sample::sidebar(&w, now, true).unwrap();
+    let tafs = sample::overview(&w, now).unwrap();
+    let words = overview::needs_you_words(&w, model.needs_you_count()).unwrap();
+    let o = overview::lines(&w, &tafs, &model.held, model.needs_you_count(), &words).unwrap();
+    assert_eq!(o.title, "Overview");
+    assert_eq!(o.subtitle, "Today, across your tafs");
+    assert_eq!(o.needs_you_label.as_deref(), Some("NEEDS YOU"));
+    let held: Vec<(&str, &str)> = o
+        .held
+        .iter()
+        .map(|h| (h.title.as_str(), h.answer_by.as_str()))
+        .collect();
+    assert_eq!(
+        held,
+        [
+            (
+                "Deploys · Run migration 0042_orders_index",
+                "answer by 03:02"
+            ),
+            ("Bill pay · Pay Atlas Freight", "answer by 03:02")
+        ]
+    );
+    assert_eq!(o.rest, None);
+    assert_eq!(o.columns, ["TAF", "NOW", "CARD", "LAST RESULT"]);
+    let rows: Vec<(&str, &str, &str, &str)> = o
+        .rows
+        .iter()
+        .map(|r| {
+            (
+                r.name.as_str(),
+                r.now.as_str(),
+                r.card.as_str(),
+                r.last_result.as_str(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        rows,
+        [
+            (
+                "Deploys",
+                "Waiting for you · Run migration 0042_orders_index",
+                "9 calls left today of 10",
+                "–"
+            ),
+            (
+                "Bill pay",
+                "Waiting for you · Pay Atlas Freight",
+                "€23,760 left this week of €25,000",
+                "–"
+            ),
+            (
+                "Refunds",
+                "Credit on account #2290",
+                "€1,960 left today of €2,000",
+                "–"
+            ),
+            (
+                "Chargebacks",
+                "Accept dispute on #3342",
+                "€465 left this week of €500",
+                "–"
+            ),
+            (
+                "Access",
+                "Deactivate Tom's accounts",
+                "39 calls left today of 40",
+                "–"
+            ),
+        ]
+    );
+    assert_eq!(o.each_line_opens, "Each line opens the taf.");
+    assert_eq!(o.empty, None);
+}
+
+#[test]
+fn the_overview_reads_in_every_language_and_with_no_tafs() {
+    use tafs_core::overview;
+    for lang in SHIPPED {
+        let w = book(lang);
+        let tafs = sample::overview(&w, Local::now()).unwrap();
+        let o = overview::lines(&w, &tafs, &[], 0, "").unwrap();
+        assert_eq!(o.rows.len(), 5, "{lang}");
+        assert_eq!(o.needs_you_label, None);
+        let none =
+            overview::lines(&w, &[], &[], 3, &overview::needs_you_words(&w, 3).unwrap()).unwrap();
+        assert!(none.empty.is_some());
+        assert!(
+            none.rest.is_some(),
+            "{lang}: what else waits opens Needs you"
+        );
+    }
+}
+
+#[test]
+fn last_result_reads_the_report_first() {
+    use tafs_core::overview::{last_result, CloudRun};
+    let w = book("en");
+    assert_eq!(last_result(&w, None).unwrap(), "–");
+    let report = CloudRun {
+        report: Some("\n  ## **Refunded** 3 orders\nmore".into()),
+        error: None,
+        last_run: Some("09:00".into()),
+    };
+    assert_eq!(last_result(&w, Some(&report)).unwrap(), "Refunded 3 orders");
+    let failed = CloudRun {
+        report: Some("  \n".into()),
+        error: Some("Stripe timed out".into()),
+        last_run: None,
+    };
+    assert_eq!(last_result(&w, Some(&failed)).unwrap(), "Stripe timed out");
+    let ran = CloudRun {
+        report: None,
+        error: None,
+        last_run: Some("09:00".into()),
+    };
+    assert_eq!(last_result(&w, Some(&ran)).unwrap(), "Last ran at 09:00");
+    assert_eq!(
+        last_result(&w, Some(&CloudRun::default())).unwrap(),
+        "Nothing yet"
+    );
 }

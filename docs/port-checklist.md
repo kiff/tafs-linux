@@ -16,6 +16,7 @@ ports a file updates its line here.
 | iPad file | Lines | What | Linux has | Missing |
 | :- | -: | :- | :- | :- |
 | SignInView.swift | 333 | `SignInView`: Sign in with KIFF. Also `SettingsView`, `PlanRow`, `AccountView`, `AccountLines` (Account) | `SignInView` whole: the code, Open KIFF, the link and Copy, the wait, the problem and Try again, the terms line (`sign_in.rs`, `tafs-core/signin.rs`) | "Sign in with your other phone" is there, dimmed: it opens `PairSignInView`. Account's screens (`SettingsView` and the rest) |
+| ShareViews.swift | 405 | Sharing a taf (`ShareSheet`, `SharedWithLine` and the rest), and the Overview (`OverviewView`) | `OverviewView` whole: the title, NEEDS YOU and what else waits, the grid with `cardLine` and `lastResult` (`overview.rs`, `tafs-core/overview.rs`, `card.rs`) | The Overview's reads: who uses each taf (`shares`) and each taf's report (`loadReport`), with Home from tafs cloud. Sharing itself |
 | HomeSplitView.swift | 584 | The sidebar for the whole app and what it opens | The brand, the screens with Needs you's count, NEEDS YOU's held calls, Your tafs relevant now, Coach and Account at the foot, the chosen row's fill (`shell.rs`, `tafs-core/sidebar.rs`) | What each row opens (title only until each screen is ported); Shared with you; Other agents; tafs being set up and Discard; the recipes strip and Explore; + New and its gallery; the halt-all row (sidebar without `tab`); Unreachable and Plan lines at the foot; Home read from tafs cloud |
 
 ## Not started
@@ -54,7 +55,6 @@ ports a file updates its line here.
 | ReportAnswerSheet.swift | 124 | Report an answer | |
 | SetupChatView.swift | 1946 | Coach's conversation | SetupComponent, SetupShape, SentMessages |
 | SetupShapePanel.swift | 130 | What Coach has made so far | SetupShape |
-| ShareViews.swift | 405 | Sharing a taf; the Overview (`OverviewView`) | |
 | TafChatView.swift | 826 | A taf's chat | |
 | TafDetailView.swift | 1467 | A taf's page | Models, NextStep |
 | TafDialPanel.swift | 228 | The dial's requests and confirmation | |
@@ -86,8 +86,8 @@ ports a file updates its line here.
 | App/AppModel.swift | `startSignIn`, `finishSignIn`, `transient`, `relevantNow`, `needsYouCount`, `accountLabel`, `coachAvailable`, `propose`'s held call (the sample's) |
 | Services/ThisDevice.swift | `signin::PLATFORM`, `KIFF_KIND` |
 | Services/TafTemplates.swift | `tafs-core/sample.rs`: the five sample tafs and their held calls |
-| Model/Models.swift | `Money.figure` for whole euros (`money.rs`) |
+| Model/Models.swift | `Money.figure` for whole euros (`money.rs`); `Window`, `TafCard.hero` (`card.rs`) |
 
 ## Coverage
 
-Ported 1, partial 2, not started 43, not for Linux 4: the 50 view files at the pin.
+Ported 1, partial 3, not started 42, not for Linux 4: the 50 view files at the pin.

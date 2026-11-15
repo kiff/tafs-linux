@@ -101,6 +101,11 @@ AVATARS
 .tafs-point.amber { background-color: @tafs_amber; }
 .tafs-point.no { background-color: @tafs_no; }
 
+/* The Overview: a held call on the raised colour, corners of 12; a line between the grid's rows. */
+button.tafs-held-row { background-color: @tafs_raised; background-image: none; border-radius: 12px; padding: 12px; border: none; box-shadow: none; min-height: 0; }
+button.tafs-held-row:hover { background-color: shade(@tafs_raised, 0.97); }
+separator.tafs-line { background-color: @tafs_line; min-height: 1px; }
+
 .tafs-code { font-family: monospace; font-size: 34px; font-weight: 600; color: @tafs_ink; }
 .tafs-mono { font-family: monospace; }
 .tafs-notice { background-color: @tafs_panel; border-bottom: 1px solid @tafs_line; padding: 12px 24px; }

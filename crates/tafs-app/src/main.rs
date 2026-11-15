@@ -1,6 +1,7 @@
 //! tafs for Linux: GTK 4 and libadwaita. The same product, account and words as the iPad app.
 
 mod kiff;
+mod overview;
 mod shell;
 mod sign_in;
 mod store;
@@ -148,14 +149,25 @@ fn activate(app: &adw::Application, o: &Options) {
         let (window, words, page) = (window.clone(), words.clone(), o.page.clone());
         let signed_in = o.signed_in;
         Rc::new(move |mode: Mode, view_only: bool| {
-            let model = match mode {
-                Mode::Sample => sample::sidebar(&words, chrono::Local::now(), signed_in)
-                    .unwrap_or_else(|e| panic!("{e}")),
-                _ => kiff_model(),
+            let at = chrono::Local::now();
+            let fail = |e: tafs_core::words::WordsError| -> ! { panic!("{e}") };
+            let (model, tafs) = match mode {
+                Mode::Sample => (
+                    sample::sidebar(&words, at, signed_in).unwrap_or_else(|e| fail(e)),
+                    sample::overview(&words, at).unwrap_or_else(|e| fail(e)),
+                ),
+                _ => (kiff_model(), vec![]),
             };
+            let count = model.needs_you_count();
+            let needs_you =
+                tafs_core::overview::needs_you_words(&words, count).unwrap_or_else(|e| fail(e));
+            let overview =
+                tafs_core::overview::lines(&words, &tafs, &model.held, count, &needs_you)
+                    .unwrap_or_else(|e| fail(e));
             let shell = shell::build(
                 words.clone(),
                 &model,
+                overview,
                 view_only,
                 selection_of(page.as_deref()),
             );

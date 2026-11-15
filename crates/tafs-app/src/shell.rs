@@ -5,10 +5,14 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use gtk::prelude::*;
+use tafs_core::overview::OverviewLines;
 use tafs_core::sidebar::{Selection, SidebarLines, SidebarModel};
 use tafs_core::words::WordBook;
 
 use crate::widgets::{avatar, eyebrow, icon_for, mascot, one_line, outline, symbol, text};
+
+/// What opens a screen beside the sidebar.
+type Opener = Rc<dyn Fn(Selection)>;
 
 /// The sidebar's width: the iPad's at full width.
 pub const SIDEBAR_WIDTH: i32 = 320;
@@ -18,7 +22,13 @@ pub struct Shell {
 }
 
 /// Builds the shell. `view_only` shows the notice that this computer can't approve yet.
-pub fn build(w: Rc<WordBook>, model: &SidebarModel, view_only: bool, first: Selection) -> Shell {
+pub fn build(
+    w: Rc<WordBook>,
+    model: &SidebarModel,
+    overview: OverviewLines,
+    view_only: bool,
+    first: Selection,
+) -> Shell {
     let lines = model.lines(&w).unwrap_or_else(|e| panic!("{e}"));
     let root = gtk::Box::new(gtk::Orientation::Horizontal, 0);
     crate::widgets::ground(&root);
@@ -42,7 +52,20 @@ pub fn build(w: Rc<WordBook>, model: &SidebarModel, view_only: bool, first: Sele
     root.append(&sidebar);
     root.append(&detail);
 
+    // What a screen opens goes through the sidebar's own choice, once it exists.
+    let holder: Rc<RefCell<Option<Opener>>> = Rc::new(RefCell::new(None));
+    let open: Rc<dyn Fn(Selection)> = {
+        let holder = holder.clone();
+        Rc::new(move |s| {
+            let f = holder.borrow().clone();
+            if let Some(f) = f {
+                f(s);
+            }
+        })
+    };
+    let overview = Rc::new(overview);
     let select: Rc<dyn Fn(Selection)> = {
+        let (open, overview) = (open.clone(), overview.clone());
         let (w, stack, selection, rows, list, account_icon, lines) = (
             w.clone(),
             stack.clone(),
@@ -67,19 +90,22 @@ pub fn build(w: Rc<WordBook>, model: &SidebarModel, view_only: bool, first: Sele
                 Some((row, _)) => list.select_row(Some(row)),
                 None => list.unselect_all(),
             }
-            let open = s == Selection::Account;
-            account_icon.set_icon_name(Some(icon_for(if open {
+            let account_open = s == Selection::Account;
+            account_icon.set_icon_name(Some(icon_for(if account_open {
                 "person.crop.circle.fill"
             } else {
                 "person.crop.circle"
             })));
-            if open {
+            if account_open {
                 account_icon.add_css_class("open");
             } else {
                 account_icon.remove_css_class("open");
             }
             let title = title_of(&w, &lines, &model_tafs, &s);
-            let page = screen_page(&title);
+            let page = match s {
+                Selection::Overview => crate::overview::page(&overview, open.clone()),
+                _ => screen_page(&title).upcast::<gtk::Widget>(),
+            };
             stack.add_child(&page);
             stack.set_visible_child(&page);
             // Each pick starts its own screen: nothing kept from the last (`.id(selection)`).
@@ -88,7 +114,7 @@ pub fn build(w: Rc<WordBook>, model: &SidebarModel, view_only: bool, first: Sele
                 let mut c = stack.first_child();
                 while let Some(child) = c {
                     c = child.next_sibling();
-                    if child != page.clone().upcast::<gtk::Widget>() {
+                    if child != page {
                         v.push(child);
                     }
                 }
@@ -122,6 +148,7 @@ pub fn build(w: Rc<WordBook>, model: &SidebarModel, view_only: bool, first: Sele
         let select = select.clone();
         coach.connect_clicked(move |_| select(Selection::Coach));
     }
+    *holder.borrow_mut() = Some(select.clone());
     select(first);
     Shell { root }
 }

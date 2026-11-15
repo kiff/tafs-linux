@@ -34,10 +34,41 @@ From the top:
 The pane is the iPad's raised colour, 320 wide. The chosen row is a rounded grey fill (the system
 list's), never a side marker.
 
+## The Overview
+
+What the mascot opens, and what opens first (`OverviewView` in `ShareViews.swift`, with
+`showsCalendar` off: Calendar is a sidebar item). The logic is `tafs-core/src/overview.rs`; the
+page is `crates/tafs-app/src/overview.rs`.
+
+- **The title** at 30 bold and "Today, across your tafs" at 14, dim.
+- **NEEDS YOU**, whenever anything waits (`needsYouCount > 0`): the amber eyebrow, then each held
+  call on the raised colour with corners of 12: an amber dot, "Deploys · Run migration
+  0042_orders_index" (14 semibold, one line) and "answer by 03:02" (12, soft) at its end. A call
+  opens its taf. When Needs you counts more than the calls listed (`showsRest`), one more row says
+  so in tafs cloud's words (or "3 need you."), with a chevron, and opens Needs you.
+- **One grid**, four equal columns, so each heading sits over its column: TAF, NOW, CARD, LAST
+  RESULT (11 bold, dim), a line between rows, 16 apart across and 12 down.
+  - **TAF:** the avatar (30) and the name (15 semibold), with who uses it under it for whoever
+    manages it, once read.
+  - **NOW:** what it's doing (13, ink).
+  - **CARD:** the Card in front's figure and words (`cardLine`, `TafCard.hero`): "9 calls left
+    today of 10", "€23,760 left this week of €25,000"; a use KIFF couldn't read shows the limit
+    and "use unavailable", never zero. "–" with no Card.
+  - **LAST RESULT** (13, soft, two lines at most, `lastResult`): the first line of its latest
+    run's report with its `**` and `#` dropped, else that run's error, else "Last ran at 09:00",
+    else "Nothing yet"; "–" for a taf tafs cloud doesn't run, as the sample's.
+  - Every cell of a line opens its taf; a screen reader reads the line as one ("Deploys, Waiting
+    for you · …, 9 calls left today of 10, –"), and Enter on it opens it.
+  - With no tafs, "No tafs yet." across the four columns.
+- **"Each line opens the taf."** under it, 12, dim.
+- The column is at most 980 wide, centred, with 24 around it; the cream reaches both edges.
+
 ## The sample
 
-`--sample` (and Try it with sample data) draws the iPad's five sample tafs and the two calls their
-Cards held (`TafTemplates`, `AppModel.propose`): Deploys' migration, which its Card always asks
+`--sample` (and Try it with sample data) draws the iPad's five sample tafs, each with its Card as
+the sample's Record used it (Deploys 1 of 10 deploys today, Bill pay €1,240 of €25,000 this week,
+Refunds €40 of €2,000 today, Chargebacks €35 of €500 this week, Access 1 of 40 roles today), and
+the two calls their Cards held (`TafTemplates`, `AppModel.propose`): Deploys' migration, which its Card always asks
 about, and Bill pay's €8,400 bill, over €5,000 each. A held call lapses 10 minutes after it was
 held. `--signed-in` draws it with the account's items, as the reference set's `overview.png`.
 
@@ -49,7 +80,9 @@ your phone." and Add this computer (dimmed: pairing comes in its own change).
 
 ## Not yet
 
-- **What each row opens:** each screen shows its title until it's ported (the Overview next).
+- **What each row opens:** each screen but the Overview shows its title until it's ported.
+- **The Overview's reads:** who uses each taf (`shares`, `refreshPeople`) and each taf's latest
+  report (`loadReport`) come with Home from tafs cloud.
 - **Home from tafs cloud** (`GET /v1/home`): until it's read, a signed-in account lists no tafs and
   no line under Your tafs.
 - **Shared with you, Other agents, tafs being set up** (and Discard), the recipes strip and

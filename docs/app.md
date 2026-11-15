@@ -8,8 +8,8 @@ another language or a `{hole}`.
 
 - **Signed out:** the welcome ([sign-in](sign-in.md)), and Sign in with KIFF over it.
 - **Signed in, or in the sample:** one sidebar for the whole app, as on the iPad
-  ([the sidebar](home.md)), and the chosen screen beside it. Screens not ported yet show their
-  title only, in the [port checklist](port-checklist.md)'s order.
+  ([the sidebar](home.md)), and the chosen screen beside it: the Overview first. Screens not
+  ported yet show their title only, in the [port checklist](port-checklist.md)'s order.
 
 The colours are the iPad's `Theme.swift`, light and dark, and follow the desktop's appearance
 (libadwaita's `StyleManager`). The type is the desktop's own font; the iPad's rounded titles are
@@ -34,6 +34,6 @@ the words at the pin.
 | `--page …` | `welcome`, `sign-in`, or a screen beside the sidebar: `needs-you`, `record`, `calendar`, `usage`, `connect-apps`, `account` |
 | `--screenshot out.png` | save the window (1280×800, at 2×) as a PNG and quit. It never reads or writes the keyring, and its sign-in shows a code without reaching KIFF |
 
-CI builds the app and saves the welcome, the sign-in, the sidebar (with and without the account's
-items), and the view-only notice in en, fr and pt, light and dark: 30 pictures, as the `screenshots`
+CI builds the app and saves the welcome, the sign-in, the Overview beside the sidebar (with the
+account's items), the sidebar over the plain sample, and the view-only notice in en, fr and pt, light and dark: 30 pictures, as the `screenshots`
 artifact of the run. The job fails if any is missing.
