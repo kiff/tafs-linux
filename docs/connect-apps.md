@@ -16,7 +16,7 @@ the person's own first, in tafs cloud's order and words. The lines are
 - **The table** (`ConnectColumns`), with its header row in each group: App, How it connects, Whose,
   Status. The App column has its room first; How, Whose and Status are 150, 130 and 230 wide and
   give way together, in proportion, down to 96, 84 and 180, so App keeps its least of 200.
-- **Each row** (`cells`): the logo's place, the name (16 semibold, one line, soft for an app not
+- **Each row** (`cells`): the name (16 semibold, one line, soft for an app not
   set up yet) and what it is (13, soft, two lines); how it connects ("Sign in", "With a key", by
   `method`, else `how`); whose it is, in tafs cloud's words; where it stands: "Connected" in green
   or "Sign in again" in amber, with "Used by Refunds and Chargebacks" under it when tafs cloud
@@ -47,7 +47,8 @@ synced into `shared/`) in a screenshot, as the iPad's sample does, and nothing o
 - **A connected app's detail** (`AppConnectionsView`, `ConnectionDetailView`): what it can read
   and do, which tafs use it, Disconnect, and removed tafs' connections. A connected row doesn't
   open yet, so it has no chevron.
-- **Logos** (`logoURL`), read from tafs cloud only: the row has the logo's place, empty.
+- **Logos** (`logoURL`), read from tafs cloud only: none is drawn yet, as on the iPad for an app
+  tafs cloud sends no logo for.
 - **This computer's read of the connections**, which names the tafs using an app when tafs cloud
   sends no `used_by`, and the signed grants read that lets Clear end removed tafs' connections.
 - **A narrow window's one-line rows** (the iPhone's `second` line): Linux always draws the table.
