@@ -116,6 +116,15 @@ pub fn taf_activity(token: &str, languages: &[&str], path: &str) -> Result<Answe
     )
 }
 
+/// A read on tafs cloud as the session, by its path (Plan & usage's balance and credits).
+pub fn cloud(token: &str, languages: &[&str], path: &str) -> Result<Answer, KiffError> {
+    get(
+        &format!("{}{path}", tafs_core::home::TAFS_CLOUD),
+        token,
+        languages,
+    )
+}
+
 /// A GET as the session, to KIFF's API or tafs cloud only, with no redirect followed.
 fn get(url: &str, token: &str, languages: &[&str]) -> Result<Answer, KiffError> {
     if !may_send_to(url) {

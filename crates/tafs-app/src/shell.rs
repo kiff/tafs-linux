@@ -32,6 +32,9 @@ pub struct Screens {
     /// Each taf's page, by its key.
     pub tafs: Rc<Vec<crate::taf::TafPage>>,
     pub actions: Rc<dyn Fn(tafs_core::account::Action)>,
+    /// Where Plan & usage reads, and tafs cloud's tafs by id for their runs' title.
+    pub usage: crate::usage::UsageSource,
+    pub cloud_names: crate::usage::Names,
 }
 
 /// Builds the shell. `view_only` shows the notice that this computer can't approve yet.
@@ -49,6 +52,8 @@ pub fn build(
         record,
         tafs,
         actions,
+        usage,
+        cloud_names,
     } = screens;
     let entries = Rc::new(record.entries.clone());
     let lines = model.lines(&w).unwrap_or_else(|e| panic!("{e}"));
@@ -138,6 +143,9 @@ pub fn build(
                 Selection::Overview => crate::overview::page(&overview, open.clone()),
                 Selection::NeedsYou => crate::needs_you::page(w.clone(), &needs_you),
                 Selection::Record => crate::record::page(w.clone(), record.clone()),
+                Selection::Usage => {
+                    crate::usage::page(w.clone(), usage.clone(), cloud_names.clone())
+                }
                 // A taf, or a held call on its taf's page.
                 Selection::Taf(key) | Selection::Held { taf: key, .. } => {
                     match tafs.iter().find(|t| t.key == *key) {

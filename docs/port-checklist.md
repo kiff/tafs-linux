@@ -22,6 +22,8 @@ ports a file updates its line here.
 | RecordView.swift | 689 | The Record, its rows, filters and receipts | `RecordView`'s list: the taf chips, the filters, days with what was spent, folded reads, `RecordRow`'s face and lines (`record.rs`, `tafs-core/record.rs`) | `ReceiptView` (a line's receipt); search and Export receipts; what a line acted on; the signed marks |
 | TafDetailView.swift | 1467 | A taf's page: head, tabs, Card bar, Activity, Card, Setup, panels | `header`, `StateChip`, the tabs, `CardBar` (it opens Card), the held calls, the sample's `activity(_:)` with `ActivityFilter`, `TafActivityList` for a tafs cloud taf, the Card tab's `CardStack`, `WalletLayout`, `TafCardFace`, `CardLines` (`taf.rs`, `tafs-core/taf_page.rs`, `cards.rs`) | Chat and Setup tabs (dimmed); on Card: time zone lines, `eachItem`, `CountedView`, pending, unit words, `HaltRow`, Versions, Usage, Revoke's action; `headerLine`, the side column, Remove; `HealthLines`, `RunsPanel`, `WorkPanel`, `ConnectionsPanel`, `VersionsPanel`, `MemoryPanel` |
 | TafPresentationViews.swift | 492 | A taf's Activity list and its rows, from tafs cloud; its runs and work | `TafActivityList`'s held calls, filters, groups, pages and foot; `SourceActivityRow`; `NextStepRow` as its words (`taf.rs`, `tafs-core/activity.rs`) | `TafKnocksPanel`, Card unit requests, `WorkPanel`, `RunsPanel`, `RetainedRuns`; the next step's buttons; a row's receipt |
+| UsageView.swift | 348 | Plan & usage: the balance, buying, who bills, members' requests | `UsageView`'s title, loading and order; `BalancePanel`'s edge, words, `Meter`, detail, warning and why it couldn't be read; the Credits panel shown or left out (`usage.rs`, `tafs-core/usage.rs`) | Raise the limit (`ApprovalGate`) and the read after it; buying packs and Solo (the store); `planMessage`; KIFF's usage read with `billingPanel`, `askPanel`, `requestsPanel`; refreshing in place |
+| CreditsViews.swift | 181 | The credits the account's tafs used, and one taf's runs | `CreditsPanel` whole: both periods, its errors, each taf's row (opening its runs at KIFF), Coach, not counted, the note; `TafCreditsView` with More runs; `CreditsRunRow`'s words and time (`usage.rs`, `tafs-core/usage.rs`) | A run's request (`KnobRequestDetail`); pull to refresh (Try again instead) |
 | HomeSplitView.swift | 584 | The sidebar for the whole app and what it opens | The brand, the screens with Needs you's count, NEEDS YOU's held calls, Your tafs relevant now, Coach and Account at the foot, the chosen row's fill (`shell.rs`, `tafs-core/sidebar.rs`) | What each row opens (title only until each screen is ported); Shared with you; Other agents; tafs being set up and Discard; the recipes strip and Explore; + New and its gallery; the halt-all row (sidebar without `tab`); Unreachable and Plan lines at the foot; Home read from tafs cloud |
 
 ## Not started
@@ -37,7 +39,6 @@ ports a file updates its line here.
 | CoachMode.swift | 131 | Coach mode over the app | |
 | CoachToolsStep.swift | 255 | Coach's tools still to give | |
 | ConnectAppsView.swift | 1128 | Connect apps | |
-| CreditsViews.swift | 181 | The credits the account's tafs used | |
 | DeleteAccountView.swift | 60 | Deleting the account | |
 | DevicesView.swift | 69 | Account › Devices | |
 | DiscardSettingUp.swift | 35 | Discard a taf being set up | |
@@ -62,7 +63,6 @@ ports a file updates its line here.
 | TafKnobView.swift | 377 | The taf's remote | KnobNavigation |
 | TafSetupViews.swift | 512 | A taf's Setup | |
 | TrialViews.swift | 214 | Trials of a new version | |
-| UsageView.swift | 348 | Plan & usage | |
 | WorkLog.swift | 181 | What a taf does while it answers | |
 | YourStepCard.swift | 46 | A step a taf handed its owner | |
 
@@ -80,7 +80,7 @@ ports a file updates its line here.
 | iPad file | Linux |
 | :- | :- |
 | Design/Theme.swift | `tafs-core/theme.rs`, `style.rs`: every colour, light and dark, the brand sweep and the taf colours |
-| Design/Components.swift | `widgets.rs`: `TafAvatar`, `Eyebrow`, `PrimaryLook`, `OutlineLook`, `Panel`, `Legal`, `shortTime`. Not yet: `StateChip`, `Meter`, `DoorRim`, `UnreachableLine` and the rest |
+| Design/Components.swift | `widgets.rs`: `TafAvatar`, `Eyebrow`, `PrimaryLook`, `OutlineLook`, `Panel`, `PanelLink`, `Legal`, `shortTime`; `Meter` (`usage.rs`). Not yet: `AccountTime` (every time on Linux is in this computer's zone), `StateChip`, `DoorRim`, `UnreachableLine` and the rest |
 | KIFF/KIFFClient.swift | `tafs-core/signin.rs`, `kiff.rs`: `DeviceStart`, `DeviceToken`, `startDeviceSignIn`, `pollDeviceToken`, `signOut`, `fingerprint`, the refusal's reading, `acceptLanguage`, `screenLanguages` |
 | KIFF/KIFFClient.swift (activity) | `ActivityCall`, `activity()` (`record.rs`, `kiff::activity`) |
 | KIFF/KIFFMapping.swift (record) | `record`, `executed`, `counted`, `isCurrency`, `recordID` (`record.rs`) |
@@ -89,6 +89,8 @@ ports a file updates its line here.
 | Model/ThemePreference.swift | `ThemePreference` (`account.rs`, `store.rs`) |
 | KIFF/PlainError.swift | `signin::plain_words` |
 | KIFF/TafsCloud.swift | `Home`, `HomeTaf`, `NeedsYou`, `home()` (`tafs-core/home.rs`, `kiff::home`) |
+| KIFF/TafsCloud.swift (usage) | `Balance`, `Credits`, `TafCredits`, `LenientItem`, `balance()`, `credits(previous:)`, `credits(taf:previous:after:)` (`tafs-core/usage.rs`, `kiff::cloud`) |
+| App/AppModel.swift (usage) | `refreshUsage`'s tafs cloud reads, `readPreviousCredits`, `readTafCredits`, `creditsWords`, `showsCreditsPanel`, `sampleBalance`, `sampleCredits` (`usage.rs`) |
 | KIFF/TafsCloud+Work.swift | `Health`, `TafWork.Summary`, read leniently (`home.rs`) |
 | KIFF/KIFFMapping.swift | `taf`, `money`, `window` (`home.rs`); `held`, `says`, `toolWords`, `name`, `reasonBreach`, `moneyReason`, `countReason`, `ordinal`, `details`, `amount`, `tafWords`, `outcomeText` (`held.rs`) |
 | KIFF/KIFFClient.swift (held) | `CardException`, `heldCalls`, `answerPage` (`held.rs`, `needs_you.rs`, `kiff::held`) |
@@ -99,4 +101,4 @@ ports a file updates its line here.
 
 ## Coverage
 
-Ported 1, partial 8, not started 37, not for Linux 4: the 50 view files at the pin.
+Ported 1, partial 10, not started 35, not for Linux 4: the 50 view files at the pin.
