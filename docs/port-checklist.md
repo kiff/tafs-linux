@@ -27,6 +27,7 @@ ports a file updates its line here.
 | ConnectAppsView.swift | 1128 | Connect apps, a connected app's detail, connecting's approval | `ConnectAppsView`'s list: the search, Yours and Discover (`split`, `keys`), the table (`ConnectColumns`) with each row (`ConnectRow`), "Make one first", More apps, Not listed? Ask Coach (`connect.rs`, `tafs-core/connect.rs`) | Connecting (dimmed: `connectableTafs` needs who manages a taf), "Which taf?", `ConnectApprovalSheet`; `AppConnectionsView`, `ConnectionDetailView`, Disconnect and Clear; logos; the narrow window's one-line rows |
 | DevicesView.swift | 69 | Account › Devices | The list with each device's name, last use (`lastUsed`, iOS's relative words) and This device, the note, KIFF's error; the sample's three (`devices.rs`, `tafs-core/devices.rs`) | Signing another device out (an approval: dimmed); Add a device (a phone pairs a computer: not for Linux) |
 | CalendarView.swift | 434 | Calendar: Day, Week, Month | Both layouts by `CalendarLayout.of`: the header with Today, previous and next, the title, the date picker and the views; the navigator, the month's cells, the strip, the time slots, the day's list and the agenda; tafs cloud's halted and "more" words; opening a taf (`calendar.rs`, `tafs-core/calendar.rs`) | Pull to refresh |
+| PeopleViews.swift | 291 | People & groups, naming a group, adding someone | `PeopleGroupsView`'s list: the account's line, each group's name, `uses`, people `managersFirst` with `PersonBadge`, `managesGroup`, the 20-second read (`people.rs`, `tafs-core/people.rs`) | Every change, signed: + Group, rename, delete, Add someone (dimmed), remove and change a role; `GroupNameSheet`, `AddToGroupSheet` |
 | HomeSplitView.swift | 584 | The sidebar for the whole app and what it opens | The brand, the screens with Needs you's count, NEEDS YOU's held calls, Your tafs relevant now, Coach and Account at the foot, the chosen row's fill (`shell.rs`, `tafs-core/sidebar.rs`) | What each row opens (title only until each screen is ported); Shared with you; Other agents; tafs being set up and Discard; the recipes strip and Explore; + New and its gallery; the halt-all row (sidebar without `tab`); Unreachable and Plan lines at the foot; Home read from tafs cloud |
 
 ## Not started
@@ -50,7 +51,6 @@ ports a file updates its line here.
 | MicButton.swift | 122 | The mic in a chat's message bar | |
 | NotificationSettingsView.swift | 138 | Account › Alerts | |
 | PairSignInView.swift | 104 | Signing in from another phone | KIFF/Pairing |
-| PeopleViews.swift | 291 | People and groups | |
 | PlanViews.swift | 268 | Buying credits (held for the owner's money question) | |
 | QuestionsCard.swift | 121 | Several questions at once | QuestionAnswers |
 | RecipeGallery.swift | 135 | The jobs' gallery | |
@@ -92,6 +92,7 @@ ports a file updates its line here.
 | KIFF/KIFFClient.swift (usage) | `Usage` (`Billing`, `Store`, `Pack`, `offered`), `PackRequest`, `usage()`; `managesBilling` (`tafs-core/usage.rs`, `kiff::usage`) |
 | KIFF/TafsCloud+Knob.swift | `ConnectApps`, `App`, `connectApps(_:provider:cursor:)`, `loadMoreConnectApps`'s merge (`tafs-core/connect.rs`) |
 | Design/Words.swift | `Words.list` (`words::list`) |
+| KIFF/KIFFClient.swift (people) | `Group`, `GroupMember`, `Person`, `groups()`, `people()` (`tafs-core/people.rs`, `kiff::kiff_get`) |
 | KIFF/KIFFClient.swift (devices) | `Device`, `devices()` (`tafs-core/devices.rs`, `kiff::devices`) |
 | App/SampleScreens.swift | `devices(now:)` (`devices::sample`) |
 | KIFF/TafsCloud.swift (usage) | `Balance`, `Credits`, `TafCredits`, `LenientItem`, `balance()`, `credits(previous:)`, `credits(taf:previous:after:)` (`tafs-core/usage.rs`, `kiff::cloud`) |
@@ -106,4 +107,4 @@ ports a file updates its line here.
 
 ## Coverage
 
-Ported 1, partial 13, not started 32, not for Linux 4: the 50 view files at the pin.
+Ported 1, partial 14, not started 31, not for Linux 4: the 50 view files at the pin.

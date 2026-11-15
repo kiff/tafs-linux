@@ -421,7 +421,7 @@ pub fn slots(events: &[Event], day: &str) -> std::collections::BTreeMap<i64, Vec
         let hour = (e.minute / 60).clamp(0, 23);
         let row = out.entry(hour).or_default();
         match row.iter_mut().find(|s| s.taf == e.taf) {
-            Some(s) => s.count += e.count,
+            Some(s) => s.count = s.count.saturating_add(e.count),
             None => row.push(Slot {
                 taf: e.taf.clone(),
                 name: e.name.clone(),
@@ -449,8 +449,7 @@ pub fn count(events: &[Event], day: &str) -> i64 {
     events
         .iter()
         .filter(|e| e.day == day)
-        .map(|e| e.count)
-        .sum()
+        .fold(0i64, |n, e| n.saturating_add(e.count))
 }
 
 /// The colours of the tafs with work on a day, at most three.
@@ -558,6 +557,13 @@ mod tests {
         assert_eq!(first_hour(&events, &["2026-11-15".into()]), 7);
         assert_eq!(first_hour(&events, &["2026-11-20".into()]), 8);
         assert_eq!(count(&events, "2026-11-15"), 4);
+        // tafs cloud's counts are summed without overflowing, however large.
+        let huge = vec![
+            event("a", "2026-11-15", 0, i64::MAX),
+            event("a", "2026-11-15", 1, 5),
+        ];
+        assert_eq!(count(&huge, "2026-11-15"), i64::MAX);
+        assert_eq!(slots(&huge, "2026-11-15")[&0][0].count, i64::MAX);
         assert_eq!(marks(&events, "2026-11-15").len(), 2);
         let a = agenda(&events, &["2026-11-14".into(), "2026-11-15".into()]);
         assert_eq!(a.len(), 1);

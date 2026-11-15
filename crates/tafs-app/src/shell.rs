@@ -39,6 +39,9 @@ pub struct Screens {
     pub connect: crate::connect::ConnectSource,
     /// Where Account › Devices reads.
     pub devices: crate::devices::DevicesSource,
+    /// Where People & groups reads, and what it knows besides.
+    pub people: crate::people::PeopleSource,
+    pub people_known: Rc<crate::people::Known>,
     /// Where the calendar reads, and the state a screenshot opens it in.
     pub calendar: crate::calendar::CalendarSource,
     pub calendar_first: tafs_core::calendar::State,
@@ -65,6 +68,8 @@ pub fn build(
         devices,
         calendar,
         calendar_first,
+        people,
+        people_known,
     } = screens;
     let entries = Rc::new(record.entries.clone());
     let lines = model.lines(&w).unwrap_or_else(|e| panic!("{e}"));
@@ -139,7 +144,10 @@ pub fn build(
                 None => list.unselect_all(),
             }
             // Account, and the screens it opens.
-            let account_open = matches!(s, Selection::Account | Selection::Devices);
+            let account_open = matches!(
+                s,
+                Selection::Account | Selection::Devices | Selection::People
+            );
             account_icon.set_icon_name(Some(icon_for(if account_open {
                 "person.crop.circle.fill"
             } else {
@@ -178,6 +186,15 @@ pub fn build(
                         calendar_first.clone(),
                     )
                 }
+                Selection::People => {
+                    let open = open.clone();
+                    crate::people::page(
+                        w.clone(),
+                        people.clone(),
+                        people_known.clone(),
+                        Rc::new(move || open(Selection::Account)),
+                    )
+                }
                 Selection::Devices => {
                     let open = open.clone();
                     crate::devices::page(
@@ -213,6 +230,7 @@ pub fn build(
                             open: Rc::new(move |screen, title| {
                                 open(match screen {
                                     tafs_core::account::Screen::Devices => Selection::Devices,
+                                    tafs_core::account::Screen::People => Selection::People,
                                     tafs_core::account::Screen::ConnectApps => {
                                         Selection::ConnectApps
                                     }
@@ -492,6 +510,7 @@ fn title_of(
         Selection::Account => lines.account.clone(),
         Selection::Coach => l("coach.coach_mode"),
         Selection::Devices => l("settings.devices.title"),
+        Selection::People => l("people.title"),
         Selection::Titled(title) => title.clone(),
         Selection::Taf(key) | Selection::Held { taf: key, .. } => tafs
             .iter()

@@ -93,6 +93,11 @@ pub fn home(token: &str, languages: &[&str]) -> Result<Answer, KiffError> {
     )
 }
 
+/// A read at KIFF as the session, by its path (People & groups).
+pub fn kiff_get(token: &str, languages: &[&str], path: &str) -> Result<Answer, KiffError> {
+    get(&format!("{KIFF_API}{path}"), token, languages)
+}
+
 /// `GET /v1/me/devices` at KIFF as the session (`devices()`).
 pub fn devices(token: &str, languages: &[&str]) -> Result<Answer, KiffError> {
     get(

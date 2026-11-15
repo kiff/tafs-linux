@@ -17,6 +17,7 @@ pub mod language;
 pub mod money;
 pub mod needs_you;
 pub mod overview;
+pub mod people;
 pub mod record;
 pub mod sample;
 pub mod session;
