@@ -1,6 +1,7 @@
 //! tafs for Linux: GTK 4 and libadwaita. The same product, account and words as the iPad app.
 
 mod account;
+mod calendar;
 mod connect;
 mod devices;
 mod kiff;
@@ -55,11 +56,13 @@ struct Options {
     home: Option<String>,
     /// Synthetic answers for Plan & usage signed in with KIFF, for its screenshots.
     usage: Option<String>,
+    /// `--size WxH`: the window's size, for a screenshot of a narrower layout.
+    size: Option<(i32, i32)>,
     screenshot: Option<String>,
 }
 
 const USAGE: &str = "tafs [--lang en|de|fr|es|it|pt|nl|pl] [--theme light|dark] [--sample] [--signed-in] [--view-only]
-     [--home contract.json] [--usage answers.json] [--page welcome|sign-in|overview|needs-you|record|calendar|usage|connect-apps|account|devices|taf|taf-card] [--screenshot out.png]";
+     [--home contract.json] [--usage answers.json] [--size WxH] [--page welcome|sign-in|overview|needs-you|record|calendar|calendar-week|usage|connect-apps|account|devices|taf|taf-card] [--screenshot out.png]";
 
 fn options() -> Result<Options, String> {
     let mut o = Options::default();
@@ -73,6 +76,14 @@ fn options() -> Result<Options, String> {
             "--screenshot" => o.screenshot = Some(value()?),
             "--home" => o.home = Some(value()?),
             "--usage" => o.usage = Some(value()?),
+            "--size" => {
+                let v = value()?;
+                let (w, h) = v.split_once('x').ok_or("--size takes WxH")?;
+                o.size = Some((
+                    w.parse().map_err(|_| "--size takes WxH")?,
+                    h.parse().map_err(|_| "--size takes WxH")?,
+                ));
+            }
             "--sample" => o.sample = true,
             "--signed-in" => o.signed_in = true,
             "--view-only" => o.view_only = true,
@@ -111,7 +122,7 @@ fn selection_of(page: Option<&str>) -> Selection {
     match page {
         Some("needs-you") => Selection::NeedsYou,
         Some("record") => Selection::Record,
-        Some("calendar") => Selection::Calendar,
+        Some("calendar") | Some("calendar-week") => Selection::Calendar,
         Some("usage") => Selection::Usage,
         Some("connect-apps") => Selection::ConnectApps,
         Some("account") => Selection::Account,
@@ -167,8 +178,8 @@ fn activate(app: &adw::Application, o: &Options) {
 
     let window = adw::ApplicationWindow::builder()
         .application(app)
-        .default_width(WIDTH)
-        .default_height(HEIGHT)
+        .default_width(o.size.map_or(WIDTH, |s| s.0))
+        .default_height(o.size.map_or(HEIGHT, |s| s.1))
         .title(words.line("app.name").unwrap_or_default())
         .build();
     window.set_size_request(900, 600);
@@ -185,6 +196,7 @@ fn activate(app: &adw::Application, o: &Options) {
         problem: RefCell::new(None),
         home_file: o.home.as_ref().map(std::path::PathBuf::from),
         usage_file: o.usage.as_ref().map(std::path::PathBuf::from),
+        calendar_day: o.page.as_deref() == Some("calendar"),
         screenshot: o.screenshot.is_some(),
         on_card: o
             .page
@@ -267,6 +279,8 @@ struct App {
     screenshot: bool,
     /// `--page taf-card`: the taf opens on its Card tab.
     on_card: bool,
+    /// `--page calendar`: the calendar opens on Day, as the reference set's `calendar.png`.
+    calendar_day: bool,
 }
 
 /// What reading the account came to.
@@ -688,6 +702,22 @@ impl App {
                     Some(f) => usage::UsageSource::File(f.clone()),
                     None => usage::UsageSource::None,
                 },
+            },
+            calendar: match (mode, self.kept.borrow().as_ref()) {
+                (Mode::Kiff, Some(kept)) => calendar::CalendarSource::Cloud {
+                    token: kept.token.clone(),
+                    languages: self.languages.clone(),
+                },
+                _ => calendar::CalendarSource::Empty,
+            },
+            // Week first; a screenshot's `--page calendar` opens Day, `calendar-week` Week.
+            calendar_first: tafs_core::calendar::State {
+                mode: if self.calendar_day {
+                    tafs_core::calendar::Mode::Day
+                } else {
+                    tafs_core::calendar::Mode::Week
+                },
+                selected: tafs_core::calendar::today(),
             },
             devices: match (mode, self.kept.borrow().as_ref()) {
                 (Mode::Sample, _) => devices::DevicesSource::Sample {

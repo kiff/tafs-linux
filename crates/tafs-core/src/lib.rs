@@ -5,6 +5,7 @@
 pub mod account;
 pub mod account_time;
 pub mod activity;
+pub mod calendar;
 pub mod card;
 pub mod cards;
 pub mod connect;

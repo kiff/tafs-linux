@@ -26,6 +26,7 @@ ports a file updates its line here.
 | CreditsViews.swift | 181 | The credits the account's tafs used, and one taf's runs | `CreditsPanel` whole: both periods, its errors, each taf's row (opening its runs at KIFF), Coach, not counted, the note; `TafCreditsView` with More runs; `CreditsRunRow`'s words and time (`usage.rs`, `tafs-core/usage.rs`) | A run's request (`KnobRequestDetail`); pull to refresh (Try again instead) |
 | ConnectAppsView.swift | 1128 | Connect apps, a connected app's detail, connecting's approval | `ConnectAppsView`'s list: the search, Yours and Discover (`split`, `keys`), the table (`ConnectColumns`) with each row (`ConnectRow`), "Make one first", More apps, Not listed? Ask Coach (`connect.rs`, `tafs-core/connect.rs`) | Connecting (dimmed: `connectableTafs` needs who manages a taf), "Which taf?", `ConnectApprovalSheet`; `AppConnectionsView`, `ConnectionDetailView`, Disconnect and Clear; logos; the narrow window's one-line rows |
 | DevicesView.swift | 69 | Account › Devices | The list with each device's name, last use (`lastUsed`, iOS's relative words) and This device, the note, KIFF's error; the sample's three (`devices.rs`, `tafs-core/devices.rs`) | Signing another device out (an approval: dimmed); Add a device (a phone pairs a computer: not for Linux) |
+| CalendarView.swift | 434 | Calendar: Day, Week, Month | Both layouts by `CalendarLayout.of`: the header with Today, previous and next, the title, the date picker and the views; the navigator, the month's cells, the strip, the time slots, the day's list and the agenda; tafs cloud's halted and "more" words; opening a taf (`calendar.rs`, `tafs-core/calendar.rs`) | Pull to refresh |
 | HomeSplitView.swift | 584 | The sidebar for the whole app and what it opens | The brand, the screens with Needs you's count, NEEDS YOU's held calls, Your tafs relevant now, Coach and Account at the foot, the chosen row's fill (`shell.rs`, `tafs-core/sidebar.rs`) | What each row opens (title only until each screen is ported); Shared with you; Other agents; tafs being set up and Discard; the recipes strip and Explore; + New and its gallery; the halt-all row (sidebar without `tab`); Unreachable and Plan lines at the foot; Home read from tafs cloud |
 
 ## Not started
@@ -37,7 +38,6 @@ ports a file updates its line here.
 | AppEventApprovalSheet.swift | 54 | An app event's filters before signing a subscription | |
 | ApprovalSetupView.swift | 102 | This device's approval readiness | |
 | AttachViews.swift | 267 | Attaching photos and files in a chat | |
-| CalendarView.swift | 434 | Calendar: Day, Week, Month | CalendarModel |
 | CoachMode.swift | 131 | Coach mode over the app | |
 | CoachToolsStep.swift | 255 | Coach's tools still to give | |
 | DeleteAccountView.swift | 60 | Deleting the account | |
@@ -106,4 +106,4 @@ ports a file updates its line here.
 
 ## Coverage
 
-Ported 1, partial 12, not started 33, not for Linux 4: the 50 view files at the pin.
+Ported 1, partial 13, not started 32, not for Linux 4: the 50 view files at the pin.

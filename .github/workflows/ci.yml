@@ -49,7 +49,7 @@ jobs:
       - name: Build
         run: cargo build --release -p tafs
       - name: Screenshots
-        run: xvfb-run -a -s "-screen 0 1400x900x24" tools/screenshots.sh
+        run: xvfb-run -a -s "-screen 0 1400x1500x24" tools/screenshots.sh
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()
         with:
