@@ -63,6 +63,8 @@ struct Options {
     sample: bool,
     signed_in: bool,
     view_only: bool,
+    /// With `--view-only`: a computer already added with the phone.
+    paired: bool,
     home: Option<String>,
     /// Synthetic answers for Plan & usage signed in with KIFF, for its screenshots.
     usage: Option<String>,
@@ -73,7 +75,7 @@ struct Options {
     screenshot: Option<String>,
 }
 
-const USAGE: &str = "tafs [--lang en|de|fr|es|it|pt|nl|pl] [--theme light|dark] [--sample] [--signed-in] [--view-only]
+const USAGE: &str = "tafs [--lang en|de|fr|es|it|pt|nl|pl] [--theme light|dark] [--sample] [--signed-in] [--view-only [--paired]]
      [--home contract.json] [--usage answers.json] [--people answers.json] [--size WxH] [--page welcome|sign-in|pair|overview|needs-you|record|calendar|calendar-week|usage|connect-apps|account|kiff-account|time-zone|devices|people|taf|taf-card] [--screenshot out.png]";
 
 fn options() -> Result<Options, String> {
@@ -100,6 +102,7 @@ fn options() -> Result<Options, String> {
             "--sample" => o.sample = true,
             "--signed-in" => o.signed_in = true,
             "--view-only" => o.view_only = true,
+            "--paired" => o.paired = true,
             "--help" | "-h" => return Err(USAGE.into()),
             other => return Err(format!("{other}?\n{USAGE}")),
         }
@@ -205,6 +208,7 @@ fn activate(app: &adw::Application, o: &Options) {
         words,
         languages,
         signed_in: o.signed_in,
+        paired: o.paired,
         first: RefCell::new(selection_of(o.page.as_deref())),
         kept: RefCell::new(None),
         sign_out_error: RefCell::new(None),
@@ -284,6 +288,8 @@ struct App {
     words: Rc<WordBook>,
     languages: Vec<&'static str>,
     /// `--signed-in`: the sample with the account's items, as the reference set draws it.
+    /// `--paired`: the view-only notice of a computer already added with the phone.
+    paired: bool,
     signed_in: bool,
     /// What opens beside the sidebar.
     first: RefCell<Selection>,
@@ -866,10 +872,16 @@ impl App {
             tafs,
             actions,
         };
-        // View-only: the notice's "Add this computer" pairs it, replacing the session it has.
-        let add: Option<Rc<dyn Fn()>> = view_only.then(|| {
-            let me = self.clone();
-            Rc::new(move || me.present_pairing(false)) as Rc<dyn Fn()>
+        // View-only: before it's paired, the notice's "Add this computer" pairs it, replacing the
+        // session it has; once paired, the notice says approvals go to the phone.
+        let paired = self.paired || self.kept.borrow().as_ref().is_some_and(|kept| kept.paired);
+        let add = view_only.then(|| {
+            if paired {
+                shell::ViewOnly::Paired
+            } else {
+                let me = self.clone();
+                shell::ViewOnly::CanPair(Rc::new(move || me.present_pairing(false)))
+            }
         });
         let shell = shell::build(
             words.clone(),
