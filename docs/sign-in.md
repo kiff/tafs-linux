@@ -60,6 +60,12 @@ so, so no device is left at KIFF that this computer forgot.
   `cloud.tafs.kiff.dev`, on the default port, with no user in the link. Redirects aren't followed.
 - **`approval_mode`:** `key` and `passkey` as KIFF says them; anything else (none, `device_key`, an
   unknown word) is view.
+- **A session this one replaces** signs itself out at KIFF first, best effort, so its device
+  doesn't stay there out of reach.
+- **A session handed over after the sign-in closed** is never kept: it's signed out at KIFF.
+- **KIFF ending the session** (a 401 on the account, Home or the held calls: the computer removed
+  in Devices, the account gone): the keyring forgets it and its key, and the welcome opens, saying
+  "Signed out of KIFF. Sign in again."
 
 ## Tests
 

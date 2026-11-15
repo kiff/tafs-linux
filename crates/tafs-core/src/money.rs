@@ -18,6 +18,10 @@ pub struct Money {
     pub scale: u32,
 }
 
+/// The most decimal places an amount may declare: 10^18 is the largest power of ten an i64 holds.
+/// A server-sent scale past it makes the amount unreadable, never a figure (or a crash).
+pub const MAX_SCALE: u32 = 18;
+
 impl Money {
     pub fn eur_whole(euros: i64) -> Money {
         Money {
@@ -27,9 +31,13 @@ impl Money {
         }
     }
 
-    /// `KIFFMapping.money`: no unit, or an empty one, is a bare number.
-    pub fn new(minor: i64, unit: Option<&str>, scale: u32) -> Money {
-        match unit {
+    /// `KIFFMapping.money`: no unit, or an empty one, is a bare number. A scale past
+    /// `MAX_SCALE` can't be read: none.
+    pub fn new(minor: i64, unit: Option<&str>, scale: u32) -> Option<Money> {
+        if scale > MAX_SCALE {
+            return None;
+        }
+        Some(match unit {
             Some(u) if !u.is_empty() => Money {
                 minor,
                 unit: Some(u.to_string()),
@@ -40,7 +48,7 @@ impl Money {
                 unit: None,
                 scale: 0,
             },
-        }
+        })
     }
 
     pub fn has_unit(&self) -> bool {
@@ -57,7 +65,11 @@ impl Money {
         let Some(unit) = &self.unit else {
             return number(self.minor, 0, language);
         };
-        let power = 10i64.pow(self.scale);
+        // Built only through `new`, which refuses a scale past `MAX_SCALE`; and if one ever got
+        // here, "–" rather than a wrong figure or a panic.
+        let Some(power) = 10i64.checked_pow(self.scale) else {
+            return "–".into();
+        };
         let n = if self.minor % power == 0 {
             number(self.minor / power, 0, language)
         } else {
@@ -103,7 +115,9 @@ pub fn euros(whole: i64, language: &str) -> String {
 fn number(minor: i64, decimals: u32, language: &str) -> String {
     let sign = if minor < 0 { "-" } else { "" };
     let n = minor.unsigned_abs();
-    let power = 10u64.pow(decimals);
+    let Some(power) = 10u64.checked_pow(decimals) else {
+        return "–".into();
+    };
     let (whole, fraction) = (n / power, n % power);
     let (group_sep, min, decimal) = match language {
         "en" => (",", 1, "."),
@@ -180,18 +194,28 @@ mod tests {
 
     #[test]
     fn decimals_show_only_when_not_whole() {
-        assert_eq!(Money::new(1050, Some("EUR"), 2).figure("en"), "€10.50");
-        assert_eq!(
-            Money::new(1050, Some("EUR"), 2).figure("de"),
-            "10,50\u{a0}€"
-        );
-        assert_eq!(Money::new(30000, Some("USD"), 2).figure("en"), "$300");
-        assert_eq!(
-            Money::new(30000, Some("USD"), 2).figure("fr"),
-            "300\u{a0}$US"
-        );
-        assert_eq!(Money::new(3000, Some("CHF"), 2).figure("en"), "CHF\u{a0}30");
-        assert_eq!(Money::new(30000, None, 0).figure("en"), "30,000");
-        assert_eq!(Money::new(5, Some("credits"), 0).figure("en"), "5 credits");
+        let m = |minor, unit, scale| Money::new(minor, unit, scale).unwrap();
+        assert_eq!(m(1050, Some("EUR"), 2).figure("en"), "€10.50");
+        assert_eq!(m(1050, Some("EUR"), 2).figure("de"), "10,50\u{a0}€");
+        assert_eq!(m(30000, Some("USD"), 2).figure("en"), "$300");
+        assert_eq!(m(30000, Some("USD"), 2).figure("fr"), "300\u{a0}$US");
+        assert_eq!(m(3000, Some("CHF"), 2).figure("en"), "CHF\u{a0}30");
+        assert_eq!(m(30000, None, 0).figure("en"), "30,000");
+        assert_eq!(m(5, Some("credits"), 0).figure("en"), "5 credits");
+    }
+
+    #[test]
+    fn a_scale_past_eighteen_is_unreadable_never_a_crash() {
+        assert!(Money::new(1, Some("EUR"), 18).is_some());
+        assert_eq!(Money::new(1, Some("EUR"), 19), None);
+        assert_eq!(Money::new(1, Some("EUR"), 64), None);
+        assert_eq!(Money::new(1, None, 64), None);
+        // Even built by hand, a figure never panics.
+        let odd = Money {
+            minor: 5,
+            unit: Some("EUR".into()),
+            scale: 64,
+        };
+        assert_eq!(odd.figure("en"), "–");
     }
 }

@@ -47,8 +47,8 @@ pub struct Amount {
 }
 
 impl Amount {
-    /// `KIFFMapping.money`.
-    pub fn money(&self) -> Money {
+    /// `KIFFMapping.money`; none when its scale can't be read.
+    pub fn money(&self) -> Option<Money> {
         Money::new(self.minor, self.unit.as_deref(), self.scale)
     }
 }
@@ -368,15 +368,20 @@ pub fn taf(w: &WordBook, h: &HomeTaf) -> Result<Taf, WordsError> {
 /// taf's lines (`TafCard.merged`), from an older tafs cloud.
 fn shown_card(w: &WordBook, c: &CardSummary) -> Result<Option<Card>, WordsError> {
     if let Some(first) = c.cards.as_ref().and_then(|cards| cards.first()) {
-        let total = match &first.total {
-            Some(t) => {
+        // A limit whose scale can't be read is no figure; a use that can't be, use unavailable.
+        let total = match first
+            .total
+            .as_ref()
+            .and_then(|t| t.limit.money().map(|limit| (t, limit)))
+        {
+            Some((t, limit)) => {
                 let mut m = MoneyTotal::new(
-                    t.limit.money(),
-                    t.used.as_ref().map(Amount::money),
+                    limit,
+                    t.used.as_ref().and_then(Amount::money),
                     window(w, &t.window, t.window_words.as_ref())?,
                 );
-                m.extra = t.extra_room.as_ref().map(Amount::money);
-                m.base = t.base_limit.as_ref().map(Amount::money);
+                m.extra = t.extra_room.as_ref().and_then(Amount::money);
+                m.base = t.base_limit.as_ref().and_then(Amount::money);
                 m.room_ends = t.room_window_end.map(ends_words);
                 Some(m)
             }
@@ -394,9 +399,11 @@ fn shown_card(w: &WordBook, c: &CardSummary) -> Result<Option<Card>, WordsError>
     }
     // Merged: the first rule with a money total, else the first with a count.
     if let Some(rule) = c.rules.iter().find(|r| r.per_window.is_some()) {
-        let limit = rule.per_window.as_ref().unwrap().money();
+        let Some(limit) = rule.per_window.as_ref().and_then(Amount::money) else {
+            return Ok(Some(Card::default()));
+        };
         let used = match c.used.get(&rule.action) {
-            Some(a) => Some(a.money()),
+            Some(a) => a.money(),
             None if c.usage_unknown.contains(&rule.action) => None,
             None => Some(Money {
                 minor: 0,

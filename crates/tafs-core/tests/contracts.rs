@@ -186,3 +186,45 @@ fn a_count_over_its_limit_names_which_call_this_would_be() {
         calls[0].created_at.with_timezone(&Local) + chrono::Duration::minutes(10)
     );
 }
+
+#[test]
+fn a_scale_past_eighteen_is_unreadable_on_home_and_held_calls() {
+    use tafs_core::held::{held, read_held};
+    let w = en();
+    for scale in [19, 64] {
+        // Home: the Card's limit can't be read, so no figure, and nothing panics.
+        let mut answer: Value = serde_json::from_slice(&contract("home.json")).unwrap();
+        answer["tafs"][0]["card"]["cards"][0]["total"]["limit"]["scale"] = scale.into();
+        answer["tafs"][0]["card"]["cards"][0]["total"]["used"]["scale"] = scale.into();
+        let h = Home::read(&serde_json::to_vec(&answer).unwrap()).expect("still reads");
+        let rae = home::taf(&w, &h.tafs[0]).unwrap();
+        let line = rae.card.as_ref().unwrap().line(&w).unwrap();
+        assert!(
+            line.as_deref().is_none_or(|l| !l.contains('€')),
+            "{scale}: {line:?}"
+        );
+        // The used alone unreadable: use unavailable, never a figure from it.
+        let mut answer: Value = serde_json::from_slice(&contract("home.json")).unwrap();
+        answer["tafs"][0]["card"]["cards"][0]["total"]["used"]["scale"] = scale.into();
+        let h = Home::read(&serde_json::to_vec(&answer).unwrap()).unwrap();
+        let line = home::taf(&w, &h.tafs[0])
+            .unwrap()
+            .card
+            .unwrap()
+            .line(&w)
+            .unwrap()
+            .unwrap();
+        assert_eq!(line, "€1,000 a day · use unavailable");
+        // A held call: no amount, and the reason doesn't use it.
+        let body = format!(
+            r#"{{"exceptions":[{{"id":"x","subject":"rae","action":"refund","entity_id":"e","status":"held",
+            "breaches":[{{"outcome":"per_action_exceeded","reason":"over","limit":100,"quantity":"sum(amount)","unit":"EUR","scale":{scale}}}],
+            "parameters":{{"amount":150}},"parameter_units":{{"amount":{{"unit":"EUR","scale":{scale}}}}},"reason":null,
+            "units_unavailable":false,"next_steps":[],"created_at":"2026-11-15T12:00:00Z","expires_at":null,"accounting_version":1}}]}}"#
+        );
+        let calls = read_held(body.as_bytes()).unwrap();
+        let call = held(&w, &calls[0], "rae").unwrap();
+        assert_eq!(call.amount, None);
+        assert_eq!(call.reason, "over");
+    }
+}

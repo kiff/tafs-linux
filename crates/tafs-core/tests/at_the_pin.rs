@@ -144,6 +144,7 @@ const LINES: &[(&str, &[&str])] = &[
     ("card.check.over_each", &["amount"]),
     ("error.sign_in_code_expired", &[]),
     ("error.offline", &[]),
+    ("error.signed_out", &[]),
     ("error.kiff_answered", &["status"]),
 ];
 

@@ -164,6 +164,7 @@ fn activate(app: &adw::Application, o: &Options) {
         kept: RefCell::new(None),
         sign_out_error: RefCell::new(None),
         cloud: RefCell::new(None),
+        problem: RefCell::new(None),
     });
 
     // What opens: the sample when asked, else the kept session, else the welcome. A screenshot
@@ -230,9 +231,28 @@ struct App {
     sign_out_error: RefCell<Option<String>>,
     /// What was last read for the account.
     cloud: RefCell<Option<Rc<Cloud>>>,
+    /// The welcome's line for why it's there, while it's open.
+    problem: RefCell<Option<gtk::Label>>,
+}
+
+/// What reading the account came to.
+enum Read {
+    Cloud(Box<Cloud>),
+    /// KIFF answered 401: the session is over.
+    SignedOut,
+    /// Nothing that could be read: the screen stays as it was.
+    Nothing,
 }
 
 impl App {
+    /// A line on the welcome, in red: why it's there.
+    fn welcome_problem(&self, words: &str) {
+        if let Some(label) = self.problem.borrow().as_ref() {
+            label.set_label(words);
+            label.set_visible(true);
+        }
+    }
+
     /// The welcome (`OnboardingView`), with nothing kept.
     fn show_welcome(self: &Rc<Self>) {
         *self.kept.borrow_mut() = None;
@@ -241,6 +261,7 @@ impl App {
         *self.first.borrow_mut() = Selection::Overview;
         let welcome = welcome::build(&self.words);
         self.window.set_content(Some(&welcome.root));
+        *self.problem.borrow_mut() = Some(welcome.problem.clone());
         let me = self.clone();
         welcome
             .sign_in
@@ -274,41 +295,61 @@ impl App {
         let (me, languages, token) = (self.clone(), self.languages.clone(), kept.token.clone());
         glib::spawn_future_local(async move {
             let read = gio::spawn_blocking(move || {
-                let account = kiff::me(&token, &languages)
-                    .ok()
-                    .and_then(|a| Account::read(&a).ok());
-                let home = kiff::home(&token, &languages)
-                    .ok()
+                let signed_out = |a: &tafs_core::signin::Answer| a.status == 401;
+                let me = kiff::me(&token, &languages).ok();
+                let home = kiff::home(&token, &languages).ok();
+                let held = kiff::held(&token, &languages).ok();
+                // KIFF ended the session (a 401 on any of them: the computer removed in Devices,
+                // the account gone): this computer is signed out (`forgetSession`).
+                if [&me, &home, &held].into_iter().flatten().any(signed_out) {
+                    return Read::SignedOut;
+                }
+                let account = me.and_then(|a| Account::read(&a).ok());
+                let Some(home) = home
                     .filter(|a| a.status == 200)
-                    .and_then(|a| Home::read(&a.body))?;
+                    .and_then(|a| Home::read(&a.body))
+                else {
+                    return Read::Nothing;
+                };
                 // KIFF's held calls: none read, none shown, and Home still is.
-                let held = kiff::held(&token, &languages)
-                    .ok()
+                let held = held
                     .filter(|a| a.status == 200)
                     .and_then(|a| tafs_core::held::read_held(&a.body))
                     .unwrap_or_default();
-                Some(Cloud {
+                Read::Cloud(Box::new(Cloud {
                     home,
                     held,
                     account,
-                })
+                }))
             })
             .await
-            .ok()
-            .flatten();
-            if let Some(cloud) = read {
-                // KIFF's word for how the session approves is what counts (contract §1.2).
-                let view_only = match cloud
-                    .account
-                    .as_ref()
-                    .and_then(|a| a.approval_mode.as_deref())
-                {
-                    Some(word) => ApprovalMode::from_kiff(Some(word)).is_view_only(),
-                    None => view_only,
-                };
-                me.open_shell(Mode::Kiff, view_only, Some(Rc::new(cloud)));
+            .unwrap_or(Read::Nothing);
+            match read {
+                Read::Cloud(cloud) => {
+                    // KIFF's word for how the session approves is what counts (contract §1.2).
+                    let view_only = match cloud
+                        .account
+                        .as_ref()
+                        .and_then(|a| a.approval_mode.as_deref())
+                    {
+                        Some(word) => ApprovalMode::from_kiff(Some(word)).is_view_only(),
+                        None => view_only,
+                    };
+                    me.open_shell(Mode::Kiff, view_only, Some(Rc::new(*cloud)));
+                }
+                Read::SignedOut => me.signed_out_by_kiff(),
+                Read::Nothing => {}
             }
         });
+    }
+
+    /// KIFF ended the session: forgotten here with its key, and the welcome says so.
+    fn signed_out_by_kiff(self: &Rc<Self>) {
+        let _ = store::clear();
+        self.show_welcome();
+        if let Ok(words) = self.words.line("error.signed_out") {
+            self.welcome_problem(&words);
+        }
     }
 
     /// The shell: over the sample, or the account's with what's been read.

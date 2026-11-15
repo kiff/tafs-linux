@@ -257,10 +257,24 @@ pub fn present(
                 let words: WordBook = (*w).clone();
                 let langs = languages.clone();
                 let token_key = key.clone();
+                let gone = cancelled.clone();
                 let finished = gio::spawn_blocking(move || {
                     let token = signin::finish(&Kiff::new(langs), &clock, &start, Some(&words))?;
-                    // Kept before the window moves on: a relaunch opens signed in.
+                    // Closed while KIFF handed it over: nobody is waiting for it here, so it's
+                    // never kept, and it ends at KIFF rather than staying there unseen.
+                    if gone.load(Ordering::SeqCst) {
+                        let _ = Kiff::new(vec![]).sign_out(&token.access_token);
+                        return Err(Stopped::Cancelled);
+                    }
                     let now = chrono::Utc::now().timestamp();
+                    // A session this one replaces signs itself out at KIFF first, best effort: its
+                    // device doesn't stay there out of the app's reach.
+                    if let Some(old) = crate::store::load(now) {
+                        if old.token != token.access_token {
+                            let _ = Kiff::new(vec![]).sign_out(&old.token);
+                        }
+                    }
+                    // Kept before the window moves on: a relaunch opens signed in.
                     let kept = KeptSession::from_token(&token, &token_key, now);
                     if let Err(refused) = crate::store::save(&kept, now) {
                         eprintln!("the keyring refused the session: {}", refused.0);
