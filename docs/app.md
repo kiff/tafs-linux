@@ -38,7 +38,8 @@ the words at the pin.
 | `--screenshot out.png` | save the window (1280×800, at 2×) as a PNG and quit. It never reads or writes the keyring, and its sign-in shows a code without reaching KIFF |
 
 CI builds the app and saves the welcome, the sign-in, the Overview beside the sidebar (with the
-account's items), the Overview from the `home.json` contract, Needs you, the Record, Refunds' page and Account over the sample, a tafs cloud taf's page from
-the contracts, the sidebar over the plain sample,
-and the view-only notice in en, fr and pt, light and dark: 66 pictures, as the `screenshots`
+account's items), the Overview from the `home.json` contract, Needs you, the Record, Refunds'
+page and its Card tab, and Account over the sample, a tafs cloud taf's page and its Card tab from
+the contracts, the sidebar over the plain sample, and the view-only notice in en, fr and pt,
+light and dark: 78 pictures, as the `screenshots`
 artifact of the run. The job fails if any is missing.
