@@ -4,10 +4,12 @@ mod account;
 mod kiff;
 mod needs_you;
 mod overview;
+mod record;
 mod shell;
 mod sign_in;
 mod store;
 mod style;
+mod taf;
 mod welcome;
 mod widgets;
 
@@ -31,6 +33,8 @@ struct Cloud {
     held: Vec<CardException>,
     /// The KIFF account (`GET /v1/me`), once read.
     account: Option<Account>,
+    /// KIFF's activity, for the Record.
+    activity: Vec<tafs_core::record::ActivityCall>,
 }
 
 /// The window's size, a laptop's, as the screenshots are saved.
@@ -50,7 +54,7 @@ struct Options {
 }
 
 const USAGE: &str = "tafs [--lang en|de|fr|es|it|pt|nl|pl] [--theme light|dark] [--sample] [--signed-in] [--view-only]
-     [--home contract.json] [--page welcome|sign-in|overview|needs-you|record|calendar|usage|connect-apps|account] [--screenshot out.png]";
+     [--home contract.json] [--page welcome|sign-in|overview|needs-you|record|calendar|usage|connect-apps|account|taf] [--screenshot out.png]";
 
 fn options() -> Result<Options, String> {
     let mut o = Options::default();
@@ -105,6 +109,10 @@ fn selection_of(page: Option<&str>) -> Selection {
         Some("usage") => Selection::Usage,
         Some("connect-apps") => Selection::ConnectApps,
         Some("account") => Selection::Account,
+        // The sample's Refunds, as the reference set's taf.png opens it.
+        Some("taf") => Selection::Taf("refunds".into()),
+        // With `--home`, the contract's first taf.
+        Some(other) if other.starts_with("taf:") => Selection::Taf(other["taf:".len()..].into()),
         _ => Selection::Overview,
     }
 }
@@ -165,6 +173,7 @@ fn activate(app: &adw::Application, o: &Options) {
         sign_out_error: RefCell::new(None),
         cloud: RefCell::new(None),
         problem: RefCell::new(None),
+        home_file: o.home.as_ref().map(std::path::PathBuf::from),
     });
 
     // What opens: the sample when asked, else the kept session, else the welcome. A screenshot
@@ -180,6 +189,7 @@ fn activate(app: &adw::Application, o: &Options) {
             home,
             held: vec![],
             account: None,
+            activity: vec![],
         }),
         None => {
             eprintln!("{path} isn't Home as tafs cloud answers it");
@@ -233,6 +243,8 @@ struct App {
     cloud: RefCell<Option<Rc<Cloud>>>,
     /// The welcome's line for why it's there, while it's open.
     problem: RefCell<Option<gtk::Label>>,
+    /// `--home`'s contract file, for the screenshots' tafs cloud reads.
+    home_file: Option<std::path::PathBuf>,
 }
 
 /// What reading the account came to.
@@ -299,9 +311,14 @@ impl App {
                 let me = kiff::me(&token, &languages).ok();
                 let home = kiff::home(&token, &languages).ok();
                 let held = kiff::held(&token, &languages).ok();
+                let activity = kiff::activity(&token, &languages).ok();
                 // KIFF ended the session (a 401 on any of them: the computer removed in Devices,
                 // the account gone): this computer is signed out (`forgetSession`).
-                if [&me, &home, &held].into_iter().flatten().any(signed_out) {
+                if [&me, &home, &held, &activity]
+                    .into_iter()
+                    .flatten()
+                    .any(signed_out)
+                {
                     return Read::SignedOut;
                 }
                 let account = me.and_then(|a| Account::read(&a).ok());
@@ -316,10 +333,16 @@ impl App {
                     .filter(|a| a.status == 200)
                     .and_then(|a| tafs_core::held::read_held(&a.body))
                     .unwrap_or_default();
+                // KIFF's activity: none read, an empty Record, and the rest still is.
+                let activity = activity
+                    .filter(|a| a.status == 200)
+                    .and_then(|a| tafs_core::record::read_activity(&a.body))
+                    .unwrap_or_default();
                 Read::Cloud(Box::new(Cloud {
                     home,
                     held,
                     account,
+                    activity,
                 }))
             })
             .await
@@ -341,6 +364,186 @@ impl App {
                 Read::Nothing => {}
             }
         });
+    }
+
+    /// Each taf's page: the sample's tafs with their Cards and states, else Home's.
+    fn taf_pages(
+        &self,
+        mode: Mode,
+        model: &SidebarModel,
+        cloud: Option<&Cloud>,
+        may_answer: bool,
+        at: chrono::DateTime<chrono::Local>,
+    ) -> Vec<taf::TafPage> {
+        let w = &self.words;
+        let holders: Vec<tafs_core::needs_you::Holder> = model
+            .tafs
+            .iter()
+            .map(|(t, _)| tafs_core::needs_you::Holder {
+                key: &t.key,
+                name: &t.name,
+                initial: &t.initial,
+                color: t.color_index,
+            })
+            .collect();
+        // A taf's held calls, as Needs you draws them.
+        let held_of = |key: &str| -> Vec<tafs_core::needs_you::CardLines> {
+            let calls: Vec<_> = model
+                .held
+                .iter()
+                .filter(|c| c.taf == key)
+                .cloned()
+                .collect();
+            tafs_core::needs_you::lines(w, &calls, &holders, may_answer, at)
+                .map(|l| l.cards)
+                .unwrap_or_default()
+        };
+        // Where a tafs cloud taf's Activity is read: tafs cloud as the session, else the contract
+        // beside `--home`'s.
+        let source = match (self.kept.borrow().as_ref(), &self.home_file) {
+            (Some(kept), _) => taf::ActivitySource::Cloud {
+                token: kept.token.clone(),
+                languages: self.languages.clone(),
+            },
+            (None, Some(home)) => {
+                taf::ActivitySource::File(home.with_file_name("taf-activity.json"))
+            }
+            _ => taf::ActivitySource::None,
+        };
+        match (mode, cloud) {
+            (Mode::Sample, _) => model
+                .tafs
+                .iter()
+                .map(|(t, _)| {
+                    let waits = model.held.iter().any(|c| c.taf == t.key);
+                    taf::TafPage {
+                        key: t.key.clone(),
+                        name: t.name.clone(),
+                        initial: t.initial.clone(),
+                        color: t.color_index,
+                        state: if waits {
+                            tafs_core::taf_page::TafState::Waiting
+                        } else {
+                            tafs_core::taf_page::TafState::Working
+                        },
+                        attention: false,
+                        card: sample::card(w, &t.key).ok(),
+                        card_title: t.name.clone(),
+                        card_environment: String::new(),
+                        card_live: true,
+                        card_active: true,
+                        card_count: 1,
+                        revoked: false,
+                        held: held_of(&t.key),
+                        sample: true,
+                        cloud_id: None,
+                        source: taf::ActivitySource::None,
+                    }
+                })
+                .collect(),
+            (_, Some(c)) => c
+                .home
+                .tafs
+                .iter()
+                .filter_map(|h| tafs_core::home::taf(w, h).ok())
+                .map(|t| taf::TafPage {
+                    held: held_of(&t.key),
+                    initial: tafs_core::sidebar::initial(&t.name),
+                    cloud_id: t.cloud.then(|| t.key.clone()),
+                    key: t.key,
+                    name: t.name,
+                    color: t.color_index,
+                    state: t.state,
+                    attention: t.attention,
+                    card: t.card,
+                    card_title: t.card_title,
+                    card_environment: t.card_environment,
+                    card_live: t.card_live,
+                    card_active: t.card_active,
+                    card_count: t.card_count,
+                    revoked: t.revoked,
+                    sample: false,
+                    source: source.clone(),
+                })
+                .collect(),
+            _ => vec![],
+        }
+    }
+
+    /// The Record's lines: the sample's, or KIFF's activity for the tafs Home lists, by the
+    /// agent each call was made as. Its chips are every taf.
+    fn record_data(
+        &self,
+        mode: Mode,
+        model: &SidebarModel,
+        cloud: Option<&Cloud>,
+        at: chrono::DateTime<chrono::Local>,
+    ) -> record::RecordData {
+        // The chips in the tafs' own order (`model.tafs`): the sample's as it made them
+        // (`TafTemplates.all`), else tafs cloud's, not the sidebar's waiting-first order.
+        let mut tafs: Vec<record::Taf> = model
+            .tafs
+            .iter()
+            .map(|(t, _)| record::Taf {
+                key: t.key.clone(),
+                name: t.name.clone(),
+                color: t.color_index,
+            })
+            .collect();
+        let order: Vec<String> = match (mode, cloud) {
+            (Mode::Sample, _) => ["refunds", "bill_pay", "access", "deploys", "chargebacks"]
+                .map(String::from)
+                .to_vec(),
+            (_, Some(c)) => c
+                .home
+                .tafs
+                .iter()
+                .map(|t| {
+                    t.id.clone()
+                        .unwrap_or_else(|| format!("agent:{}", t.kiff_agent))
+                })
+                .collect(),
+            _ => vec![],
+        };
+        tafs.sort_by_key(|t| order.iter().position(|k| *k == t.key).unwrap_or(usize::MAX));
+        let entries = match (mode, cloud) {
+            (Mode::Sample, _) => sample::record(&self.words, at).unwrap_or_default(),
+            (_, Some(c)) => {
+                let agents: Vec<(String, String)> = c
+                    .home
+                    .tafs
+                    .iter()
+                    .map(|t| {
+                        (
+                            t.kiff_agent.clone(),
+                            t.id.clone()
+                                .unwrap_or_else(|| format!("agent:{}", t.kiff_agent)),
+                        )
+                    })
+                    .collect();
+                let taf_of = |actor: &str| {
+                    agents
+                        .iter()
+                        .find(|(a, _)| a == actor)
+                        .map(|(_, k)| k.clone())
+                };
+                tafs_core::record::record(&self.words, &c.activity, &taf_of).unwrap_or_default()
+            }
+            _ => vec![],
+        };
+        // `isWaiting`: the sample's held lines wait; KIFF's while KIFF still holds their call.
+        let still_held: Vec<String> = model
+            .held
+            .iter()
+            .filter_map(|c| c.proposal_id.clone().or_else(|| c.kiff_id.clone()))
+            .map(|id| tafs_core::record::record_id(&id))
+            .collect();
+        let kiff = mode == Mode::Kiff;
+        record::RecordData {
+            entries,
+            tafs,
+            waiting: Rc::new(move |e| !kiff || still_held.contains(&e.id)),
+        }
     }
 
     /// KIFF ended the session: forgotten here with its key, and the welcome says so.
@@ -418,10 +621,14 @@ impl App {
         let me = self.clone();
         let actions: Rc<dyn Fn(AccountAction)> =
             Rc::new(move |action| me.act(action, mode, view_only));
+        let record = Rc::new(self.record_data(mode, &model, cloud.as_deref(), at));
+        let tafs = Rc::new(self.taf_pages(mode, &model, cloud.as_deref(), may_answer, at));
         let screens = shell::Screens {
             overview,
             needs_you,
             account: account_lines,
+            record,
+            tafs,
             actions,
         };
         let shell = shell::build(

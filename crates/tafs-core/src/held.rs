@@ -146,6 +146,8 @@ pub struct HeldCall {
     pub expires_at: DateTime<Local>,
     /// KIFF's id: a call from KIFF is answered in KIFF until this computer signs answers.
     pub kiff_id: Option<String>,
+    /// The proposal KIFF held: what its activity files the call under.
+    pub proposal_id: Option<String>,
     pub approvable_once: bool,
     pub accounting_version: Option<i64>,
     pub next_steps: Vec<String>,
@@ -194,6 +196,7 @@ pub fn held(w: &WordBook, e: &CardException, taf: &str) -> Result<HeldCall, Word
             .unwrap_or(e.created_at + Duration::minutes(10))
             .with_timezone(&Local),
         kiff_id: Some(e.id.clone()),
+        proposal_id: e.proposal_id.clone(),
         approvable_once: e.can_approve_once.unwrap_or(true),
         accounting_version: e.accounting_version,
         next_steps: e.next_steps.clone().unwrap_or_default(),

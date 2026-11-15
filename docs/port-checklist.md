@@ -19,6 +19,9 @@ ports a file updates its line here.
 | ShareViews.swift | 405 | Sharing a taf (`ShareSheet`, `SharedWithLine` and the rest), and the Overview (`OverviewView`) | `OverviewView` whole: the title, NEEDS YOU and what else waits, the grid with `cardLine` and `lastResult` (`overview.rs`, `tafs-core/overview.rs`, `card.rs`) | The Overview's reads: who uses each taf (`shares`) and each taf's report (`loadReport`), with Home from tafs cloud. Sharing itself |
 | NeedsYouView.swift | 603 | Needs you: held calls, "Did this happen?", steps, Coach's waits, knocks, alerts | `NeedsYouView`'s held calls and its empty state; `HeldCallCard`'s face, countdown, taf's words, details, expired and someone-answers states, and Answer in KIFF (`needs_you.rs`, `tafs-core/needs_you.rs`, `held.rs`) | Answering here (approve, extra room, next steps, refuse, Allow from now on, install); `DidThisHappenCard`, `AlertsCard`, `CoachWaitingCard`, `SetAllAsideButton`; knocks; scrolling to a call |
 | AccountPreferencesView.swift | 37 | Account's theme and time zone pickers | `ThemePicker` with `ThemePreference`, kept across launches (`account.rs`, `store.rs`) | `TimeZonePicker` |
+| RecordView.swift | 689 | The Record, its rows, filters and receipts | `RecordView`'s list: the taf chips, the filters, days with what was spent, folded reads, `RecordRow`'s face and lines (`record.rs`, `tafs-core/record.rs`) | `ReceiptView` (a line's receipt); search and Export receipts; what a line acted on; the signed marks |
+| TafDetailView.swift | 1467 | A taf's page: head, tabs, Card bar, Activity, Card, Setup, panels | `header`, `StateChip`, the tabs, `CardBar`, the held calls, the sample's `activity(_:)` with `ActivityFilter` (`taf.rs`, `tafs-core/taf_page.rs`) | Chat, Card and Setup tabs (dimmed); `TafActivityList` for a tafs cloud taf; `headerLine`, the side column, Revoke, Remove; `HealthLines`, `RunsPanel`, `WorkPanel`, `ConnectionsPanel`, `VersionsPanel`, `MemoryPanel`, the Card faces and stack |
+| TafPresentationViews.swift | 492 | A taf's Activity list and its rows, from tafs cloud; its runs and work | `TafActivityList`'s held calls, filters, groups, pages and foot; `SourceActivityRow`; `NextStepRow` as its words (`taf.rs`, `tafs-core/activity.rs`) | `TafKnocksPanel`, Card unit requests, `WorkPanel`, `RunsPanel`, `RetainedRuns`; the next step's buttons; a row's receipt |
 | HomeSplitView.swift | 584 | The sidebar for the whole app and what it opens | The brand, the screens with Needs you's count, NEEDS YOU's held calls, Your tafs relevant now, Coach and Account at the foot, the chosen row's fill (`shell.rs`, `tafs-core/sidebar.rs`) | What each row opens (title only until each screen is ported); Shared with you; Other agents; tafs being set up and Discard; the recipes strip and Explore; + New and its gallery; the halt-all row (sidebar without `tab`); Unreachable and Plan lines at the foot; Home read from tafs cloud |
 
 ## Not started
@@ -51,15 +54,12 @@ ports a file updates its line here.
 | QuestionsCard.swift | 121 | Several questions at once | QuestionAnswers |
 | RecipeGallery.swift | 135 | The jobs' gallery | |
 | RecordSearchViews.swift | 192 | The Record's search | |
-| RecordView.swift | 689 | The Record | |
 | ReportAnswerSheet.swift | 124 | Report an answer | |
 | SetupChatView.swift | 1946 | Coach's conversation | SetupComponent, SetupShape, SentMessages |
 | SetupShapePanel.swift | 130 | What Coach has made so far | SetupShape |
 | TafChatView.swift | 826 | A taf's chat | |
-| TafDetailView.swift | 1467 | A taf's page | Models, NextStep |
 | TafDialPanel.swift | 228 | The dial's requests and confirmation | |
 | TafKnobView.swift | 377 | The taf's remote | KnobNavigation |
-| TafPresentationViews.swift | 492 | A taf's names, mappings and limits, from the service | |
 | TafSetupViews.swift | 512 | A taf's Setup | |
 | TrialViews.swift | 214 | Trials of a new version | |
 | UsageView.swift | 348 | Plan & usage | |
@@ -82,6 +82,8 @@ ports a file updates its line here.
 | Design/Theme.swift | `tafs-core/theme.rs`, `style.rs`: every colour, light and dark, the brand sweep and the taf colours |
 | Design/Components.swift | `widgets.rs`: `TafAvatar`, `Eyebrow`, `PrimaryLook`, `OutlineLook`, `Panel`, `Legal`, `shortTime`. Not yet: `StateChip`, `Meter`, `DoorRim`, `UnreachableLine` and the rest |
 | KIFF/KIFFClient.swift | `tafs-core/signin.rs`, `kiff.rs`: `DeviceStart`, `DeviceToken`, `startDeviceSignIn`, `pollDeviceToken`, `signOut`, `fingerprint`, the refusal's reading, `acceptLanguage`, `screenLanguages` |
+| KIFF/KIFFClient.swift (activity) | `ActivityCall`, `activity()` (`record.rs`, `kiff::activity`) |
+| KIFF/KIFFMapping.swift (record) | `record`, `executed`, `counted`, `isCurrency`, `recordID` (`record.rs`) |
 | KIFF/KIFFClient.swift (account) | `Account`, `me()`, `signOut` (`account.rs`, `kiff::me`) |
 | Design/Components.swift (sign out) | `SignOutWay.signOut`, `confirmingSignOut` (`main.rs`) |
 | Model/ThemePreference.swift | `ThemePreference` (`account.rs`, `store.rs`) |
@@ -97,4 +99,4 @@ ports a file updates its line here.
 
 ## Coverage
 
-Ported 1, partial 5, not started 40, not for Linux 4: the 50 view files at the pin.
+Ported 1, partial 8, not started 37, not for Linux 4: the 50 view files at the pin.

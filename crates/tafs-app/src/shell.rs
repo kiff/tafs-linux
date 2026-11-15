@@ -28,6 +28,9 @@ pub struct Screens {
     pub overview: OverviewLines,
     pub needs_you: NeedsYouLines,
     pub account: AccountLines,
+    pub record: Rc<crate::record::RecordData>,
+    /// Each taf's page, by its key.
+    pub tafs: Rc<Vec<crate::taf::TafPage>>,
     pub actions: Rc<dyn Fn(tafs_core::account::Action)>,
 }
 
@@ -43,8 +46,11 @@ pub fn build(
         overview,
         needs_you,
         account,
+        record,
+        tafs,
         actions,
     } = screens;
+    let entries = Rc::new(record.entries.clone());
     let lines = model.lines(&w).unwrap_or_else(|e| panic!("{e}"));
     let root = gtk::Box::new(gtk::Orientation::Horizontal, 0);
     crate::widgets::ground(&root);
@@ -83,13 +89,15 @@ pub fn build(
     let needs_you = Rc::new(needs_you);
     let account = Rc::new(account);
     let select: Rc<dyn Fn(Selection)> = {
-        let (open, overview, needs_you, account, actions) = (
+        let (open, overview, needs_you, account, actions, record) = (
             open.clone(),
             overview.clone(),
             needs_you.clone(),
             account.clone(),
             actions.clone(),
+            record.clone(),
         );
+        let (tafs, entries) = (tafs.clone(), entries.clone());
         let (w, stack, selection, rows, list, account_icon, lines) = (
             w.clone(),
             stack.clone(),
@@ -129,6 +137,14 @@ pub fn build(
             let page = match s {
                 Selection::Overview => crate::overview::page(&overview, open.clone()),
                 Selection::NeedsYou => crate::needs_you::page(w.clone(), &needs_you),
+                Selection::Record => crate::record::page(w.clone(), record.clone()),
+                // A taf, or a held call on its taf's page.
+                Selection::Taf(key) | Selection::Held { taf: key, .. } => {
+                    match tafs.iter().find(|t| t.key == *key) {
+                        Some(t) => crate::taf::page(w.clone(), t, entries.clone()),
+                        None => screen_page(&title).upcast::<gtk::Widget>(),
+                    }
+                }
                 Selection::Account => {
                     let open = open.clone();
                     crate::account::page(

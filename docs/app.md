@@ -9,7 +9,8 @@ another language or a `{hole}`.
 - **Signed out:** the welcome ([sign-in](sign-in.md)), and Sign in with KIFF over it.
 - **Signed in, or in the sample:** one sidebar for the whole app, as on the iPad
   ([the sidebar](home.md)), and the chosen screen beside it: the Overview first, and
-  [Needs you](needs-you.md), and [Account](account.md) from the sidebar's foot. Screens not
+  [Needs you](needs-you.md), [the Record](record.md), [a taf's page](taf.md), and
+  [Account](account.md) from the sidebar's foot. Screens not
   ported yet show their title only, in the [port checklist](port-checklist.md)'s order.
 
 The colours are the iPad's `Theme.swift`, light and dark, and follow the desktop's appearance
@@ -33,10 +34,11 @@ the words at the pin.
 | `--signed-in` | with `--sample`: the account's items too, as the iPad's reference set draws them |
 | `--home contract.json` | the account's screens from a contract file's Home (`shared/contracts/home.json`), in place of tafs cloud |
 | `--view-only` | a signed-in session KIFF says is view-only, with no tafs read |
-| `--page …` | `welcome`, `sign-in`, or a screen beside the sidebar: `needs-you`, `record`, `calendar`, `usage`, `connect-apps`, `account` |
+| `--page …` | `welcome`, `sign-in`, or a screen beside the sidebar: `needs-you`, `record`, `calendar`, `usage`, `connect-apps`, `account`, `taf` (the sample's Refunds), or `taf:<id>` (a taf by its key) |
 | `--screenshot out.png` | save the window (1280×800, at 2×) as a PNG and quit. It never reads or writes the keyring, and its sign-in shows a code without reaching KIFF |
 
 CI builds the app and saves the welcome, the sign-in, the Overview beside the sidebar (with the
-account's items), the Overview from the `home.json` contract, Needs you and Account over the sample, the sidebar over the plain sample,
-and the view-only notice in en, fr and pt, light and dark: 48 pictures, as the `screenshots`
+account's items), the Overview from the `home.json` contract, Needs you, the Record, Refunds' page and Account over the sample, a tafs cloud taf's page from
+the contracts, the sidebar over the plain sample,
+and the view-only notice in en, fr and pt, light and dark: 66 pictures, as the `screenshots`
 artifact of the run. The job fails if any is missing.

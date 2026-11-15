@@ -3,6 +3,7 @@
 //! No UI: the GTK app places what this says.
 
 pub mod account;
+pub mod activity;
 pub mod card;
 pub mod held;
 pub mod home;
@@ -11,9 +12,11 @@ pub mod language;
 pub mod money;
 pub mod needs_you;
 pub mod overview;
+pub mod record;
 pub mod sample;
 pub mod session;
 pub mod sidebar;
 pub mod signin;
+pub mod taf_page;
 pub mod theme;
 pub mod words;

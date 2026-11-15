@@ -13,5 +13,6 @@
     <file alias="icons/scalable/actions/tafs-sparkles-symbolic.svg">icons/tafs-sparkles-symbolic.svg</file>
     <file alias="icons/scalable/actions/tafs-copy-symbolic.svg">icons/tafs-copy-symbolic.svg</file>
     <file alias="icons/scalable/actions/tafs-checkmark-symbolic.svg">icons/tafs-checkmark-symbolic.svg</file>
+    <file alias="icons/scalable/actions/tafs-creditcard-symbolic.svg">icons/tafs-creditcard-symbolic.svg</file>
   </gresource>
 </gresources>

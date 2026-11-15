@@ -38,6 +38,7 @@ pub fn held(w: &WordBook, held_at: DateTime<Local>) -> Result<Vec<HeldCall>, Wor
         reason,
         expires_at: lapses,
         kiff_id: None,
+        proposal_id: None,
         approvable_once: true,
         accounting_version: None,
         next_steps: vec![next],
@@ -196,6 +197,118 @@ pub fn overview(w: &WordBook, now: DateTime<Local>) -> Result<Vec<OverviewTaf>, 
             cloud: None,
             used_by: String::new(),
         });
+    }
+    Ok(out)
+}
+
+/// The sample's Record, newest first, as `record.png`: each taf's start (its Card issued by
+/// You), then the scripts' first two rounds (`AppModel.propose`): what its Card allowed, done
+/// within it (`amountLine`), and what it held.
+pub fn record(w: &WordBook, now: DateTime<Local>) -> Result<Vec<crate::record::Entry>, WordsError> {
+    use crate::record::{Entry, Kind};
+    let at = now.with_timezone(&chrono::Utc);
+    let lang = w.language();
+    let within = |amount: Option<i64>| -> Result<String, WordsError> {
+        let tail = w.line("card.within_card")?;
+        Ok(match amount {
+            Some(euros_) => format!("{}, {tail}", euros(euros_, lang)),
+            None => {
+                let mut c = tail.chars();
+                c.next()
+                    .map(|f| f.to_uppercase().collect::<String>() + c.as_str())
+                    .unwrap_or_default()
+            }
+        })
+    };
+    let entry = |taf: &str, kind: Kind, title: String, detail: String| Entry {
+        id: format!("sample-{taf}-{title}"),
+        taf: taf.into(),
+        kind,
+        title,
+        detail,
+        at,
+        owner_approved: false,
+        amount: None,
+        read_only: false,
+        on_arg: None,
+        on_value: None,
+        answer: None,
+        receipt: None,
+        proposal: None,
+    };
+    let held = held(w, now)?;
+    let l = |k: &str| w.line(k);
+    let mut out = vec![
+        entry(
+            "chargebacks",
+            Kind::Done,
+            l("sample.chargebacks.accept_3342")?,
+            within(Some(35))?,
+        ),
+        entry(
+            "deploys",
+            Kind::Held,
+            w.get("record.held", &[("summary", &held[0].summary)])?,
+            held[0].reason.clone(),
+        ),
+        entry(
+            "access",
+            Kind::Done,
+            l("sample.access.deactivate_tom")?,
+            within(None)?,
+        ),
+        entry(
+            "bill_pay",
+            Kind::Held,
+            w.get("record.held", &[("summary", &held[1].summary)])?,
+            held[1].reason.clone(),
+        ),
+        entry(
+            "refunds",
+            Kind::Done,
+            l("sample.refunds.credit_2290")?,
+            within(Some(25))?,
+        ),
+        entry(
+            "chargebacks",
+            Kind::Done,
+            l("sample.chargebacks.answer_3318")?,
+            within(Some(120))?,
+        ),
+        entry(
+            "deploys",
+            Kind::Done,
+            l("sample.deploys.deploy_api")?,
+            within(None)?,
+        ),
+        entry(
+            "access",
+            Kind::Done,
+            l("sample.access.sales_role")?,
+            within(None)?,
+        ),
+        entry(
+            "bill_pay",
+            Kind::Done,
+            l("sample.bill_pay.pay_northwind")?,
+            within(Some(1_240))?,
+        ),
+        entry(
+            "refunds",
+            Kind::Done,
+            l("sample.refunds.refund_4471")?,
+            within(Some(40))?,
+        ),
+    ];
+    let you = l("common.you")?;
+    for key in ["refunds", "bill_pay", "access", "deploys", "chargebacks"] {
+        let name = l(&format!("sample.{key}.name"))?;
+        out.push(entry(
+            key,
+            Kind::Started,
+            w.get("record.started", &[("taf", &name)])?,
+            w.get("record.card_issued_by", &[("owner", &you)])?,
+        ));
     }
     Ok(out)
 }

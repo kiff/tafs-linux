@@ -73,6 +73,56 @@ const LINES: &[(&str, &[&str])] = &[
     ("needs_you.over_total", &[]),
     ("needs_you.refuse", &[]),
     ("common.details", &[]),
+    ("record.title", &[]),
+    ("record.lead", &[]),
+    ("record.all_tafs", &[]),
+    ("record.filter.all", &[]),
+    ("record.filter.money_moved", &[]),
+    ("record.filter.stopped", &[]),
+    ("record.filter.waiting", &[]),
+    ("record.hide", &[]),
+    ("record.show", &[]),
+    ("record.nothing_here", &[]),
+    ("common.nothing_yet", &[]),
+    ("record.held", &["summary"]),
+    ("record.started", &["taf"]),
+    ("record.card_issued_by", &["owner"]),
+    ("card.within_card", &[]),
+    ("common.you", &[]),
+    ("calendar.today_date", &["date"]),
+    ("calendar.yesterday_date", &["date"]),
+    ("record.approved_by_you", &[]),
+    ("record.allowed_by_card", &[]),
+    ("record.approved_then_done", &[]),
+    ("record.done_within_card", &[]),
+    ("record.tool_refused_money", &["who"]),
+    ("record.tool_refused_amount", &["who"]),
+    ("record.tool_refused_counts_why", &["who", "why"]),
+    ("record.not_sent_nothing_reached_why", &["allowed", "why"]),
+    ("record.sent_waiting", &["allowed"]),
+    ("record.answer_lost", &["allowed"]),
+    ("record.not_recorded", &["allowed"]),
+    ("record.the_tool", &[]),
+    ("record.waiting_for_you", &[]),
+    ("record.not_sent_because", &["reason"]),
+    ("record.not_sent", &[]),
+    ("record.connection_refused_before_sending", &[]),
+    ("record.no_longer_waiting", &[]),
+    ("record.nothing_sent", &[]),
+    ("record.on.it", &[]),
+    ("taf.section.chat", &[]),
+    ("taf.section.activity", &[]),
+    ("taf.section.card", &[]),
+    ("taf.section.setup", &[]),
+    ("taf.state.working", &[]),
+    ("taf.state.waiting", &[]),
+    ("taf.state.ready", &[]),
+    ("taf.state.paused", &[]),
+    ("taf.state.stopped", &[]),
+    ("taf.state.halted", &[]),
+    ("taf.halt.part_held", &[]),
+    ("record.filter.held", &[]),
+    ("record.filter.refused", &[]),
     ("settings.your_account", &[]),
     ("settings.mode", &[]),
     ("settings.mode_kiff", &[]),
@@ -502,4 +552,209 @@ fn account_is_the_ipads_in_its_order() {
         .find(|s| s.rows.iter().any(|r| matches!(r, Row::Link(..))))
         .unwrap();
     assert!(matches!(&legal.rows[0], Row::Link(t, _) if t != &fr.line("settings.terms").unwrap()));
+}
+
+#[test]
+fn the_sample_record_is_the_reference_sets() {
+    use tafs_core::record::{days, Filter, Kind};
+    let w = book("en");
+    let now = Local.with_ymd_and_hms(2026, 11, 15, 2, 55, 0).unwrap();
+    let record = sample::record(&w, now).unwrap();
+    let d = days(&w, &record, Filter::All, None, now).unwrap();
+    assert_eq!(d.len(), 1);
+    assert_eq!(d[0].title, "Today · Nov 15");
+    let names = |key: &str| w.line(&format!("sample.{key}.name")).unwrap();
+    let lines: Vec<(String, String)> = d[0]
+        .lines
+        .iter()
+        .map(|e| {
+            (
+                format!("{} · {}", names(&e.taf), e.title_with_amount(&w).unwrap()),
+                e.row_detail(&w, true).unwrap(),
+            )
+        })
+        .collect();
+    let expect = [
+        (
+            "Chargebacks · Accept dispute on #3342",
+            "€35, within the Card",
+        ),
+        (
+            "Deploys · Held: Run migration 0042_orders_index",
+            "Schema migrations: always asks you",
+        ),
+        ("Access · Deactivate Tom's accounts", "Within the Card"),
+        ("Bill pay · Held: Pay Atlas Freight", "Over €5,000 each"),
+        ("Refunds · Credit on account #2290", "€25, within the Card"),
+        (
+            "Chargebacks · Answer dispute on #3318",
+            "€120, within the Card",
+        ),
+        ("Deploys · Deploy api v2.14.1", "Within the Card"),
+        ("Access · Give Ana the Sales role", "Within the Card"),
+        (
+            "Bill pay · Pay Northwind Packaging",
+            "€1,240, within the Card",
+        ),
+        ("Refunds · Refund order #4471", "€40, within the Card"),
+        ("Refunds · Refunds started", "Card issued by You"),
+        ("Bill pay · Bill pay started", "Card issued by You"),
+        ("Access · Access started", "Card issued by You"),
+        ("Deploys · Deploys started", "Card issued by You"),
+        ("Chargebacks · Chargebacks started", "Card issued by You"),
+    ];
+    let got: Vec<(&str, &str)> = lines
+        .iter()
+        .map(|(a, b)| (a.as_str(), b.as_str()))
+        .collect();
+    assert_eq!(got, expect);
+    // Waiting keeps the held ones; Stopped none; Money moved none (the sample's lines carry no KIFF amount).
+    assert_eq!(
+        days(&w, &record, Filter::Waiting, None, now).unwrap()[0]
+            .lines
+            .len(),
+        2
+    );
+    assert!(days(&w, &record, Filter::Stopped, None, now)
+        .unwrap()
+        .is_empty());
+    assert!(days(&w, &record, Filter::MoneyMoved, None, now)
+        .unwrap()
+        .is_empty());
+    assert_eq!(
+        days(&w, &record, Filter::All, Some("refunds"), now).unwrap()[0]
+            .lines
+            .len(),
+        3
+    );
+    assert!(record.iter().filter(|e| e.kind == Kind::Started).count() == 5);
+}
+
+#[test]
+fn kiffs_activity_reads_as_the_ipad_shows_it() {
+    use tafs_core::record::{read_activity, record, spent, Kind};
+    let w = book("en");
+    let body = br#"{"calls":[
+      {"proposal_id":"p1","action_name":"stripe_create_refund","title":"Refund a payment","actor_id":"rae","outcome":"allowed","created_at":"2026-11-15T10:00:00Z","held":false,
+       "tool_outcome":{"status":"done"},"amount":{"value":"150.00","unit":"EUR"}},
+      {"proposal_id":"p2","action_name":"refund","actor_id":"rae","outcome":"allowed","created_at":"2026-11-15T10:01:00Z","held":true,
+       "tool_outcome":{"status":"refused_by_tool","message":"card_declined"},"amount":{"value":"20","unit":"EUR"}},
+      {"proposal_id":"p3","action_name":"refund","actor_id":"rae","outcome":"owner_required","created_at":"2026-11-15T10:02:00Z","held":true},
+      {"proposal_id":"p4","action_name":"refund","actor_id":"rae","outcome":"denied","created_at":"2026-11-15T10:03:00Z","held":false,"reason":"over the limit"},
+      {"proposal_id":"p5","action_name":"list_charges","actor_id":"someone-else","outcome":"allowed","created_at":"2026-11-15T10:04:00Z","held":false,"tool_outcome":{"status":"done"}}
+    ]}"#;
+    let calls = read_activity(body).expect("KIFF's activity reads");
+    let entries = record(&w, &calls, &|actor| {
+        (actor == "rae").then(|| "taf-rae".to_string())
+    })
+    .unwrap();
+    assert_eq!(
+        entries.len(),
+        4,
+        "a call by an agent the app doesn't show isn't listed"
+    );
+    assert_eq!(
+        (entries[0].kind, entries[0].detail.as_str()),
+        (Kind::Done, "Done, within its Card")
+    );
+    assert_eq!(
+        entries[0].title_with_amount(&w).unwrap(),
+        "Refund a payment · €150"
+    );
+    assert_eq!(entries[1].kind, Kind::NotDone);
+    assert_eq!(
+        entries[1].detail,
+        "The app refused it. No money moved, but it still counts against today's total."
+    );
+    assert_eq!(
+        (entries[2].kind, entries[2].detail.as_str()),
+        (Kind::Held, "Waiting for you")
+    );
+    assert_eq!(
+        (entries[3].kind, entries[3].detail.as_str()),
+        (Kind::Refused, "Not sent · over the limit")
+    );
+    let all: Vec<&_> = entries.iter().collect();
+    assert_eq!(spent(&w, &all).unwrap().as_deref(), Some("€150 spent"));
+    // A held call KIFF no longer holds.
+    assert_eq!(
+        entries[2].row_detail(&w, false).unwrap(),
+        "no longer waiting · nothing sent"
+    );
+}
+
+#[test]
+fn the_sample_refunds_page_is_the_reference_sets() {
+    use tafs_core::taf_page::{activity, card_bar, ActivityFilter, CardMeta, TafState};
+    let w = book("en");
+    let now = Local.with_ymd_and_hms(2026, 11, 15, 2, 56, 0).unwrap();
+    let record = sample::record(&w, now).unwrap();
+    let days = activity(&w, &record, "refunds", ActivityFilter::All, now).unwrap();
+    assert_eq!(days.len(), 1);
+    assert_eq!(days[0].title, "Today · Nov 15");
+    let lines: Vec<(String, String)> = days[0]
+        .lines
+        .iter()
+        .map(|e| {
+            (
+                e.title_with_amount(&w).unwrap(),
+                e.row_detail(&w, true).unwrap(),
+            )
+        })
+        .collect();
+    let got: Vec<(&str, &str)> = lines
+        .iter()
+        .map(|(a, b)| (a.as_str(), b.as_str()))
+        .collect();
+    assert_eq!(
+        got,
+        [
+            ("Credit on account #2290", "€25, within the Card"),
+            ("Refund order #4471", "€40, within the Card"),
+            ("Refunds started", "Card issued by You"),
+        ]
+    );
+    let titles: Vec<String> = ActivityFilter::ALL
+        .iter()
+        .map(|f| f.title(&w).unwrap())
+        .collect();
+    assert_eq!(titles, ["All", "Done", "Held", "Refused"]);
+    assert_eq!(
+        activity(&w, &record, "refunds", ActivityFilter::Done, now).unwrap()[0]
+            .lines
+            .len(),
+        2
+    );
+    assert!(activity(&w, &record, "refunds", ActivityFilter::Held, now)
+        .unwrap()
+        .is_empty());
+    assert_eq!(
+        activity(&w, &record, "deploys", ActivityFilter::Held, now).unwrap()[0]
+            .lines
+            .len(),
+        1
+    );
+    let card = sample::card(&w, "refunds").unwrap();
+    let meta = CardMeta {
+        title: "Refunds",
+        environment: "",
+        live: true,
+        active: true,
+    };
+    let bar = card_bar(&w, &card, &meta, 1, false).unwrap();
+    assert_eq!(
+        (bar.line.as_str(), bar.details.as_str()),
+        ("€1,960 left today of €2,000", "Refunds")
+    );
+    let test_card = CardMeta {
+        title: "Refunds",
+        environment: "test",
+        live: false,
+        active: true,
+    };
+    assert_eq!(
+        card_bar(&w, &card, &test_card, 3, false).unwrap().details,
+        "Refunds · Test · 3 Cards"
+    );
+    assert_eq!(TafState::Working.label(&w).unwrap(), "Working");
 }
