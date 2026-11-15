@@ -217,6 +217,8 @@ mod tests {
         assert!(!manages(a.get("a2")));
         assert!(!manages(a.get("a3")));
         assert!(read_access(br#"{"agents":{"a1":{"use":true}}}"#).is_none());
+        // `manage` alone missing fails the read too: it's required, never false by default.
+        assert!(read_access(br#"{"agents":{"a1":{"use":true,"oversee":false}}}"#).is_none());
     }
 
     #[test]
@@ -236,6 +238,15 @@ mod tests {
             })
         );
         assert!(read_runs(br#"{"runs":[{"session":"s"}]}"#).is_none());
+        // With no run that has a session, the first run's error stands, not the last's.
+        let two = read_runs(
+            br#"{"runs":[{"at":"2026-10-16T12:00:00Z","error":"first"},{"at":"2026-10-16T11:00:00Z","error":"last"}]}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            latest_session(&two).unwrap_err().error.as_deref(),
+            Some("first")
+        );
         assert_eq!(report_path("t 1", "s/2"), "/v1/tafs/t%201/runs/s%2F2");
     }
 }
