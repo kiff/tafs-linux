@@ -111,6 +111,8 @@ fn selection_of(page: Option<&str>) -> Selection {
         Some("account") => Selection::Account,
         // The sample's Refunds, as the reference set's taf.png opens it.
         Some("taf") => Selection::Taf("refunds".into()),
+        // With `--home`, the contract's first taf.
+        Some(other) if other.starts_with("taf:") => Selection::Taf(other["taf:".len()..].into()),
         _ => Selection::Overview,
     }
 }
@@ -171,6 +173,7 @@ fn activate(app: &adw::Application, o: &Options) {
         sign_out_error: RefCell::new(None),
         cloud: RefCell::new(None),
         problem: RefCell::new(None),
+        home_file: o.home.as_ref().map(std::path::PathBuf::from),
     });
 
     // What opens: the sample when asked, else the kept session, else the welcome. A screenshot
@@ -240,6 +243,8 @@ struct App {
     cloud: RefCell<Option<Rc<Cloud>>>,
     /// The welcome's line for why it's there, while it's open.
     problem: RefCell<Option<gtk::Label>>,
+    /// `--home`'s contract file, for the screenshots' tafs cloud reads.
+    home_file: Option<std::path::PathBuf>,
 }
 
 /// What reading the account came to.
@@ -393,6 +398,18 @@ impl App {
                 .map(|l| l.cards)
                 .unwrap_or_default()
         };
+        // Where a tafs cloud taf's Activity is read: tafs cloud as the session, else the contract
+        // beside `--home`'s.
+        let source = match (self.kept.borrow().as_ref(), &self.home_file) {
+            (Some(kept), _) => taf::ActivitySource::Cloud {
+                token: kept.token.clone(),
+                languages: self.languages.clone(),
+            },
+            (None, Some(home)) => {
+                taf::ActivitySource::File(home.with_file_name("taf-activity.json"))
+            }
+            _ => taf::ActivitySource::None,
+        };
         match (mode, cloud) {
             (Mode::Sample, _) => model
                 .tafs
@@ -419,6 +436,8 @@ impl App {
                         revoked: false,
                         held: held_of(&t.key),
                         sample: true,
+                        cloud_id: None,
+                        source: taf::ActivitySource::None,
                     }
                 })
                 .collect(),
@@ -430,6 +449,7 @@ impl App {
                 .map(|t| taf::TafPage {
                     held: held_of(&t.key),
                     initial: tafs_core::sidebar::initial(&t.name),
+                    cloud_id: t.cloud.then(|| t.key.clone()),
                     key: t.key,
                     name: t.name,
                     color: t.color_index,
@@ -443,6 +463,7 @@ impl App {
                     card_count: t.card_count,
                     revoked: t.revoked,
                     sample: false,
+                    source: source.clone(),
                 })
                 .collect(),
             _ => vec![],

@@ -72,6 +72,9 @@ pub struct ActivityCall {
     pub outcome: String,
     #[serde(deserialize_with = "time")]
     pub created_at: DateTime<Utc>,
+    /// Required by the iPad's decoder, but tafs cloud's Activity entries (`taf-activity.json`)
+    /// send none: absent reads as not held, so that answer reads.
+    #[serde(default)]
     pub held: bool,
     #[serde(default)]
     pub tool_outcome: Option<ToolOutcome>,

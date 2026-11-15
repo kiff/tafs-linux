@@ -107,6 +107,15 @@ pub fn activity(token: &str, languages: &[&str]) -> Result<Answer, KiffError> {
     )
 }
 
+/// A taf's Activity page on tafs cloud as the session (`activityPage`), by its path.
+pub fn taf_activity(token: &str, languages: &[&str], path: &str) -> Result<Answer, KiffError> {
+    get(
+        &format!("{}{path}", tafs_core::home::TAFS_CLOUD),
+        token,
+        languages,
+    )
+}
+
 /// A GET as the session, to KIFF's API or tafs cloud only, with no redirect followed.
 fn get(url: &str, token: &str, languages: &[&str]) -> Result<Answer, KiffError> {
     if !may_send_to(url) {

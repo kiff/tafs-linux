@@ -37,6 +37,22 @@ pub struct TafPage {
     pub held: Vec<CardLines>,
     /// The sample draws its Activity from the Record; a tafs cloud taf's is its own read.
     pub sample: bool,
+    /// tafs cloud's id for it, and where its Activity is read from.
+    pub cloud_id: Option<String>,
+    pub source: ActivitySource,
+}
+
+/// Where a tafs cloud taf's Activity pages come from.
+#[derive(Clone)]
+pub enum ActivitySource {
+    /// tafs cloud, as the session.
+    Cloud {
+        token: String,
+        languages: Vec<&'static str>,
+    },
+    /// A contract file (`--home`'s screenshots): `taf-activity.json` beside it.
+    File(std::path::PathBuf),
+    None,
 }
 
 pub fn page(w: Rc<WordBook>, t: &TafPage, entries: Rc<Vec<Entry>>) -> gtk::Widget {
@@ -113,6 +129,11 @@ pub fn page(w: Rc<WordBook>, t: &TafPage, entries: Rc<Vec<Entry>>) -> gtk::Widge
         ));
         for card in &t.held {
             body.append(&crate::needs_you::held_card(&w, card));
+        }
+    }
+    if !t.sample {
+        if let Some(id) = &t.cloud_id {
+            body.append(&cloud_activity(w.clone(), id.clone(), t.source.clone()));
         }
     }
     if t.sample {
@@ -278,4 +299,233 @@ fn line(w: &WordBook, e: &Entry) -> gtk::Box {
         "{title}, {detail}"
     ))]);
     r
+}
+
+/// `TafActivityList`'s list: tafs cloud's filters, its day groups, each call's line, and its foot,
+/// a page at a time.
+fn cloud_activity(w: Rc<WordBook>, id: String, source: ActivitySource) -> gtk::Box {
+    use tafs_core::activity::{foot, path, ActivityPage, Foot};
+    struct State {
+        filter: String,
+        pages: Vec<ActivityPage>,
+        error: Option<String>,
+        loading: bool,
+    }
+    let root = gtk::Box::new(gtk::Orientation::Vertical, 14);
+    let state = Rc::new(RefCell::new(State {
+        filter: "all".into(),
+        pages: vec![],
+        error: None,
+        loading: false,
+    }));
+    let draw: Rc<RefCell<Option<Redraw>>> = Rc::new(RefCell::new(None));
+    let redraw: Redraw = {
+        let draw = draw.clone();
+        Rc::new(move || {
+            let f = draw.borrow().clone();
+            if let Some(f) = f {
+                f();
+            }
+        })
+    };
+    // Reads a page: the first again (a new filter, Try again), or the next.
+    let load: Rc<dyn Fn(bool)> = {
+        let (w, state, redraw, id, source) = (
+            w.clone(),
+            state.clone(),
+            redraw.clone(),
+            id.clone(),
+            source.clone(),
+        );
+        Rc::new(move |more: bool| {
+            let (filter, cursor) = {
+                let mut s = state.borrow_mut();
+                if s.loading {
+                    return;
+                }
+                s.loading = true;
+                s.error = None;
+                (
+                    s.filter.clone(),
+                    if more {
+                        s.pages.last().and_then(|p| p.next_cursor.clone())
+                    } else {
+                        None
+                    },
+                )
+            };
+            let p = path(&id, &filter, cursor.as_deref());
+            let source = source.clone();
+            let words: WordBook = (*w).clone();
+            let (state, redraw) = (state.clone(), redraw.clone());
+            gtk::glib::spawn_future_local(async move {
+                let read = gtk::gio::spawn_blocking(move || -> Result<ActivityPage, String> {
+                    let body = match &source {
+                        ActivitySource::Cloud { token, languages } => {
+                            let a = crate::kiff::taf_activity(token, languages, &p)
+                                .map_err(|e| e.words(&words).unwrap_or_default())?;
+                            if a.status != 200 {
+                                return Err(tafs_core::signin::refusal(&a, Some(&words))
+                                    .words(&words)
+                                    .unwrap_or_default());
+                            }
+                            a.body
+                        }
+                        ActivitySource::File(file) => {
+                            let v: serde_json::Value = serde_json::from_slice(
+                                &std::fs::read(file).map_err(|e| e.to_string())?,
+                            )
+                            .map_err(|e| e.to_string())?;
+                            serde_json::to_vec(&v["answer"]).map_err(|e| e.to_string())?
+                        }
+                        ActivitySource::None => return Err(String::new()),
+                    };
+                    ActivityPage::read(&body).ok_or_else(|| {
+                        tafs_core::signin::plain_words(&words, 200).unwrap_or_default()
+                    })
+                })
+                .await
+                .unwrap_or_else(|_| Err(String::new()));
+                {
+                    let mut s = state.borrow_mut();
+                    s.loading = false;
+                    match read {
+                        Ok(page) => {
+                            if !more {
+                                s.pages.clear();
+                            }
+                            s.pages.push(page);
+                        }
+                        Err(e) => s.error = Some(e),
+                    }
+                }
+                redraw();
+            });
+        })
+    };
+    *draw.borrow_mut() = Some(Rc::new({
+        let (w, root, state, redraw, load) = (
+            w.clone(),
+            root.clone(),
+            state.clone(),
+            redraw.clone(),
+            load.clone(),
+        );
+        move || {
+            while let Some(c) = root.first_child() {
+                root.remove(&c);
+            }
+            let s = state.borrow();
+            // tafs cloud's filters, from its first page.
+            let filters = gtk::Box::new(gtk::Orientation::Horizontal, 6);
+            for choice in s
+                .pages
+                .first()
+                .map(|p| p.filters.clone())
+                .unwrap_or_default()
+            {
+                let b = gtk::Button::with_label(&choice.title);
+                b.add_css_class("tafs-filter-bordered");
+                if choice.id == s.filter {
+                    b.add_css_class("selected");
+                }
+                let (state, load, redraw) = (state.clone(), load.clone(), redraw.clone());
+                b.connect_clicked(move |_| {
+                    state.borrow_mut().filter = choice.id.clone();
+                    redraw();
+                    load(false);
+                });
+                filters.append(&b);
+            }
+            root.append(&filters);
+            for page in &s.pages {
+                for group in &page.groups {
+                    if !group.title.is_empty() {
+                        root.append(&text(&group.title, 12, 600, &["tafs-dim"]));
+                    }
+                    for e in &group.entries {
+                        root.append(&source_row(e));
+                    }
+                }
+            }
+            if let Some(notice) = s
+                .pages
+                .last()
+                .and_then(|p| p.card_unit_exceptions_notice.clone())
+            {
+                root.append(&text(&notice, 13, 400, &["tafs-dim"]));
+            }
+            match foot(&s.pages, s.error.as_deref()) {
+                Foot::Error(e) => {
+                    root.append(&text(&e, 15, 400, &["tafs-no"]));
+                    let b =
+                        crate::widgets::outline(&w.line("common.try_again").unwrap_or_default());
+                    let (load, more) = (load.clone(), !s.pages.is_empty());
+                    b.connect_clicked(move |_| load(more));
+                    root.append(&b);
+                }
+                Foot::More(_) => {
+                    // The next page loads once the spinner comes into view.
+                    let spinner = gtk::Spinner::new();
+                    spinner.start();
+                    let load = load.clone();
+                    spinner.connect_map(move |_| load(true));
+                    root.append(&spinner);
+                }
+                _ if s.loading => {
+                    let spinner = gtk::Spinner::new();
+                    spinner.start();
+                    spinner.set_halign(gtk::Align::Start);
+                    root.append(&spinner);
+                }
+                Foot::End(words) => root.append(&text(&words, 15, 400, &["tafs-dim"])),
+                Foot::NothingHere => root.append(&text(
+                    &w.line("record.nothing_here").unwrap_or_default(),
+                    15,
+                    400,
+                    &["tafs-dim"],
+                )),
+                Foot::Nothing => {}
+            }
+        }
+    }));
+    redraw();
+    load(false);
+    root
+}
+
+/// `SourceActivityRow`: its title and detail, its time and amount at its end, and its next step.
+fn source_row(e: &tafs_core::activity::ActivityEntry) -> gtk::Box {
+    let v = gtk::Box::new(gtk::Orientation::Vertical, 6);
+    let row = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+    row.set_margin_top(5);
+    row.set_margin_bottom(5);
+    let left = gtk::Box::new(gtk::Orientation::Vertical, 4);
+    left.set_hexpand(true);
+    left.append(&text(&e.title, 15, 600, &["tafs-ink"]));
+    left.append(&text(&e.detail, 13, 400, &["tafs-soft"]));
+    row.append(&left);
+    let right = gtk::Box::new(gtk::Orientation::Vertical, 2);
+    right.set_valign(gtk::Align::Start);
+    let time = text(&e.time, 12, 400, &["tafs-dim"]);
+    time.set_wrap(false);
+    time.set_xalign(1.0);
+    right.append(&time);
+    if let Some(amount) = &e.amount_text {
+        let a = text(amount, 13, 600, &["tafs-ink"]);
+        a.set_wrap(false);
+        a.set_xalign(1.0);
+        right.append(&a);
+    }
+    row.append(&right);
+    v.append(&row);
+    // Its next step, in tafs cloud's words: a line until its buttons come with Coach and Connect apps.
+    if let Some(next) = &e.next {
+        v.append(&text(&next.words, 13, 400, &["tafs-soft"]));
+    }
+    v.update_property(&[gtk::accessible::Property::Label(&format!(
+        "{}, {}, {}",
+        e.title, e.detail, e.time
+    ))]);
+    v
 }

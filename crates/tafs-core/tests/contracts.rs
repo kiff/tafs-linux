@@ -228,3 +228,35 @@ fn a_scale_past_eighteen_is_unreadable_on_home_and_held_calls() {
         assert_eq!(call.reason, "over");
     }
 }
+
+#[test]
+fn a_tafs_cloud_tafs_activity_reads_as_sent() {
+    use tafs_core::activity::{foot, ActivityPage, Foot};
+    let page = ActivityPage::read(&contract("taf-activity.json")).expect("taf-activity.json reads");
+    assert_eq!(
+        page.filters
+            .iter()
+            .map(|f| f.title.as_str())
+            .collect::<Vec<_>>(),
+        ["All", "Done", "Held", "Refused"]
+    );
+    assert_eq!(page.groups[0].title, "Today");
+    let e = &page.groups[0].entries[0];
+    assert_eq!(
+        (e.title.as_str(), e.detail.as_str(), e.time.as_str()),
+        ("Read a case", "Done, within its Card", "12:00")
+    );
+    assert!(!e.call.held, "absent, read as not held");
+    assert_eq!(
+        foot(std::slice::from_ref(&page), None),
+        Foot::End("Nothing older in this view".into())
+    );
+    assert_eq!(
+        foot(&[], Some("It didn't reach the server.")),
+        Foot::Error("It didn't reach the server.".into())
+    );
+    // A field tafs cloud's page requires and an answer lacks fails the read.
+    let mut answer: Value = serde_json::from_slice(&contract("taf-activity.json")).unwrap();
+    answer.as_object_mut().unwrap().remove("revision");
+    assert!(ActivityPage::read(&serde_json::to_vec(&answer).unwrap()).is_none());
+}

@@ -159,6 +159,10 @@ button.tafs-reads { background: none; box-shadow: none; border: none; color: @ta
 .tafs-card-mini.faded { opacity: 0.4; }
 .tafs-segmented button.segment:disabled { opacity: 0.4; }
 
+/* tafs cloud's Activity filters: the system's bordered buttons, the chosen one in the amber as text. */
+button.tafs-filter-bordered { background-color: alpha(@tafs_soft, 0.12); background-image: none; color: @tafs_soft; border: none; border-radius: 8px; padding: 5px 12px; min-height: 0; font-size: 15px; font-weight: 400; box-shadow: none; }
+button.tafs-filter-bordered.selected { background-color: alpha(@tafs_amber_text, 0.15); color: @tafs_amber_text; }
+
 .tafs-code { font-family: monospace; font-size: 34px; font-weight: 600; color: @tafs_ink; }
 .tafs-mono { font-family: monospace; }
 .tafs-notice { background-color: @tafs_panel; border-bottom: 1px solid @tafs_line; padding: 12px 24px; }
