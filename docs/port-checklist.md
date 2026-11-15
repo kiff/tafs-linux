@@ -83,6 +83,9 @@ ports a file updates its line here.
 | Design/Components.swift | `widgets.rs`: `TafAvatar`, `Eyebrow`, `PrimaryLook`, `OutlineLook`, `Panel`, `Legal`, `shortTime`. Not yet: `StateChip`, `Meter`, `DoorRim`, `UnreachableLine` and the rest |
 | KIFF/KIFFClient.swift | `tafs-core/signin.rs`, `kiff.rs`: `DeviceStart`, `DeviceToken`, `startDeviceSignIn`, `pollDeviceToken`, `signOut`, `fingerprint`, the refusal's reading, `acceptLanguage`, `screenLanguages` |
 | KIFF/PlainError.swift | `signin::plain_words` |
+| KIFF/TafsCloud.swift | `Home`, `HomeTaf`, `NeedsYou`, `home()` (`tafs-core/home.rs`, `kiff::home`) |
+| KIFF/TafsCloud+Work.swift | `Health`, `TafWork.Summary`, read leniently (`home.rs`) |
+| KIFF/KIFFMapping.swift | `taf`, `money`, `window` (`home.rs`) |
 | App/AppModel.swift | `startSignIn`, `finishSignIn`, `transient`, `relevantNow`, `needsYouCount`, `accountLabel`, `coachAvailable`, `propose`'s held call (the sample's) |
 | Services/ThisDevice.swift | `signin::PLATFORM`, `KIFF_KIND` |
 | Services/TafTemplates.swift | `tafs-core/sample.rs`: the five sample tafs and their held calls |

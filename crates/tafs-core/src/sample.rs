@@ -5,8 +5,9 @@
 
 use chrono::{DateTime, Duration, Local};
 
-use crate::card::{CallsTotal, Card, EuroTotal, Window};
+use crate::card::{CallsTotal, Card, MoneyTotal, Window};
 use crate::money::euros;
+use crate::money::Money;
 use crate::overview::OverviewTaf;
 use crate::sidebar::{initial, relevant_now, HeldCall, Mode, SidebarModel, TafRow};
 use crate::words::{WordBook, WordsError};
@@ -79,6 +80,7 @@ pub fn sidebar(
             color_index: color,
             now: now_line,
             badge: None,
+            tone: Default::default(),
         };
         tafs.push((
             row,
@@ -115,29 +117,29 @@ pub fn card(w: &WordBook, key: &str) -> Result<Card, WordsError> {
         },
         // Bill pay: Northwind's €1,240 of €25,000 this week.
         "bill_pay" => Card {
-            total: Some(EuroTotal {
-                limit: 25_000,
-                used: Some(1_240),
-                window: week()?,
-            }),
+            total: Some(MoneyTotal::new(
+                Money::eur_whole(25_000),
+                Some(Money::eur_whole(1_240)),
+                week()?,
+            )),
             calls: None,
         },
         // Refunds: #4471's €40 of €2,000 today.
         "refunds" => Card {
-            total: Some(EuroTotal {
-                limit: 2_000,
-                used: Some(40),
-                window: day()?,
-            }),
+            total: Some(MoneyTotal::new(
+                Money::eur_whole(2_000),
+                Some(Money::eur_whole(40)),
+                day()?,
+            )),
             calls: None,
         },
         // Chargebacks: #3342's €35 accepted, of €500 this week.
         "chargebacks" => Card {
-            total: Some(EuroTotal {
-                limit: 500,
-                used: Some(35),
-                window: week()?,
-            }),
+            total: Some(MoneyTotal::new(
+                Money::eur_whole(500),
+                Some(Money::eur_whole(35)),
+                week()?,
+            )),
             calls: None,
         },
         // Access: Ana's role, 1 of 40 today.

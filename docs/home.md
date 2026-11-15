@@ -63,6 +63,37 @@ page is `crates/tafs-app/src/overview.rs`.
 - **"Each line opens the taf."** under it, 12, dim.
 - The column is at most 980 wide, centred, with 24 around it; the cream reaches both edges.
 
+## Home from tafs cloud
+
+Signed in, the window opens at once, then reads `GET /v1/home` on tafs cloud
+(`https://cloud.tafs.kiff.dev`) as the session, in the app's language (`Accept-Language`), and
+draws the sidebar and the Overview again from it (`TafsCloud.home`). The read is
+`tafs-core/src/home.rs`, tested against the pinned `contracts/home.json` and `home-paused.json`.
+
+- **As strict as the iPad's decoder:** a field `HomeTaf` requires and an answer lacks, or a time
+  that isn't one, fails the read, and the screen stays as it was. A taf's health, its work line,
+  its last change and Home's headline are read leniently, as on the iPad: an odd one never fails
+  it. An answer that isn't a 200 leaves the screen as it was too.
+- **The token goes only to tafs cloud's exact host** (`session::may_send_to`), with no
+  redirect followed.
+- **Each taf** (`KIFFMapping.taf`): what it's doing in the app's words for its state (Waiting for
+  you, Paused, Halted · resume it from Halt, Works from its chat, Acting under KIFF, Card not
+  active), or, while it works, tafs cloud's "Next run Fri 12:30" (else "Next run 12:30", else
+  Running). A setup that stopped partway says tafs cloud's words instead.
+- **What went wrong** (`healthNow`): tafs cloud's work line when it flags it, or when an idle taf
+  isn't healthy. The sidebar says it where the next run would be, in the amber, red when its
+  health is failing; the Overview keeps what it's doing.
+- **Its Card** (`shownCards.first`): KIFF's first Card as tafs cloud read it, its money in its own
+  currency and decimals, in the app's language (`Money.figure`), and a bare number saying it has
+  no currency; else the Card merged from its lines, from an older tafs cloud.
+- **Your tafs:** those relevant now (a call of its waits, or it ran or changed in the last 24
+  hours). With tafs but none relevant now, there's no Your tafs: they're all on the Overview.
+- **Needs you's count** is tafs cloud's, and so are its words.
+- **Last result:** when it last ran ("Last ran at 09:00"), else "Nothing yet", until its report
+  is read.
+
+`--home shared/contracts/home.json` reads a contract instead (CI's `overview-home`).
+
 ## The sample
 
 `--sample` (and Try it with sample data) draws the iPad's five sample tafs, each with its Card as
@@ -81,10 +112,15 @@ your phone." and Add this computer (dimmed: pairing comes in its own change).
 ## Not yet
 
 - **What each row opens:** each screen but the Overview shows its title until it's ported.
-- **The Overview's reads:** who uses each taf (`shares`, `refreshPeople`) and each taf's latest
-  report (`loadReport`) come with Home from tafs cloud.
-- **Home from tafs cloud** (`GET /v1/home`): until it's read, a signed-in account lists no tafs and
-  no line under Your tafs.
+- **The Overview's reads:** who uses each taf (`shares`, `refreshPeople`).
+- **Reading Home again:** it's read once, after signing in or at launch; a 401 isn't told apart yet.
+- **Its order:** tafs cloud's, until the Record and the chats are read for the iPad's most-recent
+  order (`listedTafs`).
+- **Held calls, steps and knocks** from KIFF: until they're read, Your tafs is what ran or changed.
+- **Each taf's runs and report** (`loadReport`), for the Overview's last result.
+- **The account's name** under Account, and its zone for times: from KIFF's account read.
+- **A room's end on a later day** shows its date as 2026-11-16 00:00, not in the language's words
+  yet.
 - **Shared with you, Other agents, tafs being set up** (and Discard), the recipes strip and
   Explore, **+ New** and its gallery, the halt-all row: with Home's read and their screens.
 - **The Unreachable and Plan lines** at the foot.

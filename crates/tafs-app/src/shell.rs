@@ -257,7 +257,12 @@ fn sidebar(
             v.set_hexpand(true);
             v.set_valign(gtk::Align::Center);
             v.append(&one_line(&taf.name, 15, 600, &["row-title"]));
-            v.append(&one_line(&taf.now, 13, 400, &["taf-now"]));
+            v.append(&one_line(
+                &taf.now,
+                13,
+                400,
+                &["taf-now", tone_class(taf.tone)],
+            ));
             b.append(&v);
             b.set_margin_top(2);
             b.set_margin_bottom(2);
@@ -319,6 +324,15 @@ fn sidebar(
     foot.append(&account);
     pane.append(&foot);
     (pane, list, icon, account, coach_button)
+}
+
+/// A row's line colour: dim, or what went wrong in the amber, or red when it's failing.
+fn tone_class(tone: tafs_core::sidebar::Tone) -> &'static str {
+    match tone {
+        tafs_core::sidebar::Tone::Dim => "dim",
+        tafs_core::sidebar::Tone::Amber => "amber",
+        tafs_core::sidebar::Tone::No => "no",
+    }
 }
 
 fn sidebar_row(child: &impl IsA<gtk::Widget>, min_height: i32) -> gtk::ListBoxRow {

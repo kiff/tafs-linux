@@ -2,7 +2,7 @@
 //! `TafCard.hero`): what's left of its money total, else of its calls. Use KIFF couldn't read
 //! shows the limit alone, never as zero left or used.
 
-use crate::money::euros;
+use crate::money::Money;
 use crate::words::{WordBook, WordsError};
 
 /// A Card's window (`Window`): KIFF's name for it, and its words.
@@ -52,13 +52,30 @@ impl Window {
     }
 }
 
-/// A money total in whole euros, the sample's (`CardTotal<Money>`): `used` is none when KIFF
-/// couldn't read it.
+/// A money total for its window (`CardTotal<Money>`): `used` is none when KIFF couldn't read
+/// it, never zero. With extra room, KIFF's `extra` and the Card's own `base`, and when the room
+/// ends, already in words (`endsWords`).
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct EuroTotal {
-    pub limit: i64,
-    pub used: Option<i64>,
+pub struct MoneyTotal {
+    pub limit: Money,
+    pub used: Option<Money>,
     pub window: Window,
+    pub extra: Option<Money>,
+    pub base: Option<Money>,
+    pub room_ends: Option<String>,
+}
+
+impl MoneyTotal {
+    pub fn new(limit: Money, used: Option<Money>, window: Window) -> MoneyTotal {
+        MoneyTotal {
+            limit,
+            used,
+            window,
+            extra: None,
+            base: None,
+            room_ends: None,
+        }
+    }
 }
 
 /// A count of calls (`CardTotal<Int>`).
@@ -72,7 +89,7 @@ pub struct CallsTotal {
 /// The Card in front of a taf, as far as its figure goes.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Card {
-    pub total: Option<EuroTotal>,
+    pub total: Option<MoneyTotal>,
     pub calls: Option<CallsTotal>,
 }
 
@@ -81,27 +98,65 @@ impl Card {
     pub fn hero(&self, w: &WordBook) -> Result<Option<(String, String)>, WordsError> {
         let lang = w.language();
         if let Some(t) = &self.total {
-            let limit = euros(t.limit, lang);
-            return Ok(Some(match t.used {
-                Some(used) => (
-                    euros((t.limit - used).max(0), lang),
+            // An amount with no currency says so once, after the words, and its figures stand
+            // bare beside it: "30 000 left today of 30 000 · no currency".
+            let unitless = !t.limit.has_unit();
+            let shown = |m: &Money| -> Result<String, WordsError> {
+                if unitless {
+                    Ok(m.figure(lang))
+                } else {
+                    m.formatted(w)
+                }
+            };
+            let note = if unitless {
+                w.line("card.hero.no_currency_suffix")?
+            } else {
+                String::new()
+            };
+            if let Some(used) = t.used.as_ref().filter(|u| u.same_kind(&t.limit)) {
+                let left = Money {
+                    minor: (t.limit.minor - used.minor).max(0),
+                    ..t.limit.clone()
+                };
+                // The Card's own total and the extra room apart, as KIFF says them.
+                if let (Some(extra), Some(own)) = (&t.extra, &t.base) {
+                    let until = match &t.room_ends {
+                        Some(ends) => w.get("card.until_ends", &[("ends", ends)])?,
+                        None => String::new(),
+                    };
+                    return Ok(Some((
+                        shown(&left)?,
+                        w.get(
+                            "card.left_extra_room",
+                            &[
+                                ("current", &t.window.current),
+                                ("own", &shown(own)?),
+                                ("extra", &shown(extra)?),
+                                ("until", &until),
+                                ("note", &note),
+                            ],
+                        )?,
+                    )));
+                }
+                return Ok(Some((
+                    shown(&left)?,
                     w.get(
                         "card.hero.left_of_note",
                         &[
                             ("window", &t.window.current),
-                            ("limit", &limit),
-                            ("note", ""),
+                            ("limit", &shown(&t.limit)?),
+                            ("note", &note),
                         ],
                     )?,
-                ),
-                None => (
-                    limit,
-                    w.get(
-                        "card.hero.use_unavailable_note",
-                        &[("label", &t.window.label), ("note", "")],
-                    )?,
-                ),
-            }));
+                )));
+            }
+            return Ok(Some((
+                shown(&t.limit)?,
+                w.get(
+                    "card.hero.use_unavailable_note",
+                    &[("label", &t.window.label), ("note", &note)],
+                )?,
+            )));
         }
         if let Some(c) = &self.calls {
             return Ok(Some(match c.used {

@@ -71,6 +71,17 @@ pub struct TafRow {
     pub now: String,
     /// A small amber badge after the name (`taf.badge`), when it has one.
     pub badge: Option<String>,
+    /// The line's colour: dim for what it's doing, amber or red for what went wrong.
+    pub tone: Tone,
+}
+
+/// A row's line colour (`tafRow`): dim, the amber as text, or red when it's failing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Tone {
+    #[default]
+    Dim,
+    Amber,
+    No,
 }
 
 /// The sidebar's state, from the app's model.

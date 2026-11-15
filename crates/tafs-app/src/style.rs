@@ -76,6 +76,8 @@ button.tafs-link { background: none; box-shadow: none; border: none; color: @taf
 .tafs-sidebar .held-title { font-size: 14px; font-weight: 600; color: @tafs_ink; }
 .tafs-sidebar .held-line { font-size: 12px; color: @tafs_soft; }
 .tafs-sidebar .taf-now { font-size: 13px; color: @tafs_dim; }
+.tafs-sidebar .taf-now.amber { color: @tafs_amber_text; }
+.tafs-sidebar .taf-now.no { color: @tafs_no; }
 .tafs-sidebar .brand { font-size: 22px; font-weight: 700; color: @tafs_ink; }
 .tafs-dot { background-color: @tafs_amber; border-radius: 4px; min-width: 8px; min-height: 8px; }
 

@@ -3,6 +3,7 @@
 //! No UI: the GTK app places what this says.
 
 pub mod card;
+pub mod home;
 pub mod keys;
 pub mod language;
 pub mod money;
