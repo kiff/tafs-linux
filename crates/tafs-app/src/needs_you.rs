@@ -12,7 +12,11 @@ use tafs_core::words::WordBook;
 
 use crate::widgets::{avatar, outline, panel, primary, text};
 
-pub fn page(w: Rc<WordBook>, n: &NeedsYouLines) -> gtk::Widget {
+pub fn page(
+    w: Rc<WordBook>,
+    n: &NeedsYouLines,
+    open: Rc<dyn Fn(tafs_core::sidebar::Selection)>,
+) -> gtk::Widget {
     let column = gtk::Box::new(gtk::Orientation::Vertical, 14);
     column.set_margin_start(16);
     column.set_margin_end(16);
@@ -50,6 +54,11 @@ pub fn page(w: Rc<WordBook>, n: &NeedsYouLines) -> gtk::Widget {
     }
     for card in &n.cards {
         column.append(&held_card(&w, card));
+    }
+    // A knock at a taf's door waits for the owner too: its row opens the taf, on its Activity,
+    // where the knocks are answered.
+    for knock in &n.knocks {
+        column.append(&knock_row(knock, open.clone()));
     }
     // The pane's full width, 16 from each edge, as the iPad's.
     column.set_valign(gtk::Align::Start);
@@ -143,6 +152,36 @@ fn happened_card(h: &tafs_core::unproven::HappenedLines) -> gtk::Box {
     }
     p.append(&text(&h.can_not_answer, 13, 400, &["tafs-soft"]));
     p
+}
+
+/// The knocked row (`NeedsYouView`): an amber-edged panel with the taf's avatar (32), its name
+/// (14 semibold), how many knocks (14, soft) and a chevron; it opens the taf's page, whose
+/// Activity opens first.
+fn knock_row(
+    k: &tafs_core::needs_you::KnockLines,
+    open: Rc<dyn Fn(tafs_core::sidebar::Selection)>,
+) -> gtk::Button {
+    let p = panel(true);
+    let line = gtk::Box::new(gtk::Orientation::Horizontal, 10);
+    line.append(&avatar(&k.initial, k.color, 32));
+    let words = gtk::Box::new(gtk::Orientation::Vertical, 2);
+    words.set_hexpand(true);
+    words.append(&text(&k.name, 14, 600, &["tafs-ink"]));
+    words.append(&text(&k.line, 14, 400, &["tafs-soft"]));
+    line.append(&words);
+    let chevron = crate::widgets::symbol("go-next-symbolic", 13);
+    chevron.add_css_class("tafs-dim");
+    line.append(&chevron);
+    p.append(&line);
+    let button = gtk::Button::new();
+    button.set_child(Some(&p));
+    button.add_css_class("tafs-plain");
+    button.set_widget_name(&format!("knocks.{}", k.key));
+    button.set_tooltip_text(Some(&k.hint));
+    button.update_property(&[gtk::accessible::Property::Description(&k.hint)]);
+    let key = k.key.clone();
+    button.connect_clicked(move |_| open(tafs_core::sidebar::Selection::Taf(key.clone())));
+    button
 }
 
 /// `CardUnitExceptionPanel`: tafs cloud's title (16 semibold), words (14, soft) and history (12,

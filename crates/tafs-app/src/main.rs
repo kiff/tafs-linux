@@ -794,6 +794,26 @@ impl App {
             .unwrap_or_else(|e| fail(e)),
             None => needs_you,
         };
+        // Knocks at the tafs' doors, in the tafs' own order, after the held calls.
+        let needs_you = match &cloud {
+            Some(c) => {
+                let knocks = c.home.knocks();
+                let knocked: Vec<tafs_core::needs_you::Knocked> = model
+                    .tafs
+                    .iter()
+                    .map(|(t, _)| tafs_core::needs_you::Knocked {
+                        key: &t.key,
+                        name: &t.name,
+                        initial: &t.initial,
+                        color: t.color_index,
+                        knocks: knocks.get(&t.key).copied().unwrap_or(0),
+                    })
+                    .collect();
+                tafs_core::needs_you::with_knocks(needs_you, words, &knocked)
+                    .unwrap_or_else(|e| fail(e))
+            }
+            None => needs_you,
+        };
         let account_lines = tafs_core::account::lines(
             words,
             mode,

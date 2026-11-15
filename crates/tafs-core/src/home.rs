@@ -239,6 +239,58 @@ pub struct HomeTaf {
     pub next_run_words: Option<String>,
     #[serde(default)]
     pub finish: Value,
+    /// Its doors, for its avatar's rim and Needs you's knocks; absent when it has none.
+    #[serde(default)]
+    pub doors: Option<Vec<DoorLight>>,
+}
+
+impl HomeTaf {
+    /// Its key in the app: tafs cloud's id, else its KIFF agent's.
+    pub fn key(&self) -> String {
+        self.id
+            .clone()
+            .unwrap_or_else(|| format!("agent:{}", self.kiff_agent))
+    }
+}
+
+impl Home {
+    /// Knocks waiting at each taf's doors, by its key (`knocks(_:)`), Home's tafs and then the
+    /// others'.
+    pub fn knocks(&self) -> std::collections::BTreeMap<String, i64> {
+        self.tafs
+            .iter()
+            .chain(&self.others)
+            .map(|t| (t.key(), t.doors.iter().flatten().map(|d| d.knocks).sum()))
+            .collect()
+    }
+}
+
+/// One of a taf's doors (`DoorLight`): lit while open, amber while a knock waits, grey while it
+/// rests. What's missing or the wrong kind reads as nothing to show, so a door never stops Home;
+/// a door that isn't an object does, as the iPad's keyed decoder does.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct DoorLight {
+    pub app: String,
+    pub open: bool,
+    pub resting: bool,
+    pub knocks: i64,
+}
+
+impl<'de> Deserialize<'de> for DoorLight {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        let v = serde_json::Map::<String, Value>::deserialize(d)?;
+        Ok(DoorLight {
+            app: v
+                .get("app")
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_string(),
+            open: v.get("open").and_then(Value::as_bool).unwrap_or(false),
+            resting: v.get("resting").and_then(Value::as_bool).unwrap_or(false),
+            // Swift's `Int`: a whole number only.
+            knocks: v.get("knocks").and_then(Value::as_i64).unwrap_or(0),
+        })
+    }
 }
 
 /// tafs cloud's count of what waits, with its words (`NeedsYou`).
@@ -318,6 +370,10 @@ pub struct Taf {
     pub card_active: bool,
     pub card_count: usize,
     pub revoked: bool,
+    /// Knocks waiting at its doors (`knocks(_:)`: their sum), for Needs you's row.
+    pub knocks: i64,
+    /// A door with a knock waiting (`doors.contains { $0.knocks > 0 }`), for `relevantNow`.
+    pub knocked: bool,
 }
 
 fn window(w: &WordBook, raw: &str, words: Option<&WindowWords>) -> Result<Window, WordsError> {
@@ -372,10 +428,7 @@ pub fn taf(w: &WordBook, h: &HomeTaf) -> Result<Taf, WordsError> {
     // The Card in front: KIFF's first, else the one merged from the taf's lines, named after it.
     let front = h.card.cards.as_ref().and_then(|c| c.first());
     Ok(Taf {
-        key: h
-            .id
-            .clone()
-            .unwrap_or_else(|| format!("agent:{}", h.kiff_agent)),
+        key: h.key(),
         agent: h.kiff_agent.clone(),
         name: h.name.clone(),
         color_index: h.color,
@@ -385,6 +438,8 @@ pub fn taf(w: &WordBook, h: &HomeTaf) -> Result<Taf, WordsError> {
         card: shown_card(w, &h.card)?,
         last_run: h.last_run,
         last_change: lenient_time(&h.last_change),
+        knocks: h.doors.iter().flatten().map(|d| d.knocks).sum(),
+        knocked: h.doors.iter().flatten().any(|d| d.knocks > 0),
         cloud: h.id.is_some(),
         state: crate::taf_page::TafState::from_cloud(&h.state, h.unscheduled == Some(true)),
         attention: Work::read(&h.work).is_some_and(|w| w.attention && !w.line.trim().is_empty()),
@@ -503,13 +558,13 @@ pub fn row(t: &Taf) -> TafRow {
     }
 }
 
-/// `relevantNow` for a taf from Home: a call of its waits, or it ran or changed in the last 24
-/// hours. Steps and knocks come with their reads.
+/// `relevantNow` for a taf from Home: a call of its waits, a knock at its doors, or it ran or
+/// changed in the last 24 hours. Steps come with their read.
 pub fn relevant(t: &Taf, held: bool, now: DateTime<Local>) -> bool {
     relevant_now(
         held,
         false,
-        false,
+        t.knocked,
         t.last_run.map(|x| x.with_timezone(&Local)),
         t.last_change.map(|x| x.with_timezone(&Local)),
         now,

@@ -307,6 +307,7 @@ fn home_with_steps_and_coachs_waits() {
         opens_coach: false,
         happened: vec![],
         card_units: vec![],
+        knocks: vec![],
         empty: Some(("Nothing is waiting.".into(), String::new())),
     };
     let lines = with_waits(empty, &home, false, &|_| false);
@@ -334,6 +335,7 @@ fn did_this_happen_beside_the_rest() {
         opens_coach: false,
         happened: vec![],
         card_units: vec![],
+        knocks: vec![],
         empty: Some(("Nothing is waiting.".into(), String::new())),
     };
     // A call KIFF can't prove waits too: "Nothing is waiting." goes.
@@ -370,6 +372,7 @@ fn card_unit_requests_from_home() {
         opens_coach: false,
         happened: vec![],
         card_units: vec![],
+        knocks: vec![],
         empty: Some(("Nothing is waiting.".into(), String::new())),
     };
     // Someone who may use Coach and manages the taf: its Coach button; and "Nothing is waiting." goes.
@@ -394,4 +397,84 @@ fn card_unit_requests_from_home() {
     broken.as_object_mut().unwrap().remove("history");
     answer["card_unit_exceptions"] = serde_json::json!([broken]);
     assert!(Home::read(&serde_json::to_vec(&answer).unwrap()).is_none());
+}
+
+#[test]
+fn knocks_at_a_tafs_doors() {
+    use tafs_core::needs_you::{with_knocks, Knocked, NeedsYouLines};
+    let w = WordBook::load(&WordBook::default_root(), "en").unwrap();
+    let mut answer: Value = serde_json::from_slice(&contract("home.json")).unwrap();
+    // A door's missing or wrong-kind fields read as nothing to show; the knocks add up.
+    answer["tafs"][0]["doors"] = serde_json::json!([
+        {"app": "slack", "open": true, "knocks": 2},
+        {"app": "email", "knocks": 1, "resting": "not a bool"},
+        {"knocks": "three"},
+        {}
+    ]);
+    let home = Home::read(&serde_json::to_vec(&answer).unwrap()).expect("Home reads");
+    let doors = home.tafs[0].doors.clone().unwrap();
+    assert_eq!(doors.len(), 4);
+    assert!(doors[0].open);
+    assert!(!doors[1].resting);
+    assert_eq!(doors[2].knocks, 0);
+    assert_eq!(doors[3].app, "");
+    let key = home.tafs[0].key();
+    assert_eq!(home.knocks().get(&key), Some(&3));
+    // A knock makes the taf relevant now, with nothing else.
+    let taf = home::taf(&w, &home.tafs[0]).unwrap();
+    assert_eq!(taf.knocks, 3);
+    assert!(taf.knocked);
+    let long_ago = Local.with_ymd_and_hms(2030, 1, 1, 12, 0, 0).unwrap();
+    assert!(home::relevant(&taf, false, long_ago));
+    // A door that isn't an object fails Home, as the iPad's keyed decoder does.
+    answer["tafs"][0]["doors"] = serde_json::json!(["slack"]);
+    assert!(Home::read(&serde_json::to_vec(&answer).unwrap()).is_none());
+
+    let empty = || NeedsYouLines {
+        title: String::new(),
+        cards: vec![],
+        steps: vec![],
+        coach: vec![],
+        set_all_aside: None,
+        opens_coach: false,
+        happened: vec![],
+        card_units: vec![],
+        knocks: vec![],
+        empty: Some(("Nothing is waiting.".into(), String::new())),
+    };
+    let tafs = |rae: i64, sam: i64| {
+        vec![
+            Knocked {
+                key: "t-rae",
+                name: "Rae",
+                initial: "R",
+                color: 1,
+                knocks: rae,
+            },
+            Knocked {
+                key: "t-sam",
+                name: "Sam",
+                initial: "S",
+                color: 2,
+                knocks: sam,
+            },
+        ]
+    };
+    // Only tafs with knocks, in the tafs' order, with the count's form; "Nothing is waiting." goes.
+    let lines = with_knocks(empty(), &w, &tafs(1, 4)).unwrap();
+    assert_eq!(lines.knocks.len(), 2);
+    assert_eq!(lines.knocks[0].key, "t-rae");
+    assert_eq!(
+        lines.knocks[0].line,
+        "Someone knocked at its door. Nothing was done."
+    );
+    assert_eq!(
+        lines.knocks[1].line,
+        "4 knocks at its doors. Nothing was done."
+    );
+    assert_eq!(lines.knocks[1].hint, "Opens Sam, where you answer it");
+    assert_eq!(lines.empty, None);
+    let lines = with_knocks(empty(), &w, &tafs(0, 0)).unwrap();
+    assert!(lines.knocks.is_empty());
+    assert!(lines.empty.is_some());
 }

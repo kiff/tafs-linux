@@ -82,6 +82,57 @@ pub struct CardUnitLines {
     pub dismiss: String,
 }
 
+/// A taf with knocks at its doors (`NeedsYouView`'s knocked row): its avatar and name, how many
+/// knocks, and that it opens where they're answered (its Activity).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct KnockLines {
+    /// The taf's key: the row opens its page.
+    pub key: String,
+    pub name: String,
+    pub initial: String,
+    pub color: i64,
+    /// "Someone knocked at its door. Nothing was done.", or "{count} knocks…".
+    pub line: String,
+    /// What a screen reader says it opens (`opensWhereYouAnswer`).
+    pub hint: String,
+}
+
+/// A taf as the knock rows name it, and its knocks.
+pub struct Knocked<'a> {
+    pub key: &'a str,
+    pub name: &'a str,
+    pub initial: &'a str,
+    pub color: i64,
+    pub knocks: i64,
+}
+
+/// The tafs whose doors have knocks (`knocks($0) > 0`), in the tafs' order; "Nothing is
+/// waiting." only when none has either.
+pub fn with_knocks(
+    mut lines: NeedsYouLines,
+    w: &WordBook,
+    tafs: &[Knocked],
+) -> Result<NeedsYouLines, WordsError> {
+    lines.knocks = tafs
+        .iter()
+        .filter(|t| t.knocks > 0)
+        .map(|t| {
+            Ok(KnockLines {
+                key: t.key.to_string(),
+                name: t.name.to_string(),
+                initial: t.initial.to_string(),
+                color: t.color,
+                line: w.count("needs_you.knocks", t.knocks, &[])?,
+                hint: w.get("needs_you.opens_where_you_answer", &[("taf", t.name)])?,
+            })
+        })
+        .collect::<Result<_, WordsError>>()?;
+    if !lines.knocks.is_empty() {
+        lines.empty = None;
+    }
+    Ok(lines)
+}
+
 /// The screen's lines.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NeedsYouLines {
@@ -99,6 +150,8 @@ pub struct NeedsYouLines {
     pub happened: Vec<crate::unproven::HappenedLines>,
     /// Card unit requests, after "Did this happen?" (`cardUnitExceptions`).
     pub card_units: Vec<CardUnitLines>,
+    /// Tafs with knocks at their doors, after the held calls: each opens its taf's Activity.
+    pub knocks: Vec<KnockLines>,
     /// With nothing waiting: "Nothing is waiting." and its hint.
     pub empty: Option<(String, String)>,
 }
@@ -204,6 +257,7 @@ pub fn lines(
         opens_coach: false,
         happened: vec![],
         card_units: vec![],
+        knocks: vec![],
         empty: held
             .is_empty()
             .then(|| -> Result<_, WordsError> {
