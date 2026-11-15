@@ -478,3 +478,92 @@ fn knocks_at_a_tafs_doors() {
     assert!(lines.knocks.is_empty());
     assert!(lines.empty.is_some());
 }
+
+#[test]
+fn recipes_for_home_with_no_taf() {
+    use tafs_core::recipes::{Recipes, Tint};
+    // The pinned answer is Home's part, the recipes left out: it reads, and lists nothing.
+    let mut answer: Value = serde_json::from_slice(&contract("recipes-home.json")).unwrap();
+    let r = Recipes::read(&serde_json::to_vec(&answer).unwrap()).expect("the contract reads");
+    assert_eq!(r.home_words(), Some("Pick a job for your first taf."));
+    assert_eq!(
+        r.home_own_words().unwrap().title,
+        "Say it in your own words"
+    );
+    assert_eq!(r.hand_words(), Some("Hand it to Coach"));
+    assert!(!r.home_lists_recipes());
+
+    answer["categories"] = serde_json::json!([
+        {"id": "money", "title": "Money", "color": {"light": "#B45309", "dark": "#F59E0B"}},
+        {"id": "support", "title": "Support", "color": {"light": "orange", "dark": "#000000"}},
+        {"id": "empty", "title": "Nothing in it"}
+    ]);
+    answer["recipes"] = serde_json::json!([
+        {"id": "r1", "title": "Refunds", "category": "money", "headline": "Refunds wait days",
+         "line": "Refunds within the Card.", "say": "Set up refunds",
+         "card": {"allows": ["Refund up to €50"], "holds": ["Refunds over €50"], "never": [1]},
+         "apps": [{"name": "Stripe", "logo": "/v1/logos/stripe"}, {"logo": "/v1/logos/x"}, {"name": "Gmail"}]},
+        {"id": "r2", "title": "Inbox", "category": "support", "headline": "  ", "proved": "  Proved.  "}
+    ]);
+    let r = Recipes::read(&serde_json::to_vec(&answer).unwrap()).expect("reads");
+    assert!(r.home_lists_recipes());
+    // A colour either half of which isn't #RRGGBB is none.
+    assert_eq!(
+        r.categories[0].color,
+        Some(Tint {
+            light: 0xB45309,
+            dark: 0xF59E0B
+        })
+    );
+    assert_eq!(r.categories[1].color, None);
+    // A category with no recipe isn't listed; tafs cloud's order otherwise.
+    let groups = r.by_category();
+    assert_eq!(
+        groups
+            .iter()
+            .map(|(c, _)| c.id.as_str())
+            .collect::<Vec<_>>(),
+        ["money", "support"]
+    );
+    // Picked narrows; a pick no longer listed narrows nothing.
+    assert_eq!(r.groups(Some("support")).len(), 1);
+    assert_eq!(r.groups(Some("gone")).len(), 2);
+    let refunds = &r.recipes[0];
+    assert_eq!(refunds.lead(), "Refunds wait days");
+    // An app without its name is left out; a zone the Card leaves empty, or can't read, isn't one.
+    assert_eq!(
+        refunds
+            .apps
+            .iter()
+            .map(|a| a.name.as_str())
+            .collect::<Vec<_>>(),
+        ["Stripe", "Gmail"]
+    );
+    let zones = r.zones(refunds);
+    assert_eq!(
+        zones.iter().map(|z| z.id).collect::<Vec<_>>(),
+        ["allows", "holds"]
+    );
+    assert_eq!(zones[0].title, "Does on its own");
+    // A blank headline leads with the title; words are trimmed.
+    assert_eq!(r.recipes[1].lead(), "Inbox");
+    assert_eq!(r.recipes[1].proved, "Proved.");
+
+    // What the iPad requires, this requires: a recipe without its title, or a `line` that isn't
+    // words, fails the read.
+    let mut broken = answer.clone();
+    broken["recipes"][0]
+        .as_object_mut()
+        .unwrap()
+        .remove("title");
+    assert!(Recipes::read(&serde_json::to_vec(&broken).unwrap()).is_none());
+    let mut broken = answer.clone();
+    broken["recipes"][1]["line"] = serde_json::json!(3);
+    assert!(Recipes::read(&serde_json::to_vec(&broken).unwrap()).is_none());
+    // What it forgives, this forgives: `home` or `labels` that can't be read are none.
+    let mut odd = answer.clone();
+    odd["labels"] = serde_json::json!("labels");
+    let r = Recipes::read(&serde_json::to_vec(&odd).unwrap()).unwrap();
+    assert!(r.labels.is_none());
+    assert!(!r.home_lists_recipes());
+}

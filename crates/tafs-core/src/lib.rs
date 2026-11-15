@@ -20,6 +20,7 @@ pub mod needs_you;
 pub mod overview;
 pub mod pairing;
 pub mod people;
+pub mod recipes;
 pub mod record;
 pub mod sample;
 pub mod session;
