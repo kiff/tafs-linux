@@ -298,6 +298,45 @@ pub fn lines(
     })
 }
 
+/// The KIFF account's own screen (`AccountView`): its name, its id when it isn't its name, who is
+/// signed in; then its time zone (`time_zone`, UTC when KIFF sends none) and, when this computer
+/// is elsewhere, the line to use this computer's.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct KiffAccountLines {
+    pub rows: Vec<(String, String)>,
+    pub zone: String,
+    pub use_this_zone: Option<String>,
+}
+
+pub fn kiff_account_lines(
+    w: &WordBook,
+    account: &Account,
+    here: &str,
+) -> Result<KiffAccountLines, WordsError> {
+    let mut rows = vec![(w.line("settings.kiff_account")?, account.name())];
+    if account.name() != account.slug {
+        rows.push((w.line("settings.account_id")?, account.slug.clone()));
+    }
+    if let Some(email) = signed_in_as(account) {
+        rows.push((w.line("settings.signed_in_as")?, email));
+    }
+    let zone = account.time_zone.clone().unwrap_or_else(|| "UTC".into());
+    let use_this_zone = if zone != here {
+        let device = w.line("device.linux")?;
+        Some(w.get(
+            "settings.use_device_zone",
+            &[("device", &device), ("identifier", here)],
+        )?)
+    } else {
+        None
+    };
+    Ok(KiffAccountLines {
+        rows,
+        zone,
+        use_this_zone,
+    })
+}
+
 /// The sign-out's question (`SignOutWay.signOut`): its title, why, and its button.
 pub fn sign_out_question(w: &WordBook) -> Result<(String, String, String), WordsError> {
     let device = w.line("device.linux")?;

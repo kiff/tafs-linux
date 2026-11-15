@@ -146,7 +146,10 @@ pub fn build(
             // Account, and the screens it opens.
             let account_open = matches!(
                 s,
-                Selection::Account | Selection::Devices | Selection::People
+                Selection::Account
+                    | Selection::Devices
+                    | Selection::People
+                    | Selection::KiffAccount
             );
             account_icon.set_icon_name(Some(icon_for(if account_open {
                 "person.crop.circle.fill"
@@ -184,6 +187,14 @@ pub fn build(
                             }),
                         }),
                         calendar_first.clone(),
+                    )
+                }
+                Selection::KiffAccount => {
+                    let open = open.clone();
+                    crate::kiff_account::page(
+                        w.clone(),
+                        people_known.account.clone(),
+                        Rc::new(move || open(Selection::Account)),
                     )
                 }
                 Selection::People => {
@@ -231,6 +242,9 @@ pub fn build(
                                 open(match screen {
                                     tafs_core::account::Screen::Devices => Selection::Devices,
                                     tafs_core::account::Screen::People => Selection::People,
+                                    tafs_core::account::Screen::KiffAccount => {
+                                        Selection::KiffAccount
+                                    }
                                     tafs_core::account::Screen::ConnectApps => {
                                         Selection::ConnectApps
                                     }
@@ -511,6 +525,7 @@ fn title_of(
         Selection::Coach => l("coach.coach_mode"),
         Selection::Devices => l("settings.devices.title"),
         Selection::People => l("people.title"),
+        Selection::KiffAccount => l("settings.kiff_account"),
         Selection::Titled(title) => title.clone(),
         Selection::Taf(key) | Selection::Held { taf: key, .. } => tafs
             .iter()

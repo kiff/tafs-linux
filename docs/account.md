@@ -59,8 +59,19 @@ sample opens the sign-in over it.
 
 ## Not yet
 
-- **The rows' screens:** KIFF account, Alerts and Time zone open their titles until each is
-  ported. People & groups, Devices, Connect apps and Plan & usage open their screens.
+- **The rows' screens:** Alerts and Time zone open their titles until each is ported. KIFF
+  account, People & groups, Devices, Connect apps and Plan & usage open their screens.
+
+## KIFF account
+
+Account › KIFF account (`AccountView`, `crates/tafs-app/src/kiff_account.rs`): the round back
+button, then the account's name, its id when it isn't its name, and who is signed in (as
+`AccountLines`); its time zone (`time_zone` from `GET /v1/me`, UTC when KIFF sends none) with,
+when this computer is in another zone, "Use this computer's: {identifier}" (this computer's zone
+by `TZ`, else `/etc/localtime`), and "Holds' deadlines, Activity, the Record and what your tafs
+write use this time zone."; Export my chats with what it exports; and Delete account with what it
+deletes, for whoever may (`account.delete`). The time zone row doesn't open its picker yet; using
+this computer's zone (a signed setup call), exporting and deleting are there, dimmed.
 
 ## People & groups
 

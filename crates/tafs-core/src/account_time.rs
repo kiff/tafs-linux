@@ -75,6 +75,25 @@ pub fn zoned_short_time<T: TimeZone>(at: &DateTime<T>) -> String {
     short_time(at) + &label(at)
 }
 
+/// This computer's zone by its identifier (`TimeZone.current.identifier`): `TZ` when it names
+/// one, else what `/etc/localtime` links to, else UTC.
+pub fn local_identifier() -> String {
+    if let Ok(tz) = std::env::var("TZ") {
+        let tz = tz.trim_start_matches(':');
+        if tz.parse::<Tz>().is_ok() {
+            return tz.to_string();
+        }
+    }
+    std::fs::read_link("/etc/localtime")
+        .ok()
+        .and_then(|p| {
+            let p = p.to_string_lossy().to_string();
+            p.split_once("zoneinfo/").map(|(_, id)| id.to_string())
+        })
+        .filter(|id| id.parse::<Tz>().is_ok())
+        .unwrap_or_else(|| "UTC".into())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

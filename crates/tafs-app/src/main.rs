@@ -5,6 +5,7 @@ mod calendar;
 mod connect;
 mod devices;
 mod kiff;
+mod kiff_account;
 mod needs_you;
 mod overview;
 mod people;
@@ -65,7 +66,7 @@ struct Options {
 }
 
 const USAGE: &str = "tafs [--lang en|de|fr|es|it|pt|nl|pl] [--theme light|dark] [--sample] [--signed-in] [--view-only]
-     [--home contract.json] [--usage answers.json] [--people answers.json] [--size WxH] [--page welcome|sign-in|overview|needs-you|record|calendar|calendar-week|usage|connect-apps|account|devices|people|taf|taf-card] [--screenshot out.png]";
+     [--home contract.json] [--usage answers.json] [--people answers.json] [--size WxH] [--page welcome|sign-in|overview|needs-you|record|calendar|calendar-week|usage|connect-apps|account|kiff-account|devices|people|taf|taf-card] [--screenshot out.png]";
 
 fn options() -> Result<Options, String> {
     let mut o = Options::default();
@@ -132,6 +133,7 @@ fn selection_of(page: Option<&str>) -> Selection {
         Some("account") => Selection::Account,
         Some("devices") => Selection::Devices,
         Some("people") => Selection::People,
+        Some("kiff-account") => Selection::KiffAccount,
         // The sample's Refunds, as the reference set's taf.png opens it.
         Some("taf") | Some("taf-card") => Selection::Taf("refunds".into()),
         // With `--home`, the contract's first taf.
@@ -720,7 +722,16 @@ impl App {
                 _ => people::PeopleSource::None,
             },
             people_known: Rc::new(people::Known {
-                account: cloud.as_deref().and_then(|c| c.account.clone()),
+                // The account read; for a screenshot, the one `--people`'s file gives.
+                account: cloud
+                    .as_deref()
+                    .and_then(|c| c.account.clone())
+                    .or_else(|| {
+                        let f = self.people_file.as_ref()?;
+                        let v: serde_json::Value =
+                            serde_json::from_slice(&std::fs::read(f).ok()?).ok()?;
+                        serde_json::from_value(v["account"].clone()).ok()
+                    }),
                 agents: cloud
                     .as_deref()
                     .map(|c| {

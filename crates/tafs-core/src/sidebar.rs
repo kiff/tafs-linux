@@ -21,6 +21,8 @@ pub enum Selection {
     Devices,
     /// Account › People & groups.
     People,
+    /// Account › KIFF account.
+    KiffAccount,
     /// Coach mode, from its button at the foot.
     Coach,
     /// A screen Account opens, by its title, until it's ported.
