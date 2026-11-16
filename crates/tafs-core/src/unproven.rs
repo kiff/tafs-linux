@@ -88,14 +88,14 @@ pub struct HappenedLines {
     pub amount: Option<String>,
     /// Why KIFF asks, in its words, when it said.
     pub why: Option<String>,
-    /// In place of No and Yes: this device can't approve (`ApprovalGate`'s not-ready words).
-    pub can_not_answer: String,
+    /// In place of No and Yes: this computer can't approve (`ApprovalGate`'s `ApprovalNotReady`).
+    pub can_not_answer: crate::approval::NotReady,
 }
 
 /// The cards, in KIFF's order (newest first).
 pub fn lines(w: &WordBook, calls: &[Unproven]) -> Result<Vec<HappenedLines>, WordsError> {
     let title = w.line("record.did_this_happen.title")?;
-    let can_not_answer = w.line("approval.device_can_not_approve_approve")?;
+    let can_not_answer = crate::approval::not_ready(w, crate::approval::THIS_COMPUTER, None)?;
     calls
         .iter()
         .map(|call| {
@@ -194,7 +194,7 @@ mod tests {
         // No and Yes are signed like an approval: this device can't, and says so.
         for card in &cards {
             assert_eq!(
-                card.can_not_answer,
+                card.can_not_answer.line,
                 "This device can't approve. Approve on another device signed in to your account."
             );
         }

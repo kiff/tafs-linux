@@ -131,6 +131,10 @@ pub fn icon_for(sf: &str) -> &'static str {
         "sparkles" => "tafs-sparkles-symbolic",
         "doc.on.doc" => "tafs-copy-symbolic",
         "checkmark" => "tafs-checkmark-symbolic",
+        "creditcard" => "tafs-creditcard-symbolic",
+        "person.2" => "system-users-symbolic",
+        "link" => "insert-link-symbolic",
+        "doc.text" => "x-office-document-symbolic",
         // A halt's hand: the desktop's stop sign, in red where it's drawn.
         "hand.raised" | "hand.raised.fill" => "process-stop-symbolic",
         _ => "image-missing-symbolic",

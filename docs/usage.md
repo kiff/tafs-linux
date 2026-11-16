@@ -13,7 +13,9 @@ It reads each time it opens: until then a panel with a spinner, at the screen's 
   semibold), a bar at `meter_pct` (green, amber when `warning`, red when `waiting`), the `detail`
   (14, soft) and the `warning` (14 semibold, in the state's colour). The panel's edge is red at
   50% while waiting, amber at 50% from the warning. When it couldn't be read, why, in red.
-  Signed in with KIFF, tafs cloud's Raise offer (`raise.words`) is under it, dimmed.
+  Signed in with KIFF, tafs cloud's Raise offer (`raise.words`) is under it behind
+  `ApprovalGate` (`docs/approval.md`): raising is signed, so this computer's line stands in the
+  button's place.
 - **KIFF's plan** (`GET /v1/me/usage` at KIFF), signed in with KIFF, in the iPad's order:
   - who bills it (`billingPanel`): "Billed by Apple", "Billed by Google Play", "Billed by KIFF"
     or "Managed by your company's agreement", none when no plan is billed; after a move from
@@ -27,9 +29,10 @@ It reads each time it opens: until then a panel with a spinner, at the screen's 
     primary style while the balance waits;
   - for someone who manages billing (`requestsPanel`): REQUESTS in the amber, each open request
     ("Someone asks to raise the spend limit.", "Someone asks for {pack}.") with its reason, Raise
-    the limit where tafs cloud offers it, and Decline.
+    the limit where tafs cloud offers it (behind `ApprovalGate`, so this computer's line in its
+    place), and Decline.
 
-  The buttons are there, dimmed, until asking and answering are ported. When KIFF's read fails,
+  The other buttons are there, dimmed, until asking and answering are ported. When KIFF's read fails,
   why, once, in red, after the credits.
 - **Credits** (`CreditsPanel`), from `GET /v1/usage/credits`, unless the balance says
   `credits_panel: false` (no plan and no run lately): CREDITS, Last period and This period, then

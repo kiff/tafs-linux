@@ -7,6 +7,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use gtk::prelude::*;
+use tafs_core::sidebar::Mode;
 use tafs_core::usage::{
     answered, credits_path, sample_balance, sample_credits, taf_credits_path, tone, Balance,
     Credits, TafCredits, Tone, BALANCE_PATH,
@@ -218,7 +219,7 @@ pub fn page(w: Rc<WordBook>, source: UsageSource, names: Names) -> gtk::Widget {
                 column.append(&p);
                 return;
             }
-            balance_panel(&column, &s, kiff_billing(&source).is_some());
+            balance_panel(&w, &column, &s, kiff_billing(&source).is_some());
             if let (Some(manages_billing), Some(u)) = (kiff_billing(&source), &s.usage) {
                 billing_panel(&w, &column, u);
                 ask_panel(&w, &column, u, manages_billing, &s);
@@ -329,9 +330,10 @@ pub fn page(w: Rc<WordBook>, source: UsageSource, names: Names) -> gtk::Widget {
 }
 
 /// `BalancePanel`: the words, a bar at `meter_pct`, the detail and the warning; else why it
-/// couldn't be read. Signed in with KIFF, tafs cloud's Raise offer under it, dimmed until
-/// raising (a signed call) is ported. Buying waits for a store.
-fn balance_panel(column: &gtk::Box, s: &State, kiff: bool) {
+/// couldn't be read. Signed in with KIFF, tafs cloud's Raise offer under it behind
+/// `ApprovalGate`: raising is signed, so this computer says why it can't in the button's place.
+/// Buying waits for a store.
+fn balance_panel(w: &WordBook, column: &gtk::Box, s: &State, kiff: bool) {
     let Some(b) = &s.balance else {
         if let Some(why) = &s.balance_error {
             let p = panel(false);
@@ -371,7 +373,7 @@ fn balance_panel(column: &gtk::Box, s: &State, kiff: bool) {
     if let (true, Some(raise)) = (kiff, &line.raise) {
         let b = crate::widgets::primary(&raise.words);
         b.set_sensitive(false);
-        column.append(&b);
+        column.append(&crate::approval::gate(w, Mode::Kiff, &b));
     }
 }
 
@@ -845,8 +847,9 @@ fn ask_panel(w: &WordBook, column: &gtk::Box, u: &KiffUsage, manages_billing: bo
 }
 
 /// `requestsPanel`, for someone who manages billing: members' open requests, in the amber,
-/// each its line and reason, then Raise the limit (where tafs cloud offers it) and Decline,
-/// dimmed until answering is ported. Approving a pack buys it in the App Store: none here.
+/// each its line and reason, then Raise the limit (where tafs cloud offers it) behind
+/// `ApprovalGate`, so this computer's why in its place, and Decline, dimmed until answering is
+/// ported. Approving a pack buys it in the App Store: none here.
 fn requests_panel(
     w: &WordBook,
     column: &gtk::Box,
@@ -881,7 +884,7 @@ fn requests_panel(
         if r.kind == "raise" && offers_raise {
             let raise = crate::widgets::primary(&l("usage.raise_limit_button"));
             raise.set_sensitive(false);
-            buttons.append(&raise);
+            buttons.append(&crate::approval::gate(w, Mode::Kiff, &raise));
         }
         let decline = outline(&l("usage.requests.decline"));
         decline.set_sensitive(false);

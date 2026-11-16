@@ -5,7 +5,7 @@
 
 use std::rc::Rc;
 
-use gtk::prelude::*;
+use adw::prelude::*;
 use tafs_core::account::{kiff_account_lines, Account};
 use tafs_core::words::WordBook;
 
@@ -52,6 +52,87 @@ fn row_button(words: &str, class: &str) -> gtk::Button {
     }
     b.set_sensitive(false);
     b
+}
+
+thread_local! {
+    /// `--page delete-account`: the sheet opens once with the page, for its screenshot.
+    pub static OPEN_DELETE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// `DeleteAccountView`, its own sheet: the warning (15 semibold), What goes (the tafs, the
+/// sign-ins, Cards and keys, KIFF's records, each with its symbol, 14), and where Delete account
+/// would be, why this computer can't (`ApprovalGate`): deleting is confirmed by the device, which
+/// this computer can't. Cancel at the top.
+fn delete_sheet(w: &WordBook, parent: &impl IsA<gtk::Widget>) {
+    let Ok(d) = tafs_core::account::delete_lines(w) else {
+        return;
+    };
+    let column = gtk::Box::new(gtk::Orientation::Vertical, 16);
+    column.set_margin_start(16);
+    column.set_margin_end(16);
+    column.set_margin_top(16);
+    column.set_margin_bottom(16);
+    let warning = group();
+    let t = text(&d.warning, 15, 600, &["tafs-ink"]);
+    t.set_margin_start(16);
+    t.set_margin_end(16);
+    t.set_margin_top(12);
+    t.set_margin_bottom(12);
+    warning.append(&t);
+    column.append(&warning);
+    let heading = text(&d.what_goes.to_uppercase(), 13, 400, &["tafs-dim"]);
+    heading.set_margin_start(16);
+    column.append(&heading);
+    let goes = group();
+    for (n, (sf, words)) in d.goes.iter().enumerate() {
+        if n > 0 {
+            goes.append(&line());
+        }
+        let r = gtk::Box::new(gtk::Orientation::Horizontal, 12);
+        r.set_margin_start(16);
+        r.set_margin_end(16);
+        r.set_margin_top(11);
+        r.set_margin_bottom(11);
+        let icon = symbol(crate::widgets::icon_for(sf), 16);
+        icon.add_css_class("tafs-amber-text");
+        r.append(&icon);
+        r.append(&text(words, 14, 400, &["tafs-ink"]));
+        goes.append(&r);
+    }
+    column.append(&goes);
+    let delete = gtk::Button::with_label(&d.title);
+    column.append(&crate::approval::gate(
+        w,
+        tafs_core::sidebar::Mode::Kiff,
+        &delete,
+    ));
+
+    let scroller = gtk::ScrolledWindow::new();
+    scroller.set_hscrollbar_policy(gtk::PolicyType::Never);
+    scroller.set_child(Some(&column));
+    scroller.set_vexpand(true);
+    let header = adw::HeaderBar::new();
+    header.set_show_end_title_buttons(false);
+    header.set_show_start_title_buttons(false);
+    let cancel = gtk::Button::with_label(&d.cancel);
+    cancel.add_css_class("flat");
+    header.pack_start(&cancel);
+    let toolbar = adw::ToolbarView::new();
+    toolbar.add_top_bar(&header);
+    toolbar.set_content(Some(&scroller));
+    crate::widgets::ground(&toolbar);
+    let dialog = adw::Dialog::new();
+    dialog.set_child(Some(&toolbar));
+    dialog.set_content_width(560);
+    dialog.set_content_height(520);
+    dialog.set_title(&d.title);
+    {
+        let dialog = dialog.clone();
+        cancel.connect_clicked(move |_| {
+            dialog.close();
+        });
+    }
+    dialog.present(Some(parent));
 }
 
 pub fn page(
@@ -112,7 +193,18 @@ pub fn page(
             column.append(&footer(&l("export.own_chats_each_taf_coach")));
             if account.allows("account.delete") {
                 let g = group();
-                g.append(&row_button(&l("settings.delete_account.row"), "tafs-no"));
+                let delete = row_button(&l("settings.delete_account.row"), "tafs-no");
+                // Its sheet opens: what goes, and why this computer can't delete it.
+                delete.set_sensitive(true);
+                let w = w.clone();
+                {
+                    let w = w.clone();
+                    delete.connect_clicked(move |b| delete_sheet(&w, b));
+                }
+                if OPEN_DELETE.with(|o| o.replace(false)) {
+                    delete.connect_map(move |b| delete_sheet(&w, b));
+                }
+                g.append(&delete);
                 column.append(&g);
                 column.append(&footer(&l("sign_in.deletes_every_taf_runs_chats")));
             }

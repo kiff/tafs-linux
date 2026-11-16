@@ -1,6 +1,7 @@
 //! tafs for Linux: GTK 4 and libadwaita. The same product, account and words as the iPad app.
 
 mod account;
+mod approval;
 mod calendar;
 mod connect;
 mod devices;
@@ -11,6 +12,7 @@ mod needs_you;
 mod overview;
 mod pairing;
 mod people;
+mod receipts;
 mod recipes;
 mod record;
 mod record_search;
@@ -24,7 +26,7 @@ mod welcome;
 mod widgets;
 mod zones;
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 use adw::prelude::*;
@@ -91,13 +93,18 @@ struct Options {
     halt: Option<String>,
     /// With `--home`: a Record search page (and a case) as tafs cloud answers them.
     record_search: Option<String>,
+    /// With `--home`: what this person may do with each taf, as tafs cloud answers
+    /// `GET /v1/me/access`.
+    access: Option<String>,
+    /// With `--home`: a receipts export as tafs cloud answers it, never saved.
+    receipts: Option<String>,
     /// `--size WxH`: the window's size, for a screenshot of a narrower layout.
     size: Option<(i32, i32)>,
     screenshot: Option<String>,
 }
 
 const USAGE: &str = "tafs [--lang en|de|fr|es|it|pt|nl|pl] [--theme light|dark] [--sample] [--signed-in] [--view-only [--paired]]
-     [--home contract.json] [--usage answers.json] [--people answers.json] [--unproven answers.json] [--recipes answers.json] [--gallery answers.json] [--halt answer.json] [--record-search answers.json] [--size WxH] [--page welcome|sign-in|pair|recipe:<id>|gallery|halt-all|halt:<id>|record-search:<q>|overview|needs-you|record|calendar|calendar-week|usage|connect-apps|account|kiff-account|time-zone|devices|people|taf|taf-card] [--screenshot out.png]";
+     [--home contract.json] [--usage answers.json] [--people answers.json] [--unproven answers.json] [--recipes answers.json] [--gallery answers.json] [--halt answer.json] [--record-search answers.json] [--access answer.json] [--receipts answer.json] [--size WxH] [--page welcome|sign-in|pair|recipe:<id>|gallery|halt-all|halt:<id>|record-search:<q>|record-export|overview|needs-you|record|calendar|calendar-week|usage|connect-apps|account|kiff-account|time-zone|devices|people|taf|taf-card] [--screenshot out.png]";
 
 fn options() -> Result<Options, String> {
     let mut o = Options::default();
@@ -117,6 +124,8 @@ fn options() -> Result<Options, String> {
             "--gallery" => o.gallery = Some(value()?),
             "--halt" => o.halt = Some(value()?),
             "--record-search" => o.record_search = Some(value()?),
+            "--access" => o.access = Some(value()?),
+            "--receipts" => o.receipts = Some(value()?),
             "--size" => {
                 let v = value()?;
                 let (w, h) = v.split_once('x').ok_or("--size takes WxH")?;
@@ -170,7 +179,7 @@ fn selection_of(page: Option<&str>) -> Selection {
         Some("account") => Selection::Account,
         Some("devices") => Selection::Devices,
         Some("people") => Selection::People,
-        Some("kiff-account") => Selection::KiffAccount,
+        Some("kiff-account") | Some("delete-account") => Selection::KiffAccount,
         Some("time-zone") => Selection::TimeZone,
         // The sample's Refunds, as the reference set's taf.png opens it.
         Some("taf") | Some("taf-card") => Selection::Taf("refunds".into()),
@@ -178,6 +187,7 @@ fn selection_of(page: Option<&str>) -> Selection {
         Some(other) if other.starts_with("taf:") => Selection::Taf(other["taf:".len()..].into()),
         Some("halt-all") => Selection::HaltAll,
         Some(other) if other.starts_with("record-search:") => Selection::Record,
+        Some("record-export") => Selection::Record,
         Some(other) if other.starts_with("halt:") => Selection::Halt(other["halt:".len()..].into()),
         Some(other) if other.starts_with("taf-card:") => {
             Selection::Taf(other["taf-card:".len()..].into())
@@ -242,12 +252,22 @@ fn activate(app: &adw::Application, o: &Options) {
         kept: RefCell::new(None),
         sign_out_error: RefCell::new(None),
         cloud: RefCell::new(None),
+        held_seen: RefCell::new(None),
+        held_watch: Cell::new(0),
         problem: RefCell::new(None),
         home_file: o.home.as_ref().map(std::path::PathBuf::from),
         usage_file: o.usage.as_ref().map(std::path::PathBuf::from),
         people_file: o.people.as_ref().map(std::path::PathBuf::from),
         halt_file: halt_file(o.halt.as_deref()),
         record_search_file: record_search_file(o.record_search.as_deref()),
+        receipts_file: o.receipts.as_deref().map(|p| match std::fs::read(p) {
+            Ok(b) => b,
+            Err(_) => {
+                eprintln!("{p} can't be read");
+                std::process::exit(2);
+            }
+        }),
+        receipts_open: o.page.as_deref() == Some("record-export"),
         record_query: o
             .page
             .as_deref()
@@ -260,6 +280,21 @@ fn activate(app: &adw::Application, o: &Options) {
             .as_deref()
             .is_some_and(|p| p == "taf-card" || p.starts_with("taf-card:")),
     });
+    if o.page.as_deref() == Some("delete-account") {
+        kiff_account::OPEN_DELETE.with(|d| d.set(true));
+    }
+    // A hold's notification, clicked (`app.open-hold`): Needs you, read again. A screenshot
+    // sends none.
+    if !screenshot {
+        let action = gio::SimpleAction::new("open-hold", Some(glib::VariantTy::STRING));
+        let me = Rc::downgrade(&app_state);
+        action.connect_activate(move |_, _| {
+            if let Some(me) = me.upgrade() {
+                me.open_hold();
+            }
+        });
+        app.add_action(&action);
+    }
 
     // What opens: the sample when asked, else the kept session, else the welcome. A screenshot
     // never reads or writes the keyring.
@@ -279,7 +314,7 @@ fn activate(app: &adw::Application, o: &Options) {
             recipes: recipes_file(o.recipes.as_deref()),
             gallery: gallery_file(o.gallery.as_deref()),
             account_halt: o.halt.as_deref().map(|p| halt_file(Some(p)).unwrap()),
-            access: Default::default(),
+            access: access_file(o.access.as_deref()),
             used_by: Default::default(),
             reports: Default::default(),
         }),
@@ -372,6 +407,12 @@ struct App {
     sign_out_error: RefCell<Option<String>>,
     /// What was last read for the account.
     cloud: RefCell<Option<Rc<Cloud>>>,
+    /// The held calls already known, by KIFF's id: notified, or waiting when the account was
+    /// read. None until the account is read, and after signing out.
+    held_seen: RefCell<Option<std::collections::BTreeSet<String>>>,
+    /// The minute's read of held calls in force: a new account read, or signing out, ends the
+    /// last one.
+    held_watch: Cell<u64>,
     /// The welcome's line for why it's there, while it's open.
     problem: RefCell<Option<gtk::Label>>,
     /// `--home`'s contract file, for the screenshots' tafs cloud reads.
@@ -387,6 +428,10 @@ struct App {
         tafs_core::record_search::SearchPage,
         Option<tafs_core::record_search::RecordCase>,
     )>,
+    /// `--receipts`'s answer: the screenshots' export, never sent or saved.
+    receipts_file: Option<Vec<u8>>,
+    /// `--page record-export`: the export's days open, for a screenshot.
+    receipts_open: bool,
     /// `--people`'s file of synthetic answers.
     people_file: Option<std::path::PathBuf>,
     /// A screenshot: the sample's Refunds has the reference set's three Cards.
@@ -419,6 +464,13 @@ impl App {
     fn show_welcome(self: &Rc<Self>) {
         // Signed out: no account, so this computer's zone.
         tafs_core::account_time::use_zone(None);
+        // Signed out: the minute's read ends, and the last account's notifications never stay.
+        self.held_watch.set(self.held_watch.get() + 1);
+        if let (Some(seen), Some(app)) = (self.held_seen.take(), self.window.application()) {
+            for hold in seen {
+                app.withdraw_notification(&tafs_core::hold_alert::tag(&hold));
+            }
+        }
         *self.kept.borrow_mut() = None;
         *self.cloud.borrow_mut() = None;
         *self.sign_out_error.borrow_mut() = None;
@@ -566,7 +618,9 @@ impl App {
                         Some(word) => ApprovalMode::from_kiff(Some(word)).is_view_only(),
                         None => view_only,
                     };
-                    me.open_shell(Mode::Kiff, view_only, Some(Rc::new(*cloud)));
+                    let cloud = Rc::new(*cloud);
+                    me.open_shell(Mode::Kiff, view_only, Some(cloud.clone()));
+                    me.watch_holds(&cloud);
                 }
                 Read::SignedOut => me.signed_out_by_kiff(),
                 Read::Nothing => {}
@@ -787,12 +841,137 @@ impl App {
             })),
             _ => None,
         };
+        // Signed in, for whoever sees every taf's Record (`seesEveryTaf`): the receipts
+        // export; a screenshot's from `--receipts`, never sent or saved.
+        let sees_every =
+            cloud.is_some_and(|c| tafs_core::receipts::sees_every_taf(&c.home.tafs, &c.access));
+        let receipts = match (
+            mode,
+            sees_every,
+            self.kept.borrow().as_ref(),
+            &self.receipts_file,
+        ) {
+            (Mode::Kiff, true, _, Some(canned)) => Some(Rc::new(receipts::ReceiptsSource {
+                token: String::new(),
+                languages: vec![],
+                canned: Some(canned.clone()),
+                open: self.receipts_open,
+            })),
+            (Mode::Kiff, true, Some(kept), None) => Some(Rc::new(receipts::ReceiptsSource {
+                token: kept.token.clone(),
+                languages: self.languages.clone(),
+                canned: None,
+                open: false,
+            })),
+            _ => None,
+        };
         record::RecordData {
             entries,
             tafs,
             waiting: Rc::new(move |e| !kiff || still_held.contains(&e.id)),
             search,
+            receipts,
         }
+    }
+
+    /// While tafs runs, KIFF's held calls read once a minute, as Windows does (a computer gets no
+    /// push): each call held since the last read is notified (`HoldNotification`), and a call no
+    /// longer held loses its notification (`removeAlerts(forHold:)`). What waited when the account
+    /// was read isn't announced: it's in Needs you. Only for someone who answers held calls
+    /// (`canAnswerHolds`). A 401 signs this computer out, as any read.
+    fn watch_holds(self: &Rc<Self>, cloud: &Cloud) {
+        use tafs_core::hold_alert;
+        let watch = self.held_watch.get() + 1;
+        self.held_watch.set(watch);
+        // Notifications already shown for holds of this account stay theirs.
+        let mut seen = self.held_seen.take().unwrap_or_default();
+        seen.extend(cloud.held.iter().map(|h| h.id.clone()));
+        *self.held_seen.borrow_mut() = Some(seen);
+        let notifies = hold_alert::notifies(
+            cloud
+                .account
+                .as_ref()
+                .and_then(|a| a.capabilities.as_deref()),
+        );
+        let Some(token) = self.kept.borrow().as_ref().map(|k| k.token.clone()) else {
+            return;
+        };
+        let tafs: Vec<(String, String)> = cloud
+            .home
+            .tafs
+            .iter()
+            .chain(&cloud.home.others)
+            .map(|t| (t.kiff_agent.clone(), t.name.clone()))
+            .collect();
+        let (me, languages) = (self.clone(), self.languages.clone());
+        glib::spawn_future_local(async move {
+            loop {
+                glib::timeout_future(hold_alert::PERIOD).await;
+                if me.held_watch.get() != watch {
+                    return;
+                }
+                let (token, languages) = (token.clone(), languages.clone());
+                let read = gio::spawn_blocking(move || kiff::held(&token, &languages).ok())
+                    .await
+                    .ok()
+                    .flatten();
+                if me.held_watch.get() != watch {
+                    return;
+                }
+                let Some(answer) = read else { continue };
+                if answer.status == 401 {
+                    me.signed_out_by_kiff();
+                    return;
+                }
+                // A read that fails changes nothing: the next minute reads again.
+                let Some(holds) = (answer.status == 200)
+                    .then(|| tafs_core::held::read_held(&answer.body))
+                    .flatten()
+                else {
+                    continue;
+                };
+                let Some(app) = me.window.application() else {
+                    continue;
+                };
+                let seen = me.held_seen.borrow().clone();
+                for hold in hold_alert::gone(seen.as_ref(), &holds) {
+                    app.withdraw_notification(&hold_alert::tag(&hold));
+                }
+                if notifies {
+                    for hold in hold_alert::fresh(seen.as_ref(), &holds) {
+                        let named = hold_alert::named(
+                            &me.words,
+                            hold,
+                            tafs.iter().map(|(a, n)| (a.as_str(), n.as_str())),
+                        )
+                        .ok()
+                        .flatten();
+                        let Ok(lines) = hold_alert::lines(&me.words, hold, named.as_deref()) else {
+                            continue;
+                        };
+                        let n = gio::Notification::new(&lines.title);
+                        n.set_body(Some(&lines.body));
+                        n.set_default_action_and_target_value(
+                            "app.open-hold",
+                            Some(&lines.hold.to_variant()),
+                        );
+                        app.send_notification(Some(&hold_alert::tag(&lines.hold)), &n);
+                    }
+                }
+                *me.held_seen.borrow_mut() = Some(holds.iter().map(|h| h.id.clone()).collect());
+            }
+        });
+    }
+
+    /// A hold's notification, clicked: the account read again, opening on Needs you
+    /// (`PushDelegate.open`).
+    fn open_hold(self: &Rc<Self>) {
+        self.window.present();
+        let Some(kept) = self.kept.borrow().clone() else {
+            return;
+        };
+        *self.first.borrow_mut() = Selection::NeedsYou;
+        self.open_account(kept);
     }
 
     /// KIFF ended the session: forgotten here with its key, and the welcome says so.
@@ -1456,6 +1635,28 @@ fn gallery_file(path: Option<&str>) -> Option<tafs_core::recipes::Gallery> {
         Some(g) => Some(g),
         None => {
             eprintln!("{path} isn't the gallery as tafs cloud answers it");
+            std::process::exit(2);
+        }
+    }
+}
+
+/// `--access`'s file, as tafs cloud answers `GET /v1/me/access` (a contract file's `answer`, or
+/// the answer itself). None given, none read; a file that can't be read stops the app.
+fn access_file(
+    path: Option<&str>,
+) -> std::collections::BTreeMap<String, tafs_core::access::Access> {
+    let Some(path) = path else {
+        return Default::default();
+    };
+    let read = std::fs::read(path).ok().and_then(|b| {
+        let v: serde_json::Value = serde_json::from_slice(&b).ok()?;
+        let a = v.get("answer").cloned().unwrap_or(v);
+        tafs_core::access::read_access(&serde_json::to_vec(&a).ok()?)
+    });
+    match read {
+        Some(a) => a,
+        None => {
+            eprintln!("{path} isn't access as tafs cloud answers it");
             std::process::exit(2);
         }
     }

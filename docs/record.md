@@ -91,5 +91,37 @@ words are forgiven; a blank `about` opens no case. `--home shared/contracts/home
 --record-search crates/tafs-app/fixtures/record-search.json --page record-search:1042` (synthetic)
 draws a search, CI's `record-search`; nothing is sent.
 
-Not yet: exporting receipts (`ExportReceiptsRow`); a call from a taf not on Home drawn as the
-iPad's plain panel without its next step (it's drawn as the others here).
+Not yet: a call from a taf not on Home drawn as the iPad's plain panel without its next step (it's
+drawn as the others here).
+
+## Exporting receipts (signed in)
+
+The iPad's `ExportReceiptsRow` (`RecordSearchViews.swift`), with `exportReceipts` from
+`TafsCloud+Record.swift` and `AppModel`, is ported to `tafs-core/src/receipts.rs` and
+`crates/tafs-app/src/receipts.rs`. It sits under the box, for whoever sees every taf's Record
+(`seesEveryTaf`): at least one of their tafs is on tafs cloud, and they oversee or manage each.
+A taf whose access wasn't read counts as not seen. tafs cloud still decides, with a 403 in its
+words.
+
+- **Export receipts** (15 semibold, amber) opens Last 7 days, Last 30 days and Last 90 days. Each
+  range ends today and counts today, in the account's calendar days.
+- **One of them** reads `GET /v1/record/receipts?from=&to=`. While it reads, "Preparing receipts…"
+  shows, dim, with a spinner. Up to 32 MB is read, and a longer answer is refused rather than
+  saved cut short.
+- **The files:** `receipts-{from}-to-{to}.json` is tafs cloud's answer byte for byte (KIFF's
+  receipts as issued), and `.csv` is its `csv`. "{count} calls have no receipt yet." follows
+  when some are `missing`. "They couldn't be exported. {why}" shows in red when the read fails.
+- **Where Linux differs:** the iPad hands the two files to its share sheet. Linux asks for a
+  folder and saves both files there. Closing the dialog saves nothing, as closing the share
+  sheet does. A day in the answer that isn't YYYY-MM-DD never names a file: the asked day does.
+  If saving fails, the system's reason follows "They couldn't be exported.", as the iPad shows
+  its own.
+
+To draw the row open (CI's `record-export`; nothing is sent or saved), run with:
+- `--home shared/contracts/home.json`;
+- `--access crates/tafs-app/fixtures/access.json` (Rae, overseen);
+- `--record-search crates/tafs-app/fixtures/record-search.json`;
+- `--receipts crates/tafs-app/fixtures/receipts.json`;
+- `--page record-export`.
+
+All of these fixtures are synthetic.

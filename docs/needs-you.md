@@ -91,8 +91,8 @@ Each is an amber-edged panel: "Did this happen?" (13 semibold, amber), KIFF's wo
 as they are (15 semibold) or, before KIFF sent them, its title and amount; why KIFF asks, in its
 words (13, soft). No and Yes are signed like an approval, and this computer approves nothing (its
 key is in software), so where they'd be the card says "This device can't approve. Approve on
-another device signed in to your account." (`ApprovalGate`), as tafs-macos #76 does: it's
-answered on the phone. `--home shared/contracts/home.json --unproven
+another device signed in to your account." (`ApprovalGate`'s `ApprovalNotReady`, 14 in ink;
+`docs/approval.md`), as tafs-macos #76 does: it's answered on the phone. `--home shared/contracts/home.json --unproven
 crates/tafs-app/fixtures/unproven.json` (synthetic) draws two, CI's `needs-you-happened`.
 
 ## Card unit requests
@@ -122,6 +122,36 @@ hears "Opens {taf}, where you answer it". A knock also makes its taf relevant no
 (`relevantNow`). "Nothing is waiting." shows only when none knocks either.
 `--home crates/tafs-app/fixtures/home-waits.json` (synthetic) draws one, CI's `needs-you-waits`.
 
+## Notifications for held calls
+
+The iPad's hold notification (`HoldNotification.swift`: `words`, `fill`, `time`), and removing it
+once the hold is gone (`PushDelegate`'s `removeAlerts(forHold:)`), are ported to
+`tafs-core/src/hold_alert.rs` and `main.rs` › `watch_holds`. The iPad gets tafs cloud's push and
+fills it in from KIFF. A computer gets no push, so while tafs runs signed in with KIFF it reads
+KIFF's held calls (`GET /v1/me/card-exceptions?status=held`) once a minute, as Windows does
+(tafs-windows#69):
+
+- **What's notified:** each call held since the last read, as a desktop notification
+  (`gio::Notification`). Its title is "Rae needs you", Coach's own agent reads "Coach needs
+  you", and an agent no taf has reads "A taf needs you". Its body is what the call does and its
+  amount, why it's held, and when to answer by, in the account's zone with the zone's short name
+  when this computer's clock differs, then "Nothing is sent until you approve.".
+- **What isn't:** what already waited when the account was read. That's in Needs you, and
+  opening tafs doesn't announce it.
+- **Who's notified:** only someone who answers held calls (`holds.answer`, as `canAnswerHolds`).
+- **Gone:** a hold no longer held (answered elsewhere, or lapsed) loses its notification at the
+  next read. Signing out withdraws every one, and ends the reads.
+- **Clicking one:** tafs comes to the front and reads the account again, opening on Needs you
+  (`PushDelegate.open`). Bringing that one call into view isn't ported.
+- **A read that fails** changes nothing, and the next minute reads again. A 401 signs this
+  computer out, as any read does.
+- **Each notification's id** is its hold's id hashed (SHA-256), so any id KIFF sends is a safe
+  one.
+
+Unlike Windows, the reads don't pause while the window is minimised: a minimised window is when
+a notification helps. Needs you itself is read when the account opens and when a notification
+is clicked, not every minute.
+
 ## Not yet
 
 - **Answering from this computer:** KIFF takes an answer signed by the session's key. Until
@@ -133,5 +163,5 @@ hears "Opens {taf}, where you answer it". A knock also makes its taf relevant no
   the Doors screen.
 - **Discussing a Card unit request with Coach, and dismissing it:** there, dimmed.
 - **Alerts** (`AlertsCard`): the iPad offers them only to a session holding an approval key, and a
-  Linux session never does; Linux's notifications come in their own change.
+  Linux session never does. Held calls are notified (above).
 - **Bringing a call into view** from its alert.

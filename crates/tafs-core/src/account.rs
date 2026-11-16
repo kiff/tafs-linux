@@ -403,6 +403,32 @@ pub fn signed_out(result: Result<(), KiffError>) -> Result<(), KiffError> {
     }
 }
 
+/// `DeleteAccountView`'s words: the title, the warning, and what goes, each with its symbol.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DeleteLines {
+    pub title: String,
+    pub warning: String,
+    pub what_goes: String,
+    /// (SF symbol, words): tafs, sign-ins, Cards, records.
+    pub goes: Vec<(&'static str, String)>,
+    pub cancel: String,
+}
+
+pub fn delete_lines(w: &WordBook) -> Result<DeleteLines, WordsError> {
+    Ok(DeleteLines {
+        title: w.line("settings.delete_account.title")?,
+        warning: w.line("settings.delete_account.warning")?,
+        what_goes: w.line("settings.delete_account.what_goes")?,
+        goes: vec![
+            ("person.2", w.line("settings.delete_account.goes_tafs")?),
+            ("link", w.line("settings.delete_account.goes_sign_ins")?),
+            ("creditcard", w.line("settings.delete_account.goes_cards")?),
+            ("doc.text", w.line("settings.delete_account.goes_records")?),
+        ],
+        cancel: w.line("common.cancel")?,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -456,5 +482,24 @@ mod tests {
             }),
             Err(KiffError::Unauthorized)
         );
+    }
+
+    #[test]
+    fn deleting_says_what_goes_in_every_language() {
+        let w = WordBook::load(&WordBook::default_root(), "en").unwrap();
+        let d = delete_lines(&w).unwrap();
+        assert_eq!(d.title, "Delete account");
+        assert_eq!(
+            d.warning,
+            "This deletes your KIFF account. It can't be undone."
+        );
+        assert_eq!(
+            d.goes.iter().map(|(s, _)| *s).collect::<Vec<_>>(),
+            ["person.2", "link", "creditcard", "doc.text"]
+        );
+        assert_eq!(d.goes[0].1, "Tafs, runs, chats and notes");
+        for lang in crate::words::SHIPPED {
+            delete_lines(&WordBook::load(&WordBook::default_root(), lang).unwrap()).unwrap();
+        }
     }
 }

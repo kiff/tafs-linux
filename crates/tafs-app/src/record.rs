@@ -27,6 +27,8 @@ pub struct RecordData {
     pub waiting: Rc<dyn Fn(&Entry) -> bool>,
     /// Signed in with KIFF: the search across the person's tafs.
     pub search: Option<Rc<crate::record_search::SearchSource>>,
+    /// Signed in, for whoever sees every taf's Record: the receipts export.
+    pub receipts: Option<Rc<crate::receipts::ReceiptsSource>>,
 }
 
 /// Draws the chips and the days again, after a choice.
@@ -66,6 +68,9 @@ pub fn page(w: Rc<WordBook>, data: Rc<RecordData>) -> gtk::Widget {
         });
         let ui = crate::record_search::build(w.clone(), source.clone(), showing);
         column.append(&ui.entry);
+        if let Some(r) = &data.receipts {
+            column.append(&crate::receipts::row(w.clone(), r.clone()));
+        }
         column.append(&ui.results);
     }
     column.append(&tafs_scroll);

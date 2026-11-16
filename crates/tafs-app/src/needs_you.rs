@@ -138,7 +138,7 @@ fn coach_card(waiting: &tafs_core::waits::CoachWaiting, opens_coach: bool) -> gt
 
 /// `DidThisHappenCard`: an amber-edged panel with "Did this happen?" in amber, KIFF's words for
 /// the call (or its title and amount), why KIFF asks, and where No and Yes would be, that this
-/// device can't approve (`ApprovalGate`): both answers are signed like an approval.
+/// computer can't approve (`ApprovalGate`, one for both): both answers are signed like an approval.
 fn happened_card(h: &tafs_core::unproven::HappenedLines) -> gtk::Box {
     let p = panel(true);
     p.set_widget_name(&format!("happened.{}", h.proposal));
@@ -150,7 +150,7 @@ fn happened_card(h: &tafs_core::unproven::HappenedLines) -> gtk::Box {
     if let Some(why) = &h.why {
         p.append(&text(why, 13, 400, &["tafs-soft"]));
     }
-    p.append(&text(&h.can_not_answer, 13, 400, &["tafs-soft"]));
+    p.append(&crate::approval::not_ready(&h.can_not_answer));
     p
 }
 
