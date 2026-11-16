@@ -730,7 +730,7 @@ fn a_halt_as_tafs_cloud_answers_it() {
         l.with_all.as_deref(),
         Some("Halted with all your tafs. Resume them all to let it run.")
     );
-    assert_eq!(halt::row(&w, &halted, true).unwrap().2, true);
+    assert!(halt::row(&w, &halted, true).unwrap().2);
 
     // Read as the iPad's synthesized decoder: a state it doesn't know, a missing part, or a time
     // that isn't one fails the read.
