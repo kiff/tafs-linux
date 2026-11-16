@@ -5,6 +5,7 @@ mod ai_consent;
 mod alerts;
 mod approval;
 mod calendar;
+mod coach;
 mod connect;
 mod connected;
 mod devices;
@@ -141,13 +142,16 @@ struct Options {
     balance: Option<String>,
     /// With `--runs`: a run's own page as tafs cloud answers `GET /v1/tafs/{id}/requests/{run}`.
     request: Option<String>,
+    /// With `--home`: Coach's conversation as tafs cloud answers
+    /// `GET /v1/tafs/{id}/conversation/{session}`, read from a file: nothing is sent.
+    coach: Option<String>,
     /// `--size WxH`: the window's size, for a screenshot of a narrower layout.
     size: Option<(i32, i32)>,
     screenshot: Option<String>,
 }
 
 const USAGE: &str = "tafs [--lang en|de|fr|es|it|pt|nl|pl] [--theme light|dark] [--sample] [--signed-in] [--view-only [--paired]]
-     [--home contract.json] [--usage answers.json] [--people answers.json] [--unproven answers.json] [--recipes answers.json] [--gallery answers.json] [--halt answer.json] [--record-search answers.json] [--access answer.json] [--receipts answer.json] [--activity answer.json] [--calls answer.json] [--receipt answer.json] [--work answer.json] [--doors answer.json] [--account-reads answers.json] [--me answer.json] [--memory answer.json] [--runs answer.json] [--request answer.json] [--balance answer.json] [--size WxH] [--page welcome|sign-in|pair|recipe:<id>|gallery|halt-all|halt:<id>|record-search:<q>|record-export|receipt:<proposal id>|run:<taf id>|pin-sheet|overview|needs-you|record|calendar|calendar-week|usage|connect-apps|account|kiff-account|time-zone|alerts|devices|people|taf|taf-card|taf-setup|consent|connected|sign-in-code] [--screenshot out.png]";
+     [--home contract.json] [--usage answers.json] [--people answers.json] [--unproven answers.json] [--recipes answers.json] [--gallery answers.json] [--halt answer.json] [--record-search answers.json] [--access answer.json] [--receipts answer.json] [--activity answer.json] [--calls answer.json] [--receipt answer.json] [--work answer.json] [--doors answer.json] [--account-reads answers.json] [--me answer.json] [--memory answer.json] [--runs answer.json] [--request answer.json] [--balance answer.json] [--coach answer.json] [--size WxH] [--page welcome|sign-in|pair|recipe:<id>|gallery|halt-all|halt:<id>|record-search:<q>|record-export|receipt:<proposal id>|run:<taf id>|pin-sheet|coach|overview|needs-you|record|calendar|calendar-week|usage|connect-apps|account|kiff-account|time-zone|alerts|devices|people|taf|taf-card|taf-setup|consent|connected|sign-in-code] [--screenshot out.png]";
 
 fn options() -> Result<Options, String> {
     let mut o = Options::default();
@@ -180,6 +184,7 @@ fn options() -> Result<Options, String> {
             "--runs" => o.runs = Some(value()?),
             "--balance" => o.balance = Some(value()?),
             "--request" => o.request = Some(value()?),
+            "--coach" => o.coach = Some(value()?),
             "--size" => {
                 let v = value()?;
                 let (w, h) = v.split_once('x').ok_or("--size takes WxH")?;
@@ -237,6 +242,7 @@ fn selection_of(page: Option<&str>) -> Selection {
         Some("time-zone") => Selection::TimeZone,
         Some("alerts") => Selection::Alerts,
         Some("language") => Selection::Language,
+        Some("coach") => Selection::Coach,
         // The sample's Refunds, as the reference set's taf.png opens it.
         Some("taf") | Some("taf-card") => Selection::Taf("refunds".into()),
         // With `--home`, the contract's first taf.
@@ -341,6 +347,7 @@ fn activate(app: &adw::Application, o: &Options) {
         memory_file: o.memory.as_ref().map(std::path::PathBuf::from),
         runs_file: o.runs.as_ref().map(std::path::PathBuf::from),
         request_file: o.request.as_ref().map(std::path::PathBuf::from),
+        coach_file: o.coach.as_ref().map(std::path::PathBuf::from),
         open_run: o.page.as_deref().is_some_and(|p| p.starts_with("run:")),
         usage_file: o.usage.as_ref().map(std::path::PathBuf::from),
         people_file: o.people.as_ref().map(std::path::PathBuf::from),
@@ -588,6 +595,8 @@ struct App {
     runs_file: Option<std::path::PathBuf>,
     /// `--request`'s page: the screenshots' run, never sent.
     request_file: Option<std::path::PathBuf>,
+    /// `--coach`'s answer: the screenshots' Coach conversation, never sent.
+    coach_file: Option<std::path::PathBuf>,
     /// `--page run:<taf id>`: that taf's first kept run open, for a screenshot.
     open_run: bool,
     /// `--usage`'s file of synthetic answers.
@@ -1692,6 +1701,34 @@ impl App {
                 },
                 _ => connect::ConnectSource::None,
             },
+            // Coach, signed in with KIFF: its conversation read as the session with this device's
+            // proof, or a screenshot's from `--coach`, never sent. The sample has no Coach.
+            coach: match (mode, self.kept.borrow().as_ref(), &self.coach_file) {
+                (Mode::Kiff, _, Some(f)) => coach::CoachSource::File(f.clone()),
+                (Mode::Kiff, Some(kept), None) => coach::CoachSource::Cloud {
+                    kept: Box::new(kept.clone()),
+                    languages: self.languages.clone(),
+                },
+                _ => coach::CoachSource::None,
+            },
+            // The account's tafs by KIFF agent: a result's button opens the one it set up.
+            coach_listed: Rc::new(
+                cloud
+                    .as_deref()
+                    .map(|c| {
+                        c.home
+                            .tafs
+                            .iter()
+                            .filter_map(|h| tafs_core::home::taf(words, h).ok())
+                            .map(|t| tafs_core::coach_lines::Listed {
+                                agent: t.agent,
+                                key: t.key,
+                                name: t.name,
+                            })
+                            .collect()
+                    })
+                    .unwrap_or_default(),
+            ),
             cloud_names: Rc::new(
                 tafs.iter()
                     .filter_map(|t| Some((t.cloud_id.clone()?, t.name.clone(), t.manages)))

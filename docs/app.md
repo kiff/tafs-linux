@@ -10,7 +10,7 @@ another language or a `{hole}`.
 - **Signed in, or in the sample:** one sidebar for the whole app, as on the iPad
   ([the sidebar](home.md)), and the chosen screen beside it: the Overview first, and
   [Needs you](needs-you.md), [the Record](record.md), [a taf's page](taf.md), and
-  [Account](account.md) from the sidebar's foot. Screens not
+  [Coach](coach.md) and [Account](account.md) from the sidebar's foot. Screens not
   ported yet show their title only, in the [port checklist](port-checklist.md)'s order.
 
 The colours are the iPad's `Theme.swift`, light and dark, and follow the desktop's appearance
@@ -81,8 +81,9 @@ time), so does Linux, when the account's clock isn't this computer's at that mom
 | `--runs answer.json` | with `--home`: a page of a taf's runs as tafs cloud answers `GET /v1/tafs/{id}/work/runs`; every page reads it, and Run now sends nothing |
 | `--request answer.json` | with `--runs`: a run's own page as tafs cloud answers `GET /v1/tafs/{id}/requests/{run}`; Try the reply now sends nothing |
 | `--receipt answer.json` | with `--home`: a receipt as KIFF answers `GET /v1/receipts/{trace_id}`; nothing is sent |
+| `--coach answer.json` | with `--home`: Coach's conversation as tafs cloud answers `GET /v1/tafs/{id}/conversation/{session}`; nothing is read or sent ([Coach](coach.md)) |
 | `--paired` | with `--view-only`: a computer already added with the phone, whose notice says approvals go to the phone |
-| `--page …` | `welcome`, `sign-in`, `pair` (adding this computer with a phone), `recipe:<id>` (with `--home` and `--recipes`: that recipe's sheet), `gallery` (with `--home` and `--gallery`: the gallery), `halt-all` or `halt:<id>` (a halt's screen), `record-search:<q>` (the Record with that search), `record-export` (the Record with the receipts' days open), `receipt:<proposal id>` (with `--activity` and `--receipt`: that line's receipt), `run:<taf id>` (with `--runs` and `--request`: that taf's first kept run's own page), `delete-account` (with `--people`: the KIFF account's Delete account sheet), `pin-sheet` (the security key's PIN sheet, with canned answers; no key is asked), or a screen beside the sidebar: `needs-you`, `record`, `calendar`, `usage`, `connect-apps`, `account`, `alerts`, `taf` (the sample's Refunds), or `taf:<id>` (a taf by its key) |
+| `--page …` | `welcome`, `sign-in`, `pair` (adding this computer with a phone), `recipe:<id>` (with `--home` and `--recipes`: that recipe's sheet), `gallery` (with `--home` and `--gallery`: the gallery), `halt-all` or `halt:<id>` (a halt's screen), `record-search:<q>` (the Record with that search), `record-export` (the Record with the receipts' days open), `receipt:<proposal id>` (with `--activity` and `--receipt`: that line's receipt), `run:<taf id>` (with `--runs` and `--request`: that taf's first kept run's own page), `delete-account` (with `--people`: the KIFF account's Delete account sheet), `pin-sheet` (the security key's PIN sheet, with canned answers; no key is asked), or a screen beside the sidebar: `needs-you`, `record`, `calendar`, `usage`, `connect-apps`, `account`, `alerts`, `taf` (the sample's Refunds), `taf:<id>` (a taf by its key), or `coach` (with `--coach`: Coach's conversation) |
 | `--screenshot out.png` | save the window (1280×800, at 2×) as a PNG and quit. It never reads or writes the keyring, and its sign-in and pairing show a code without reaching KIFF |
 
 CI builds the app and saves the welcome, the sign-in, the pairing, the Overview beside the sidebar (with the
@@ -90,8 +91,9 @@ account's items), the Overview from the `home.json` contract, Needs you (and wit
 page and its Card tab, Plan & usage and Account over the sample, Plan & usage signed in with
 KIFF from synthetic answers (managing billing, and as a member), Connect apps, Devices, People & groups, the KIFF account and its time zone picker (from synthetic answers), Alerts, the
 calendar's Day and Week (and Day at an upright iPad's size, `--size 1032x1376`), a tafs cloud
-taf's page and its Card tab from the contracts (and with its Card's own lines) (and with its work and runs, and a run's own page), the sidebar over the plain sample (and with an agent not run by tafs, and with the plan's line), and Home with no taf and a recipe's sheet, the strip and the gallery, the halt screens, a Record search, the receipts export open, a Record line's receipt, the Delete account sheet, the security key's PIN sheet, the
-view-only notice (and once paired), and the boards' empty states (the Overview with no taf, Needs you with nothing waiting, Halt all once halted) in en, fr and pt, light and dark: 354 pictures, as the `screenshots`
+taf's page and its Card tab from the contracts (and with its Card's own lines) (and with its work and runs, and a run's own page), the sidebar over the plain sample (and with an agent not run by tafs, and with the plan's line), and Home with no taf and a recipe's sheet, the strip and the gallery, the halt screens, a Record search, the receipts export open, a Record line's receipt, the Delete account sheet, the security key's PIN sheet,
+Coach's conversation from the contract (and with an approval waiting under tafs cloud's wider line), the
+view-only notice (and once paired), and the boards' empty states (the Overview with no taf, Needs you with nothing waiting, Halt all once halted) in en, fr and pt, light and dark: 372 pictures, as the `screenshots`
 artifact of the run. The job fails if any is missing.
 
 ## The AppImage

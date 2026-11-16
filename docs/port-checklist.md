@@ -43,6 +43,10 @@ ports a file updates its line here.
 | TafDialPanel.swift | 228 | The dial's requests and confirmation, and a run's own page | `KnobRequestDetail`: where it came from, its line, its steps with their marks, Try the reply now for whoever manages the taf (`runs_panel.rs`, `tafs-core/runs.rs`) | The dial's requests and their confirmation; Ask Coach (Coach isn't on this computer) |
 | DoorsView.swift | 923 | A taf's Doors tab | `KnockCard` for a message and `DoItSheet`, on a taf's Activity (`knocks.rs`, `tafs-core/doors.rs`) | The Doors tab itself: its doors, the dial, adding and closing one, pairing and keys; the day's line (`rest`) and its OK |
 | DiscardSettingUp.swift | 35 | Discard a taf being set up | `DiscardSettingUpButton`'s button in tafs cloud's words, beside the taf, for the person whose setup it was (`shell.rs`) | Its confirmation and the discard: signed, so the button is there, dimmed |
+| SetupChatView.swift | 1946 | Coach's conversation | Read only, signed in with KIFF (`coach.rs`, `tafs-core/coach_lines.rs`, `tafs-core/coach.rs`): the newest conversation read with this device's proof; the inline title; `SetupPlan` with `StepMark`, folded; `thread`'s order (`items`, `textBeforeCards`'s answers read once), `gapTime`, the owner's `ChatBubble` with `ownerWords` and `AnsweredCardLine`, Coach's words full width (Markdown as Pango markup), `WhileYouWereAway`, the coach lines, the dots while it works, unread steering; `SetupComponentView`: notice, confirm, `QuestionsCard`, `SetupApproval`, sign-in, result (`handOver`, `improvement`), `DriveCard`; `OutcomeLine`; `WiderLine` above where the buttons go, then `ApprovalGate`'s line in their place; `DriveRecapCard`'s eyebrow and task | The message box, sending and every answer (the cards' choices, Send answers and Chat about this are there, dimmed); Approve, Decline, the sign-in's button and Not now (signed: `ApprovalGate`'s line instead); planque's grant and KIFF's draft on an approval (the card's own title and words stand for them, and `cardNextWords` is drawn without a grant); `RefusedLines` is decoded but, as on the iPad, not drawn in Coach; a knob card is its title alone (`KnobDraftCard`); a drive recap's steps and why it ended; the stream (`LiveWork`, revealing, pinning), the Needs you bar and ↓; New conversation, Previous conversations and archiving; the recipes on an empty chat; `SetupShapePanel` (only with planque ready); `CoachToolsRow`; a result's See version |
+| QuestionsCard.swift | 121 | Several questions at once | The card as it waits, read only: Coach's words, its title, "0 of N answered", each question and choice with its line, Something else…, the note; answered, `OutcomeLine` with `QuestionAnswers.words` (`coach_lines.rs`) | Choosing, your own answer, Send answers and Chat about this: there, dimmed |
+| DriveViews.swift | 73 | Coach asks to drive the app | `DriveCard` read only: answered, its line; waiting, its eyebrow, task and note, then `ApprovalGate`'s line; `DriveRecapCard`'s eyebrow and task (`coach_lines.rs`) | Approving or declining a drive; a recap's steps and why it ended (`DriveStep` isn't decoded) |
+| WorkLog.swift | 181 | What a taf does while it answers | `WorkSummary(coach: true)` folded under Coach's words, with `WorkLog.rows`, `duration` and `StepList` (`coach_lines.rs`, `coach.rs`) | `LiveWork` (no stream); a taf's own chat |
 
 ## Not started
 
@@ -53,18 +57,14 @@ ports a file updates its line here.
 | AttachViews.swift | 267 | Attaching photos and files in a chat | |
 | CoachMode.swift | 131 | Coach mode over the app | |
 | CoachToolsStep.swift | 255 | Coach's tools still to give | |
-| DriveViews.swift | 73 | Coach asks to drive the app | |
 | MicButton.swift | 122 | The mic in a chat's message bar | |
 | PlanViews.swift | 268 | Buying credits (held for the owner's money question) | |
-| QuestionsCard.swift | 121 | Several questions at once | QuestionAnswers |
 | ReportAnswerSheet.swift | 124 | Report an answer | |
-| SetupChatView.swift | 1946 | Coach's conversation | SetupComponent, SetupShape, SentMessages |
 | SetupShapePanel.swift | 130 | What Coach has made so far | SetupShape |
 | TafChatView.swift | 826 | A taf's chat | |
 | TafKnobView.swift | 377 | The taf's remote | KnobNavigation |
 | TafSetupViews.swift | 512 | A taf's Setup | |
 | TrialViews.swift | 214 | Trials of a new version | |
-| WorkLog.swift | 181 | What a taf does while it answers | |
 
 ## Not for Linux
 
@@ -107,7 +107,14 @@ ports a file updates its line here.
 | Services/ThisDevice.swift | `signin::PLATFORM`, `KIFF_KIND` |
 | Services/TafTemplates.swift | `tafs-core/sample.rs`: the five sample tafs and their held calls |
 | Model/Models.swift | `Money.figure` for whole euros (`money.rs`); `Window`, `TafCard.hero` (`card.rs`) |
+| KIFF/TafsCloud.swift (Coach) | `ChatMessage` (`Refused`, `Work`, `DoorMark`, `AttachmentRef`), `Shown`, `CardAnswer`, `LenientShown`, `Steering`, `CoachLine`, `Chat`, `chats(_:)`, `setupRead`'s `setup`, `setupThread(_:session:proof:can:)`, `setupThread(decoding:)`; `DriveRecap` (`tafs-core/coach.rs`, `kiff::cloud_with`) |
+| Model/SetupComponent.swift | `SetupComponent` with `Signs`, `Wider`, `Connection`; `ShownComponent`; `SetupThread`'s `items`, `placedAt`, `plan`, `Answer`, `answer(to:)`, `answer(_:to:)`, `ownerWords`, `replaced`, `handOver`, `improvement`, `planNeeded`, `fold` (`tafs-core/coach.rs`, `coach_lines.rs`) |
+| KIFF/PlanqueClient.swift | `message`, `grantsReadProof` (`tafs-core/planque.rs`); nothing else: this computer signs no other request |
+| KIFF/SigningTime.swift | `SigningTime.next` (`planque::signing_time`) |
+| KIFF/KIFFClient.swift (this device) | `thisDeviceID` (`devices::this_device_id`) |
+| App/AppModel.swift (Coach) | `loadSetup`'s Coach, `loadSetupThread`'s read order (chats, proof, conversation), `setupCardState` without a grant, `activityWords` (`coach.rs`, `coach_lines.rs`) |
+| Model/QuestionAnswers.swift | `QuestionAnswers.words` (`coach_lines::question_words`) |
 
 ## Coverage
 
-Ported 7, partial 22, not started 17, not for Linux 4: the 50 view files at the pin.
+Ported 7, partial 26, not started 13, not for Linux 4: the 50 view files at the pin.

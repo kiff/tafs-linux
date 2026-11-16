@@ -358,27 +358,49 @@ pub fn cloud_file(token: &str, languages: &[&str], path: &str) -> Result<Answer,
 }
 
 pub fn cloud(token: &str, languages: &[&str], path: &str) -> Result<Answer, KiffError> {
-    get(
+    cloud_with(token, languages, path, &[])
+}
+
+/// A read on tafs cloud as the session with headers of its own: Coach's conversation with this
+/// device's proof (`Planque-Device-Signature`), which tafs cloud only forwards. Neither the token
+/// nor a header's value is ever logged.
+pub fn cloud_with(
+    token: &str,
+    languages: &[&str],
+    path: &str,
+    headers: &[(&str, &str)],
+) -> Result<Answer, KiffError> {
+    get_with(
         &format!("{}{path}", tafs_core::home::TAFS_CLOUD),
         token,
         languages,
+        headers,
     )
 }
 
 /// A GET as the session, to KIFF's API or tafs cloud only, with no redirect followed.
 fn get(url: &str, token: &str, languages: &[&str]) -> Result<Answer, KiffError> {
+    get_with(url, token, languages, &[])
+}
+
+fn get_with(
+    url: &str,
+    token: &str,
+    languages: &[&str],
+    headers: &[(&str, &str)],
+) -> Result<Answer, KiffError> {
     if !may_send_to(url) {
         return Err(KiffError::Unreadable);
     }
-    let agent = agent();
-    Kiff::read(
-        agent
-            .get(url)
-            .set("Accept", "application/json")
-            .set("Accept-Language", &accept_language(languages))
-            .set("Authorization", &format!("Bearer {token}"))
-            .call(),
-    )
+    let mut request = agent()
+        .get(url)
+        .set("Accept", "application/json")
+        .set("Accept-Language", &accept_language(languages))
+        .set("Authorization", &format!("Bearer {token}"));
+    for (name, value) in headers {
+        request = request.set(name, value);
+    }
+    Kiff::read(request.call())
 }
 
 /// `GET /v1/me/did-this-happen` at KIFF as the session (`didThisHappen`): the money calls KIFF

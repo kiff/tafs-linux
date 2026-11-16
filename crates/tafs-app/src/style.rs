@@ -97,6 +97,42 @@ button.tafs-account:hover { background-color: alpha(@tafs_ink, 0.04); }
 .tafs-account image { color: @tafs_soft; }
 .tafs-account image.open { color: @tafs_amber_text; }
 
+/* Coach (`SetupChatView`): its own wash; the owner's words on the brand sweep, corners of 18; cards'
+   edges in their state's colour; an answered card's line on the raised colour at 60%. */
+.tafs-coach-wash { background-color: @tafs_coach_wash; }
+.tafs-coach-title { border-bottom: 1px solid @tafs_line; }
+.tafs-owner-bubble { background-image: linear-gradient(135deg, BRAND0, BRAND1, BRAND2); color: white; border-radius: 18px; padding: 10px 14px; }
+.tafs-owner-bubble.steered { opacity: 0.8; }
+.tafs-panel.edge-amber { border-color: @tafs_amber; }
+.tafs-panel.edge-ok { border-color: @tafs_ok; }
+.tafs-panel.edge-no { border-color: @tafs_no; }
+.tafs-panel.edge-ink { border-color: @tafs_ink; }
+.tafs-eyebrow.ok { color: @tafs_ok; }
+.tafs-outcome { background-color: alpha(@tafs_raised, 0.6); border-radius: 12px; padding: 10px 12px; }
+button.tafs-outcome-button { background: none; border: none; box-shadow: none; padding: 0; min-height: 0; }
+button.tafs-outcome-button:hover .tafs-outcome { background-color: @tafs_raised; }
+.tafs-notice { border-radius: 14px; padding: 12px; background-color: alpha(@tafs_soft, 0.10); }
+.tafs-notice.no { background-color: alpha(@tafs_no, 0.10); }
+.tafs-notice.amber { background-color: alpha(@tafs_amber, 0.10); }
+.tafs-notice.ok { background-color: alpha(@tafs_ok, 0.10); }
+.tafs-away { background-color: @tafs_raised; border-radius: 14px; padding: 12px; }
+.tafs-card-words { background-color: @tafs_raised; border-radius: 12px; padding: 12px; }
+button.tafs-capsule { background-color: @tafs_panel; background-image: none; color: @tafs_ink; border: 1px solid alpha(@tafs_ink, 0.18);
+  border-radius: 999px; padding: 9px 14px; min-height: 0; box-shadow: none; font-size: 14px; font-weight: 400; }
+button.tafs-choice { background-color: @tafs_panel; background-image: none; color: @tafs_ink; border: 1px solid alpha(@tafs_ink, 0.18);
+  border-radius: 22px; padding: 10px 16px; min-height: 24px; box-shadow: none; }
+button.tafs-capsule:disabled, button.tafs-choice:disabled { opacity: 0.45; }
+button.tafs-coach-link { background: none; border: none; box-shadow: none; color: @tafs_coach; font-size: 15px; font-weight: 600; padding: 0; min-height: 0; }
+button.tafs-coach-link:disabled { opacity: 0.45; }
+button.tafs-work { background: none; border: none; box-shadow: none; padding: 0; min-height: 0; color: @tafs_dim; font-size: 13px; }
+.tafs-step-list { border-left: 1px solid @tafs_line; padding-left: 6px; margin-left: 4px; }
+.tafs-plan-mark { border-radius: 999px; min-width: 18px; min-height: 18px; }
+.tafs-plan-mark.done { background-color: @tafs_ok; color: @tafs_on_fill; }
+.tafs-plan-mark.failed { background-color: @tafs_no; color: @tafs_on_fill; }
+.tafs-plan-mark.active { border: 2.5px solid @tafs_amber; min-width: 13px; min-height: 13px; }
+.tafs-plan-mark.pending { border: 1.5px solid alpha(@tafs_ink, 0.25); min-width: 15px; min-height: 15px; }
+.tafs-typing { background-color: @tafs_dim; border-radius: 999px; min-width: 7px; min-height: 7px; }
+
 /* TafAvatar: the initial in white on the taf's colour, corners of 30% of its size. */
 .tafs-avatar { color: white; font-weight: 700; }
 AVATARS

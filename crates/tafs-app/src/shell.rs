@@ -60,6 +60,9 @@ pub struct Screens {
     /// Where the calendar reads, and the state a screenshot opens it in.
     pub calendar: crate::calendar::CalendarSource,
     pub calendar_first: tafs_core::calendar::State,
+    /// Where Coach's conversation is read, and the account's tafs a result can open.
+    pub coach: crate::coach::CoachSource,
+    pub coach_listed: Rc<Vec<tafs_core::coach_lines::Listed>>,
 }
 
 /// Builds the shell. `view_only` shows the notice that this computer can't approve yet.
@@ -92,6 +95,8 @@ pub fn build(
         gallery,
         halt,
         export,
+        coach,
+        coach_listed,
     } = screens;
     let entries = Rc::new(record.entries.clone());
     let lines = model.lines(&w).unwrap_or_else(|e| panic!("{e}"));
@@ -294,6 +299,10 @@ pub fn build(
                 Selection::Usage => {
                     crate::usage::page(w.clone(), usage.clone(), cloud_names.clone())
                 }
+                // Coach, read only, signed in with KIFF; the sample has none, so its title alone.
+                Selection::Coach if !matches!(coach, crate::coach::CoachSource::None) => {
+                    crate::coach::page(w.clone(), coach.clone(), coach_listed.clone(), open.clone())
+                }
                 // A halt: every taf's, or one taf's by tafs cloud's id.
                 Selection::HaltAll | Selection::Halt(_) => match &halt {
                     Some(source) => {
@@ -412,7 +421,7 @@ pub fn build(
         let select = select.clone();
         account_button.connect_clicked(move |_| select(Selection::Account));
     }
-    // Coach mode comes in its own change: until then Coach opens its title, as the other screens do.
+    // Coach opens its conversation, read only; in the sample, its title.
     if let Some(coach) = coach_button {
         let select = select.clone();
         coach.connect_clicked(move |_| select(Selection::Coach));
