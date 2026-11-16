@@ -83,5 +83,30 @@ does:
 - **A new credential's attestation object**: `fmt`, `attStmt` and `authData`, in CTAP2's
   canonical order.
 
-Next come the key itself through libfido2 with its PIN sheet, then registering it through
-pairing, with S1's `credential_proof`.
+The key itself is `crates/tafs-app/src/fido_key.rs`, ported from macOS 12's `FidoKey.swift`.
+It asks the one key plugged in through libfido2, with exactly those asks:
+- **It loads the system's `libfido2.so.1` at runtime**, the first time a key is asked
+  (Debian and Ubuntu's `libfido2-1`, Fedora's `libfido2`, 1.14 or later for the raw
+  authenticator data). macOS 12 builds the library from pinned source instead. This way the app
+  builds and runs without it, and a computer without it says so (`Missing::Library`,
+  `Missing::TooOld`).
+- **It starts libfido2 once**, with `FIDO_DEBUG` cleared (it would print the frames sent to the
+  key) and no U2F fallback.
+- **It opens one key only**, with a PIN set. No key, several keys, a U2F-only key or a key
+  without a PIN is refused before anything is asked of it. The key waits two minutes for its
+  touch.
+- **It asks only two things of the key:** `fido_dev_get_assert` and `fido_dev_make_cred`. It
+  reads the retry count after a wrong PIN and for the PIN sheet. It never resets the key, and
+  never sets or changes its PIN.
+- **The PIN goes to the key once**, and is cleared whether or not the key was reached.
+- **A request can be cancelled at the key** (`fido_dev_cancel`) from another thread.
+- **The answer is raw:** the authenticator data, the signature and the credential used, or the
+  attestation object built from libfido2's three parts. `passkey::refusal` checks it whatever
+  libfido2 says.
+
+Nothing calls it while it's switched off. Its tests ask with no key plugged in: where libfido2
+is installed it finds none, and where it isn't, it says it's missing. Either way, no PIN is left
+held.
+
+Next come the PIN sheet (its `approval.security_key.*` words, once they're at the pin), then
+registering the key through pairing, with S1's `credential_proof`.
