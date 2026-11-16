@@ -154,14 +154,14 @@ thread_local! {
         RefCell::default();
 }
 
-/// An app's logo (18), loaded from tafs cloud (`AppMark`'s `AsyncImage`): nothing while it loads
-/// or when it fails, so the name stands alone.
-fn logo(url: String) -> gtk::Picture {
+/// An app's logo (`size`: 18 on a recipe, 24 in Connect apps), loaded from tafs cloud (`AppMark`'s
+/// `AsyncImage`): nothing while it loads or when it fails, so the name stands alone.
+pub fn logo(url: String, size: i32) -> gtk::Picture {
     // Hidden from a screen reader, as the iPad's: the name says it.
     let picture = gtk::Picture::builder()
         .accessible_role(gtk::AccessibleRole::Presentation)
         .build();
-    picture.set_size_request(18, 18);
+    picture.set_size_request(size, size);
     picture.set_can_shrink(true);
     picture.set_content_fit(gtk::ContentFit::Contain);
     picture.set_visible(false);
@@ -203,7 +203,7 @@ fn app_marks(recipe: &Recipe) -> gtk::FlowBox {
     for app in &recipe.apps {
         let mark = gtk::Box::new(gtk::Orientation::Horizontal, 6);
         if let Some(url) = tafs_core::recipes::logo_url(app.logo.as_deref()) {
-            mark.append(&logo(url));
+            mark.append(&logo(url, 18));
         }
         mark.append(&text(&app.name, 12, 400, &["tafs-dim"]));
         marks.insert(&mark, -1);

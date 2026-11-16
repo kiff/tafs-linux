@@ -6,7 +6,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use gtk::prelude::*;
+use adw::prelude::*;
 use tafs_core::connect::{path, says_make_a_taf, split, App, ConnectApps, Row};
 use tafs_core::words::WordBook;
 
@@ -18,10 +18,12 @@ pub enum ConnectSource {
     /// The sample: the reference set's apps in a screenshot (`SampleScreens.connectApps`),
     /// else nothing, as the iPad's sample.
     Sample { screenshot: bool },
-    /// tafs cloud, as the session.
+    /// tafs cloud, as the session, and the tafs an app can be connected for (`connectableTafs`:
+    /// on tafs cloud and managed by this person), by tafs cloud's id.
     Cloud {
         token: String,
         languages: Vec<&'static str>,
+        connectable: Vec<String>,
     },
     /// Signed out: nothing read.
     None,
@@ -35,6 +37,8 @@ struct State {
     loading_more: bool,
     /// Each read's number: only the newest search may replace the page.
     request: u64,
+    /// A narrow window: one-line rows and no table (`sizeClass != .regular`).
+    narrow: bool,
 }
 
 type Redraw = Rc<dyn Fn()>;
@@ -72,11 +76,14 @@ fn read_page(
         .ok_or_else(|| why(tafs_core::signin::plain_words(w, 200).unwrap_or_default()))
 }
 
-/// `connectableTafs`: the tafs an app can be connected for, on tafs cloud and managed by this
-/// person. Who manages a taf isn't read on Linux yet, so none: Connect stays dimmed, as the
-/// iPad's when no taf can have it.
-fn connectable() -> &'static [String] {
-    &[]
+impl ConnectSource {
+    /// `connectableTafs`: the tafs an app can be connected for; the sample's none.
+    fn connectable(&self) -> usize {
+        match self {
+            ConnectSource::Cloud { connectable, .. } => connectable.len(),
+            _ => 0,
+        }
+    }
 }
 
 pub fn page(w: Rc<WordBook>, source: ConnectSource, open_coach: Rc<dyn Fn()>) -> gtk::Widget {
@@ -123,7 +130,10 @@ pub fn page(w: Rc<WordBook>, source: ConnectSource, open_coach: Rc<dyn Fn()>) ->
     let load: Rc<dyn Fn(bool)> = {
         let (w, source, state, redraw) = (w.clone(), source.clone(), state.clone(), redraw.clone());
         Rc::new(move |more: bool| {
-            let ConnectSource::Cloud { token, languages } = &source else {
+            let ConnectSource::Cloud {
+                token, languages, ..
+            } = &source
+            else {
                 // The sample lists the reference set's apps, unsearched.
                 if let ConnectSource::Sample { screenshot: true } = source {
                     let mut s = state.borrow_mut();
@@ -223,10 +233,15 @@ pub fn page(w: Rc<WordBook>, source: ConnectSource, open_coach: Rc<dyn Fn()>) ->
             if !yours.is_empty() {
                 list.append(&section_header(&l("connect.apps.yours")));
                 let group = group();
-                group.append(&columns(&w));
-                for app in &yours {
-                    group.append(&separator());
-                    group.append(&row(&w, app));
+                // The table's header on a wide window only (`if table { columns }`).
+                if !s.narrow {
+                    group.append(&columns(&w));
+                }
+                for (i, app) in yours.iter().enumerate() {
+                    if i > 0 || !s.narrow {
+                        group.append(&separator());
+                    }
+                    group.append(&row(&w, app, s.narrow));
                 }
                 list.append(&group);
             }
@@ -235,7 +250,7 @@ pub fn page(w: Rc<WordBook>, source: ConnectSource, open_coach: Rc<dyn Fn()>) ->
                 let group = group();
                 let mut first = true;
                 // Connecting needs a taf: said over the apps to connect, never over Yours.
-                if says_make_a_taf(discover.len(), false, connectable().len()) {
+                if says_make_a_taf(discover.len(), false, source.connectable()) {
                     let note = text(
                         &l("connect.apps_connect_taf_make_one"),
                         13,
@@ -247,7 +262,7 @@ pub fn page(w: Rc<WordBook>, source: ConnectSource, open_coach: Rc<dyn Fn()>) ->
                     group.append(&note);
                     first = false;
                 }
-                if yours.is_empty() {
+                if yours.is_empty() && !s.narrow {
                     if !first {
                         group.append(&separator());
                     }
@@ -259,7 +274,7 @@ pub fn page(w: Rc<WordBook>, source: ConnectSource, open_coach: Rc<dyn Fn()>) ->
                         group.append(&separator());
                     }
                     first = false;
-                    group.append(&row(&w, app));
+                    group.append(&row(&w, app, s.narrow));
                 }
                 list.append(&group);
             }
@@ -294,7 +309,36 @@ pub fn page(w: Rc<WordBook>, source: ConnectSource, open_coach: Rc<dyn Fn()>) ->
     redraw();
     load(false);
     crate::widgets::ground(&outer);
-    outer.upcast()
+    // Below the table's least width (App's and the three others' least, with their spacing,
+    // inside the page's margins), each app is one row with a second line, as on an iPhone.
+    let least = tafs_core::connect::APP_LEAST
+        + tafs_core::connect::LEAST.iter().sum::<f64>()
+        + tafs_core::connect::SPACING * 3.0
+        + 32.0;
+    let bin = adw::BreakpointBin::new();
+    bin.set_size_request(320, 240);
+    bin.set_child(Some(&outer));
+    let narrow = adw::Breakpoint::new(adw::BreakpointCondition::new_length(
+        adw::BreakpointConditionLengthType::MaxWidth,
+        least,
+        adw::LengthUnit::Px,
+    ));
+    {
+        let (state, redraw) = (state.clone(), redraw.clone());
+        narrow.connect_apply(move |_| {
+            state.borrow_mut().narrow = true;
+            redraw();
+        });
+    }
+    {
+        let (state, redraw) = (state.clone(), redraw.clone());
+        narrow.connect_unapply(move |_| {
+            state.borrow_mut().narrow = false;
+            redraw();
+        });
+    }
+    bin.add_breakpoint(narrow);
+    bin.upcast()
 }
 
 /// A section's header, as the iPad's inset list draws it: 17 semibold, soft, inset.
@@ -424,7 +468,7 @@ fn columns(w: &WordBook) -> gtk::Widget {
 
 /// One app (`cells`): its name and what it is, how it connects, whose it is, and where it stands
 /// with who uses it, then its ✓ or Connect. A connected app's detail opens with its port.
-fn row(w: &WordBook, app: &App) -> gtk::Widget {
+fn row(w: &WordBook, app: &App, narrow: bool) -> gtk::Widget {
     let said = Row::new(w, app, &[]).unwrap_or_else(|_| Row {
         how: String::new(),
         whose: None,
@@ -433,8 +477,17 @@ fn row(w: &WordBook, app: &App) -> gtk::Widget {
         line: None,
         setup: None,
     });
-    // The name on one line, cut at its end only as a last resort; what it is under it, in two.
+    // The logo, from tafs cloud only, beside the name (`name`). The name on one line, cut at its
+    // end only as a last resort; what it is under it, in two.
+    let named = gtk::Box::new(gtk::Orientation::Horizontal, 10);
+    if let Some(url) = tafs_core::recipes::logo_url(app.logo.as_deref()) {
+        let logo = crate::recipes::logo(url, 24);
+        logo.set_valign(gtk::Align::Center);
+        named.append(&logo);
+    }
     let name = gtk::Box::new(gtk::Orientation::Vertical, 1);
+    name.set_hexpand(true);
+    named.append(&name);
     name.append(&one_line(
         app.display_name(),
         16,
@@ -450,6 +503,34 @@ fn row(w: &WordBook, app: &App) -> gtk::Widget {
         s.set_lines(2);
         s.set_ellipsize(gtk::pango::EllipsizeMode::End);
         name.append(&s);
+    }
+    // A narrow window (the iPhone's): the name, and how it connects, whose it is and where it
+    // stands in one line under it, then its ✓ or Connect.
+    if narrow {
+        let r = gtk::Box::new(gtk::Orientation::Horizontal, 12);
+        let v = gtk::Box::new(gtk::Orientation::Vertical, 2);
+        v.set_hexpand(true);
+        v.set_valign(gtk::Align::Center);
+        v.append(&named);
+        v.append(&text(
+            &said.second(),
+            13,
+            400,
+            &[if app.needs_reconnect() {
+                "tafs-amber-text"
+            } else {
+                "tafs-dim"
+            }],
+        ));
+        r.append(&v);
+        if let Some(t) = trailing(w, app) {
+            t.set_valign(gtk::Align::Center);
+            r.append(&t);
+        }
+        r.set_size_request(-1, 52);
+        r.set_margin_top(10);
+        r.set_margin_bottom(10);
+        return r.upcast();
     }
     let how = one_line(&said.how, 14, 400, &["tafs-soft"]);
     let whose = one_line(said.whose.as_deref().unwrap_or(""), 14, 400, &["tafs-soft"]);
@@ -483,16 +564,33 @@ fn row(w: &WordBook, app: &App) -> gtk::Widget {
         }
         status.append(&v);
     }
-    // A ✓ for a connected app; else Connect (or Sign in again) as wide as its words, dimmed
-    // while no taf can have it; nothing for an app not set up yet.
+    if let Some(t) = trailing(w, app) {
+        status.append(&t);
+    }
+    let r = table_row([
+        named.upcast(),
+        how.upcast(),
+        whose.upcast(),
+        status.upcast(),
+    ]);
+    r.set_size_request(-1, 52);
+    r.set_margin_top(10);
+    r.set_margin_bottom(10);
+    r
+}
+
+/// `trailing`: a ✓ for a connected app; else Connect (or Sign in again) as wide as its words,
+/// dimmed while no taf can have it; nothing for an app not set up yet.
+fn trailing(w: &WordBook, app: &App) -> Option<gtk::Widget> {
     if app.needs_setup() {
+        None
     } else if app.connected() {
         let check = symbol("tafs-checkmark-symbolic", 17);
         check.add_css_class("tafs-ok");
         check.update_property(&[gtk::accessible::Property::Label(
             &w.line("connect.status.connected").unwrap_or_default(),
         )]);
-        status.append(&check);
+        Some(check.upcast())
     } else {
         let label = w
             .line(if app.needs_reconnect() {
@@ -505,12 +603,9 @@ fn row(w: &WordBook, app: &App) -> gtk::Widget {
         b.set_hexpand(false);
         b.add_css_class("compact");
         b.set_valign(gtk::Align::Center);
-        b.set_sensitive(!connectable().is_empty());
-        status.append(&b);
+        // Connecting is signed with this computer's key (`ConnectApprovalSheet`), which isn't
+        // ported: Connect stays dimmed even where a taf could have the app.
+        b.set_sensitive(false);
+        Some(b.upcast())
     }
-    let r = table_row([name.upcast(), how.upcast(), whose.upcast(), status.upcast()]);
-    r.set_size_request(-1, 52);
-    r.set_margin_top(10);
-    r.set_margin_bottom(10);
-    r
 }
