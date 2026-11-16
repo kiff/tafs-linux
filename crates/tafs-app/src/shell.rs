@@ -321,7 +321,14 @@ pub fn build(
                                 }
                                 _ => None,
                             };
-                            crate::taf::page(w.clone(), t, entries.clone(), halt_row)
+                            let open = open.clone();
+                            crate::taf::page(
+                                w.clone(),
+                                t,
+                                entries.clone(),
+                                halt_row,
+                                Rc::new(move || open(Selection::Usage)),
+                            )
                         }
                         None => screen_page(&title).upcast::<gtk::Widget>(),
                     }

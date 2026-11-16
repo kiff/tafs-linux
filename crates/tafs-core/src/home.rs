@@ -128,17 +128,76 @@ pub struct CardSummary {
 pub struct Health {
     pub level: String,
     pub lines: Vec<String>,
+    /// The fixes tafs cloud decides for its lines (`Health.Fix`).
+    pub fixes: Vec<Fix>,
+}
+
+/// A way to fix what one line says (`Health.Fix`): Coach opened with `say` in its box
+/// (`coach`), or Plan & usage (`credits`). `line` is the line's index; -1 when it isn't one.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct Fix {
+    pub line: i64,
+    pub kind: String,
+    pub words: String,
+    pub say: Option<String>,
+}
+
+impl Fix {
+    fn read(v: &Value) -> Option<Fix> {
+        let o = v.as_object()?;
+        Some(Fix {
+            line: o.get("line").and_then(Value::as_i64).unwrap_or(-1),
+            kind: o
+                .get("kind")
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_string(),
+            words: o
+                .get("words")
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_string(),
+            say: o.get("say").and_then(Value::as_str).map(str::to_string),
+        })
+    }
 }
 
 impl Health {
-    fn read(v: &Value) -> Option<Health> {
+    /// The fix kinds the app can act on (`knownKinds`).
+    pub const KNOWN_KINDS: [&'static str; 2] = ["coach", "credits"];
+
+    /// The fixes for one line, of the kinds the app can act on, in tafs cloud's order
+    /// (`fixes(for:)`).
+    pub fn fixes_for(&self, line: usize) -> Vec<&Fix> {
+        self.fixes
+            .iter()
+            .filter(|f| {
+                f.line == line as i64
+                    && Self::KNOWN_KINDS.contains(&f.kind.as_str())
+                    && !f.words.is_empty()
+                    && (f.kind != "coach" || !f.say.as_deref().unwrap_or("").is_empty())
+            })
+            .collect()
+    }
+
+    /// Whether a work's line is this health's first reason (`repeats(workLine:)`), so the page
+    /// says it once.
+    pub fn repeats(&self, work_line: &str) -> bool {
+        let line = work_line.trim();
+        match self.lines.first() {
+            Some(first) if self.needs_attention() && !line.is_empty() => first.starts_with(line),
+            _ => false,
+        }
+    }
+
+    pub fn read(v: &Value) -> Option<Health> {
         if v.is_null() {
             return None;
         }
         let Some(o) = v.as_object() else {
             return Some(Health {
                 level: "healthy".into(),
-                lines: vec![],
+                ..Default::default()
             });
         };
         let level = o
@@ -157,7 +216,16 @@ impl Health {
                     .collect()
             })
             .unwrap_or_default();
-        Some(Health { level, lines })
+        let fixes = o
+            .get("fixes")
+            .and_then(Value::as_array)
+            .map(|a| a.iter().filter_map(Fix::read).collect())
+            .unwrap_or_default();
+        Some(Health {
+            level,
+            lines,
+            fixes,
+        })
     }
 
     /// Something to show: a level other than healthy, with a line to say why.

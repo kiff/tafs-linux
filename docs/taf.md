@@ -59,6 +59,26 @@ Read as strictly as the iPad's decoder, with one exception: a call's `held`, whi
 it's absent. `--home shared/contracts/home.json --page taf:<id>` reads `taf-activity.json` beside it
 (CI's `taf-home`).
 
+## Its work
+
+Above its Activity, after its held calls, a tafs cloud taf's work (`WorkPanel`,
+`crates/tafs-app/src/work_panel.rs`, `tafs-core/src/work.rs`). It's read once as the session
+(`GET /v1/tafs/{id}/work`), and nothing is drawn until it's read, as the iPad's. Under "Its work":
+- **its line** (15, ink), unless its health's first line already says it (`repeats(workLine:)`);
+- **its health** (`HealthLines`): the work's, else Home's. Each line is amber, or red when it's
+  failing. A `credits` fix opens Plan & usage. A `coach` fix draws no button: Coach isn't on this
+  computer, as the iPad's without `mayUseCoach`;
+- **its oldest waiting case** in tafs cloud's words, amber and semibold once past the promise;
+- **its requests and skipped firings,** newest first. A request's line is amber when it needs
+  you, red when it failed, else soft, with what it used ("34 credits") and where its result went
+  under it. A skipped firing is dim: nothing ran, which isn't a failure.
+- **What went wrong reading it** in red, in its place.
+
+Read as leniently as the iPad's `TafWork`: a part that isn't one reads as none, and a list with
+one item it can't read reads as empty. The screenshot (`--work
+crates/tafs-app/fixtures/taf-work.json`, synthetic: no contract for it at the pin) is CI's
+`taf-work`.
+
 ## Not yet
 
 - **The page opens on Activity**; the iPad opens on Chat. Chat and Setup are there, dimmed, until
@@ -66,8 +86,9 @@ it's absent. `--home shared/contracts/home.json --page taf:<id>` reads `taf-acti
 - **On the Card tab:** tafs cloud's time zone lines, each item's totals (`eachItem`), How this is
   counted (`CountedView`), what's pending, the unit words and Connect again, the halt row,
   Versions, Usage; Revoke itself (dimmed).
-- **Above a tafs cloud taf's Activity:** its doors' knocks, Card unit requests, its work
-  (`WorkPanel`), its runs (`RunsPanel`, `RetainedRuns`); and the next step's buttons (Connect it
+- **Above a tafs cloud taf's Activity:** its doors' knocks, Card unit requests, its runs (`RunsPanel`, `RetainedRuns`); and the next step's buttons (Connect it
   again, Ask Coach), shown as their words for now; a call's receipt; "All apps" for a selection.
 - **The line under the head:** its version and who it's shared with (`headerLine`, `ShareLine`).
+- **In its work:** Answer within (`PromiseRow`, whoever manages the taf), Send again, and a step
+  it handed you as its card (`YourStepCard`): its line for now.
 - **The side column** on a wide window, Remove, and folding the head while scrolling.

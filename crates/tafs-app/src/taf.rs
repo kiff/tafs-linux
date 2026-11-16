@@ -47,6 +47,9 @@ pub struct TafPage {
     /// tafs cloud's id for it, and where its Activity is read from.
     pub cloud_id: Option<String>,
     pub source: ActivitySource,
+    /// Where its work is read (`WorkPanel`), and its health as Home read it.
+    pub work: crate::work_panel::WorkSource,
+    pub health: Option<tafs_core::home::Health>,
 }
 
 /// Where a tafs cloud taf's Activity pages come from.
@@ -67,6 +70,7 @@ pub fn page(
     t: &TafPage,
     entries: Rc<Vec<Entry>>,
     halt_row: Option<gtk::Button>,
+    open_usage: Rc<dyn Fn()>,
 ) -> gtk::Widget {
     let outer = gtk::Box::new(gtk::Orientation::Vertical, 12);
     outer.set_margin_start(16);
@@ -156,6 +160,14 @@ pub fn page(
     }
     if !t.sample {
         if let Some(id) = &t.cloud_id {
+            // `TafActivityList.parts`: its held calls, its work, then the list.
+            body.append(&crate::work_panel::panel_for(
+                w.clone(),
+                id.clone(),
+                t.work.clone(),
+                t.health.clone(),
+                Rc::new(crate::work_panel::Opens { usage: open_usage }),
+            ));
             body.append(&cloud_activity(w.clone(), id.clone(), t.source.clone()));
         }
     }
