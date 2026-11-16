@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=tafs
+Comment=Your tafs, Needs you and the Record, with KIFF
+Exec=tafs
+Icon=dev.kiff.tafs
+Terminal=false
+Categories=Office;Finance;
+StartupWMClass=dev.kiff.tafs
