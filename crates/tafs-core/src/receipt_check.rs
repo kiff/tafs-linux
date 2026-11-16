@@ -449,6 +449,29 @@ mod tests {
         assert_eq!(recover_address(&digest, &low).as_deref(), Some(TEST_SIGNER));
     }
 
+    /// A recovery id outside 0–3 (after 27 is taken off one of 27 or more) recovers nothing: it's
+    /// refused before recovery, never a panic, as the iPad's `(0...3).contains(v)` guard.
+    #[test]
+    fn a_recovery_id_outside_0_to_3_is_refused() {
+        let chain = raw_value("causal_chain", SIGNED.as_bytes()).unwrap();
+        let digest = keccak256(hex(&Sha256::digest(chain)).as_bytes());
+        let good = unhex("79917d81e09b24ef196e5b71c72ea1c5cc8951e628b63922072ef59832d0a43e4a0b198bead4ddad1312fe7f1e9b6d41b5f617fe08c5aed59abcd9e5b225a2ce01").unwrap();
+        for v in [4u8, 26, 31, 255] {
+            let mut bad = good.clone();
+            bad[64] = v;
+            assert_eq!(recover_address(&digest, &bad), None, "v = {v}");
+        }
+        for v in [1u8, 28] {
+            let mut ok = good.clone();
+            ok[64] = v;
+            assert_eq!(
+                recover_address(&digest, &ok).as_deref(),
+                Some(TEST_SIGNER),
+                "v = {v}"
+            );
+        }
+    }
+
     #[test]
     fn each_failure_has_its_words() {
         for lang in crate::words::SHIPPED {

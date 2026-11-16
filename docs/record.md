@@ -46,6 +46,12 @@ was made as) is one line (`KIFFMapping.record`):
 - **Who decided** (once KIFF sends an answer or a receipt): approved or refused by you, by "an
   admin" (KIFF's role for whoever answered), refused by its Card, Card issued; then done, nothing
   sent, not done, nothing sent yet, sent with no answer yet, or result unknown.
+- **What it acted on** (`naming`, kiff/tafs#167): for each tafs cloud taf with a call KIFF
+  hashed a resource for (`on_hash`), the app reads the taf's call refs (`GET /v1/tafs/{id}/calls`,
+  kept 30 days) at tafs cloud as the session, and a line takes the value kept under its KIFF key
+  (`entity_id`) only when its sha256 is KIFF's hash: "payment intent …QbstR", by the argument's
+  name (`on_arg`), else "it". A taf whose calls can't be read keeps its lines without it; KIFF's
+  hash alone names nothing. The receipt's On line and its check use the same value.
 - A call by an agent the app doesn't list isn't shown. An activity read that fails leaves the
   Record empty; a 401 signs this computer out ([sign-in](sign-in.md)).
 
@@ -57,7 +63,6 @@ the scripts' first two rounds, newest first: what each Card allowed ("€40, wit
 
 ## Not yet
 
-- **What a line acted on** (`naming`, the runs' call refs): KIFF's hash alone names nothing.
 - **"Signed on this computer"** under a line: this computer signs no answer.
 - **Which vendor refused** a call, by its connection (`vendors`).
 
@@ -182,3 +187,7 @@ it over the window.
 The screenshot (`--page receipt:prop_receipt_1`) reads
 `crates/tafs-app/fixtures/activity.json` and `receipt.json`, both synthetic: a receipt not
 signed yet, since no fixture carries KIFF's signature.
+
+`record-on` draws the Record from the same `activity.json` with `--calls`
+`crates/tafs-app/fixtures/calls.json` (one taf's call refs, synthetic, used for every taf): the
+refused refund names "payment intent …QbstR", and the ref whose hash isn't KIFF's names nothing.

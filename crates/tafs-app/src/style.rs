@@ -249,6 +249,15 @@ spinner { color: @tafs_amber; }
 headerbar { background-color: @tafs_background; box-shadow: none; color: @tafs_ink; }
 headerbar button { color: @tafs_amber_text; }
 link, label link { color: @tafs_amber_text; }
+/* A taf's knocks: the panel's edge in amber at 45%; a stranger's knock on amber at 7%, a
+   paired sender's calmly; Do it in amber, Pair outlined, Ignore plain. */
+.tafs-panel.knocks-edge { border-color: alpha(@tafs_amber, 0.45); }
+.tafs-knock { padding: 12px; border-radius: 16px; background-color: alpha(@tafs_amber, 0.07); border: 1px solid alpha(@tafs_amber, 0.45); }
+.tafs-knock.paired { background-color: @tafs_panel; border-color: alpha(@tafs_ink, 0.2); }
+button.tafs-knock-do { background: @tafs_amber; color: white; font-size: 14px; font-weight: 600; border-radius: 999px; padding: 8px 14px; border: none; box-shadow: none; min-height: 0; }
+button.tafs-knock-pair { background: none; color: @tafs_ink; font-size: 14px; font-weight: 500; border-radius: 999px; padding: 8px 12px; border: 1px solid alpha(@tafs_ink, 0.2); box-shadow: none; min-height: 0; }
+button.tafs-knock-ignore { background: none; color: @tafs_soft; font-size: 14px; font-weight: 500; padding: 8px 12px; border: none; box-shadow: none; min-height: 0; }
+.tafs-do-it-field { background-color: @tafs_panel; border: 1px solid @tafs_line; border-radius: 12px; padding: 6px; font-size: 15px; }
 "#;
 
 /// The style sheet for one appearance.

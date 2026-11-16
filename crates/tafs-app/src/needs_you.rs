@@ -188,7 +188,7 @@ fn knock_row(
 /// dim); its Coach button for someone who may use Coach and manages the taf; and Dismiss in red,
 /// which is signed like a refusal. Both there, dimmed: Coach isn't ported, and this computer can't
 /// sign.
-fn card_unit_panel(ask: &tafs_core::needs_you::CardUnitLines) -> gtk::Box {
+pub fn card_unit_panel(ask: &tafs_core::needs_you::CardUnitLines) -> gtk::Box {
     let p = panel(false);
     p.set_widget_name(&format!("card-unit.{}", ask.id));
     p.append(&text(&ask.title, 16, 600, &["tafs-ink"]));

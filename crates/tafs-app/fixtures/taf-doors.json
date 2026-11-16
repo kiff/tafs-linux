@@ -1,0 +1,79 @@
+{
+  "doors": [
+    {
+      "id": "door_1",
+      "app": "email",
+      "kind": "email",
+      "label": "Email",
+      "open": true,
+      "address": "rae@doors.example",
+      "proof": "proven",
+      "how": "It checks the sender's domain",
+      "keys": [
+        {
+          "id": "owner@example.com",
+          "auto": true
+        }
+      ],
+      "today": 3,
+      "limit": 50,
+      "resting": false
+    }
+  ],
+  "apps": [
+    {
+      "id": "email",
+      "label": "Email",
+      "kind": "email",
+      "proof": "proven",
+      "how": "It checks the sender's domain"
+    }
+  ],
+  "knocks": [
+    {
+      "id": "knock_1",
+      "door": "door_1",
+      "app": "email",
+      "from": "ana@example.com",
+      "name": "Ana Ruiz",
+      "proof": "pass",
+      "subject": "Refund for order 1042",
+      "text": "Hi, the parcel arrived damaged. Could you refund the €150 to my card? Photos attached.",
+      "attachments": 2,
+      "at": "2026-11-16T09:12:00Z",
+      "state": "open"
+    },
+    {
+      "id": "knock_2",
+      "door": "door_1",
+      "app": "email",
+      "from": "billing@example.net",
+      "proof": "fail",
+      "text": "Your invoice is overdue, pay at the link below.",
+      "at": "2026-11-16T09:40:00Z",
+      "state": "open"
+    },
+    {
+      "id": "knock_3",
+      "door": "door_1",
+      "app": "email",
+      "from": "sam@example.org",
+      "name": "Sam",
+      "proof": "pass",
+      "text": "Can you also send me the receipt for last week's order?",
+      "at": "2026-11-16T10:05:00Z",
+      "state": "open",
+      "paired": true
+    },
+    {
+      "id": "knock_4",
+      "door": "door_1",
+      "app": "email",
+      "from": "door_1",
+      "at": "2026-11-16T10:30:00Z",
+      "state": "open",
+      "rest": "others",
+      "dropped": 4
+    }
+  ]
+}

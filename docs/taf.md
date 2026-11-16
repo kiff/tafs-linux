@@ -46,6 +46,11 @@ A taf tafs cloud runs draws its own Activity (`TafActivityList`), a page at a ti
 in tafs cloud's words (`tafs-core/src/activity.rs`):
 
 - its held calls first, as Needs you's cards;
+- its Card unit requests (`.cardUnits`), each as Needs you draws it (`CardUnitExceptionPanel`,
+  its Coach button and Dismiss dimmed): the last page's own (`card_unit_exceptions`) once read,
+  else Home's for the taf; then tafs cloud's notice (`card_unit_exceptions_notice`), 13, dim. A
+  page that sends them reads as strictly as Home: one without what the iPad needs, and the page
+  isn't read;
 - tafs cloud's filters, from its first page, as bordered buttons (the chosen one in the amber as
   text); choosing one reads its first page again;
 - each day group's title (12 semibold, dim), then each call (`SourceActivityRow`): its title (15
@@ -57,7 +62,39 @@ in tafs cloud's words (`tafs-core/src/activity.rs`):
 Read as strictly as the iPad's decoder, with one exception: a call's `held`, which the iPad's
 `ActivityCall` requires and tafs cloud's `taf-activity.json` doesn't send, reads as not held when
 it's absent. `--home shared/contracts/home.json --page taf:<id>` reads `taf-activity.json` beside it
-(CI's `taf-home`).
+(CI's `taf-home`). With `--home crates/tafs-app/fixtures/home-waits.json`, its own
+`taf-activity.json` (the contract's, with Home's request as the page's own, synthetic) draws one
+(CI's `taf-units`).
+
+## Its knocks
+
+For whoever manages a tafs cloud taf, and only where Home says tafs cloud offers doors
+(`doors_offered`), its doors' knocks come first on its Activity, before its held calls
+(`TafKnocksPanel`, `crates/tafs-app/src/knocks.rs`, `tafs-core/src/doors.rs`). The doors are read as
+the session when the Activity opens (`GET /v1/tafs/{id}/doors`), tried again quietly after 1 s and
+3 s; nothing is drawn until they're read, and nothing when no message waits. Read as the iPad's
+decoders read them: every door and app whole, or none; a knock without its id, door, app, sender
+or time, none; the rest of a knock when it can be.
+
+- **Knocks · waiting on you** (amber eyebrow, the panel's edge in amber at 45%): each open knock
+  from someone not paired, then **Paired**, a paired sender's message kept from its knock. The
+  door's line about its day's messages (`rest`) isn't one of them: it's the Doors tab's.
+- **Each knock** (`KnockCard`), on amber at 7% with an amber edge, a paired sender's on the panel
+  with a quiet edge: "● KNOCK · BY EMAIL" or "PAIRED · BY EMAIL" (10 semibold, monospaced), with
+  "· DIDN'T CHECK OUT" when the sender check failed; for a paired sender "Paired · Do it or
+  Ignore this message"; "Ana Ruiz (ana@example.com) wrote about "…". Nothing was done." (14
+  semibold); the message (14, soft, three lines, selectable); its attachments, not opened; why
+  the sender can't be trusted, when it can't.
+- **Its answers**, unsigned, `POST /v1/tafs/{id}/doors/knocks/{knock}` as the session: **Do it**
+  (amber, not for a sender who failed the check) opens "Tell Rae what to do" with the owner's
+  words (Do what it asks, within your Card) and Send to Rae; **Pair Ana** or Pair them, for a
+  sender who passed the check and isn't paired yet, which reads the doors again, the message
+  still waiting; **Ignore**. A knock answered goes away. Why one wasn't sent shows under the
+  panel, or in Do it while it's open; a 429 without tafs cloud's words is the app's own line.
+
+`--doors <file>` with `--home` draws a taf's doors from a file, as if tafs cloud offered them, and
+its answers send nothing: `crates/tafs-app/fixtures/taf-doors.json` (synthetic), with
+`access-manage.json` so the taf is managed, CI's `taf-knocks`.
 
 ## Its work
 
@@ -134,7 +171,7 @@ On the Card tab, as the iPad's `card(_:)`, all from Home as tafs cloud read it f
   each is ported.
 - **On the Card tab:** Connect again (Coach), the halt row,
   Versions, Usage; Revoke itself (dimmed).
-- **Above a tafs cloud taf's Activity:** its doors' knocks, Card unit requests; and the next step's buttons (Connect it
+- **Above a tafs cloud taf's Activity:** the next step's buttons (Connect it
   again, Ask Coach), shown as their words for now; a call's receipt; "All apps" for a selection.
 - **The line under the head:** its version and who it's shared with (`headerLine`, `ShareLine`).
 - **In its work:** Answer within (`PromiseRow`, whoever manages the taf), Send again, and a step

@@ -406,6 +406,10 @@ pub struct Home {
     pub headline: Value,
     #[serde(default)]
     pub setting_up: Option<Vec<Value>>,
+    /// The doors tafs cloud offers here (`doors_offered`); absent when none, and no taf's
+    /// knocks are read.
+    #[serde(default)]
+    pub doors_offered: Option<Vec<String>>,
     /// Card unit requests (`card_unit_exceptions`).
     #[serde(default)]
     pub card_unit_exceptions: Option<Vec<crate::waits::CardUnitException>>,

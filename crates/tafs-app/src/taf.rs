@@ -47,6 +47,13 @@ pub struct TafPage {
     /// tafs cloud's id for it, and where its Activity is read from.
     pub cloud_id: Option<String>,
     pub source: ActivitySource,
+    /// Where its doors are read and its knocks answered (`TafKnocksPanel`), where tafs cloud
+    /// offers doors.
+    pub doors: crate::knocks::DoorsSource,
+    /// Its Card unit requests as Home sent them, drawn until its Activity's own are read, and
+    /// whether this person may use Coach (their Coach button, dimmed).
+    pub card_units: Vec<tafs_core::waits::CardUnitException>,
+    pub may_use_coach: bool,
     /// Where its work is read (`WorkPanel`), and its health as Home read it.
     pub work: crate::work_panel::WorkSource,
     pub health: Option<tafs_core::home::Health>,
@@ -156,6 +163,15 @@ pub fn page(
     let body = gtk::Box::new(gtk::Orientation::Vertical, 16);
     body.set_margin_top(4);
     body.set_margin_bottom(12);
+    // `TafActivityList.parts`: for whoever manages the taf, its doors' knocks come first.
+    if let (false, true, Some(id)) = (t.sample, t.manages, &t.cloud_id) {
+        body.append(&crate::knocks::panel_for(
+            w.clone(),
+            id.clone(),
+            Some(t.name.clone()),
+            t.doors.clone(),
+        ));
+    }
     if !t.held.is_empty() {
         body.append(&eyebrow(
             &w.line("needs_you.title").unwrap_or_default(),
@@ -167,7 +183,16 @@ pub fn page(
     }
     if !t.sample {
         if let Some(id) = &t.cloud_id {
-            // `TafActivityList.parts`: its held calls, its work, then the list.
+            // `TafActivityList.parts`: its held calls, its Card unit requests, its work, then the
+            // list. The requests are its Activity's last page's, once read.
+            let units = gtk::Box::new(gtk::Orientation::Vertical, 14);
+            let units_of = Units {
+                home: t.card_units.clone(),
+                discuss: t.may_use_coach && t.manages,
+                into: units.clone(),
+            };
+            units_of.draw(None, None);
+            body.append(&units);
             body.append(&crate::work_panel::panel_for(
                 w.clone(),
                 id.clone(),
@@ -191,7 +216,12 @@ pub fn page(
                 }
             }
             body.append(&kept);
-            body.append(&cloud_activity(w.clone(), id.clone(), t.source.clone()));
+            body.append(&cloud_activity(
+                w.clone(),
+                id.clone(),
+                t.source.clone(),
+                units_of,
+            ));
         }
     }
     if t.sample {
@@ -712,7 +742,31 @@ fn line(w: &WordBook, e: &Entry) -> gtk::Box {
 
 /// `TafActivityList`'s list: tafs cloud's filters, its day groups, each call's line, and its foot,
 /// a page at a time.
-fn cloud_activity(w: Rc<WordBook>, id: String, source: ActivitySource) -> gtk::Box {
+/// `TafActivityList`'s `.cardUnits`: the Activity's last page's requests (`card_unit_exceptions`),
+/// else Home's for the taf, each as Needs you draws it, then tafs cloud's notice.
+struct Units {
+    home: Vec<tafs_core::waits::CardUnitException>,
+    discuss: bool,
+    into: gtk::Box,
+}
+
+impl Units {
+    fn draw(&self, page: Option<&[tafs_core::waits::CardUnitException]>, notice: Option<&str>) {
+        while let Some(c) = self.into.first_child() {
+            self.into.remove(&c);
+        }
+        for ask in page.unwrap_or(&self.home) {
+            let lines = tafs_core::needs_you::card_unit_lines(ask, self.discuss);
+            self.into.append(&crate::needs_you::card_unit_panel(&lines));
+        }
+        if let Some(notice) = notice {
+            self.into.append(&text(notice, 13, 400, &["tafs-dim"]));
+        }
+        self.into.set_visible(self.into.first_child().is_some());
+    }
+}
+
+fn cloud_activity(w: Rc<WordBook>, id: String, source: ActivitySource, units: Units) -> gtk::Box {
     use tafs_core::activity::{foot, path, ActivityPage, Foot};
     struct State {
         filter: String,
@@ -857,13 +911,11 @@ fn cloud_activity(w: Rc<WordBook>, id: String, source: ActivitySource) -> gtk::B
                     }
                 }
             }
-            if let Some(notice) = s
-                .pages
-                .last()
-                .and_then(|p| p.card_unit_exceptions_notice.clone())
-            {
-                root.append(&text(&notice, 13, 400, &["tafs-dim"]));
-            }
+            let last = s.pages.last();
+            units.draw(
+                last.and_then(|p| p.card_unit_exceptions.as_deref()),
+                last.and_then(|p| p.card_unit_exceptions_notice.as_deref()),
+            );
             match foot(&s.pages, s.error.as_deref()) {
                 Foot::Error(e) => {
                     root.append(&text(&e, 15, 400, &["tafs-no"]));
