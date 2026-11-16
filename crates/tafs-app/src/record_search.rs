@@ -23,6 +23,9 @@ pub struct SearchSource {
     pub canned: Option<(SearchPage, Option<RecordCase>)>,
     /// `--page record-search:<q>`: what's in the box when the Record opens, for a screenshot.
     pub initial: Option<String>,
+    /// tafs cloud's ids of the person's tafs on Home (`tafID(cloudID:)`): a hit from one of them is
+    /// drawn as its Activity draws it; any other taf's, as a plain panel.
+    pub on_home: Vec<String>,
 }
 
 /// One page (`searchRecord`): the page, or why not, in plain words.
@@ -323,7 +326,19 @@ fn hit_row(
     );
     v.append(&name);
     let p = panel(false);
-    p.append(&crate::taf::source_row(&hit.entry));
+    if source.on_home.contains(&hit.taf_id) {
+        p.append(&crate::taf::source_row(&hit.entry));
+    } else {
+        // A taf not on Home (`RecordHitRow`'s else): its title (15 semibold), detail (13, soft),
+        // amount (14 medium) and time (12, dim), with no next step to take from here.
+        p.set_spacing(4);
+        p.append(&text(&hit.entry.title, 15, 600, &["tafs-ink"]));
+        p.append(&text(&hit.entry.detail, 13, 400, &["tafs-soft"]));
+        if let Some(amount) = &hit.entry.amount_text {
+            p.append(&text(amount, 14, 500, &["tafs-ink"]));
+        }
+        p.append(&text(&hit.entry.time, 12, 400, &["tafs-dim"]));
+    }
     v.append(&p);
     if let (true, Some(about)) = (opens_case, &hit.about) {
         let b = gtk::Button::with_label(&format!("{about} ›"));

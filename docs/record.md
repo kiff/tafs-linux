@@ -91,8 +91,9 @@ words are forgiven; a blank `about` opens no case. `--home shared/contracts/home
 --record-search crates/tafs-app/fixtures/record-search.json --page record-search:1042` (synthetic)
 draws a search, CI's `record-search`; nothing is sent.
 
-Not yet: a call from a taf not on Home drawn as the iPad's plain panel without its next step (it's
-drawn as the others here).
+A call from a taf that isn't on Home (tafs cloud's id isn't one of Home's tafs) is drawn as the
+iPad's plain panel: its title (15 semibold), detail (13, soft), amount (14) and time (12, dim), with no
+next step to take from here. In the screenshot, Sam's "Send a reply" is one.
 
 ## Exporting receipts (signed in)
 
