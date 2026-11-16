@@ -162,13 +162,16 @@ struct Options {
     /// With `--home`: "Your brief" as tafs cloud answers `GET /v1/brief`; every read is it, and
     /// Later sends nothing.
     brief: Option<String>,
+    /// With `--brief`: a mission's log as tafs cloud answers `GET /v1/missions/{id}/log`, for
+    /// every mission's Evidence.
+    mission_log: Option<String>,
     /// `--size WxH`: the window's size, for a screenshot of a narrower layout.
     size: Option<(i32, i32)>,
     screenshot: Option<String>,
 }
 
 const USAGE: &str = "tafs [--lang en|de|fr|es|it|pt|nl|pl] [--theme light|dark] [--sample] [--signed-in] [--view-only [--paired]]
-     [--home contract.json] [--usage answers.json] [--people answers.json] [--unproven answers.json] [--recipes answers.json] [--gallery answers.json] [--halt answer.json] [--record-search answers.json] [--access answer.json] [--receipts answer.json] [--activity answer.json] [--calls answer.json] [--receipt answer.json] [--work answer.json] [--doors answer.json] [--account-reads answers.json] [--me answer.json] [--memory answer.json] [--runs answer.json] [--request answer.json] [--balance answer.json] [--coach answer.json] [--coach-chats answer.json] [--chat answer.json [--report]] [--brief answer.json] [--size WxH] [--page welcome|sign-in|pair|recipe:<id>|gallery|halt-all|halt:<id>|record-search:<q>|record-export|receipt:<proposal id>|run:<taf id>|pin-sheet|coach|overview|overview-label:<id>|needs-you|brief-answer:<decision id>|record|calendar|calendar-week|usage|connect-apps|account|kiff-account|time-zone|alerts|devices|people|taf|taf-card|taf-setup|consent|connected|sign-in-code] [--screenshot out.png]";
+     [--home contract.json] [--usage answers.json] [--people answers.json] [--unproven answers.json] [--recipes answers.json] [--gallery answers.json] [--halt answer.json] [--record-search answers.json] [--access answer.json] [--receipts answer.json] [--activity answer.json] [--calls answer.json] [--receipt answer.json] [--work answer.json] [--doors answer.json] [--account-reads answers.json] [--me answer.json] [--memory answer.json] [--runs answer.json] [--request answer.json] [--balance answer.json] [--coach answer.json] [--coach-chats answer.json] [--chat answer.json [--report]] [--brief answer.json] [--mission-log answer.json] [--size WxH] [--page welcome|sign-in|pair|recipe:<id>|gallery|halt-all|halt:<id>|record-search:<q>|record-export|receipt:<proposal id>|run:<taf id>|pin-sheet|coach|overview|overview-label:<id>|needs-you|brief-answer:<decision id>|mission-log:<mission id>|record|calendar|calendar-week|usage|connect-apps|account|kiff-account|time-zone|alerts|devices|people|taf|taf-card|taf-setup|consent|connected|sign-in-code] [--screenshot out.png]";
 
 fn options() -> Result<Options, String> {
     let mut o = Options::default();
@@ -206,6 +209,7 @@ fn options() -> Result<Options, String> {
             "--chat" => o.chat = Some(value()?),
             "--report" => o.report = true,
             "--brief" => o.brief = Some(value()?),
+            "--mission-log" => o.mission_log = Some(value()?),
             "--size" => {
                 let v = value()?;
                 let (w, h) = v.split_once('x').ok_or("--size takes WxH")?;
@@ -253,6 +257,7 @@ fn selection_of(page: Option<&str>) -> Selection {
     match page {
         Some("needs-you") => Selection::NeedsYou,
         Some(other) if other.starts_with("brief-answer:") => Selection::NeedsYou,
+        Some(other) if other.starts_with("mission-log:") => Selection::NeedsYou,
         Some("record") => Selection::Record,
         Some("calendar") | Some("calendar-week") => Selection::Calendar,
         Some("usage") => Selection::Usage,
@@ -374,6 +379,7 @@ fn activate(app: &adw::Application, o: &Options) {
         chat_file: o.chat.as_ref().map(std::path::PathBuf::from),
         open_report: o.report,
         brief_file: o.brief.as_ref().map(std::path::PathBuf::from),
+        mission_log_file: o.mission_log.as_ref().map(std::path::PathBuf::from),
         open_run: o.page.as_deref().is_some_and(|p| p.starts_with("run:")),
         usage_file: o.usage.as_ref().map(std::path::PathBuf::from),
         people_file: o.people.as_ref().map(std::path::PathBuf::from),
@@ -421,6 +427,13 @@ fn activate(app: &adw::Application, o: &Options) {
         .and_then(|p| p.strip_prefix("overview-label:"))
     {
         overview::CHOSEN.with(|c| *c.borrow_mut() = Some(id.to_string()));
+    }
+    if let Some(id) = o
+        .page
+        .as_deref()
+        .and_then(|p| p.strip_prefix("mission-log:"))
+    {
+        brief::LOG.with(|l| *l.borrow_mut() = Some(id.to_string()));
     }
     if let Some(id) = o
         .page
@@ -654,6 +667,8 @@ struct App {
     open_report: bool,
     /// `--brief`'s answer: the screenshots' brief, every read of it, never sent.
     brief_file: Option<std::path::PathBuf>,
+    /// `--mission-log`'s answer: every mission's log, never sent.
+    mission_log_file: Option<std::path::PathBuf>,
     /// `--page run:<taf id>`: that taf's first kept run open, for a screenshot.
     open_run: bool,
     /// `--usage`'s file of synthetic answers.
@@ -1692,6 +1707,7 @@ impl App {
                         .collect(),
                     needs_you_items: items,
                     needs_you_others: others as i64,
+                    log_file: self.mission_log_file.clone(),
                 }))
             }),
             _ => None,

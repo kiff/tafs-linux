@@ -351,6 +351,23 @@ button.tafs-outline.coach { color: @tafs_coach; border-color: alpha(@tafs_coach,
 button.tafs-label-chip { background-color: @tafs_panel; background-image: none; color: @tafs_ink; border: 1px solid @tafs_line;
   border-radius: 999px; padding: 0 12px; min-height: 32px; box-shadow: none; }
 button.tafs-label-chip.selected { background-color: @tafs_ink; color: @tafs_on_fill; border-color: @tafs_ink; }
+/* A mission's log (`LogRow`): on the panel with a 1-point edge, corners of 12, a 3-point edge in its
+   kind's colour; the kind in that colour on it at 12%; evidence in Coach's colour on its wash. */
+.tafs-log-row { background-color: @tafs_panel; border: 1px solid @tafs_line; border-radius: 12px; }
+.tafs-log-edge { min-width: 3px; }
+.tafs-log-edge.ok { background-color: @tafs_ok; }
+.tafs-log-edge.blue { background-color: @tafs_blue; }
+.tafs-log-edge.amber { background-color: @tafs_amber; }
+.tafs-log-edge.ink { background-color: @tafs_ink; }
+.tafs-log-edge.dim { background-color: @tafs_dim; }
+.tafs-log-edge.line { background-color: @tafs_line; }
+.tafs-log-kind { border-radius: 999px; padding: 2px 6px; }
+.tafs-log-kind.ok { color: @tafs_ok; background-color: alpha(@tafs_ok, 0.12); }
+.tafs-log-kind.blue { color: @tafs_blue; background-color: alpha(@tafs_blue, 0.12); }
+.tafs-log-kind.amber { color: @tafs_amber; background-color: alpha(@tafs_amber, 0.12); }
+.tafs-log-kind.ink { color: @tafs_ink; background-color: alpha(@tafs_ink, 0.12); }
+.tafs-log-kind.dim { color: @tafs_dim; background-color: alpha(@tafs_dim, 0.12); }
+.tafs-evidence { color: @tafs_coach; background-color: @tafs_coach_wash; border-radius: 999px; padding: 2px 6px; }
 /* A taf's labels on its line (`TafLabels`): 11 medium, soft, on the raised colour. */
 .tafs-taf-label { color: @tafs_soft; background-color: @tafs_raised; border-radius: 999px; padding: 2px 7px; }
 .tafs-chip-dot { background-color: @tafs_amber; border-radius: 999px; min-width: 6px; min-height: 6px; }

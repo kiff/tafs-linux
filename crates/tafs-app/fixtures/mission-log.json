@@ -1,0 +1,114 @@
+{
+  "about": "Synthetic: the Money mission's log as tafs cloud answers GET /v1/missions/{id}/log (by as {kind, name?}), from the iPad's sample log (SampleBrief.swift), with a removed taf's entry, for its screenshot (--mission-log). Made up, not from any account.",
+  "answer": {
+    "items": [
+      {
+        "id": "log_s1",
+        "at": "2026-11-16T06:10:00Z",
+        "by": {
+          "kind": "lead"
+        },
+        "kind": "stuck",
+        "kind_words": "stuck",
+        "words": "Bill pay didn't run at 07:00: its bank sign-in needs you.",
+        "evidence": [
+          {
+            "kind": "run",
+            "id": "r1",
+            "words": "run"
+          },
+          {
+            "kind": "hold",
+            "id": "h1",
+            "words": "hold"
+          }
+        ]
+      },
+      {
+        "id": "log_h1",
+        "at": "2026-11-16T06:03:00Z",
+        "by": {
+          "kind": "taf",
+          "name": "Bill pay"
+        },
+        "by_words": "Bill pay → Chargebacks",
+        "kind": "handed",
+        "kind_words": "handed",
+        "words": "Bill 0412, for payment. A reference, not its data.",
+        "evidence": [
+          {
+            "kind": "item",
+            "id": "0412",
+            "words": "bill 0412"
+          }
+        ]
+      },
+      {
+        "id": "log_d1",
+        "at": "2026-11-16T06:02:00Z",
+        "by": {
+          "kind": "taf",
+          "name": "Bill pay"
+        },
+        "kind": "delivered",
+        "kind_words": "delivered",
+        "words": "12 bills sorted, 2 didn't match their order.",
+        "evidence": [
+          {
+            "kind": "run",
+            "id": "r2",
+            "words": "run"
+          },
+          {
+            "kind": "record",
+            "id": "rec",
+            "words": "12 record lines"
+          }
+        ],
+        "value": "€4,120 sorted"
+      },
+      {
+        "id": "log_p1",
+        "at": "2026-11-15T17:28:00Z",
+        "by": {
+          "kind": "person"
+        },
+        "kind": "decided",
+        "kind_words": "decided",
+        "words": "Sent the reminder to Atelier Dubois.",
+        "evidence": [
+          {
+            "kind": "item",
+            "id": "0142",
+            "words": "invoice 0142"
+          },
+          {
+            "kind": "hold",
+            "id": "h2",
+            "words": "hold"
+          }
+        ]
+      },
+      {
+        "id": "log_q1",
+        "at": "2026-11-15T08:12:00Z",
+        "by": {
+          "kind": "taf"
+        },
+        "by_words": "Quotes",
+        "kind": "delivered",
+        "kind_words": "delivered",
+        "words": "3 quotes drafted for new clients.",
+        "evidence": [
+          {
+            "kind": "run",
+            "id": "r3",
+            "words": "run"
+          }
+        ],
+        "removed": true
+      }
+    ],
+    "before": "log_q1"
+  }
+}

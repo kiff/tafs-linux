@@ -83,16 +83,37 @@ where its own answer is given (`destination(of:answer:)`).
 - **Later** (`POST /v1/brief/decisions/{id}/later`, the id as written, ":" kept): the card goes
   only once tafs cloud has moved it; else it stays, to answer or try again. It signs nothing.
 
+## A mission's log
+
+Done's **Evidence ›** (13 semibold, Coach's colour, after what the cases are worth) opens the
+mission's log over the brief (`MissionLogView`, design v2.1 §6), read once from
+`GET /v1/missions/{id}/log` at tafs cloud as the session; until it's read, a spinner, which stays
+if the read fails, as on the iPad.
+
+- **"Log"** (`mission.log`) by the way back to the brief; the mission's name at 30 bold; "Read
+  only · newest first" (`mission.read_only`, 13 dim).
+- **Ask Coach** (`coach.ask`, outlined in Coach's colour), for whoever may use Coach: Coach opens
+  with the mission's name in its box.
+- **The entries by day**, each day's title as the Record's ("Today · Nov 16"), in the account's
+  zone: who (tafs cloud's words, else the taf's name; with neither, "A taf", Coach for the lead,
+  You for the person), "removed" (`mission.removed`) for a removed taf's entry, its kind in its
+  colour (delivered green, handed blue, stuck amber, decided ink, else dim) on that colour at
+  12%, the time (12 monospaced), its words, its evidence in Coach's colour on its wash, and its
+  value. The edge is the kind's colour, the line's for a removed taf, whose entry is drawn at half
+  strength. An entry with no words, and evidence with none, isn't drawn.
+
 ## Not yet
 
-- Done's **Evidence ›**, which opens the mission's log (`MissionLogView`).
 - The brief's alert (`brief_kind`), and reading it again when one comes: this computer has no
   push.
+- The log's earlier pages (`before`): the iPad reads the first only, too.
 
 ## Screenshots
 
 `--brief answer.json` (with `--home`) reads the brief from a file, tafs cloud's answer or a
 fixture's `{about, answer}`: every read is it, a label's too, and Later sends nothing.
-`--page brief-answer:<decision id>` opens it with that decision's signed answer tapped. CI's
-`brief`, `brief-answer` and `brief-clear` are `crates/tafs-app/fixtures/brief.json` and
-`brief-clear.json` over `home-missions.json`'s four tafs.
+`--page brief-answer:<decision id>` opens it with that decision's signed answer tapped.
+`--mission-log answer.json` is every mission's log, and `--page mission-log:<mission id>` opens
+that one over the brief (the iPad's `-screen mission-log`). CI's `brief`, `brief-answer`,
+`brief-clear` and `mission-log` are `crates/tafs-app/fixtures/brief.json`, `brief-clear.json` and
+`mission-log.json` over `home-missions.json`'s four tafs.

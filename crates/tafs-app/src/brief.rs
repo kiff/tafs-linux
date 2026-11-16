@@ -53,6 +53,9 @@ pub struct BriefPane {
     /// how many it can't carry.
     pub needs_you_items: Vec<String>,
     pub needs_you_others: i64,
+    /// `--mission-log`: every mission's log read from this file; with a fixture's brief and
+    /// none, a log isn't read.
+    pub log_file: Option<std::path::PathBuf>,
 }
 
 /// The page's state (`AppModel`'s brief, `briefLabel`, `briefSetAside`, `nextMoveDismissed`).
@@ -70,6 +73,10 @@ struct State {
     gated: BTreeSet<String>,
     /// Needs you, opened from the rest's line, over the brief.
     needs_you_open: bool,
+    /// A mission's log, opened from Done's Evidence, over the brief: its id and its name.
+    log_open: Option<(String, String)>,
+    /// That log, once read.
+    log: Option<brief::MissionLog>,
 }
 
 struct Page {
@@ -86,6 +93,9 @@ thread_local! {
     /// `--page brief-answer:<decision id>`: that decision's signed answer already tapped, its
     /// `ApprovalGate` words showing, for a screenshot.
     pub static ANSWERED: RefCell<Option<String>> = const { RefCell::new(None) };
+    /// `--page mission-log:<mission id>`: that mission's log open over the brief, for a
+    /// screenshot (the iPad's `-screen mission-log`).
+    pub static LOG: RefCell<Option<String>> = const { RefCell::new(None) };
 }
 
 /// Below this width the pane is an iPhone's: one column.
@@ -110,6 +120,8 @@ pub fn page(
             compact: false,
             gated: ANSWERED.with(|a| a.borrow().iter().cloned().collect()),
             needs_you_open: false,
+            log_open: None,
+            log: None,
         }),
         w,
         pane,
@@ -117,7 +129,22 @@ pub fn page(
         needs_you,
         root: root.clone(),
     });
-    page.draw();
+    // A screenshot's log, by its mission: named as Done names it.
+    let first_log = LOG.with(|l| l.borrow().clone()).map(|id| {
+        let name = page
+            .pane
+            .brief
+            .done
+            .iter()
+            .find(|d| d.log.as_deref() == Some(id.as_str()))
+            .and_then(|d| d.mission.clone())
+            .unwrap_or_default();
+        (id, name)
+    });
+    match first_log {
+        Some(log) => page.open_log(log),
+        None => page.draw(),
+    }
     let bin = adw::BreakpointBin::new();
     bin.set_size_request(320, 240);
     bin.set_child(Some(&root));
@@ -153,6 +180,10 @@ impl Page {
             self.root.append(&(self.needs_you)());
             return;
         };
+        if let Some((_, name)) = &s.log_open {
+            self.root.append(&self.log_page(b, name, s.log.as_ref()));
+            return;
+        }
         if s.needs_you_open {
             // Needs you over the brief, with the way back to it.
             let back = gtk::Button::new();
@@ -563,11 +594,169 @@ impl Page {
             for c in &group.cases {
                 p.append(&case_row(c));
             }
-            if let Some(value) = &group.value {
-                p.append(&text(value, 15, 600, &["tafs-ink"]));
+            // What it's worth, and the way to the mission's log with its evidence.
+            if group.value.is_some() || group.log.is_some() {
+                let row = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+                let value = text(group.value.as_deref().unwrap_or(""), 15, 600, &["tafs-ink"]);
+                value.set_hexpand(true);
+                row.append(&value);
+                if let Some(mission) = &group.log {
+                    let link = gtk::Button::with_label(&format!("{} ›", b.words.evidence));
+                    link.add_css_class("tafs-coach-link");
+                    link.add_css_class("small");
+                    let (page, log) = (
+                        self.clone(),
+                        (mission.clone(), group.mission.clone().unwrap_or_default()),
+                    );
+                    link.connect_clicked(move |_| page.open_log(log.clone()));
+                    row.append(&link);
+                }
+                p.append(&row);
             }
         }
         into.append(&p);
+    }
+
+    /// `MissionLogView`, pushed over the brief: its log read once, at tafs cloud as the session or
+    /// from a screenshot's file.
+    fn open_log(self: &Rc<Self>, log: (String, String)) {
+        {
+            let mut s = self.state.borrow_mut();
+            s.log_open = Some(log.clone());
+            s.log = None;
+        }
+        self.draw();
+        let (source, file, words) = (
+            self.pane.source.clone(),
+            self.pane.log_file.clone(),
+            (*self.w).clone(),
+        );
+        let (p, mission) = (self.clone(), log.0);
+        gtk::glib::spawn_future_local(async move {
+            let path = brief::MissionLog::path(&mission, None);
+            let read = gtk::gio::spawn_blocking(move || {
+                let body = match (&source, &file) {
+                    (_, Some(f)) => {
+                        let v: serde_json::Value =
+                            serde_json::from_slice(&std::fs::read(f).ok()?).ok()?;
+                        match v.get("answer") {
+                            Some(a) if v.get("about").is_some() => serde_json::to_vec(a).ok()?,
+                            _ => serde_json::to_vec(&v).ok()?,
+                        }
+                    }
+                    (BriefSource::Cloud { token, languages }, None) => {
+                        crate::kiff::cloud(token, languages, &path)
+                            .ok()
+                            .filter(|a| a.status == 200)?
+                            .body
+                    }
+                    (BriefSource::File(_), None) => return None,
+                };
+                brief::MissionLog::read(&body, &words).ok().flatten()
+            })
+            .await
+            .ok()
+            .flatten();
+            // Still on that log: it's drawn; a read that fails keeps the spinner, as the iPad's.
+            let still = p
+                .state
+                .borrow()
+                .log_open
+                .as_ref()
+                .is_some_and(|(m, _)| *m == mission);
+            if still && read.is_some() {
+                p.state.borrow_mut().log = read;
+                p.draw();
+            }
+        });
+    }
+
+    /// A mission's log (design v2.1 §6): "Log" by the way back, the mission's name, "Read only ·
+    /// newest first", Ask Coach for whoever may use it, then the entries by day.
+    fn log_page(
+        self: &Rc<Self>,
+        b: &Brief,
+        name: &str,
+        log: Option<&brief::MissionLog>,
+    ) -> gtk::Widget {
+        let l = |k: &str| self.w.line(k).unwrap_or_default();
+        let column = gtk::Box::new(gtk::Orientation::Vertical, 12);
+        column.set_margin_start(16);
+        column.set_margin_end(16);
+        column.set_margin_top(12);
+        column.set_margin_bottom(16);
+        let bar = gtk::Box::new(gtk::Orientation::Horizontal, 12);
+        let back = gtk::Button::new();
+        back.set_child(Some(&symbol("go-previous-symbolic", 20)));
+        back.add_css_class("tafs-round-back");
+        back.set_tooltip_text(Some(&b.words.title));
+        back.update_property(&[gtk::accessible::Property::Label(&b.words.title)]);
+        let p = self.clone();
+        back.connect_clicked(move |_| {
+            {
+                let mut s = p.state.borrow_mut();
+                s.log_open = None;
+                s.log = None;
+            }
+            p.draw();
+        });
+        bar.append(&back);
+        let heading = one_line(&l("mission.log"), 17, 600, &["tafs-ink"]);
+        heading.set_valign(gtk::Align::Center);
+        heading.set_accessible_role(gtk::AccessibleRole::Heading);
+        bar.append(&heading);
+        column.append(&bar);
+        if !name.is_empty() {
+            column.append(&text(name, 30, 700, &["tafs-ink"]));
+        }
+        column.append(&text(&l("mission.read_only"), 13, 400, &["tafs-dim"]));
+        if self.pane.may_use_coach {
+            let ask = gtk::Button::new();
+            ask.add_css_class("tafs-outline");
+            ask.add_css_class("coach");
+            ask.set_halign(gtk::Align::Start);
+            let inner = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+            let spark = symbol(icon_for("sparkle"), 15);
+            spark.set_accessible_role(gtk::AccessibleRole::Presentation);
+            inner.append(&spark);
+            inner.append(&gtk::Label::new(Some(&l("coach.ask"))));
+            inner.set_margin_start(10);
+            inner.set_margin_end(10);
+            ask.set_child(Some(&inner));
+            ask.update_property(&[gtk::accessible::Property::Label(&l("coach.ask"))]);
+            let (page, name) = (self.clone(), name.to_string());
+            ask.connect_clicked(move |_| {
+                crate::coach::set_draft(&name);
+                (page.open)(Selection::Coach);
+            });
+            column.append(&ask);
+        }
+        match log {
+            Some(log) => {
+                let days =
+                    brief::log_days(&self.w, &log.items, chrono::Utc::now()).unwrap_or_default();
+                for day in days {
+                    column.append(&eyebrow(&day.title, false));
+                    for item in &day.items {
+                        column.append(&log_row(&l("mission.removed"), item));
+                    }
+                }
+            }
+            None => {
+                let spinner = gtk::Spinner::new();
+                spinner.start();
+                spinner.set_halign(gtk::Align::Center);
+                spinner.set_size_request(24, 24);
+                column.append(&spinner);
+            }
+        }
+        column.set_valign(gtk::Align::Start);
+        let scroller = gtk::ScrolledWindow::new();
+        scroller.set_hscrollbar_policy(gtk::PolicyType::Never);
+        scroller.set_child(Some(&column));
+        scroller.set_vexpand(true);
+        crate::widgets::ground(&scroller);
+        scroller.upcast()
     }
 
     /// The things that need nothing now, in one line, opening Needs you; with its own count
@@ -625,6 +814,84 @@ pub fn read_answer(body: &[u8], w: &WordBook) -> Option<Brief> {
         _ => body.to_vec(),
     };
     Brief::read(&answer, w).ok().flatten()?.shown()
+}
+
+/// `LogRow`: an edge in its kind's colour (the line's once its taf is removed), who, "removed",
+/// its kind as a coloured word, the time; its words; its evidence and value. A removed taf's entry
+/// is at half strength.
+fn log_row(removed: &str, item: &brief::LogItem) -> gtk::Box {
+    let tint = item.tint();
+    let row = gtk::Box::new(gtk::Orientation::Horizontal, 0);
+    row.add_css_class("tafs-log-row");
+    row.set_overflow(gtk::Overflow::Hidden);
+    let edge = gtk::Box::new(gtk::Orientation::Vertical, 0);
+    edge.add_css_class("tafs-log-edge");
+    edge.add_css_class(if item.removed { "line" } else { tint });
+    row.append(&edge);
+    let v = gtk::Box::new(gtk::Orientation::Vertical, 6);
+    v.set_hexpand(true);
+    v.set_margin_start(12);
+    v.set_margin_end(12);
+    v.set_margin_top(12);
+    v.set_margin_bottom(12);
+    let head = gtk::Box::new(gtk::Orientation::Horizontal, 6);
+    head.append(&one_line(item.who(), 14, 600, &["tafs-ink"]));
+    if item.removed {
+        let r = one_line(removed, 11, 400, &["tafs-dim"]);
+        r.set_valign(gtk::Align::Center);
+        head.append(&r);
+    }
+    if !item.kind_words.is_empty() {
+        let k = one_line(&item.kind_words, 11, 500, &["tafs-log-kind", tint]);
+        k.set_valign(gtk::Align::Center);
+        head.append(&k);
+    }
+    let spacer = gtk::Box::new(gtk::Orientation::Horizontal, 0);
+    spacer.set_hexpand(true);
+    head.append(&spacer);
+    if let Some(at) = item.time() {
+        head.append(&one_line(
+            &tafs_core::account_time::short_time(&at),
+            12,
+            400,
+            &["tafs-dim", "tafs-mono"],
+        ));
+    }
+    v.append(&head);
+    v.append(&text(&item.words, 14, 400, &["tafs-ink"]));
+    if !item.evidence.is_empty() || item.value.is_some() {
+        let foot = gtk::Box::new(gtk::Orientation::Horizontal, 6);
+        for e in &item.evidence {
+            foot.append(&one_line(
+                &e.words,
+                11,
+                400,
+                &["tafs-evidence", "tafs-mono"],
+            ));
+        }
+        if let Some(value) = &item.value {
+            foot.append(&one_line(value, 12, 600, &["tafs-ink"]));
+        }
+        v.append(&foot);
+    }
+    row.append(&v);
+    if item.removed {
+        row.set_opacity(0.5);
+    }
+    // Read as one.
+    let label = [
+        item.who(),
+        if item.removed { removed } else { "" },
+        item.kind_words.as_str(),
+        item.words.as_str(),
+    ]
+    .into_iter()
+    .filter(|s| !s.is_empty())
+    .collect::<Vec<_>>()
+    .join(", ");
+    row.set_accessible_role(gtk::AccessibleRole::Group);
+    row.update_property(&[gtk::accessible::Property::Label(&label)]);
+    row
 }
 
 /// `CaseRow`: a dot in its state's colour, its name and what was done, as tafs cloud says it.
@@ -755,5 +1022,34 @@ mod tests {
         assert!(clear.decisions.is_empty(), "board 3 where the decisions go");
         assert_eq!(read_answer(b"{}", &w), None, "nothing in it: Needs you");
         assert_eq!(read_answer(b"[]", &w), None);
+    }
+
+    /// The screenshots' log reads as tafs cloud's answer: who in each entry's words, a removed
+    /// taf's entry kept and marked.
+    #[test]
+    fn the_logs_fixture_reads_as_tafs_clouds_answer() {
+        let w = en();
+        let v: serde_json::Value = serde_json::from_slice(&fixture("mission-log.json")).unwrap();
+        let log = brief::MissionLog::read(&serde_json::to_vec(&v["answer"]).unwrap(), &w)
+            .unwrap()
+            .unwrap();
+        let who: Vec<_> = log.items.iter().map(|i| i.who().to_string()).collect();
+        assert_eq!(
+            who,
+            [
+                w.line("coach.title").unwrap(),
+                "Bill pay → Chargebacks".into(),
+                "Bill pay".into(),
+                w.line("common.you").unwrap(),
+                "Quotes".into(),
+            ]
+        );
+        assert!(log.items[4].removed);
+        let b = read_answer(&fixture("brief.json"), &w).unwrap();
+        assert_eq!(
+            b.done[0].log.as_deref(),
+            Some("m_money"),
+            "Done's Evidence opens it"
+        );
     }
 }

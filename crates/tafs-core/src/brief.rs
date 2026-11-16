@@ -12,6 +12,7 @@
 //! `LabelsWords` read them there, and `chips` lays out the row the brief and the Overview share
 //! (`LabelChips`).
 
+use chrono::{DateTime, Utc};
 use serde_json::{Map, Value};
 
 use crate::words::{WordBook, WordsError};
@@ -696,6 +697,197 @@ pub fn all_words(
     w.line("home.labels_all")
 }
 
+/// One piece of an entry's evidence (`MissionLog.Evidence`): a run, a held call, an item, in
+/// tafs cloud's words; one with no words isn't drawn.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct Evidence {
+    pub kind: String,
+    pub id: String,
+    pub words: String,
+}
+
+/// One entry of a mission's log (`MissionLog.Item`): when, by whom (a taf, the lead Coach, or the
+/// person), its kind and its words, with its evidence and value; a removed taf's entry stays,
+/// marked.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct LogItem {
+    pub at: String,
+    pub by: String,
+    pub kind: String,
+    pub words: String,
+    /// The kind in the person's words ("delivered", "handed", "stuck", "decided", "note").
+    pub kind_words: String,
+    /// Who wrote it, or who handed it on to whom ("Bills in → Payouts").
+    pub by_words: String,
+    pub evidence: Vec<Evidence>,
+    pub value: Option<String>,
+    pub removed: bool,
+    /// tafs cloud's id for the entry, when it sends one.
+    pub server_id: Option<String>,
+}
+
+impl LogItem {
+    fn read(v: &Value, w: &WordBook) -> Result<LogItem, WordsError> {
+        let Some(c) = v.as_object() else {
+            return Ok(LogItem::default());
+        };
+        let mut by = text(c, "by").unwrap_or_default();
+        let mut by_words = text(c, "by_words").unwrap_or_default();
+        // tafs cloud sends `by` as an object, `{kind: taf | lead | person, name?}`: the taf by
+        // its name (none once it's removed), the mission's lead, or the person. A field of
+        // another shape is no `by` at all.
+        if by.is_empty() {
+            let who = c.get("by").and_then(Value::as_object).and_then(|o| {
+                let field = |k: &str| match o.get(k) {
+                    None | Some(Value::Null) => Some(None),
+                    Some(Value::String(s)) => Some(Some(s.clone())),
+                    Some(_) => None,
+                };
+                Some((field("kind")?, field("name")?))
+            });
+            if let Some((kind, name)) = who {
+                by = kind.clone().unwrap_or_default();
+                if by_words.is_empty() {
+                    let name = name.as_deref().map(str::trim).unwrap_or("").to_string();
+                    by_words = if !name.is_empty() {
+                        name
+                    } else {
+                        w.line(match kind.as_deref() {
+                            Some("lead") => "coach.title",
+                            Some("person") => "common.you",
+                            _ => "needs_you.a_taf",
+                        })?
+                    };
+                }
+            }
+        }
+        Ok(LogItem {
+            at: text(c, "at").unwrap_or_default(),
+            kind: text(c, "kind").unwrap_or_default(),
+            words: text(c, "words").unwrap_or_default(),
+            kind_words: text(c, "kind_words").unwrap_or_default(),
+            evidence: list(c, "evidence", |e| {
+                let Some(e) = e.as_object() else {
+                    return Evidence::default();
+                };
+                Evidence {
+                    kind: text(e, "kind").unwrap_or_default(),
+                    id: text(e, "id").unwrap_or_default(),
+                    words: text(e, "words").unwrap_or_default(),
+                }
+            })
+            .into_iter()
+            .filter(|e| !e.words.is_empty())
+            .collect(),
+            value: text(c, "value"),
+            removed: flag(c, "removed").unwrap_or(false),
+            server_id: text(c, "id"),
+            by,
+            by_words,
+        })
+    }
+
+    /// Who, as the row says it: the words for them, else the kind sent.
+    pub fn who(&self) -> &str {
+        if self.by_words.is_empty() {
+            &self.by
+        } else {
+            &self.by_words
+        }
+    }
+
+    /// When it was written; none when it isn't an ISO time.
+    pub fn time(&self) -> Option<DateTime<Utc>> {
+        DateTime::parse_from_rfc3339(&self.at)
+            .ok()
+            .map(|t| t.with_timezone(&Utc))
+    }
+
+    /// Its kind's colour (`LogRow.tint`): a palette colour's name.
+    pub fn tint(&self) -> &'static str {
+        match self.kind.as_str() {
+            "delivered" => "ok",
+            "handed" => "blue",
+            "stuck" => "amber",
+            "decided" => "ink",
+            _ => "dim",
+        }
+    }
+}
+
+/// A mission's log (`TafsCloud.MissionLog`, design v2.1 §6): read only, newest first.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct MissionLog {
+    pub items: Vec<LogItem>,
+    pub before: Option<String>,
+}
+
+impl MissionLog {
+    /// `missionLog(_:before:)`'s path.
+    pub fn path(mission: &str, before: Option<&str>) -> String {
+        let mut p = format!("/v1/missions/{}/log", encode(mission, b""));
+        if let Some(b) = before {
+            p.push_str(&format!("?before={}", encode(b, b"")));
+        }
+        p
+    }
+
+    /// tafs cloud's answer, as the iPad reads it: none only when it isn't an object; an entry
+    /// with no words is left out.
+    pub fn read(body: &[u8], w: &WordBook) -> Result<Option<MissionLog>, WordsError> {
+        let Ok(Value::Object(c)) = serde_json::from_slice::<Value>(body) else {
+            return Ok(None);
+        };
+        let mut items = Vec::new();
+        for v in c
+            .get("items")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+        {
+            let item = LogItem::read(v, w)?;
+            if !item.words.is_empty() {
+                items.push(item);
+            }
+        }
+        Ok(Some(MissionLog {
+            items,
+            before: text(&c, "before"),
+        }))
+    }
+}
+
+/// One day of a log (`MissionLogView.days`): its title ("Today · Nov 16"), and its entries in
+/// tafs cloud's order.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LogDay {
+    pub title: String,
+    pub items: Vec<LogItem>,
+}
+
+/// The log by day, in the account's zone: an entry whose time can't be read counts as now's.
+/// Entries of one day stay together only while they follow each other, as on the iPad.
+pub fn log_days(
+    w: &WordBook,
+    items: &[LogItem],
+    now: DateTime<Utc>,
+) -> Result<Vec<LogDay>, WordsError> {
+    let today = crate::account_time::day(&now);
+    let mut out: Vec<LogDay> = Vec::new();
+    for item in items {
+        let at = item.time().unwrap_or(now);
+        let title = crate::record::day_title(w, crate::account_time::day(&at), today)?;
+        match out.last_mut() {
+            Some(day) if day.title == title => day.items.push(item.clone()),
+            _ => out.push(LogDay {
+                title,
+                items: vec![item.clone()],
+            }),
+        }
+    }
+    Ok(out)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1115,5 +1307,111 @@ mod tests {
         );
         b.words.all = "Everything".into();
         assert_eq!(all_words(&w, None, Some(&b)).unwrap(), "Everything");
+    }
+
+    /// A mission's log reads `{at, by, kind, words, evidence, value?}`; a removed taf's entry
+    /// stays, marked.
+    #[test]
+    fn the_log_reads_its_items_and_keeps_a_removed_tafs_entries() {
+        let w = en();
+        let log = MissionLog::read(
+            br#"{"items":[{"at":"2026-11-14T07:02:00+01:00","by":"taf","kind":"delivered","words":"12 bills sorted.","evidence":[{"kind":"run","id":"r1","words":"run"},{"kind":"x"}],"value":"\u20ac4,120 sorted"},
+                  {"at":"2026-11-13T09:12:00+01:00","by":"taf","kind":"delivered","words":"3 quotes drafted.","removed":true},{"words":""}],
+         "before":"c1"}"#,
+            &w,
+        )
+        .unwrap()
+        .unwrap();
+        assert_eq!(log.items.len(), 2);
+        let ev: Vec<_> = log.items[0]
+            .evidence
+            .iter()
+            .map(|e| e.words.as_str())
+            .collect();
+        assert_eq!(ev, ["run"]);
+        assert_eq!(log.items[0].value.as_deref(), Some("€4,120 sorted"));
+        assert_eq!(log.items[0].who(), "taf", "no words for who: the kind sent");
+        assert!(log.items[1].removed);
+        assert_eq!(log.before.as_deref(), Some("c1"));
+        assert_eq!(MissionLog::read(b"[]", &w).unwrap(), None);
+    }
+
+    /// The log as tafs cloud serves it: `by` an object, `{kind, name?}`; a removed taf has no
+    /// name, the lead is Coach, the person You; evidence with no words isn't shown.
+    #[test]
+    fn the_log_reads_tafs_clouds_shape() {
+        let w = en();
+        let log = MissionLog::read(
+            br#"{"items":[
+          {"id":"log_r2","at":"2026-11-16T07:10:00Z","by":{"kind":"taf","name":"Bill pay"},"kind":"delivered","words":"6 done","evidence":[{"kind":"run","id":"r2"}]},
+          {"id":"log_r1","at":"2026-11-16T06:10:00Z","by":{"kind":"taf"},"kind":"delivered","words":"3 done","removed":true},
+          {"id":"log_n1","at":"2026-11-16T06:00:00Z","by":{"kind":"lead"},"kind":"note","words":"Started the month's close.","evidence":[]},
+          {"id":"log_p1","at":"2026-11-16T05:00:00Z","by":{"kind":"person","name":" "},"kind":"decided","words":"Sent it."},
+          {"id":"log_x","at":"2026-11-16T04:00:00Z","by":{"kind":3},"kind":"odd","words":"Odd."}
+        ],"before":"log_n1"}"#,
+            &w,
+        )
+        .unwrap()
+        .unwrap();
+        let ids: Vec<_> = log
+            .items
+            .iter()
+            .map(|i| i.server_id.clone().unwrap())
+            .collect();
+        assert_eq!(ids, ["log_r2", "log_r1", "log_n1", "log_p1", "log_x"]);
+        let who: Vec<_> = log.items.iter().map(|i| i.who().to_string()).collect();
+        assert_eq!(
+            who,
+            [
+                "Bill pay".to_string(),
+                w.line("needs_you.a_taf").unwrap(),
+                w.line("coach.title").unwrap(),
+                w.line("common.you").unwrap(),
+                String::new(),
+            ]
+        );
+        assert!(log.items[0].evidence.is_empty(), "refs only, never shown");
+        let tints: Vec<_> = log.items.iter().map(LogItem::tint).collect();
+        assert_eq!(tints, ["ok", "ok", "dim", "ink", "dim"]);
+    }
+
+    #[test]
+    fn the_logs_path_and_its_days() {
+        // `.alphanumerics`, as the iPad escapes it: "_" too.
+        assert_eq!(MissionLog::path("money", None), "/v1/missions/money/log");
+        assert_eq!(MissionLog::path("m_1", None), "/v1/missions/m%5F1/log");
+        assert_eq!(
+            MissionLog::path("a/b", Some("c 1")),
+            "/v1/missions/a%2Fb/log?before=c%201"
+        );
+        let w = en();
+        // Every time at noon UTC, so the days are the same in any zone this runs in.
+        let item = |at: &str| LogItem {
+            at: at.into(),
+            words: "w".into(),
+            ..Default::default()
+        };
+        let now = DateTime::parse_from_rfc3339("2026-11-16T12:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
+        let items = [
+            item("2026-11-16T12:00:00Z"),
+            item("not a time"),
+            item("2026-11-15T12:00:00Z"),
+            item("2026-11-13T12:00:00Z"),
+        ];
+        let days = log_days(&w, &items, now).unwrap();
+        let shape: Vec<_> = days
+            .iter()
+            .map(|d| (d.title.clone(), d.items.len()))
+            .collect();
+        assert_eq!(
+            shape,
+            [
+                ("Today · Nov 16".to_string(), 2),
+                ("Yesterday · Nov 15".to_string(), 1),
+                ("Friday · Nov 13".to_string(), 1),
+            ]
+        );
     }
 }
