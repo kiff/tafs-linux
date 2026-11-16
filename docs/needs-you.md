@@ -91,8 +91,8 @@ Each is an amber-edged panel: "Did this happen?" (13 semibold, amber), KIFF's wo
 as they are (15 semibold) or, before KIFF sent them, its title and amount; why KIFF asks, in its
 words (13, soft). No and Yes are signed like an approval, and this computer approves nothing (its
 key is in software), so where they'd be the card says "This device can't approve. Approve on
-another device signed in to your account." (`ApprovalGate`), as tafs-macos #76 does: it's
-answered on the phone. `--home shared/contracts/home.json --unproven
+another device signed in to your account." (`ApprovalGate`'s `ApprovalNotReady`, 14 in ink;
+`docs/approval.md`), as tafs-macos #76 does: it's answered on the phone. `--home shared/contracts/home.json --unproven
 crates/tafs-app/fixtures/unproven.json` (synthetic) draws two, CI's `needs-you-happened`.
 
 ## Card unit requests

@@ -10,6 +10,7 @@ ports a file updates its line here.
 | iPad file | Lines | What | Models | Linux |
 | :- | -: | :- | :- | :- |
 | OnboardingView.swift | 63 | The welcome: what tafs is, Sign in with KIFF, Try it with sample data | AppModel.startSample | `welcome.rs` |
+| ApprovalSetupView.swift | 102 | Why this device can't approve, in an approval's place: `ApprovalGate`, `ApprovalNotice`, `ApprovalNotReady` | `ApprovalReadiness` (Biometry.swift): every state's words, `approvalBlocked` | `approval.rs`, `tafs-core/approval.rs`: this computer is `Unsupported` (no Face ID or Touch ID), so its line alone; `ReadinessReader` reads a value that never changes here, and `openTafsSettings` opens iOS settings |
 
 ## Partial
 
@@ -22,7 +23,7 @@ ports a file updates its line here.
 | RecordView.swift | 689 | The Record, its rows, filters and receipts | `RecordView`'s list: the taf chips, the filters, days with what was spent, folded reads, `RecordRow`'s face and lines (`record.rs`, `tafs-core/record.rs`) | `ReceiptView` (a line's receipt); search and Export receipts; what a line acted on; the signed marks |
 | TafDetailView.swift | 1467 | A taf's page: head, tabs, Card bar, Activity, Card, Setup, panels | `header`, `StateChip`, the tabs, `CardBar` (it opens Card), the held calls, the sample's `activity(_:)` with `ActivityFilter`, `TafActivityList` for a tafs cloud taf, the Card tab's `CardStack`, `WalletLayout`, `TafCardFace`, `CardLines` (`taf.rs`, `tafs-core/taf_page.rs`, `cards.rs`) | Chat and Setup tabs (dimmed); on Card: time zone lines, `eachItem`, `CountedView`, pending, unit words, `HaltRow`, Versions, Usage, Revoke's action; `headerLine`, the side column, Remove; `HealthLines`, `RunsPanel`, `WorkPanel`, `ConnectionsPanel`, `VersionsPanel`, `MemoryPanel` |
 | TafPresentationViews.swift | 492 | A taf's Activity list and its rows, from tafs cloud; its runs and work | `TafActivityList`'s held calls, filters, groups, pages and foot; `SourceActivityRow`; `NextStepRow` as its words (`taf.rs`, `tafs-core/activity.rs`) | `TafKnocksPanel`, Card unit requests, `WorkPanel`, `RunsPanel`, `RetainedRuns`; the next step's buttons; a row's receipt |
-| UsageView.swift | 348 | Plan & usage: the balance, buying, who bills, members' requests | `UsageView`'s title, loading and order; `BalancePanel`'s edge, words, `Meter`, detail, warning and why it couldn't be read; the Credits panel shown or left out; KIFF's usage read with `billingPanel`'s lines, `askPanel` and `requestsPanel` with their buttons dimmed, and why KIFF couldn't be read (`usage.rs`, `tafs-core/usage.rs`) | Raise the limit (`ApprovalGate`), declining and the read after it; Ask an admin (`AskAdminView`) and Withdraw; buying packs and Solo, and approving a pack (the store); Manage and Cancel Solo (Apple's page); `planMessage`; refreshing in place |
+| UsageView.swift | 348 | Plan & usage: the balance, buying, who bills, members' requests | `UsageView`'s title, loading and order; `BalancePanel`'s edge, words, `Meter`, detail, warning and why it couldn't be read; the Credits panel shown or left out; KIFF's usage read with `billingPanel`'s lines, `askPanel` and `requestsPanel` with their buttons dimmed, Raise behind `ApprovalGate`, and why KIFF couldn't be read (`usage.rs`, `tafs-core/usage.rs`) | Raise the limit itself (signed), declining and the read after it; Ask an admin (`AskAdminView`) and Withdraw; buying packs and Solo, and approving a pack (the store); Manage and Cancel Solo (Apple's page); `planMessage`; refreshing in place |
 | CreditsViews.swift | 181 | The credits the account's tafs used, and one taf's runs | `CreditsPanel` whole: both periods, its errors, each taf's row (opening its runs at KIFF), Coach, not counted, the note; `TafCreditsView` with More runs; `CreditsRunRow`'s words and time (`usage.rs`, `tafs-core/usage.rs`) | A run's request (`KnobRequestDetail`); pull to refresh (Try again instead) |
 | ConnectAppsView.swift | 1128 | Connect apps, a connected app's detail, connecting's approval | `ConnectAppsView`'s list: the search, Yours and Discover (`split`, `keys`), the table (`ConnectColumns`) with each row (`ConnectRow`), "Make one first", More apps, Not listed? Ask Coach (`connect.rs`, `tafs-core/connect.rs`) | Connecting (dimmed: `connectableTafs` needs who manages a taf), "Which taf?", `ConnectApprovalSheet`; `AppConnectionsView`, `ConnectionDetailView`, Disconnect and Clear; logos; the narrow window's one-line rows |
 | DevicesView.swift | 69 | Account › Devices | The list with each device's name, last use (`lastUsed`, iOS's relative words) and This device, the note, KIFF's error; the sample's three (`devices.rs`, `tafs-core/devices.rs`) | Signing another device out (an approval: dimmed); Add a device (a phone pairs a computer: not for Linux) |
@@ -42,7 +43,6 @@ ports a file updates its line here.
 | AIConsentView.swift | 74 | The AI-data consent screen | |
 | AllowSheetView.swift | 96 | "Allow this from now on" | HoldAllow |
 | AppEventApprovalSheet.swift | 54 | An app event's filters before signing a subscription | |
-| ApprovalSetupView.swift | 102 | This device's approval readiness | |
 | AttachViews.swift | 267 | Attaching photos and files in a chat | |
 | CoachMode.swift | 131 | Coach mode over the app | |
 | CoachToolsStep.swift | 255 | Coach's tools still to give | |
@@ -109,4 +109,4 @@ ports a file updates its line here.
 
 ## Coverage
 
-Ported 1, partial 15, not started 30, not for Linux 4: the 50 view files at the pin.
+Ported 2, partial 15, not started 29, not for Linux 4: the 50 view files at the pin.

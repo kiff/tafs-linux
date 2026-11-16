@@ -1,6 +1,7 @@
 //! tafs for Linux: GTK 4 and libadwaita. The same product, account and words as the iPad app.
 
 mod account;
+mod approval;
 mod calendar;
 mod connect;
 mod devices;

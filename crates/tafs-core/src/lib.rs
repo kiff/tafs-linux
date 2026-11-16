@@ -6,6 +6,7 @@ pub mod access;
 pub mod account;
 pub mod account_time;
 pub mod activity;
+pub mod approval;
 pub mod calendar;
 pub mod card;
 pub mod cards;
