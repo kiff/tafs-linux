@@ -31,6 +31,10 @@ pub enum Selection {
     Titled(String),
     /// A taf, by its key.
     Taf(String),
+    /// Halt all: every taf at once, its own screen (`HomeSelection.haltAll`).
+    HaltAll,
+    /// A taf's halt, by its key (tafs cloud's id), its own screen (`HaltRow`).
+    Halt(String),
     /// A held call, on its taf's page.
     Held {
         call: String,
@@ -57,6 +61,8 @@ pub struct ScreenItem {
     pub badge: Option<String>,
     /// What a screen reader says: "Needs you, 2" with a count.
     pub accessible: String,
+    /// A line under the title, in red: Halt all's state while it isn't running.
+    pub line: Option<String>,
 }
 
 pub use crate::held::HeldCall;
@@ -105,6 +111,8 @@ pub struct SidebarModel {
     pub account_name: Option<String>,
     /// Home's count from tafs cloud (`homeNeedsYou`); none counts the held calls here.
     pub cloud_needs_you: Option<i64>,
+    /// The account's halt, where it's offered (`showsAccountHalt`): its row, and its state.
+    pub account_halt: Option<crate::halt::Halt>,
 }
 
 /// Everything the sidebar draws, top to foot.
@@ -175,6 +183,7 @@ impl SidebarModel {
             } else {
                 needs_you
             },
+            line: None,
         }];
         screens.push(item(
             Selection::Record,
@@ -193,6 +202,26 @@ impl SidebarModel {
                 w.line("connect.apps.title")?,
                 "app.connected.to.app.below.fill",
             ));
+        }
+        // Every taf at once, from its own screen (`haltAllRow`): its state in red under it while
+        // it isn't running.
+        if let Some(h) = &self.account_halt {
+            let running = h.state == crate::halt::State::Running;
+            let mut halt = item(
+                Selection::HaltAll,
+                w.line("taf.halt.title_all")?,
+                if running {
+                    "hand.raised"
+                } else {
+                    "hand.raised.fill"
+                },
+            );
+            if !running {
+                let state = crate::halt::headline(w, h)?;
+                halt.accessible = format!("{}, {}", halt.title, state);
+                halt.line = Some(state);
+            }
+            screens.push(halt);
         }
 
         let mut held = Vec::new();
@@ -276,6 +305,7 @@ fn item(selection: Selection, title: String, symbol: &'static str) -> ScreenItem
         title,
         symbol,
         badge: None,
+        line: None,
     }
 }
 

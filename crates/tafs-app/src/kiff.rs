@@ -96,6 +96,41 @@ pub fn home(token: &str, languages: &[&str]) -> Result<Answer, KiffError> {
     )
 }
 
+/// A taf's halt, or with none the account's, at tafs cloud as the session: `GET` reads where it
+/// stands (`halted`); `POST` halts it (`halt`), one tap and no signature, since it only takes
+/// authority away. The taf is tafs cloud's id, escaped as one path segment.
+pub fn halt(
+    token: &str,
+    languages: &[&str],
+    taf: Option<&str>,
+    halt_it: bool,
+) -> Result<Answer, KiffError> {
+    let url = format!(
+        "{}{}",
+        tafs_core::home::TAFS_CLOUD,
+        tafs_core::halt::path(taf)
+    );
+    if !may_send_to(&url) {
+        return Err(KiffError::Unreadable);
+    }
+    let agent = agent();
+    let request = if halt_it {
+        agent.post(&url)
+    } else {
+        agent.get(&url)
+    }
+    .set("Accept", "application/json")
+    .set("Accept-Language", &accept_language(languages))
+    .set("Authorization", &format!("Bearer {token}"));
+    Kiff::read(if halt_it {
+        request
+            .set("Content-Type", "application/json")
+            .send_bytes(b"{}")
+    } else {
+        request.call()
+    })
+}
+
 /// `GET /v1/recipes/gallery` at tafs cloud as the session (`TafsCloud.gallery`): every
 /// ready-made job, at any time.
 pub fn gallery(token: &str, languages: &[&str]) -> Result<Answer, KiffError> {

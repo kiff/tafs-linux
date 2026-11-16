@@ -38,6 +38,7 @@ window, .tafs-ground { background-color: @tafs_background; color: @tafs_ink; }
 /* Eyebrow: capitals, monospaced 12, tracked 0.7. */
 .tafs-eyebrow { font-family: monospace; font-size: 12px; letter-spacing: 0.7px; color: @tafs_dim; }
 .tafs-eyebrow.amber { color: @tafs_amber; }
+.tafs-eyebrow.tafs-no { color: @tafs_no; }
 
 /* Panel: the panel colour, a 1-point edge, corners of 18, padding 16. */
 .tafs-panel { background-color: @tafs_panel; border: 1px solid @tafs_line; border-radius: 18px; padding: 16px; }
@@ -60,6 +61,8 @@ button.tafs-outline {
 }
 button.tafs-outline:hover { background-color: alpha(@tafs_ink, 0.04); }
 button.tafs-outline:active { background-color: alpha(@tafs_ink, 0.08); }
+/* OutlineButtonStyle(color: Theme.no): a halt's button, its words and edge in red. */
+button.tafs-outline.tafs-no { color: @tafs_no; border-color: alpha(@tafs_no, 0.5); }
 button.tafs-outline:disabled { opacity: 0.4; }
 
 button.tafs-link { background: none; box-shadow: none; border: none; color: @tafs_amber_text; font-size: 13px; font-weight: 600; padding: 2px 4px; min-height: 0; }

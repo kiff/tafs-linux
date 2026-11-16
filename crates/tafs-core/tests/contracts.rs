@@ -667,7 +667,7 @@ fn a_halt_as_tafs_cloud_answers_it() {
     )
     .expect("reads");
     assert_eq!(h.state, State::Halting);
-    let l = halt::lines(&w, &h, Some("Rae"), "a passkey", "Not from this computer.").unwrap();
+    let l = halt::lines(&w, &h, Some("Rae")).unwrap();
     assert_eq!(l.title, "Halt");
     assert_eq!(l.name, "Rae");
     assert_eq!(l.headline, "Halting…");
@@ -684,7 +684,7 @@ fn a_halt_as_tafs_cloud_answers_it() {
 
     // Running: no parts, and one tap to halt; the account's says "all".
     let running = halt::Halt::running();
-    let l = halt::lines(&w, &running, None, "a passkey", "").unwrap();
+    let l = halt::lines(&w, &running, None).unwrap();
     assert_eq!(l.title, "Halt all");
     assert_eq!(l.name, "All your tafs");
     assert_eq!(
@@ -705,26 +705,20 @@ fn a_halt_as_tafs_cloud_answers_it() {
     )
     .unwrap();
     assert_eq!(halted.stopped, Some(2));
-    let l = halt::lines(
-        &w,
-        &halted,
-        Some("Rae"),
-        "a passkey",
-        "Not from this computer.",
-    )
-    .unwrap();
+    let l = halt::lines(&w, &halted, Some("Rae")).unwrap();
     assert_eq!(l.headline, "Halted");
     assert!(l.explanation.starts_with("Since "));
     assert_eq!(
         l.action,
         Action::Resume {
-            button: "Resume with a passkey".into(),
-            why: "Not from this computer.".into()
+            button: "Resume Rae".into(),
+            why: "This device can't approve. Approve on another device signed in to your account."
+                .into()
         }
     );
     let mut with_all = halted.clone();
     with_all.account = true;
-    let l = halt::lines(&w, &with_all, Some("Rae"), "a passkey", "").unwrap();
+    let l = halt::lines(&w, &with_all, Some("Rae")).unwrap();
     assert_eq!(l.action, Action::None);
     assert_eq!(
         l.with_all.as_deref(),

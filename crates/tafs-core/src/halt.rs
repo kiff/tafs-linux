@@ -155,15 +155,11 @@ pub fn explanation(w: &WordBook, h: &Halt, all: bool) -> Result<String, WordsErr
     }
 }
 
-/// The screen for a taf (its name) or, with none, the account. `biometry` is the device's word
-/// for what would sign a resume; `why` says this computer can't.
-pub fn lines(
-    w: &WordBook,
-    h: &Halt,
-    taf: Option<&str>,
-    biometry: &str,
-    why: &str,
-) -> Result<HaltLines, WordsError> {
+/// The screen for a taf (its name) or, with none, the account. Resuming is signed by the device;
+/// this computer's key is in software, so its button names what it would do ("Resume Rae",
+/// "Resume all your tafs": the iPad's prompt words, as Linux has no biometry to name) and the
+/// shared line says why it can't.
+pub fn lines(w: &WordBook, h: &Halt, taf: Option<&str>) -> Result<HaltLines, WordsError> {
     let all = taf.is_none();
     let parts = if h.state == State::Running {
         None
@@ -197,8 +193,11 @@ pub fn lines(
         },
         State::Halted if with_account => Action::None,
         State::Halted => Action::Resume {
-            button: w.get("taf.halt.resume_with", &[("biometry", biometry)])?,
-            why: why.to_string(),
+            button: match taf {
+                Some(name) => w.get("taf.halt.resume_prompt", &[("taf", name)])?,
+                None => w.line("taf.halt.resume_all_prompt")?,
+            },
+            why: w.line("approval.device_can_not_approve_approve")?,
         },
     };
     Ok(HaltLines {

@@ -44,6 +44,8 @@ pub struct Screens {
     pub people_known: Rc<crate::people::Known>,
     /// Where the time zones are read.
     pub zones: crate::zones::ZonesSource,
+    /// Where a halt is read and sent, signed in with KIFF: the halt screens and the taf page's row.
+    pub halt: Option<Rc<crate::halt::HaltSource>>,
     /// The jobs' gallery, signed in with KIFF: "Explore jobs" and, with tafs, the strip.
     pub gallery: Option<Rc<crate::recipes::GalleryPane>>,
     /// Home with no taf, when tafs cloud lists its recipes (`homeListsRecipes`): they take the
@@ -80,6 +82,7 @@ pub fn build(
         zones,
         recipes,
         gallery,
+        halt,
     } = screens;
     let entries = Rc::new(record.entries.clone());
     let lines = model.lines(&w).unwrap_or_else(|e| panic!("{e}"));
@@ -255,10 +258,48 @@ pub fn build(
                 Selection::Usage => {
                     crate::usage::page(w.clone(), usage.clone(), cloud_names.clone())
                 }
+                // A halt: every taf's, or one taf's by tafs cloud's id.
+                Selection::HaltAll | Selection::Halt(_) => match &halt {
+                    Some(source) => {
+                        let id = match &s {
+                            Selection::Halt(id) => Some(id.clone()),
+                            _ => None,
+                        };
+                        let name = id.as_ref().and_then(|id| {
+                            tafs.iter()
+                                .find(|t| t.cloud_id.as_deref() == Some(id.as_str()))
+                                .map(|t| t.name.clone())
+                        });
+                        crate::halt::page(
+                            w.clone(),
+                            source.clone(),
+                            crate::halt::Whose { id, name },
+                        )
+                    }
+                    None => screen_page(&title).upcast::<gtk::Widget>(),
+                },
                 // A taf, or a held call on its taf's page.
                 Selection::Taf(key) | Selection::Held { taf: key, .. } => {
                     match tafs.iter().find(|t| t.key == *key) {
-                        Some(t) => crate::taf::page(w.clone(), t, entries.clone()),
+                        Some(t) => {
+                            // Halting is a job of its own too: its row opens its screen, for a
+                            // tafs cloud taf this person manages that isn't revoked.
+                            let halt_row = match (&halt, &t.cloud_id) {
+                                (Some(source), Some(id)) if t.manages && !t.revoked => {
+                                    Some(crate::halt::row(
+                                        w.clone(),
+                                        source.clone(),
+                                        crate::halt::Whose {
+                                            id: Some(id.clone()),
+                                            name: Some(t.name.clone()),
+                                        },
+                                        open.clone(),
+                                    ))
+                                }
+                                _ => None,
+                            };
+                            crate::taf::page(w.clone(), t, entries.clone(), halt_row)
+                        }
                         None => screen_page(&title).upcast::<gtk::Widget>(),
                     }
                 }
@@ -389,13 +430,31 @@ fn sidebar(
     for item in &lines.screens {
         let b = gtk::Box::new(gtk::Orientation::Horizontal, 14);
         let icon = symbol(icon_for(item.symbol), 20);
-        icon.add_css_class("tafs-ink");
+        // A halt's hand is red; every other screen's icon is ink.
+        icon.add_css_class(if item.symbol.starts_with("hand.") {
+            "tafs-no"
+        } else {
+            "tafs-ink"
+        });
         b.append(&icon);
         let title = gtk::Label::new(Some(&item.title));
         title.add_css_class("row-title");
         title.set_xalign(0.0);
-        title.set_hexpand(true);
-        b.append(&title);
+        // Halt all's state, in red under its title, while it isn't running.
+        match &item.line {
+            Some(line) => {
+                let v = gtk::Box::new(gtk::Orientation::Vertical, 2);
+                v.set_hexpand(true);
+                v.set_valign(gtk::Align::Center);
+                v.append(&title);
+                v.append(&text(line, 13, 400, &["tafs-no"]));
+                b.append(&v);
+            }
+            None => {
+                title.set_hexpand(true);
+                b.append(&title);
+            }
+        }
         if let Some(badge) = &item.badge {
             let count = gtk::Label::new(Some(badge));
             count.add_css_class("row-badge");
@@ -617,6 +676,7 @@ fn title_of(
         Selection::KiffAccount => l("settings.kiff_account"),
         Selection::TimeZone => l("settings.time_zone_title"),
         Selection::Titled(title) => title.clone(),
+        Selection::Halt(_) => l("taf.halt.title"),
         Selection::Taf(key) | Selection::Held { taf: key, .. } => tafs
             .iter()
             .find(|(k, _)| k == key)
