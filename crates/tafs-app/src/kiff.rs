@@ -153,6 +153,24 @@ pub fn run_now(token: &str, languages: &[&str], taf: &str) -> Result<Answer, Kif
     )
 }
 
+/// Send again (`TafsCloud.sendAgain`): a delivery given up on, sent once more, at tafs cloud as
+/// the session. It does no work and signs nothing.
+pub fn send_again(token: &str, languages: &[&str], path: &str) -> Result<Answer, KiffError> {
+    let url = format!("{}{path}", tafs_core::home::TAFS_CLOUD);
+    if !may_send_to(&url) {
+        return Err(KiffError::Unreadable);
+    }
+    Kiff::read(
+        agent()
+            .post(&url)
+            .set("Accept", "application/json")
+            .set("Accept-Language", &accept_language(languages))
+            .set("Authorization", &format!("Bearer {token}"))
+            .set("Content-Type", "application/json")
+            .send_bytes(b"{}"),
+    )
+}
+
 /// `GET /v1/recipes/gallery` at tafs cloud as the session (`TafsCloud.gallery`): every
 /// ready-made job, at any time.
 pub fn gallery(token: &str, languages: &[&str]) -> Result<Answer, KiffError> {

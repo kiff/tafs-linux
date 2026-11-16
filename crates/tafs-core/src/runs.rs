@@ -6,7 +6,7 @@ use serde_json::Value;
 
 use crate::home::HomeTaf;
 use crate::words::{WordBook, WordsError};
-use crate::work::{segment, Request, Row, Skipped};
+use crate::work::{segment, Delivery, Request, Row, Skipped};
 
 /// The panel's page holds 3 runs; the sheet with them all, 20 a page.
 pub const PANEL: u32 = 3;
@@ -24,6 +24,97 @@ pub fn path(taf: &str, cursor: Option<&str>, limit: u32) -> String {
 
 pub fn run_path(taf: &str) -> String {
     format!("/v1/tafs/{}/run", segment(taf))
+}
+
+/// A run's own page (`TafsCloud.request`).
+pub fn request_path(taf: &str, run: &str) -> String {
+    format!("/v1/tafs/{}/requests/{}", segment(taf), segment(run))
+}
+
+/// Send again (`TafsCloud.sendAgain`): the delivery at `place` of `run`, sent once more.
+pub fn send_again_path(taf: &str, run: &str, place: &str) -> String {
+    format!(
+        "/v1/tafs/{}/requests/{}/deliveries/{}/send",
+        segment(taf),
+        segment(run),
+        segment(place)
+    )
+}
+
+/// A step of a run (`RequestDetail.Step`): done, next, or what went wrong.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Step {
+    pub label: String,
+    pub line: Option<String>,
+    pub state: String,
+}
+
+/// How a step is marked (`KnobRequestDetail`): done in ok, next with a clock, else a warning, both
+/// amber.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Mark {
+    Done,
+    Next,
+    Problem,
+}
+
+impl Step {
+    pub fn mark(&self) -> Mark {
+        match self.state.as_str() {
+            "done" => Mark::Done,
+            "next" => Mark::Next,
+            _ => Mark::Problem,
+        }
+    }
+}
+
+/// A run's own page (`RequestDetail`), as strictly as the iPad's synthesized decoder.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RequestDetail {
+    pub id: String,
+    pub from: String,
+    pub line: String,
+    pub steps: Vec<Step>,
+    pub deliveries: Vec<Delivery>,
+}
+
+pub fn read_request(body: &[u8]) -> Option<RequestDetail> {
+    let v: Value = serde_json::from_slice(body).ok()?;
+    let o = v.as_object()?;
+    let text = |o: &serde_json::Map<String, Value>, k: &str| o.get(k)?.as_str().map(str::to_string);
+    let optional = |o: &serde_json::Map<String, Value>, k: &str| -> Option<Option<String>> {
+        match o.get(k) {
+            None | Some(Value::Null) => Some(None),
+            Some(Value::String(s)) => Some(Some(s.clone())),
+            Some(_) => None,
+        }
+    };
+    let steps = o
+        .get("steps")?
+        .as_array()?
+        .iter()
+        .map(|s| {
+            let s = s.as_object()?;
+            optional(s, "at")?;
+            Some(Step {
+                label: text(s, "label")?,
+                line: optional(s, "line")?,
+                state: text(s, "state")?,
+            })
+        })
+        .collect::<Option<Vec<_>>>()?;
+    Some(RequestDetail {
+        id: text(o, "id")?,
+        from: text(o, "from")?,
+        line: text(o, "line")?,
+        steps,
+        deliveries: o
+            .get("deliveries")?
+            .as_array()?
+            .iter()
+            .map(Delivery::read)
+            .collect::<Option<_>>()?,
+    })
 }
 
 /// A page of the runs tafs cloud kept (`RunsPage`), as strictly as the iPad's decoder: a page
@@ -191,6 +282,32 @@ mod tests {
             "/v1/tafs/taf%201/work/runs?limit=3&cursor=c%2F2"
         );
         assert_eq!(run_path("t"), "/v1/tafs/t/run");
+    }
+
+    #[test]
+    fn a_run_s_own_page_reads_as_the_ipad_decodes_it() {
+        let d = read_request(br#"{"id": "run_1", "from": "From the Refunds door", "line": "Stopped: Stripe didn't answer",
+            "steps": [{"label": "Read the case", "state": "done", "at": "05:00"},
+                      {"label": "Refund it", "line": "Stripe didn't answer", "state": "failed"},
+                      {"label": "Reply", "line": null, "state": "next"}],
+            "deliveries": [{"place": "door_reply", "line": "The reply wasn't sent", "send_again": true},
+                           {"place": "action", "key": "slack/post", "line": "Not posted"}]}"#).unwrap();
+        let marks: Vec<Mark> = d.steps.iter().map(Step::mark).collect();
+        assert_eq!(marks, [Mark::Done, Mark::Problem, Mark::Next]);
+        assert_eq!(d.deliveries[0].send_place(), "door_reply");
+        assert_eq!(d.deliveries[1].send_place(), "slack/post");
+        assert_eq!(
+            send_again_path("t", "run 1", &d.deliveries[1].send_place()),
+            "/v1/tafs/t/requests/run%201/deliveries/slack%2Fpost/send"
+        );
+        assert_eq!(request_path("t", "r/1"), "/v1/tafs/t/requests/r%2F1");
+        // Required: its id, from, line, steps and deliveries; a step's label and state.
+        assert!(read_request(br#"{"id": "r", "from": "f", "line": "l", "steps": []}"#).is_none());
+        assert!(read_request(br#"{"id": "r", "from": "f", "line": "l", "steps": [{"label": "x"}], "deliveries": []}"#).is_none());
+        assert!(read_request(
+            br#"{"id": "r", "from": "f", "line": "l", "steps": [], "deliveries": [3]}"#
+        )
+        .is_none());
     }
 
     #[test]

@@ -112,13 +112,15 @@ struct Options {
     work: Option<String>,
     /// With `--home`: a page of a taf's runs as tafs cloud answers `GET /v1/tafs/{id}/work/runs`.
     runs: Option<String>,
+    /// With `--runs`: a run's own page as tafs cloud answers `GET /v1/tafs/{id}/requests/{run}`.
+    request: Option<String>,
     /// `--size WxH`: the window's size, for a screenshot of a narrower layout.
     size: Option<(i32, i32)>,
     screenshot: Option<String>,
 }
 
 const USAGE: &str = "tafs [--lang en|de|fr|es|it|pt|nl|pl] [--theme light|dark] [--sample] [--signed-in] [--view-only [--paired]]
-     [--home contract.json] [--usage answers.json] [--people answers.json] [--unproven answers.json] [--recipes answers.json] [--gallery answers.json] [--halt answer.json] [--record-search answers.json] [--access answer.json] [--receipts answer.json] [--activity answer.json] [--receipt answer.json] [--work answer.json] [--runs answer.json] [--size WxH] [--page welcome|sign-in|pair|recipe:<id>|gallery|halt-all|halt:<id>|record-search:<q>|record-export|receipt:<proposal id>|pin-sheet|overview|needs-you|record|calendar|calendar-week|usage|connect-apps|account|kiff-account|time-zone|alerts|devices|people|taf|taf-card] [--screenshot out.png]";
+     [--home contract.json] [--usage answers.json] [--people answers.json] [--unproven answers.json] [--recipes answers.json] [--gallery answers.json] [--halt answer.json] [--record-search answers.json] [--access answer.json] [--receipts answer.json] [--activity answer.json] [--receipt answer.json] [--work answer.json] [--runs answer.json] [--request answer.json] [--size WxH] [--page welcome|sign-in|pair|recipe:<id>|gallery|halt-all|halt:<id>|record-search:<q>|record-export|receipt:<proposal id>|run:<taf id>|pin-sheet|overview|needs-you|record|calendar|calendar-week|usage|connect-apps|account|kiff-account|time-zone|alerts|devices|people|taf|taf-card] [--screenshot out.png]";
 
 fn options() -> Result<Options, String> {
     let mut o = Options::default();
@@ -144,6 +146,7 @@ fn options() -> Result<Options, String> {
             "--receipt" => o.receipt = Some(value()?),
             "--work" => o.work = Some(value()?),
             "--runs" => o.runs = Some(value()?),
+            "--request" => o.request = Some(value()?),
             "--size" => {
                 let v = value()?;
                 let (w, h) = v.split_once('x').ok_or("--size takes WxH")?;
@@ -204,6 +207,7 @@ fn selection_of(page: Option<&str>) -> Selection {
         Some("taf") | Some("taf-card") => Selection::Taf("refunds".into()),
         // With `--home`, the contract's first taf.
         Some(other) if other.starts_with("taf:") => Selection::Taf(other["taf:".len()..].into()),
+        Some(other) if other.starts_with("run:") => Selection::Taf(other["run:".len()..].into()),
         Some("halt-all") => Selection::HaltAll,
         Some(other) if other.starts_with("record-search:") => Selection::Record,
         Some("record-export") => Selection::Record,
@@ -278,6 +282,8 @@ fn activate(app: &adw::Application, o: &Options) {
         home_file: o.home.as_ref().map(std::path::PathBuf::from),
         work_file: o.work.as_ref().map(std::path::PathBuf::from),
         runs_file: o.runs.as_ref().map(std::path::PathBuf::from),
+        request_file: o.request.as_ref().map(std::path::PathBuf::from),
+        open_run: o.page.as_deref().is_some_and(|p| p.starts_with("run:")),
         usage_file: o.usage.as_ref().map(std::path::PathBuf::from),
         people_file: o.people.as_ref().map(std::path::PathBuf::from),
         halt_file: halt_file(o.halt.as_deref()),
@@ -468,6 +474,10 @@ struct App {
     work_file: Option<std::path::PathBuf>,
     /// `--runs`'s page: the screenshots' runs, never sent.
     runs_file: Option<std::path::PathBuf>,
+    /// `--request`'s page: the screenshots' run, never sent.
+    request_file: Option<std::path::PathBuf>,
+    /// `--page run:<taf id>`: that taf's first kept run open, for a screenshot.
+    open_run: bool,
     /// `--usage`'s file of synthetic answers.
     usage_file: Option<std::path::PathBuf>,
     /// `--halt`'s answer: the screenshots' halt, never sent to tafs cloud.
@@ -744,7 +754,11 @@ impl App {
         // Where its runs are read and Run now sent: tafs cloud as the session; a screenshot's
         // first page from `--runs`, and its Run now sends nothing.
         let runs = match (self.kept.borrow().as_ref(), &self.runs_file) {
-            (_, Some(file)) => runs_panel::RunsSource::File(file.clone()),
+            (_, Some(file)) => runs_panel::RunsSource::File {
+                page: file.clone(),
+                request: self.request_file.clone(),
+                open: self.open_run,
+            },
             (Some(kept), None) => runs_panel::RunsSource::Cloud {
                 token: kept.token.clone(),
                 languages: self.languages.clone(),

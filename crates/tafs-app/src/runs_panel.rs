@@ -26,7 +26,12 @@ pub enum RunsSource {
         languages: Vec<&'static str>,
     },
     /// A screenshot's first page (`--runs`): every page reads it, and Run now sends nothing.
-    File(std::path::PathBuf),
+    /// `request` (`--request`) is every run's own page; `open` opens the first run's at once.
+    File {
+        page: std::path::PathBuf,
+        request: Option<std::path::PathBuf>,
+        open: bool,
+    },
     None,
 }
 
@@ -59,7 +64,7 @@ async fn read_page(
                 }
                 a.body
             }
-            RunsSource::File(f) => std::fs::read(f).map_err(|e| e.to_string())?,
+            RunsSource::File { page, .. } => std::fs::read(page).map_err(|e| e.to_string())?,
             RunsSource::None => return Err(String::new()),
         };
         runs::read_page(&body)
@@ -69,8 +74,19 @@ async fn read_page(
     .unwrap_or_else(|_| Err(String::new()))
 }
 
-/// A row: a run's line, what it used, where its result went; or a skipped firing, dim.
-fn row(r: &Row) -> gtk::Widget {
+/// What opening a run needs: the words, the taf, where it's read, and whether this person
+/// manages the taf (Send again is theirs).
+#[derive(Clone)]
+pub struct Opening {
+    pub w: Rc<WordBook>,
+    pub id: String,
+    pub source: RunsSource,
+    pub manages: bool,
+}
+
+/// A row: a run's line, what it used, where its result went, opening its own page; or a
+/// skipped firing, dim.
+fn row(r: &Row, open: &Opening) -> gtk::Widget {
     match r {
         Row::Skipped(s) => text(&s.words, 13, 400, &["tafs-dim"]).upcast(),
         Row::Request(r) => {
@@ -82,8 +98,235 @@ fn row(r: &Row) -> gtk::Widget {
             for d in &r.deliveries {
                 v.append(&text(&d.line, 12, 400, &["tafs-dim"]));
             }
-            v.upcast()
+            // A link to the run's own page (`NavigationLink { KnobRequestDetail }`), leading.
+            let b = gtk::Button::new();
+            b.add_css_class("flat");
+            b.add_css_class("tafs-run-row");
+            b.set_child(Some(&v));
+            b.update_property(&[gtk::accessible::Property::Label(&r.line)]);
+            let (open, run) = (open.clone(), r.id.clone());
+            b.connect_clicked(move |b| request_sheet(open.clone(), run.clone(), b));
+            b.upcast()
         }
+    }
+}
+
+/// A run's own page (`KnobRequestDetail`), over the window: where it came from and its line,
+/// each step with its mark, and Try the reply now for whoever manages the taf. Coach's Ask isn't
+/// on this computer.
+pub fn request_sheet(open: Opening, run: String, parent: &impl IsA<gtk::Widget>) {
+    let w = open.w.clone();
+    let column = gtk::Box::new(gtk::Orientation::Vertical, 16);
+    column.set_margin_start(20);
+    column.set_margin_end(20);
+    column.set_margin_top(16);
+    column.set_margin_bottom(20);
+    let load: Later = Rc::new(RefCell::new(None));
+    let reload: Rc<dyn Fn()> = {
+        let (open, run, column, load) = (open.clone(), run.clone(), column.clone(), load.clone());
+        Rc::new(move || {
+            while let Some(c) = column.first_child() {
+                column.remove(&c);
+            }
+            let spinner = gtk::Spinner::new();
+            spinner.start();
+            spinner.set_halign(gtk::Align::Start);
+            column.append(&spinner);
+            let (open, run, column, load) =
+                (open.clone(), run.clone(), column.clone(), load.clone());
+            glib::spawn_future_local(async move {
+                let (words, source, id, r) = (
+                    (*open.w).clone(),
+                    open.source.clone(),
+                    open.id.clone(),
+                    run.clone(),
+                );
+                let read = gio::spawn_blocking(move || -> Result<runs::RequestDetail, String> {
+                    let body = match &source {
+                        RunsSource::Cloud { token, languages } => {
+                            let a = crate::kiff::taf_activity(
+                                token,
+                                languages,
+                                &runs::request_path(&id, &r),
+                            )
+                            .map_err(|e| e.words(&words).unwrap_or_default())?;
+                            if a.status != 200 {
+                                return Err(plain(&words, &a));
+                            }
+                            a.body
+                        }
+                        RunsSource::File {
+                            request: Some(f), ..
+                        } => std::fs::read(f).map_err(|e| e.to_string())?,
+                        _ => return Err(String::new()),
+                    };
+                    runs::read_request(&body).ok_or_else(|| {
+                        tafs_core::signin::plain_words(&words, 200).unwrap_or_default()
+                    })
+                })
+                .await
+                .unwrap_or_else(|_| Err(String::new()));
+                while let Some(c) = column.first_child() {
+                    column.remove(&c);
+                }
+                draw_request(&open, &run, &column, read, &load);
+            });
+        })
+    };
+    *load.borrow_mut() = Some(reload.clone());
+    reload();
+    let scroller = gtk::ScrolledWindow::new();
+    scroller.set_hscrollbar_policy(gtk::PolicyType::Never);
+    scroller.set_child(Some(&column));
+    scroller.set_vexpand(true);
+    let header = adw::HeaderBar::new();
+    let toolbar = adw::ToolbarView::new();
+    toolbar.add_top_bar(&header);
+    toolbar.set_content(Some(&scroller));
+    crate::widgets::ground(&toolbar);
+    let dialog = adw::Dialog::new();
+    dialog.set_title(&w.line("knob.request_title").unwrap_or_default());
+    dialog.set_child(Some(&toolbar));
+    dialog.set_content_width(520);
+    dialog.set_content_height(560);
+    dialog.present(Some(parent));
+}
+
+fn draw_request(
+    open: &Opening,
+    run: &str,
+    column: &gtk::Box,
+    read: Result<runs::RequestDetail, String>,
+    load: &Later,
+) {
+    let w = &open.w;
+    let l = |k: &str| w.line(k).unwrap_or_default();
+    let again = |column: &gtk::Box| {
+        let b = outline(&l("common.try_again"));
+        b.set_hexpand(false);
+        b.set_halign(gtk::Align::Start);
+        let load = load.clone();
+        b.connect_clicked(move |_| {
+            let f = load.borrow().clone();
+            if let Some(f) = f {
+                f();
+            }
+        });
+        column.append(&b);
+    };
+    let detail = match read {
+        Ok(d) => d,
+        Err(why) => {
+            column.append(&text(&why, 14, 400, &["tafs-no"]));
+            again(column);
+            return;
+        }
+    };
+    // `Section(detail.from) { Text(detail.line) }`.
+    column.append(&eyebrow(&detail.from, false));
+    let head = panel(false);
+    head.append(&text(&detail.line, 15, 400, &["tafs-ink"]));
+    column.append(&head);
+    let steps = panel(false);
+    for step in &detail.steps {
+        let r = gtk::Box::new(gtk::Orientation::Horizontal, 10);
+        let (icon, class) = match step.mark() {
+            runs::Mark::Done => ("emblem-ok-symbolic", "tafs-ok"),
+            runs::Mark::Next => ("document-open-recent-symbolic", "tafs-amber-text"),
+            runs::Mark::Problem => ("dialog-warning-symbolic", "tafs-amber-text"),
+        };
+        let i = gtk::Image::from_icon_name(icon);
+        i.add_css_class(class);
+        i.set_valign(gtk::Align::Start);
+        i.set_margin_top(2);
+        r.append(&i);
+        let v = gtk::Box::new(gtk::Orientation::Vertical, 4);
+        v.set_hexpand(true);
+        v.append(&text(&step.label, 15, 600, &["tafs-ink"]));
+        if let Some(line) = &step.line {
+            v.append(&text(line, 13, 400, &["tafs-dim"]));
+        }
+        r.append(&v);
+        steps.append(&r);
+    }
+    if !detail.steps.is_empty() {
+        column.append(&steps);
+    }
+    // Try the reply now, for each delivery that can be sent again, for whoever manages the taf.
+    for d in detail.deliveries.iter().filter(|d| d.send_again) {
+        if !open.manages {
+            continue;
+        }
+        let b = outline(&l("work.request.try_reply_now"));
+        b.set_hexpand(false);
+        b.set_halign(gtk::Align::Start);
+        let said = text("", 13, 400, &["tafs-no"]);
+        said.set_visible(false);
+        let (open, run, place, load) =
+            (open.clone(), run.to_string(), d.send_place(), load.clone());
+        let said2 = said.clone();
+        b.connect_clicked(move |b| {
+            b.set_sensitive(false);
+            b.set_label(&open.w.line("work.sending_again").unwrap_or_default());
+            let (open, run, place, load, b, said) = (
+                open.clone(),
+                run.clone(),
+                place.clone(),
+                load.clone(),
+                b.clone(),
+                said2.clone(),
+            );
+            glib::spawn_future_local(async move {
+                let (words, source, id) = ((*open.w).clone(), open.source.clone(), open.id.clone());
+                let sent = gio::spawn_blocking(move || -> Result<(), String> {
+                    match &source {
+                        RunsSource::Cloud { token, languages } => {
+                            let a = crate::kiff::send_again(
+                                token,
+                                languages,
+                                &runs::send_again_path(&id, &run, &place),
+                            )
+                            .map_err(|e| e.words(&words).unwrap_or_default())?;
+                            if !(200..300).contains(&a.status) {
+                                return Err(plain(&words, &a));
+                            }
+                            Ok(())
+                        }
+                        // A screenshot's sends nothing.
+                        _ => Ok(()),
+                    }
+                })
+                .await
+                .unwrap_or_else(|_| Err(String::new()));
+                match sent {
+                    // Read again, as the iPad's `load()` after it.
+                    Ok(()) => {
+                        let f = load.borrow().clone();
+                        if let Some(f) = f {
+                            f();
+                        }
+                    }
+                    Err(why) => {
+                        b.set_sensitive(true);
+                        b.set_label(
+                            &open
+                                .w
+                                .line("work.request.try_reply_now")
+                                .unwrap_or_default(),
+                        );
+                        said.set_label(
+                            &open
+                                .w
+                                .get("work.not_sent_again", &[("why", &why)])
+                                .unwrap_or(why),
+                        );
+                        said.set_visible(true);
+                    }
+                }
+            });
+        });
+        column.append(&b);
+        column.append(&said);
     }
 }
 
@@ -176,24 +419,39 @@ pub fn runs_panel(
 /// `RetainedRuns` on the page: tafs cloud's heading, the first page's three runs and skipped
 /// firings, what went wrong and Try again, and its "more" line opening every run. `reload` reads
 /// the page again (after a Run now).
-pub fn retained_runs(w: Rc<WordBook>, id: String, source: RunsSource) -> (gtk::Box, Rc<dyn Fn()>) {
+pub fn retained_runs(
+    w: Rc<WordBook>,
+    id: String,
+    source: RunsSource,
+    manages: bool,
+) -> (gtk::Box, Rc<dyn Fn()>) {
+    let opening = Opening {
+        w: w.clone(),
+        id: id.clone(),
+        source: source.clone(),
+        manages,
+    };
     let root = gtk::Box::new(gtk::Orientation::Vertical, 0);
     let load: Later = Rc::new(RefCell::new(None));
     let reload: Rc<dyn Fn()> = {
-        let (w, id, source, root, load) = (
+        let (w, id, source, root, load, opening) = (
             w.clone(),
             id.clone(),
             source.clone(),
             root.clone(),
             load.clone(),
+            opening.clone(),
         );
+        let opened = Rc::new(Cell::new(false));
         Rc::new(move || {
-            let (w, id, source, root, load) = (
+            let (w, id, source, root, load, opening, opened) = (
                 w.clone(),
                 id.clone(),
                 source.clone(),
                 root.clone(),
                 load.clone(),
+                opening.clone(),
+                opened.clone(),
             );
             glib::spawn_future_local(async move {
                 let read = read_page(&w, &source, &id, None, runs::PANEL).await;
@@ -206,17 +464,32 @@ pub fn retained_runs(w: Rc<WordBook>, id: String, source: RunsSource) -> (gtk::B
                     Ok(page) => {
                         p.append(&eyebrow(&page.title, false));
                         for r in page.rows(true) {
-                            p.append(&row(&r));
+                            p.append(&row(&r, &opening));
+                        }
+                        // A screenshot's `--page run:<id>`: the first run's own page, once.
+                        let first = page.requests.first().map(|r| r.id.clone());
+                        if let (RunsSource::File { open: true, .. }, Some(run), false) =
+                            (&source, first, opened.get())
+                        {
+                            opened.set(true);
+                            // Read after the page is on screen: open it now, else once it's shown.
+                            let (opening, root2) = (opening.clone(), root.clone());
+                            if root.is_mapped() {
+                                glib::idle_add_local_once(move || {
+                                    request_sheet(opening, run, &root2)
+                                });
+                            } else {
+                                root.connect_map(move |_| {
+                                    request_sheet(opening.clone(), run.clone(), &root2)
+                                });
+                            }
                         }
                         if !page.more_title.is_empty() {
                             let more = gtk::Button::with_label(&page.more_title);
                             more.add_css_class("tafs-link");
                             more.set_halign(gtk::Align::Start);
-                            let (w, id, source, title) =
-                                (w.clone(), id.clone(), source.clone(), page.title.clone());
-                            more.connect_clicked(move |b| {
-                                all_runs(w.clone(), id.clone(), source.clone(), &title, b)
-                            });
+                            let (opening, title) = (opening.clone(), page.title.clone());
+                            more.connect_clicked(move |b| all_runs(opening.clone(), &title, b));
                             p.append(&more);
                         }
                     }
@@ -249,13 +522,12 @@ pub fn retained_runs(w: Rc<WordBook>, id: String, source: RunsSource) -> (gtk::B
 
 /// Every run, in a sheet titled as the panel: 20 a page, the next read as the list reaches its
 /// end, then tafs cloud's end words.
-fn all_runs(
-    w: Rc<WordBook>,
-    id: String,
-    source: RunsSource,
-    title: &str,
-    parent: &impl IsA<gtk::Widget>,
-) {
+fn all_runs(opening: Opening, title: &str, parent: &impl IsA<gtk::Widget>) {
+    let (w, id, source) = (
+        opening.w.clone(),
+        opening.id.clone(),
+        opening.source.clone(),
+    );
     struct State {
         cursor: Option<String>,
         first: bool,
@@ -279,7 +551,7 @@ fn all_runs(
     }));
     let next: Later = Rc::new(RefCell::new(None));
     let more: Rc<dyn Fn()> = {
-        let (w, id, source, list, foot, state, next) = (
+        let (w, id, source, list, foot, state, next, opening) = (
             w.clone(),
             id.clone(),
             source.clone(),
@@ -287,6 +559,7 @@ fn all_runs(
             foot.clone(),
             state.clone(),
             next.clone(),
+            opening.clone(),
         );
         Rc::new(move || {
             let cursor = {
@@ -304,7 +577,7 @@ fn all_runs(
             spinner.start();
             spinner.set_halign(gtk::Align::Start);
             foot.append(&spinner);
-            let (w, id, source, list, foot, state, next) = (
+            let (w, id, source, list, foot, state, next, opening) = (
                 w.clone(),
                 id.clone(),
                 source.clone(),
@@ -312,6 +585,7 @@ fn all_runs(
                 foot.clone(),
                 state.clone(),
                 next.clone(),
+                opening.clone(),
             );
             glib::spawn_future_local(async move {
                 let read = read_page(&w, &source, &id, cursor, runs::ALL).await;
@@ -323,7 +597,7 @@ fn all_runs(
                 match read {
                     Ok(page) => {
                         for r in page.rows(s.first) {
-                            list.append(&row(&r));
+                            list.append(&row(&r, &opening));
                         }
                         s.first = false;
                         // A screenshot's file has one page.
