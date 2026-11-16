@@ -13,6 +13,7 @@ mod needs_you;
 mod overview;
 mod pairing;
 mod people;
+mod pin_sheet;
 mod receipts;
 mod recipes;
 mod record;
@@ -105,7 +106,7 @@ struct Options {
 }
 
 const USAGE: &str = "tafs [--lang en|de|fr|es|it|pt|nl|pl] [--theme light|dark] [--sample] [--signed-in] [--view-only [--paired]]
-     [--home contract.json] [--usage answers.json] [--people answers.json] [--unproven answers.json] [--recipes answers.json] [--gallery answers.json] [--halt answer.json] [--record-search answers.json] [--access answer.json] [--receipts answer.json] [--size WxH] [--page welcome|sign-in|pair|recipe:<id>|gallery|halt-all|halt:<id>|record-search:<q>|record-export|overview|needs-you|record|calendar|calendar-week|usage|connect-apps|account|kiff-account|time-zone|devices|people|taf|taf-card] [--screenshot out.png]";
+     [--home contract.json] [--usage answers.json] [--people answers.json] [--unproven answers.json] [--recipes answers.json] [--gallery answers.json] [--halt answer.json] [--record-search answers.json] [--access answer.json] [--receipts answer.json] [--size WxH] [--page welcome|sign-in|pair|recipe:<id>|gallery|halt-all|halt:<id>|record-search:<q>|record-export|pin-sheet|overview|needs-you|record|calendar|calendar-week|usage|connect-apps|account|kiff-account|time-zone|devices|people|taf|taf-card] [--screenshot out.png]";
 
 fn options() -> Result<Options, String> {
     let mut o = Options::default();
@@ -376,6 +377,19 @@ fn activate(app: &adw::Application, o: &Options) {
     }
 
     window.present();
+    // `--page pin-sheet`: the security key's PIN sheet, for its screenshot. Its answers are
+    // canned (five tries left; no key plugged in): no key is asked, nothing is signed.
+    if o.page.as_deref() == Some("pin-sheet") {
+        use tafs_core::security_key::Failure;
+        pin_sheet::present(
+            app_state.words.clone(),
+            &window,
+            std::sync::Arc::new(|_| Err(fido_key::KeyError::Key(Failure::NoKey))),
+            std::sync::Arc::new(|| Ok(5)),
+            std::sync::Arc::new(|| {}),
+            Rc::new(|_| {}),
+        );
+    }
     if let Some(path) = o.screenshot.clone() {
         let (window, app) = (window.clone(), app.clone());
         glib::timeout_add_local_once(std::time::Duration::from_millis(1500), move || {
