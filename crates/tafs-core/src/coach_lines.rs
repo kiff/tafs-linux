@@ -220,10 +220,12 @@ pub enum Line {
         text: String,
         answered: Option<String>,
     },
-    /// Coach's words (Markdown), under its work.
+    /// Coach's words (Markdown), under its work; tafs cloud's id for them and their chat when
+    /// they can be reported.
     Coach {
         work: Option<WorkLines>,
         text: String,
+        report: Option<crate::report::Reported>,
     },
     Card {
         card_ref: String,
@@ -553,12 +555,41 @@ pub fn duration(w: &WordBook, ms: i64) -> Result<String, WordsError> {
     }
 }
 
-/// `WorkSummary(coach: true)`: Coach's steps in its words, tries of one step after a failed or
-/// unmade one as one row, and the failed ones left out once something worked.
+/// `WorkSummary(coach: true)`: Coach's steps in its words, without what it only showed.
 pub fn work_lines(w: &WordBook, work: &Work) -> Result<WorkLines, WordsError> {
+    work_lines_in(w, work, |tool| activity_words(w, tool))
+}
+
+/// `AppModel.tafActivityWords`: what a taf is doing, in the owner's words, from the tool it calls.
+/// Every tool that reaches the company's systems goes through KIFF, by its name in words past any
+/// prefix (`KIFFMapping.toolWords`): this computer reads no connection's title for it.
+pub fn taf_activity_words(w: &WordBook, tool: &str) -> Result<String, WordsError> {
+    match tool {
+        "memory" => w.line("taf.activity.reading_notes"),
+        "kiff_pending" => w.line("taf.activity.checking_waits"),
+        _ => w.get(
+            "work.asking_kiff_run",
+            &[("tool", &crate::held::tool_words(tool))],
+        ),
+    }
+}
+
+/// `WorkSummary` in a taf's chat: every step in the taf's words.
+pub fn taf_work_lines(w: &WordBook, work: &Work) -> Result<WorkLines, WordsError> {
+    work_lines_in(w, work, |tool| taf_activity_words(w, tool).map(Some))
+}
+
+/// `WorkSummary` with `WorkLog.rows(running: false)`: each step in `words`' words (one with none
+/// is left out), tries of one step after a failed or unmade one as one row, and the failed ones
+/// left out once something worked.
+fn work_lines_in(
+    w: &WordBook,
+    work: &Work,
+    words: impl Fn(&str) -> Result<Option<String>, WordsError>,
+) -> Result<WorkLines, WordsError> {
     let mut steps: Vec<(String, StepStatus)> = Vec::new();
     for s in &work.steps {
-        let Some(words) = activity_words(w, &s.tool)? else {
+        let Some(words) = words(&s.tool)? else {
             continue;
         };
         let status = if s.not_made {
@@ -1144,7 +1175,7 @@ fn card(
 
 /// `gapTime`: a time between parts of the thread an hour or more apart, and at its top: the time
 /// of day today, else the date and the time.
-fn gap(language: &str, at: DateTime<Utc>, now: DateTime<Utc>) -> String {
+pub fn gap(language: &str, at: DateTime<Utc>, now: DateTime<Utc>) -> String {
     let time = crate::account_time::short_time(&at);
     let day = crate::account_time::day(&at);
     if day == crate::account_time::day(&now) {
@@ -1349,6 +1380,7 @@ fn message(w: &WordBook, thread: &SetupThread, m: &ChatMessage) -> Result<Line, 
                 .map(|work| work_lines(w, work))
                 .transpose()?,
             text: m.text.clone(),
+            report: crate::report::reportable(m),
         },
     })
 }
@@ -1490,9 +1522,17 @@ mod tests {
                 answered: None
             }
         );
-        let Line::Coach { work, .. } = &l.lines[2] else {
+        let Line::Coach { work, report, .. } = &l.lines[2] else {
             panic!("{:?}", l.lines[2])
         };
+        // Coach's answer can be reported, by tafs cloud's id for it and its chat.
+        assert_eq!(
+            report,
+            &Some(crate::report::Reported {
+                message: "run2.3".into(),
+                session: "sess1".into()
+            })
+        );
         let work = work.as_ref().unwrap();
         assert_eq!(work.summary, "Worked for 1 min 1 s");
         assert_eq!(work.steps[0].words, "Working on the connection");

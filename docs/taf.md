@@ -10,7 +10,8 @@ the page is `crates/tafs-app/src/taf.rs`.
   (`StateChip`): Working in green, Waiting in amber, Stopped and Halted in red, Ready and Paused
   in the soft colour, each on its colour at 15%. When tafs cloud flags what went wrong, the chip
   isn't shown in place of Working.
-- **The tabs:** Chat, Activity, Card and Setup, as the system's segmented control.
+- **The tabs:** Chat, Activity, Card and Setup, as the system's segmented control. A tafs cloud
+  taf's page, signed in with KIFF, opens on its chat ([chat.md](chat.md)); without it, on Activity.
 - **The Card bar** (`CardBar`): a small Card in the taf's colour (the dim colour when it isn't
   live, faded when revoked or not active) with the Card's mark, the Card's figure and words ("€1,960
   left today of €2,000", else its title), and under it its name, its environment when it isn't
@@ -195,7 +196,7 @@ for See all; Forget sends nothing. CI's `taf-setup`.
 
 ## Not yet
 
-- **The page opens on Activity**; the iPad opens on Chat. Chat is there, dimmed, until it's ported.
+- **The sample's Chat**, there, dimmed. A tafs cloud taf's page opens on its chat ([chat.md](chat.md)).
 - **On the Setup tab:** Starts when, Results go to, the connected apps' ring, its own Connect
   again (signed), Improve in Coach, and the sample's Setup (there, dimmed).
 - **On the Card tab:** Connect again (Coach), the halt row,

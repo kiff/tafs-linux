@@ -36,6 +36,7 @@ pub fn held(w: &WordBook, held_at: DateTime<Local>) -> Result<Vec<HeldCall>, Wor
         amount,
         context,
         reason,
+        held_at,
         expires_at: lapses,
         kiff_id: None,
         proposal_id: None,

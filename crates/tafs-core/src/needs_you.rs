@@ -54,6 +54,8 @@ pub struct CardLines {
     pub avatar: Option<(String, i64)>,
     /// "9:37 left", or "expired", counted down to `expires_at`.
     pub remaining: String,
+    /// When it was held: where its card goes in its taf's chat (`heldAt`).
+    pub held_at: DateTime<Local>,
     pub expires_at: DateTime<Local>,
     pub amount: Option<String>,
     pub summary: String,
@@ -236,6 +238,7 @@ pub fn lines(
             id: call.id.clone(),
             avatar: taf.map(|t| (t.initial.to_string(), t.color)),
             remaining: remaining(w, call.expires_at, now)?,
+            held_at: call.held_at,
             expires_at: call.expires_at,
             sentence: w.get(
                 "needs_you.asks_lapses",

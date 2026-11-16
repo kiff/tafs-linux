@@ -312,7 +312,7 @@ pub struct ChatMessage {
 impl ChatMessage {
     /// `ChatMessage.init(from:)`: its time, who, words and session strictly; any mark the app
     /// can't read leaves it a plain message.
-    fn read(v: &Value) -> Read<ChatMessage> {
+    pub(crate) fn read(v: &Value) -> Read<ChatMessage> {
         let c = object(v)?;
         let at = date(c, "at")?;
         let from = match text(c, "from")?.as_str() {
@@ -835,7 +835,7 @@ pub struct Steering {
 }
 
 impl Steering {
-    fn read(v: &Value) -> Read<Steering> {
+    pub(crate) fn read(v: &Value) -> Read<Steering> {
         let c = object(v)?;
         let message = |m: &Value| -> Read<SteeringMessage> {
             let m = object(m)?;

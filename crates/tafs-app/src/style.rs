@@ -155,6 +155,11 @@ button.tafs-send, button.tafs-stop { border-radius: 999px; min-width: 40px; min-
 button.tafs-send { background-color: @tafs_coach; }
 button.tafs-send:disabled { background-color: alpha(@tafs_coach, 0.4); color: @tafs_on_fill; }
 button.tafs-stop { background-color: @tafs_ink; }
+/* A taf's chat: Send on the brand sweep (`Theme.brand`), white; a door's stamp in the blue, monospaced. */
+button.tafs-send.brand { background-color: transparent; background-image: linear-gradient(135deg, BRAND0, BRAND1, BRAND2); color: white; }
+button.tafs-send.brand:disabled { opacity: 0.4; color: white; }
+.tafs-blue { color: @tafs_blue; }
+.tafs-mono { font-family: monospace; }
 /* Coach's bar: New conversation and its menu, plain icons in the ink. */
 button.tafs-bar-icon, menubutton.tafs-bar-icon > button { background: none; border: none; box-shadow: none; color: @tafs_ink; min-width: 36px; min-height: 36px; padding: 0; }
 button.tafs-bar-icon:hover, menubutton.tafs-bar-icon > button:hover { background-color: alpha(@tafs_ink, 0.06); }

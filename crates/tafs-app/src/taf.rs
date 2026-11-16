@@ -69,6 +69,9 @@ pub struct TafPage {
     /// (`timeZoneWords`, `scheduleTimeZoneWords`): signed in with KIFF.
     pub time_zone_words: Option<String>,
     pub schedule_time_zone_words: Option<String>,
+    /// Where its chat is read and what's written goes (`TafChatView`): a tafs cloud taf's, signed
+    /// in with KIFF.
+    pub chat: crate::taf_chat::ChatSource,
 }
 
 /// Where a tafs cloud taf's Activity pages come from.
@@ -116,8 +119,10 @@ pub fn page(
     }
     outer.append(&head);
 
-    // Chat, Activity, Card, Setup, as the system's segmented control. Chat is there, dimmed, until
-    // it's ported; Setup is a tafs cloud taf's, signed in with KIFF (the sample's isn't ported).
+    // Chat, Activity, Card, Setup, as the system's segmented control. Chat is a tafs cloud taf's,
+    // signed in with KIFF, and the page opens on it (the sample's chat is there, dimmed); Setup too
+    // (the sample's isn't ported).
+    let has_chat = !t.sample && t.cloud_id.is_some() && !t.chat.is_none();
     let has_setup = !t.sample
         && t.cloud_id.is_some()
         && !matches!(t.setup, crate::setup_pane::SetupSource::None);
@@ -127,7 +132,7 @@ pub fn page(
     let mut first: Option<gtk::ToggleButton> = None;
     let mut buttons = Vec::new();
     for (key, enabled) in [
-        ("taf.section.chat", false),
+        ("taf.section.chat", has_chat),
         ("taf.section.activity", true),
         ("taf.section.card", true),
         ("taf.section.setup", has_setup),
@@ -143,8 +148,12 @@ pub fn page(
         tabs.append(&b);
         buttons.push(b);
     }
-    let (activity_tab, card_tab, setup_tab) =
-        (buttons[1].clone(), buttons[2].clone(), buttons[3].clone());
+    let (chat_tab, activity_tab, card_tab, setup_tab) = (
+        buttons[0].clone(),
+        buttons[1].clone(),
+        buttons[2].clone(),
+        buttons[3].clone(),
+    );
     outer.append(&tabs);
 
     // The Card in front, one line above the activity.
@@ -358,6 +367,31 @@ pub fn page(
             }
         });
     }
+    // Chat: read when it's first shown, and kept while the app runs.
+    if let (true, Some(id)) = (has_chat, &t.cloud_id) {
+        let holder = gtk::Box::new(gtk::Orientation::Vertical, 0);
+        holder.set_vexpand(true);
+        panes.add_named(&holder, Some("chat"));
+        let made = std::cell::Cell::new(false);
+        let (w, source) = (w.clone(), t.chat.clone());
+        let taf = RefCell::new(Some(crate::taf_chat::ChatTaf {
+            id: id.clone(),
+            name: t.name.clone(),
+            ask_coach: t.may_use_coach && t.manages,
+            held: t.held.clone(),
+        }));
+        let panes = panes.clone();
+        chat_tab.connect_toggled(move |b| {
+            if b.is_active() {
+                if !made.replace(true) {
+                    if let Some(taf) = taf.borrow_mut().take() {
+                        holder.append(&crate::taf_chat::pane(w.clone(), taf, source.clone()));
+                    }
+                }
+                panes.set_visible_child_name("chat");
+            }
+        });
+    }
     outer.append(&panes);
     {
         let panes = panes.clone();
@@ -379,6 +413,9 @@ pub fn page(
         setup_tab.set_active(true);
     } else if t.opens_on_card {
         card_tab.set_active(true);
+    } else if has_chat {
+        // The iPad opens a taf's page on its chat.
+        chat_tab.set_active(true);
     } else {
         activity_tab.set_active(true);
     }

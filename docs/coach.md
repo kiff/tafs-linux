@@ -6,7 +6,8 @@ has no Coach, so there it still opens its title alone. What it reads and how it'
 `tafs-core/src/coach.rs`; the device's proof is `tafs-core/src/planque.rs`; what's sent, and how the
 conversation holds it while it goes, is `tafs-core/src/coach_send.rs`; what it draws is
 `tafs-core/src/coach_lines.rs`, tested there and in every language at the pin
-(`tests/at_the_pin.rs`); the page is `crates/tafs-app/src/coach.rs`. Nothing it sends is signed:
+(`tests/at_the_pin.rs`); the page is `crates/tafs-app/src/coach.rs`, with what it draws alike with a
+taf's chat ([chat.md](chat.md)) in `crates/tafs-app/src/chat.rs`. Nothing it sends is signed:
 each goes to tafs cloud as the session (`kiff::cloud_send`, which reaches tafs cloud only).
 
 ## What's read
@@ -66,6 +67,9 @@ out, as every other read does.
   why, Edit (back to the box) and Retry (`UnsentBubble`); a send refused because the account is
   halted offers Resume, which opens Halt all. tafs cloud's `steering.not_sent` shows the same way,
   once.
+- **Reporting Coach's answer:** an answer of Coach's with tafs cloud's id has Report this answer in
+  its menu (a right click or a long press), which sends `POST /v1/tafs/{setup}/messages/{id}/report`
+  with the answer's chat, as a taf's answer does ([chat.md](chat.md#reporting-an-answer)).
 - **Reading again** (`followSetup`): while the page is open, every second while Coach works, else
   every three, for 100 reads after the owner last wrote; one read at a time, and none once the page
   is closed. Linux has no stream: there's no live work, no reveal and no pin of a sent message.
