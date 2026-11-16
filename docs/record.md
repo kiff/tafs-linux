@@ -115,7 +115,8 @@ words.
   folder and saves both files there. Closing the dialog saves nothing, as closing the share
   sheet does. A day in the answer that isn't YYYY-MM-DD never names a file: the asked day does.
   If saving fails, the system's reason follows "They couldn't be exported.", as the iPad shows
-  its own.
+  its own. The files are written with mode 0600, readable by the person alone. Saving the same
+  days in the same folder replaces the earlier files.
 
 To draw the row open (CI's `record-export`; nothing is sent or saved), run with:
 - `--home shared/contracts/home.json`;

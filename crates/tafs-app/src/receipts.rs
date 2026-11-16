@@ -30,7 +30,7 @@ fn export(w: &WordBook, source: &ReceiptsSource, from: &str, to: &str) -> Result
     if let Some(body) = &source.canned {
         return Ok(Export::read(body, from, to));
     }
-    let a = crate::kiff::receipts(&source.token, &source.languages, &receipts::path(from, to))
+    let a = crate::kiff::cloud_file(&source.token, &source.languages, &receipts::path(from, to))
         .map_err(|e| e.words(w).unwrap_or_default())?;
     if !(200..300).contains(&a.status) {
         return Err(tafs_core::signin::refusal(&a, Some(w))
@@ -43,8 +43,8 @@ fn export(w: &WordBook, source: &ReceiptsSource, from: &str, to: &str) -> Result
 /// Both files into `dir`, the JSON as tafs cloud sent it.
 fn save(dir: &std::path::Path, e: &Export) -> std::io::Result<()> {
     let (json, csv) = e.file_names();
-    std::fs::write(dir.join(json), &e.json)?;
-    std::fs::write(dir.join(csv), e.csv.as_bytes())
+    crate::widgets::write_private(&dir.join(json), &e.json)?;
+    crate::widgets::write_private(&dir.join(csv), e.csv.as_bytes())
 }
 
 /// The row: the button (15 semibold, amber; dim with a spinner while preparing), the days

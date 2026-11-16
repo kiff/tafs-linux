@@ -145,3 +145,39 @@ pub fn icon_for(sf: &str) -> &'static str {
 pub fn ground<W: IsA<gtk::Widget>>(w: &W) {
     w.add_css_class("tafs-ground");
 }
+
+/// Writes a file the person saved from tafs (their chats, their receipts) readable by them alone
+/// (0600), whatever the umask: other accounts on a shared computer can't read it. A file already
+/// there by that name is replaced, and keeps the same mode.
+pub fn write_private(path: &std::path::Path, bytes: &[u8]) -> std::io::Result<()> {
+    use std::io::Write;
+    use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+    let mut f = std::fs::OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .mode(0o600)
+        .open(path)?;
+    // `mode` applies only when the file is made: one there already is set to 0600 too.
+    f.set_permissions(std::fs::Permissions::from_mode(0o600))?;
+    f.write_all(bytes)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::os::unix::fs::PermissionsExt;
+
+    #[test]
+    fn a_saved_file_is_the_persons_alone() {
+        let dir = std::env::temp_dir().join(format!("tafs-private-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("tafs-chats.txt");
+        std::fs::write(&path, b"old").unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o644)).unwrap();
+        super::write_private(&path, b"new").unwrap();
+        assert_eq!(std::fs::read(&path).unwrap(), b"new");
+        let mode = std::fs::metadata(&path).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode, 0o600);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+}

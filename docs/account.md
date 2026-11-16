@@ -85,7 +85,26 @@ when this computer is in another zone, "Use this computer's: {identifier}" (this
 by `TZ`, else `/etc/localtime`), and "Holds' deadlines, Activity, the Record and what your tafs
 write use this time zone."; Export my chats with what it exports; and Delete account with what it
 deletes, for whoever may (`account.delete`). The time zone row opens its picker; using
-this computer's zone (a signed setup call) and exporting are there, dimmed.
+this computer's zone (a signed setup call) is there, dimmed.
+
+Export my chats (`ExportChatsView.swift`, kiff/tafs#424) reads `GET /v1/me/chats/export` as the
+session, signed in with KIFF from a kept session. While it reads, "Preparing your chats…" shows
+with a spinner.
+- **The two files** are split as `splitExport` does: `tafs-chats.json` is the answer without
+  `readable`, its keys sorted and pretty-printed, and `tafs-chats.txt` is `readable`. They're
+  saved in a folder the person picks. The iPad hands them to its share sheet instead, and
+  closing the dialog saves nothing, as closing the sheet does.
+- **Saving again:** "Ready: tafs-chats.json, tafs-chats.txt. Share again" then saves them again.
+  These are the iPad's words.
+- **When it fails,** why shows in red and the row says Try again:
+  - an answer that wasn't read, or isn't what tafs cloud sends: "Your chats weren't exported.
+    Check your connection and try again.";
+  - files that couldn't be saved: "…this computer couldn't save the files."
+- **The answer can be up to 32 MB**, as for receipts.
+- **The files are the person's alone:** they're written with mode 0600, whatever the umask, so
+  other accounts on a shared computer can't read them. Their names are fixed, so an export
+  saved in the same folder replaces the last one there.
+- **A screenshot's account sends nothing**, so its row stays dimmed.
 
 Delete account opens its sheet (`DeleteAccountView`), with Cancel at the top:
 - the warning ("This deletes your KIFF account. It can't be undone.", 15 semibold);
