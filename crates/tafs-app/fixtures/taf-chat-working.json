@@ -1,0 +1,41 @@
+{
+  "about": "Synthetic: GET /v1/tafs/{id}/conversation for Rae at work (no contract for a taf's own thread at the pin): the owner's message, the run at work, a message written to it that it hasn't read, and one tafs cloud holds to go once it's done.",
+  "answer": {
+    "messages": [
+      {
+        "id": "run5.in",
+        "at": "2026-11-16T09:12:00.000Z",
+        "from": "owner",
+        "kind": "message",
+        "text": "Why did 4410 wait?",
+        "session": "sesn_9"
+      },
+      {
+        "id": "run5.2",
+        "at": "2026-11-16T09:12:20.000Z",
+        "from": "taf",
+        "kind": "message",
+        "text": "Order 4410 is €150: over your Card's €50 for one refund, so KIFF held it for you to approve.",
+        "session": "sesn_9",
+        "work": {"ms": 4200, "steps": [{"tool": "memory"}, {"tool": "list_payments_k3f9"}]}
+      },
+      {
+        "id": "run8.in",
+        "at": "2026-11-16T10:02:00.000Z",
+        "from": "owner",
+        "kind": "message",
+        "text": "Refund every open request under €50 from this week",
+        "session": "sesn_9"
+      }
+    ],
+    "working": {"session": "sesn_9", "run": "run8"},
+    "steering": {
+      "run": "run8",
+      "status": "RUNNING",
+      "untaken": [
+        {"text": "Leave out orders from Spain", "at": "2026-11-16T10:02:20.000Z"}
+      ],
+      "held": {"text": "Then tell me the total", "at": "2026-11-16T10:02:40.000Z"}
+    }
+  }
+}

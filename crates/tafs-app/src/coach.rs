@@ -17,7 +17,7 @@ use gtk::glib;
 use tafs_core::coach::{self, Kind, SetupThread};
 use tafs_core::coach_lines::{
     ApprovalLines, Card, CoachLines, ComposerLines, Line, Listed, Mark, Outcome, PlanLines,
-    PlanStep, ResultLines, SignInLines, StepStatus, Tone, UnsentLines, WorkLines,
+    PlanStep, ResultLines, SignInLines, Tone, UnsentLines,
 };
 use tafs_core::coach_send::{
     self, CardSend, Conversation, Delivery, Polls, QuestionSelection, Refusal, Steered, Submit,
@@ -27,6 +27,7 @@ use tafs_core::sidebar::{Mode, Selection};
 use tafs_core::signin::Answer;
 use tafs_core::words::WordBook;
 
+use crate::chat::{owner, Composer, Sent};
 use crate::widgets::{eyebrow, outline, panel, primary, symbol, text};
 
 /// Where Coach's conversation is read from, and where what's written goes.
@@ -65,9 +66,6 @@ enum Fail {
     SignedOut,
     Why(String),
 }
-
-/// What a send to tafs cloud answered: its status and body, or why it didn't get there.
-type Sent = Result<Answer, String>;
 
 /// The page and what it holds while it's open.
 struct Page {
@@ -111,15 +109,6 @@ struct Drawn {
     notes: Vec<(String, String)>,
     chatting: Vec<String>,
     selections: Vec<(String, QuestionSelection)>,
-}
-
-/// The message box (`composer`) and its button, Send or Stop.
-struct Composer {
-    bar: gtk::Box,
-    view: gtk::TextView,
-    placeholder: gtk::Label,
-    send: gtk::Button,
-    stop: gtk::Button,
 }
 
 /// The page, and what it reads.
@@ -193,7 +182,7 @@ pub fn page(
     error.set_margin_bottom(4);
     error.set_visible(false);
     root.append(&error);
-    let composer = composer(&w);
+    let composer = crate::chat::composer(crate::chat::Whose::Coach);
     composer.bar.set_visible(false);
     root.append(&composer.bar);
 
@@ -298,75 +287,6 @@ pub fn page(
     root.upcast()
 }
 
-/// The message box: the words, what it says while empty, and Send, or Stop while Coach works.
-fn composer(w: &WordBook) -> Composer {
-    let bar = gtk::Box::new(gtk::Orientation::Vertical, 0);
-    bar.add_css_class("tafs-composer-bar");
-    let field = gtk::Box::new(gtk::Orientation::Vertical, 4);
-    field.add_css_class("tafs-composer");
-    field.set_margin_start(12);
-    field.set_margin_end(12);
-    field.set_margin_top(10);
-    field.set_margin_bottom(10);
-    let view = gtk::TextView::new();
-    view.add_css_class("tafs-composer-text");
-    view.set_wrap_mode(gtk::WrapMode::WordChar);
-    view.set_accepts_tab(false);
-    view.set_top_margin(10);
-    view.set_bottom_margin(4);
-    view.set_left_margin(14);
-    view.set_right_margin(14);
-    view.set_widget_name("coach.composer");
-    let placeholder = text("", 16, 400, &["tafs-dim"]);
-    placeholder.set_can_target(false);
-    placeholder.set_halign(gtk::Align::Start);
-    placeholder.set_valign(gtk::Align::Start);
-    placeholder.set_margin_start(14);
-    placeholder.set_margin_top(10);
-    placeholder.set_accessible_role(gtk::AccessibleRole::Presentation);
-    let scroll = gtk::ScrolledWindow::new();
-    scroll.set_hscrollbar_policy(gtk::PolicyType::Never);
-    // One line high, growing with the words up to about six lines, then scrolling.
-    scroll.set_propagate_natural_height(true);
-    scroll.set_min_content_height(30);
-    scroll.set_max_content_height(160);
-    scroll.set_vscrollbar_policy(gtk::PolicyType::External);
-    scroll.set_child(Some(&view));
-    let overlay = gtk::Overlay::new();
-    overlay.set_child(Some(&scroll));
-    overlay.add_overlay(&placeholder);
-    field.append(&overlay);
-    let row = gtk::Box::new(gtk::Orientation::Horizontal, 10);
-    row.set_margin_start(8);
-    row.set_margin_end(8);
-    row.set_margin_bottom(8);
-    let spacer = gtk::Box::new(gtk::Orientation::Horizontal, 0);
-    spacer.set_hexpand(true);
-    row.append(&spacer);
-    let send = gtk::Button::new();
-    send.add_css_class("tafs-send");
-    send.set_child(Some(&symbol("go-up-symbolic", 16)));
-    send.set_widget_name("coach.send");
-    let stop = gtk::Button::new();
-    stop.add_css_class("tafs-stop");
-    stop.set_child(Some(&symbol("media-playback-stop-symbolic", 14)));
-    stop.set_widget_name("coach.stop");
-    stop.update_property(&[gtk::accessible::Property::Label(
-        &w.line("setup.stop").unwrap_or_default(),
-    )]);
-    row.append(&send);
-    row.append(&stop);
-    field.append(&row);
-    bar.append(&field);
-    Composer {
-        bar,
-        view,
-        placeholder,
-        send,
-        stop,
-    }
-}
-
 fn wire_composer(page: &Rc<Page>) {
     let c = &page.composer;
     let buffer = c.view.buffer();
@@ -398,34 +318,19 @@ fn wire_composer(page: &Rc<Page>) {
         });
     }
     // ⌘↩ sends and ⌘. stops, as on the iPad's keyboard: Ctrl here.
-    let keys = gtk::EventControllerKey::new();
-    {
-        let p = Rc::downgrade(page);
-        keys.connect_key_pressed(move |_, key, _, state| {
-            let Some(p) = p.upgrade() else {
-                return glib::Propagation::Proceed;
-            };
-            if !state.contains(gtk::gdk::ModifierType::CONTROL_MASK) {
-                return glib::Propagation::Proceed;
+    let (p, q) = (Rc::downgrade(page), Rc::downgrade(page));
+    c.keys(
+        move || {
+            if let Some(p) = p.upgrade() {
+                p.send();
             }
-            match key {
-                gtk::gdk::Key::Return | gtk::gdk::Key::KP_Enter => {
-                    if p.composer.send.is_visible() && p.composer.send.is_sensitive() {
-                        p.send();
-                    }
-                    glib::Propagation::Stop
-                }
-                gtk::gdk::Key::period => {
-                    if p.composer.stop.is_visible() {
-                        p.stop();
-                    }
-                    glib::Propagation::Stop
-                }
-                _ => glib::Propagation::Proceed,
+        },
+        move || {
+            if let Some(q) = q.upgrade() {
+                q.stop();
             }
-        });
-    }
-    c.view.add_controller(keys);
+        },
+    );
 }
 
 impl Page {
@@ -441,12 +346,11 @@ impl Page {
     }
 
     fn draft(&self) -> String {
-        let b = self.composer.view.buffer();
-        b.text(&b.start_iter(), &b.end_iter(), false).to_string()
+        self.composer.draft()
     }
 
     fn set_draft(&self, words: &str) {
-        self.composer.view.buffer().set_text(words);
+        self.composer.set_draft(words);
     }
 
     /// `loadSetup`: Coach's taf, then its thread.
@@ -570,19 +474,11 @@ impl Page {
     async fn post(&self, path: String, body: Vec<u8>) -> Option<Sent> {
         let CoachSource::Cloud {
             kept, languages, ..
-        } = self.source.clone()
+        } = &self.source
         else {
             return None;
         };
-        let words = (*self.w).clone();
-        Some(
-            gtk::gio::spawn_blocking(move || {
-                crate::kiff::cloud_send(&kept.token, &languages, "POST", &path, Some(&body))
-                    .map_err(|e| e.words(&words).unwrap_or_default())
-            })
-            .await
-            .unwrap_or_else(|_| Err(String::new())),
-        )
+        Some(crate::chat::post(&self.w, &kept.token, languages, path, body).await)
     }
 
     /// The AI-data consent's screen, for a turn tafs cloud refused for want of it.
@@ -933,21 +829,9 @@ impl Page {
         else {
             return;
         };
-        let empty = self.draft().trim().is_empty();
-        let k = &self.composer;
-        k.bar.set_visible(c.setup.is_some());
+        self.composer.bar.set_visible(c.setup.is_some());
         self.tools.set_visible(c.setup.is_some());
-        k.placeholder.set_label(&placeholder);
-        k.placeholder.set_visible(self.draft().is_empty());
-        k.view
-            .update_property(&[gtk::accessible::Property::Placeholder(&placeholder)]);
-        k.stop.set_visible(thinking && empty);
-        k.stop
-            .update_property(&[gtk::accessible::Property::Label(&stop)]);
-        k.send.set_visible(!(thinking && empty));
-        k.send.set_sensitive(!empty);
-        k.send
-            .update_property(&[gtk::accessible::Property::Label(&send)]);
+        self.composer.show(&placeholder, &send, &stop, thinking);
     }
 
     /// Draws what the conversation holds now, unless it's what's drawn already.
@@ -1213,18 +1097,12 @@ fn draw_thread(page: &Rc<Page>, lines: &CoachLines, drawn: &Drawn) {
     }
     for line in &lines.lines {
         column.append(&match line {
-            Line::Gap(at) => {
-                let l = text(at, 12, 400, &["tafs-dim"]);
-                l.set_xalign(0.5);
-                l.set_justify(gtk::Justification::Center);
-                l.set_margin_top(6);
-                l.upcast::<gtk::Widget>()
-            }
+            Line::Gap(at) => crate::chat::gap(at),
             Line::Owner {
                 text: words,
                 answered,
             } => owner(words, answered.as_deref(), false),
-            Line::Coach { work, text: words } => coach_words(work.as_ref(), words),
+            Line::Coach { work, text: words } => crate::chat::answer(work.as_ref(), words).upcast(),
             Line::Card { card_ref, card } => {
                 let c = card_view(page, card_ref, card);
                 c.set_widget_name(&format!("card.{card_ref}"));
@@ -1264,18 +1142,7 @@ fn draw_thread(page: &Rc<Page>, lines: &CoachLines, drawn: &Drawn) {
     }
     // Coach at work: the dots where its words will be.
     if let Some(answering) = &lines.thinking {
-        let dots = gtk::Box::new(gtk::Orientation::Horizontal, 5);
-        dots.set_margin_top(8);
-        dots.set_margin_bottom(8);
-        for _ in 0..3 {
-            let d = gtk::Box::new(gtk::Orientation::Horizontal, 0);
-            d.add_css_class("tafs-typing");
-            d.set_valign(gtk::Align::Center);
-            dots.append(&d);
-        }
-        dots.set_accessible_role(gtk::AccessibleRole::Img);
-        dots.update_property(&[gtk::accessible::Property::Label(answering)]);
-        column.append(&dots);
+        column.append(&crate::chat::dots(answering));
     }
     // How the last run ended, when the owner stopped it.
     if let Some(stopped) = &drawn.ended {
@@ -1392,104 +1259,6 @@ fn unsent(page: &Rc<Page>, u: &UnsentLines, busy: bool) -> gtk::Widget {
     row.append(&retry);
     v.append(&row);
     v.upcast()
-}
-
-/// The owner's words on the right, on the brand sweep (`ChatBubble`), and under them that they
-/// answered the card above.
-fn owner(words: &str, answered: Option<&str>, steered: bool) -> gtk::Widget {
-    let v = gtk::Box::new(gtk::Orientation::Vertical, 4);
-    let bubble = text(words, 15, 400, &["tafs-owner-bubble"]);
-    if steered {
-        bubble.add_css_class("steered");
-    }
-    bubble.set_halign(gtk::Align::End);
-    bubble.set_margin_start(48);
-    bubble.set_selectable(true);
-    bubble.set_max_width_chars(60);
-    v.append(&bubble);
-    if let Some(a) = answered {
-        let l = text(a, 12, 400, &["tafs-dim"]);
-        l.set_xalign(1.0);
-        v.append(&l);
-    }
-    v.upcast()
-}
-
-/// Coach's words full width, with no bubble, under its work folded to "Worked for".
-fn coach_words(work: Option<&WorkLines>, words: &str) -> gtk::Widget {
-    let v = gtk::Box::new(gtk::Orientation::Vertical, 6);
-    if let Some(work) = work {
-        v.append(&work_summary(work));
-    }
-    let l = text("", 16, 400, &["tafs-ink"]);
-    // Its size alone: a weight over the whole would undo the words' own bold.
-    let attrs = gtk::pango::AttrList::new();
-    attrs.insert(gtk::pango::AttrSize::new_size_absolute(
-        16 * gtk::pango::SCALE,
-    ));
-    l.set_attributes(Some(&attrs));
-    l.set_markup(&tafs_core::coach_lines::markup(words));
-    l.set_selectable(true);
-    l.set_margin_top(2);
-    l.set_margin_bottom(2);
-    v.append(&l);
-    v.upcast()
-}
-
-/// `WorkSummary`: "Worked for 12 s ›", which opens its steps.
-fn work_summary(work: &WorkLines) -> gtk::Box {
-    let v = gtk::Box::new(gtk::Orientation::Vertical, 6);
-    let b = gtk::Button::new();
-    b.add_css_class("tafs-work");
-    b.set_halign(gtk::Align::Start);
-    let h = gtk::Box::new(gtk::Orientation::Horizontal, 4);
-    h.append(&text(&work.summary, 13, 400, &["tafs-dim"]));
-    let chevron = symbol("pan-end-symbolic", 11);
-    chevron.add_css_class("tafs-dim");
-    h.append(&chevron);
-    b.set_child(Some(&h));
-    b.update_property(&[
-        gtk::accessible::Property::Label(&work.accessible),
-        gtk::accessible::Property::Description(&work.shows),
-    ]);
-    v.append(&b);
-    let steps = gtk::Box::new(gtk::Orientation::Vertical, 4);
-    steps.add_css_class("tafs-step-list");
-    for row in &work.steps {
-        let h = gtk::Box::new(gtk::Orientation::Horizontal, 8);
-        let (icon, class) = match row.status {
-            StepStatus::Done => ("tafs-checkmark-symbolic", "tafs-dim"),
-            StepStatus::Error => ("dialog-error-symbolic", "tafs-no"),
-            StepStatus::NotMade => ("edit-undo-symbolic", "tafs-dim"),
-        };
-        let mark = symbol(icon, 11);
-        mark.add_css_class(class);
-        mark.set_size_request(14, -1);
-        h.append(&mark);
-        h.append(&text(&row.words, 13, 400, &["tafs-soft"]));
-        if let Some(note) = &row.note {
-            h.append(&text(note, 12, 400, &["tafs-dim"]));
-        }
-        steps.append(&h);
-    }
-    steps.set_visible(false);
-    v.append(&steps);
-    let (shows, hides) = (work.shows.clone(), work.hides.clone());
-    b.connect_clicked(move |b| {
-        let open = !steps.is_visible();
-        steps.set_visible(open);
-        chevron.set_icon_name(Some(if open {
-            "pan-down-symbolic"
-        } else {
-            "pan-end-symbolic"
-        }));
-        b.update_property(&[gtk::accessible::Property::Description(if open {
-            &hides
-        } else {
-            &shows
-        })]);
-    });
-    v
 }
 
 /// `StepMark`: done, failed, at work or to do.

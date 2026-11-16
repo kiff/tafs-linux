@@ -1,0 +1,126 @@
+{
+  "about": "Synthetic: GET /v1/tafs/{id}/conversation for Rae at rest, shaped as tafs cloud's coach-conversation.json and the iPad's TafsCloud.Thread (no contract for a taf's own thread at the pin): a scheduled run's kickoff and report with where its result went and its count, the owner's question and the taf's answer with its work, a setting it hands to Coach, a message by email and its answer sent back, a connection refused, a message a stopped run never read, and the latest run stopped at its cost cap.",
+  "answer": {
+    "messages": [
+      {
+        "id": "run4.in",
+        "at": "2026-11-16T08:00:00.000Z",
+        "from": "taf",
+        "kind": "kickoff",
+        "text": "Work the refund queue: every open refund request since your last run.",
+        "session": "sched_4"
+      },
+      {
+        "id": "run4.3",
+        "at": "2026-11-16T08:00:40.000Z",
+        "from": "taf",
+        "kind": "message",
+        "text": "Refunded **3 orders** under €50. Order 4410 is €150, so it waits for you.",
+        "session": "sched_4",
+        "delivered": "Sent to Google Sheets · Refunds 2026",
+        "counted": "From the Record — done: 3 · waiting for you: 1",
+        "work": {
+          "ms": 12400,
+          "steps": [
+            {"tool": "memory"},
+            {"tool": "list_payments_k3f9"},
+            {"tool": "create_refund_k3f9", "error": true},
+            {"tool": "create_refund_k3f9"},
+            {"tool": "kiff_pending"}
+          ]
+        }
+      },
+      {
+        "id": "run5.in",
+        "at": "2026-11-16T09:12:00.000Z",
+        "from": "owner",
+        "kind": "message",
+        "text": "Why did 4410 wait?",
+        "session": "sesn_9"
+      },
+      {
+        "id": "run5.2",
+        "at": "2026-11-16T09:12:20.000Z",
+        "from": "taf",
+        "kind": "message",
+        "text": "Order 4410 is €150: over your Card's €50 for one refund, so KIFF held it for you to approve.",
+        "session": "sesn_9",
+        "work": {
+          "ms": 4200,
+          "steps": [
+            {"tool": "memory"},
+            {"tool": "list_payments_k3f9"}
+          ]
+        }
+      },
+      {
+        "id": "door1.in",
+        "at": "2026-11-16T09:40:00.000Z",
+        "from": "owner",
+        "kind": "message",
+        "text": "Please refund order 4415, it arrived broken.",
+        "session": "door_1",
+        "door": {"app": "email", "from": "ana@example.com", "subject": "Order 4415"}
+      },
+      {
+        "id": "door1.2",
+        "at": "2026-11-16T09:40:30.000Z",
+        "from": "taf",
+        "kind": "message",
+        "text": "Refunded order 4415, €32.",
+        "session": "door_1",
+        "door": {"app": "email", "reply": "sent"}
+      },
+      {
+        "id": "run7.in",
+        "at": "2026-11-16T09:50:00.000Z",
+        "from": "owner",
+        "kind": "message",
+        "text": "Check the shipping label for 4410 in Shippo",
+        "session": "sesn_9"
+      },
+      {
+        "id": "run7.4",
+        "at": "2026-11-16T09:50:45.000Z",
+        "from": "taf",
+        "kind": "message",
+        "text": "I couldn't reach Shippo, so I didn't check the label.",
+        "session": "sesn_9",
+        "refused": {
+          "words": "Rae couldn't connect Shippo yet",
+          "why": "Why: managed sign-in isn't set up for this app",
+          "next": "Next: ask Coach to connect Shippo with its key instead, or to use another app."
+        }
+      }
+    ],
+    "components": [
+      {
+        "at": "2026-11-16T09:12:21.000Z",
+        "session": "sesn_9",
+        "run": "run5",
+        "seq": 3,
+        "component": {
+          "type": "ask_coach",
+          "id": "raise-limit",
+          "text": "Raise Rae's limit for one refund to €200, so orders like 4410 go through without waiting."
+        }
+      },
+      {
+        "at": "2026-11-16T09:12:22.000Z",
+        "session": "sesn_9",
+        "run": "run5",
+        "seq": 4,
+        "component": {"type": "confirm", "id": "not-drawn", "text": "A taf's other cards aren't drawn in its chat."}
+      }
+    ],
+    "steering": {
+      "run": "run7",
+      "status": "CANCELLED",
+      "untaken": [],
+      "not_sent": [
+        {"text": "And skip 4412 too", "at": "2026-11-16T09:50:20.000Z", "why": "You stopped it before it read this."}
+      ]
+    },
+    "stopped": {"run": "run7", "stop": "cost_cap"}
+  }
+}

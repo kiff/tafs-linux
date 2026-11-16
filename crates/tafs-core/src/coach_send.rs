@@ -200,6 +200,52 @@ pub fn steered(body: &[u8]) -> Option<Steered> {
     .ok()
 }
 
+/// What the run at work holds once words were written to it (`submitChat`'s and `submitSetup`'s
+/// steer): taken, they join what it hasn't read; kept, tafs cloud's `held` is what waits now. Shown
+/// at once, as the next read of the thread says the same.
+pub fn steered_into(
+    current: Option<Steering>,
+    run: &str,
+    text: &str,
+    steered: &Steered,
+    now: DateTime<Utc>,
+) -> Steering {
+    match steered {
+        Steered::Taken { status } => {
+            let current = current.filter(|s| s.run == run);
+            let mut untaken = current
+                .as_ref()
+                .map(|c| c.untaken.clone())
+                .unwrap_or_default();
+            untaken.push(SteeringMessage {
+                text: text.into(),
+                at: now,
+            });
+            Steering {
+                run: run.into(),
+                status: status.clone(),
+                untaken,
+                held: current.as_ref().and_then(|c| c.held.clone()),
+                not_sent: current.map(|c| c.not_sent).unwrap_or_default(),
+            }
+        }
+        Steered::Kept { held, .. } => Steering {
+            run: current
+                .as_ref()
+                .map_or_else(|| run.to_string(), |c| c.run.clone()),
+            status: current
+                .as_ref()
+                .map_or_else(|| "RUNNING".to_string(), |c| c.status.clone()),
+            untaken: current
+                .as_ref()
+                .map(|c| c.untaken.clone())
+                .unwrap_or_default(),
+            held: held.clone(),
+            not_sent: current.map(|c| c.not_sent).unwrap_or_default(),
+        },
+    }
+}
+
 /// `stop`'s answer: `{"stopped": …}`, a Bool, or it can't be read.
 pub fn stopped(body: &[u8]) -> bool {
     serde_json::from_slice::<Value>(body)
@@ -569,6 +615,9 @@ pub struct Unsent {
     pub halted: Option<String>,
     /// From the thread's steering, by its hash: shown once.
     pub settle: Option<String>,
+    /// Not sent only because the owner wrote too many too fast (`busy`): a message that goes
+    /// through takes it away.
+    pub busy: bool,
 }
 
 /// A message on its way: the local copy's id, its words and where it goes.
@@ -705,6 +754,7 @@ impl Conversation {
             at: now,
             halted,
             settle,
+            busy: false,
         });
     }
 
@@ -811,45 +861,10 @@ impl Conversation {
 
     /// Written to the run while Coach works (`steer`): shown at once, as the run now holds it.
     pub fn steered(&mut self, run: &str, text: &str, steered: &Steered, now: DateTime<Utc>) {
-        let current = self.thread.steering.clone();
-        match steered {
-            Steered::Taken { status } => {
-                let current = current.filter(|s| s.run == run);
-                let mut untaken = current
-                    .as_ref()
-                    .map(|c| c.untaken.clone())
-                    .unwrap_or_default();
-                untaken.push(SteeringMessage {
-                    text: text.into(),
-                    at: now,
-                });
-                self.thread.steering = Some(Steering {
-                    run: run.into(),
-                    status: status.clone(),
-                    untaken,
-                    held: current.as_ref().and_then(|c| c.held.clone()),
-                    not_sent: current.map(|c| c.not_sent).unwrap_or_default(),
-                });
-            }
-            Steered::Kept { sent, held } => {
-                self.thread.steering = Some(Steering {
-                    run: current
-                        .as_ref()
-                        .map_or_else(|| run.to_string(), |c| c.run.clone()),
-                    status: current
-                        .as_ref()
-                        .map_or_else(|| "RUNNING".to_string(), |c| c.status.clone()),
-                    untaken: current
-                        .as_ref()
-                        .map(|c| c.untaken.clone())
-                        .unwrap_or_default(),
-                    held: held.clone(),
-                    not_sent: current.map(|c| c.not_sent).unwrap_or_default(),
-                });
-                if sent.is_some() {
-                    self.awaiting = Some(now);
-                }
-            }
+        let current = self.thread.steering.take();
+        self.thread.steering = Some(steered_into(current, run, text, steered, now));
+        if matches!(steered, Steered::Kept { sent: Some(_), .. }) {
+            self.awaiting = Some(now);
         }
     }
 

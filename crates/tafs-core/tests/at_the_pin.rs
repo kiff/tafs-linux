@@ -365,6 +365,41 @@ const LINES: &[(&str, &[&str])] = &[
     ("error.offline", &[]),
     ("error.signed_out", &[]),
     ("error.kiff_answered", &["status"]),
+    ("chat.empty_named", &["taf"]),
+    ("chat.it_lower", &[]),
+    ("chat.the_taf", &[]),
+    ("chat.your_taf", &[]),
+    ("chat.write_next", &[]),
+    ("chat.message_taf", &["taf"]),
+    ("chat.send_while_works", &["taf"]),
+    ("chat.stop", &[]),
+    ("chat.answering", &[]),
+    ("chat.held", &[]),
+    ("chat.send_again", &[]),
+    ("chat.edit_and_send", &[]),
+    ("chat.run_started_with", &["time", "text"]),
+    ("chat.answered_card_above", &[]),
+    ("chat.steer.taf_reads_next", &["taf"]),
+    ("chat.steer.taf_reads_paused", &["taf"]),
+    ("chat.steer.it_reads_next", &[]),
+    ("chat.steer.it_reads_paused", &[]),
+    ("chat.steer.stopped_before_read", &[]),
+    ("chat.steer.not_read_before_end", &[]),
+    ("chat.cap.cost", &["taf"]),
+    ("chat.cap.turns", &["taf"]),
+    ("chat.stopped.out_of_room", &["taf"]),
+    ("chat.stopped.declined", &["taf"]),
+    ("chat.retry", &[]),
+    ("chat.too_many", &["taf"]),
+    ("chat.thread_not_loaded", &["why"]),
+    ("coach.taf_halted", &["taf"]),
+    ("coach.nothing_reaches_until_you_resume", &[]),
+    ("coach.ask", &[]),
+    ("door.stamp.by", &["app"]),
+    ("door.stamp.sent_back", &["app"]),
+    ("door.stamp.goes_back", &["app"]),
+    ("door.stamp.not_sent_back", &[]),
+    ("work.did_not_stop", &["why"]),
 ];
 
 #[test]
@@ -1661,6 +1696,42 @@ fn what_is_sent_to_coach_reads_in_every_language() {
             "work.did_not_stop",
         ] {
             assert!(w.get(key, &[("why", "x")]).is_ok(), "{lang}: {key}");
+        }
+    }
+}
+
+/// A taf's chat draws in every shipped language: the fixture's thread, at rest and at work, with
+/// a message not sent for a halt, the box's words, a too-long message and every cap.
+#[test]
+fn a_taf_s_chat_draws_in_every_language() {
+    use tafs_core::taf_chat::{self, TafChat, TafThread, Whose};
+    let read = |name: &str| {
+        let path = format!("{}/../tafs-app/fixtures/{name}", env!("CARGO_MANIFEST_DIR"));
+        let v: serde_json::Value = serde_json::from_slice(&std::fs::read(path).unwrap()).unwrap();
+        TafThread::read(&serde_json::to_vec(&v["answer"]).unwrap()).unwrap()
+    };
+    let now = chrono::Utc::now();
+    for lang in SHIPPED {
+        let w = book(lang);
+        for (file, name) in [
+            ("taf-chat.json", Some("Rae")),
+            ("taf-chat-working.json", None),
+        ] {
+            let mut c = TafChat::new("taf-1");
+            c.took(&w, read(file), now);
+            let d = c.deliver("x", now).unwrap();
+            c.not_sent(&d, "Rae is halted", None, false, now);
+            let whose = Whose {
+                name,
+                ask_coach: true,
+            };
+            let lines = taf_chat::lines(&w, &c, &whose, &[], now).unwrap();
+            assert!(!lines.lines.is_empty(), "{lang}");
+            taf_chat::composer(&w, name, c.thinking()).unwrap();
+            assert!(c.submit(&w, &"a".repeat(2001), now).is_ok(), "{lang}");
+        }
+        for stop in taf_chat::CAP_STOPS {
+            assert!(taf_chat::cap_words(&w, stop, "Rae").unwrap().is_some());
         }
     }
 }

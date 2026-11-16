@@ -1144,7 +1144,7 @@ fn card(
 
 /// `gapTime`: a time between parts of the thread an hour or more apart, and at its top: the time
 /// of day today, else the date and the time.
-fn gap(language: &str, at: DateTime<Utc>, now: DateTime<Utc>) -> String {
+pub fn gap(language: &str, at: DateTime<Utc>, now: DateTime<Utc>) -> String {
     let time = crate::account_time::short_time(&at);
     let day = crate::account_time::day(&at);
     if day == crate::account_time::day(&now) {

@@ -143,6 +143,8 @@ pub struct HeldCall {
     /// What it's for, in the sample's words; none from KIFF.
     pub context: String,
     pub reason: String,
+    /// When it was held (`heldAt`): where its card goes in its taf's chat.
+    pub held_at: DateTime<Local>,
     pub expires_at: DateTime<Local>,
     /// KIFF's id: a call from KIFF is answered in KIFF until this computer signs answers.
     pub kiff_id: Option<String>,
@@ -191,6 +193,7 @@ pub fn held(w: &WordBook, e: &CardException, taf: &str) -> Result<HeldCall, Word
         amount: amount(e),
         context: String::new(),
         reason,
+        held_at: e.created_at.with_timezone(&Local),
         expires_at: e
             .expires_at
             .unwrap_or(e.created_at + Duration::minutes(10))

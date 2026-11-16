@@ -13,7 +13,7 @@ export XDG_CONFIG_HOME=$(mktemp -d)
 mkdir -p "$XDG_CONFIG_HOME/gtk-4.0"
 printf '[Settings]\ngtk-font-name=Inter 11\ngtk-hint-font-metrics=1\n' > "$XDG_CONFIG_HOME/gtk-4.0/settings.ini"
 missing=0
-for screen in welcome sign-in sign-in-code sign-in-narrow pair connected overview overview-home overview-empty needs-you needs-you-empty needs-you-waits needs-you-happened record taf taf-card taf-home taf-home-card taf-card-lines taf-work taf-run taf-knocks taf-setup taf-units usage usage-kiff usage-kiff-member connect-apps connect-apps-narrow devices people kiff-account account-kiff consent time-zone language alerts calendar calendar-week calendar-compact account sidebar-sample sidebar-others sidebar-setting-up sidebar-plan view-only view-only-paired recipes recipe-sheet gallery-strip gallery halt-all halt-all-halted halt-one record-search record-export record-receipt record-on delete-account pin-sheet coach coach-wider coach-asks coach-chats coach-empty coach-start; do
+for screen in welcome sign-in sign-in-code sign-in-narrow pair connected overview overview-home overview-empty needs-you needs-you-empty needs-you-waits needs-you-happened record taf taf-card taf-home taf-home-card taf-card-lines taf-work taf-run taf-knocks taf-setup taf-units usage usage-kiff usage-kiff-member connect-apps connect-apps-narrow devices people kiff-account account-kiff consent time-zone language alerts calendar calendar-week calendar-compact account sidebar-sample sidebar-others sidebar-setting-up sidebar-plan view-only view-only-paired recipes recipe-sheet gallery-strip gallery halt-all halt-all-halted halt-one record-search record-export record-receipt record-on delete-account pin-sheet coach coach-wider coach-asks coach-chats coach-empty coach-start taf-chat taf-chat-working; do
   case $screen in
     welcome) opts=(--page welcome) ;;
     sign-in) opts=(--page sign-in) ;;
@@ -52,6 +52,9 @@ for screen in welcome sign-in sign-in-code sign-in-narrow pair connected overvie
     taf-work) opts=(--home shared/contracts/home.json --work crates/tafs-app/fixtures/taf-work.json --runs crates/tafs-app/fixtures/taf-runs-page.json --page taf:taf-aaaa0000000000000000) ;;
     taf-setup) opts=(--home shared/contracts/home.json --access crates/tafs-app/fixtures/access-manage.json --memory crates/tafs-app/fixtures/taf-memory.json --page taf-setup:taf-aaaa0000000000000000) ;;
     taf-knocks) opts=(--home shared/contracts/home.json --access crates/tafs-app/fixtures/access-manage.json --doors crates/tafs-app/fixtures/taf-doors.json --page taf:taf-aaaa0000000000000000) ;;
+    # A taf's chat from a file (synthetic: no contract for a taf's own thread at the pin): at rest, and at work.
+    taf-chat) opts=(--home shared/contracts/home.json --access crates/tafs-app/fixtures/access-manage.json --chat crates/tafs-app/fixtures/taf-chat.json --page taf:taf-aaaa0000000000000000) ;;
+    taf-chat-working) opts=(--home shared/contracts/home.json --chat crates/tafs-app/fixtures/taf-chat-working.json --page taf:taf-aaaa0000000000000000) ;;
     taf-units) opts=(--home crates/tafs-app/fixtures/home-waits.json --page taf:taf-aaaa0000000000000000) ;;
     taf-run) opts=(--home shared/contracts/home.json --work crates/tafs-app/fixtures/taf-work.json --runs crates/tafs-app/fixtures/taf-runs-page.json --request crates/tafs-app/fixtures/taf-run-request.json --page run:taf-aaaa0000000000000000) ;;
     taf-card-lines) opts=(--home crates/tafs-app/fixtures/home-card-lines.json --page taf-card:taf-aaaa0000000000000000) ;;

@@ -45,6 +45,7 @@ pub mod session;
 pub mod setup;
 pub mod sidebar;
 pub mod signin;
+pub mod taf_chat;
 pub mod taf_page;
 pub mod theme;
 pub mod unproven;
