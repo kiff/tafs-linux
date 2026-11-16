@@ -1,0 +1,11 @@
+{
+  "id": "run_1",
+  "from": "From the Refunds door · maria@…",
+  "line": "Stopped: Stripe didn't answer",
+  "steps": [
+    {"label": "Read the case", "line": "Order 1042, €150, paid by card", "at": "03:15", "state": "done"},
+    {"label": "Refund it at Stripe", "line": "Stripe didn't answer after 3 tries", "at": "03:16", "state": "failed"},
+    {"label": "Reply to maria@…", "line": null, "state": "next"}
+  ],
+  "deliveries": [{"place": "door_reply", "state": "given_up", "line": "The reply wasn't sent after 3 tries", "send_again": true}]
+}

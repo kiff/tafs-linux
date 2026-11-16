@@ -39,8 +39,40 @@ fn string(o: &serde_json::Map<String, Value>, key: &str) -> String {
 /// Where a request's result went (`Delivery`), and whether it can be sent again.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Delivery {
+    /// `door_reply`, or a place of the taf's own, named by `key`.
+    pub place: String,
+    pub key: Option<String>,
     pub line: String,
     pub send_again: bool,
+}
+
+impl Delivery {
+    /// What Send again names in its route (`sendPlace`): the door's reply, or the place's key.
+    pub fn send_place(&self) -> String {
+        if self.place == "door_reply" {
+            "door_reply".into()
+        } else {
+            self.key.clone().unwrap_or_else(|| "door_reply".into())
+        }
+    }
+
+    /// One delivery, as the iPad's lenient `Delivery`: none only when it isn't an object.
+    pub fn read(d: &Value) -> Option<Delivery> {
+        let d = d.as_object()?;
+        Some(Delivery {
+            place: d
+                .get("place")
+                .and_then(Value::as_str)
+                .unwrap_or("door_reply")
+                .to_string(),
+            key: d.get("key").and_then(Value::as_str).map(str::to_string),
+            line: string(d, "line"),
+            send_again: d
+                .get("send_again")
+                .and_then(Value::as_bool)
+                .unwrap_or(false),
+        })
+    }
 }
 
 /// One request (`Request`): done, working, retrying, needs_you, waiting, stopped or failed.
@@ -62,16 +94,7 @@ impl Request {
         let deliveries = match o.get("deliveries").and_then(Value::as_array) {
             Some(a) => a
                 .iter()
-                .map(|d| {
-                    let d = d.as_object()?;
-                    Some(Delivery {
-                        line: string(d, "line"),
-                        send_again: d
-                            .get("send_again")
-                            .and_then(Value::as_bool)
-                            .unwrap_or(false),
-                    })
-                })
+                .map(Delivery::read)
                 .collect::<Option<Vec<_>>>()
                 .unwrap_or_default(),
             None => vec![],

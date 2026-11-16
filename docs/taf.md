@@ -96,6 +96,16 @@ After its work, a tafs cloud taf's runs (`crates/tafs-app/src/runs_panel.rs`,
   - Under them, its "more" line (`more_title`) opens every run in a sheet, 20 a page. The next
     page is read as the list reaches its end, then tafs cloud's end words.
   - What went wrong reading is shown with Try again.
+- **A run's own page** (`KnobRequestDetail`): each kept run, on the page and in the sheet,
+  opens it over the window (`GET /v1/tafs/{id}/requests/{run}`), titled Request:
+  - where it came from (`from`), and its line;
+  - each step with its mark: done (ok), next (a clock) or what went wrong (a warning), both
+    amber; its line under it;
+  - for whoever manages the taf, Try the reply now on each delivery that can be sent again
+    (`POST …/requests/{run}/deliveries/{place}/send`, unsigned). It turns to "Sending again…",
+    and the page is read again. If it fails, "It wasn't sent again." and why.
+  - Ask Coach isn't here: Coach isn't on this computer.
+  - What went wrong reading it shows with Try again.
 - **Read as strictly as the iPad's `RunsPage`:** a page without its title, or with a run it
   can't read, isn't one.
 - The screenshot (`--runs crates/tafs-app/fixtures/taf-runs-page.json`, synthetic) is CI's
@@ -108,7 +118,7 @@ After its work, a tafs cloud taf's runs (`crates/tafs-app/src/runs_panel.rs`,
 - **On the Card tab:** tafs cloud's time zone lines, each item's totals (`eachItem`), How this is
   counted (`CountedView`), what's pending, the unit words and Connect again, the halt row,
   Versions, Usage; Revoke itself (dimmed).
-- **Above a tafs cloud taf's Activity:** its doors' knocks, Card unit requests; a run's own page (`KnobRequestDetail`); and the next step's buttons (Connect it
+- **Above a tafs cloud taf's Activity:** its doors' knocks, Card unit requests; and the next step's buttons (Connect it
   again, Ask Coach), shown as their words for now; a call's receipt; "All apps" for a selection.
 - **The line under the head:** its version and who it's shared with (`headerLine`, `ShareLine`).
 - **In its work:** Answer within (`PromiseRow`, whoever manages the taf), Send again, and a step

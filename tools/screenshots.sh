@@ -13,7 +13,7 @@ export XDG_CONFIG_HOME=$(mktemp -d)
 mkdir -p "$XDG_CONFIG_HOME/gtk-4.0"
 printf '[Settings]\ngtk-font-name=Inter 11\ngtk-hint-font-metrics=1\n' > "$XDG_CONFIG_HOME/gtk-4.0/settings.ini"
 missing=0
-for screen in welcome sign-in pair overview overview-home needs-you needs-you-waits needs-you-happened record taf taf-card taf-home taf-home-card taf-work usage usage-kiff usage-kiff-member connect-apps devices people kiff-account time-zone alerts calendar calendar-week calendar-compact account sidebar-sample view-only view-only-paired recipes recipe-sheet gallery-strip gallery halt-all halt-one record-search record-export record-receipt delete-account pin-sheet; do
+for screen in welcome sign-in pair overview overview-home needs-you needs-you-waits needs-you-happened record taf taf-card taf-home taf-home-card taf-work taf-run usage usage-kiff usage-kiff-member connect-apps devices people kiff-account time-zone alerts calendar calendar-week calendar-compact account sidebar-sample view-only view-only-paired recipes recipe-sheet gallery-strip gallery halt-all halt-one record-search record-export record-receipt delete-account pin-sheet; do
   case $screen in
     welcome) opts=(--page welcome) ;;
     sign-in) opts=(--page sign-in) ;;
@@ -40,6 +40,7 @@ for screen in welcome sign-in pair overview overview-home needs-you needs-you-wa
     taf) opts=(--sample --signed-in --page taf) ;;
     taf-home) opts=(--home shared/contracts/home.json --page taf:taf-aaaa0000000000000000) ;;
     taf-work) opts=(--home shared/contracts/home.json --work crates/tafs-app/fixtures/taf-work.json --runs crates/tafs-app/fixtures/taf-runs-page.json --page taf:taf-aaaa0000000000000000) ;;
+    taf-run) opts=(--home shared/contracts/home.json --work crates/tafs-app/fixtures/taf-work.json --runs crates/tafs-app/fixtures/taf-runs-page.json --request crates/tafs-app/fixtures/taf-run-request.json --page run:taf-aaaa0000000000000000) ;;
     taf-card) opts=(--sample --signed-in --page taf-card) ;;
     taf-home-card) opts=(--home shared/contracts/home.json --page taf-card:taf-aaaa0000000000000000) ;;
     sidebar-sample) opts=(--sample) ;;
