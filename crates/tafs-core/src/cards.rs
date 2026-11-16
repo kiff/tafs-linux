@@ -162,9 +162,48 @@ pub struct FullCard {
     pub rules: Vec<Rule>,
     /// Its totals, for its figure.
     pub totals: Card,
+    /// What tafs cloud says besides: each item's totals, how it's counted, what's pending and
+    /// why its total has no currency.
+    pub extra: CardExtra,
+}
+
+/// One tool of a Card and how KIFF counts it, in KIFF's words (`CardCounted`).
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct Counted {
+    pub tool: String,
+    pub title: String,
+    pub lines: Vec<String>,
+}
+
+/// A Card's lines in tafs cloud's and KIFF's own words, under its limits (`TafCard`).
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct CardExtra {
+    /// Its totals for each item apart ("1 call in any 7 days for each invoice id"), none blank.
+    pub each_item: Vec<String>,
+    /// How this is counted: each tool's lines, as the owner approved them.
+    pub counted: Vec<Counted>,
+    /// What of its totals' use is from calls the tool refused, the money total's then the
+    /// count's (`pending`).
+    pub pending: Vec<String>,
+    /// Why its money total has no currency (`unitWords`).
+    pub unit_words: Option<String>,
 }
 
 impl FullCard {
+    /// Whether its totals are what the taf may do for real: live, and active (`countsForReal`).
+    pub fn counts_for_real(&self) -> bool {
+        self.live && self.active
+    }
+
+    /// What's pending, shown only for a Card that counts for real.
+    pub fn pending_shown(&self) -> &[String] {
+        if self.counts_for_real() {
+            &self.extra.pending
+        } else {
+            &[]
+        }
+    }
+
     /// `environmentLabel`: the environment it's scoped to in capitals, none when live or every one.
     pub fn environment_label(&self) -> Option<String> {
         (!self.live && !self.environment.is_empty()).then(|| self.environment.to_uppercase())
@@ -255,6 +294,7 @@ mod tests {
     #[test]
     fn the_stack_puts_the_front_card_last() {
         let card = |id: &str| FullCard {
+            extra: Default::default(),
             id: id.into(),
             title: id.into(),
             environment: String::new(),

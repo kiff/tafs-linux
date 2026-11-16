@@ -407,6 +407,7 @@ pub fn full_cards(
     if !(screenshot && key == "refunds") {
         let name = w.line(&format!("sample.{key}.name"))?;
         return Ok(vec![FullCard {
+            extra: Default::default(),
             id: format!("sample-{key}"),
             title: name,
             environment: String::new(),
@@ -418,6 +419,7 @@ pub fn full_cards(
         }]);
     }
     let refunds = FullCard {
+        extra: Default::default(),
         id: "sample-refunds".into(),
         title: w.line("sample.card.refunds_stripe")?,
         environment: String::new(),
@@ -437,6 +439,7 @@ pub fn full_cards(
     let mut charges = Rule::new(w.line("sample.list_charges")?, day()?);
     charges.count_per_window = Some(200);
     let reads = FullCard {
+        extra: Default::default(),
         id: "sample-reads".into(),
         title: w.line("sample.card.read_stripe")?,
         environment: String::new(),
@@ -454,6 +457,7 @@ pub fn full_cards(
         },
     };
     let test = FullCard {
+        extra: Default::default(),
         id: "sample-test".into(),
         title: w.line("sample.refunds_stripe_test")?,
         environment: "test".into(),
