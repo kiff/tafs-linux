@@ -843,6 +843,10 @@ fn the_record_searched() {
         record_search::case_path("Order #1042/x"),
         "/v1/record/cases/Order%20%231042%2Fx"
     );
+    // A dot segment stays a segment: never `/v1/record/cases/..`.
+    assert_eq!(record_search::case_path(".."), "/v1/record/cases/%2E%2E");
+    assert_eq!(record_search::case_path("."), "/v1/record/cases/%2E");
+    assert_eq!(record_search::case_path("v1.2"), "/v1/record/cases/v1%2E2");
     assert_eq!(record_search::asked("  1042 "), Some("1042".into()));
     assert_eq!(record_search::asked("   "), None);
 }

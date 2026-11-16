@@ -218,9 +218,13 @@ pub fn search_path(q: &str, cursor: Option<&str>, limit: Option<u32>) -> String 
     format!("/v1/record?{}", query.join("&"))
 }
 
-/// One case's path, its `about` escaped as one segment.
+/// One case's path, its `about` escaped as one segment. Its dots are encoded too, so an `about`
+/// of `.` or `..` stays a segment and is never read as a step up the path.
 pub fn case_path(about: &str) -> String {
-    format!("/v1/record/cases/{}", crate::access::escaped(about))
+    format!(
+        "/v1/record/cases/{}",
+        crate::access::escaped(about).replace('.', "%2E")
+    )
 }
 
 /// What's asked: typed words trimmed; blank is no search, and the Record shows again.
