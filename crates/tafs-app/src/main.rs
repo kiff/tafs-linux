@@ -14,6 +14,7 @@ mod overview;
 mod pairing;
 mod people;
 mod pin_sheet;
+mod receipt_sheet;
 mod receipts;
 mod recipes;
 mod record;
@@ -100,13 +101,17 @@ struct Options {
     access: Option<String>,
     /// With `--home`: a receipts export as tafs cloud answers it, never saved.
     receipts: Option<String>,
+    /// With `--home`: KIFF's activity, `{"calls": […]}`, for the Record.
+    activity: Option<String>,
+    /// With `--home`: a receipt as KIFF answers `GET /v1/receipts/{trace_id}`, never sent.
+    receipt: Option<String>,
     /// `--size WxH`: the window's size, for a screenshot of a narrower layout.
     size: Option<(i32, i32)>,
     screenshot: Option<String>,
 }
 
 const USAGE: &str = "tafs [--lang en|de|fr|es|it|pt|nl|pl] [--theme light|dark] [--sample] [--signed-in] [--view-only [--paired]]
-     [--home contract.json] [--usage answers.json] [--people answers.json] [--unproven answers.json] [--recipes answers.json] [--gallery answers.json] [--halt answer.json] [--record-search answers.json] [--access answer.json] [--receipts answer.json] [--size WxH] [--page welcome|sign-in|pair|recipe:<id>|gallery|halt-all|halt:<id>|record-search:<q>|record-export|pin-sheet|overview|needs-you|record|calendar|calendar-week|usage|connect-apps|account|kiff-account|time-zone|devices|people|taf|taf-card] [--screenshot out.png]";
+     [--home contract.json] [--usage answers.json] [--people answers.json] [--unproven answers.json] [--recipes answers.json] [--gallery answers.json] [--halt answer.json] [--record-search answers.json] [--access answer.json] [--receipts answer.json] [--activity answer.json] [--receipt answer.json] [--size WxH] [--page welcome|sign-in|pair|recipe:<id>|gallery|halt-all|halt:<id>|record-search:<q>|record-export|receipt:<proposal id>|pin-sheet|overview|needs-you|record|calendar|calendar-week|usage|connect-apps|account|kiff-account|time-zone|devices|people|taf|taf-card] [--screenshot out.png]";
 
 fn options() -> Result<Options, String> {
     let mut o = Options::default();
@@ -128,6 +133,8 @@ fn options() -> Result<Options, String> {
             "--record-search" => o.record_search = Some(value()?),
             "--access" => o.access = Some(value()?),
             "--receipts" => o.receipts = Some(value()?),
+            "--activity" => o.activity = Some(value()?),
+            "--receipt" => o.receipt = Some(value()?),
             "--size" => {
                 let v = value()?;
                 let (w, h) = v.split_once('x').ok_or("--size takes WxH")?;
@@ -190,6 +197,7 @@ fn selection_of(page: Option<&str>) -> Selection {
         Some("halt-all") => Selection::HaltAll,
         Some(other) if other.starts_with("record-search:") => Selection::Record,
         Some("record-export") => Selection::Record,
+        Some(other) if other.starts_with("receipt:") => Selection::Record,
         Some(other) if other.starts_with("halt:") => Selection::Halt(other["halt:".len()..].into()),
         Some(other) if other.starts_with("taf-card:") => {
             Selection::Taf(other["taf-card:".len()..].into())
@@ -270,6 +278,18 @@ fn activate(app: &adw::Application, o: &Options) {
             }
         }),
         receipts_open: o.page.as_deref() == Some("record-export"),
+        receipt_file: o.receipt.as_deref().map(|p| match std::fs::read(p) {
+            Ok(b) => b,
+            Err(_) => {
+                eprintln!("{p} can't be read");
+                std::process::exit(2);
+            }
+        }),
+        receipt_open: o
+            .page
+            .as_deref()
+            .and_then(|p| p.strip_prefix("receipt:"))
+            .map(tafs_core::record::record_id),
         record_query: o
             .page
             .as_deref()
@@ -311,7 +331,7 @@ fn activate(app: &adw::Application, o: &Options) {
             home,
             held: vec![],
             account: None,
-            activity: vec![],
+            activity: activity_file(o.activity.as_deref()),
             unproven: unproven_file(o.unproven.as_deref()),
             recipes: recipes_file(o.recipes.as_deref()),
             gallery: gallery_file(o.gallery.as_deref()),
@@ -447,6 +467,10 @@ struct App {
     receipts_file: Option<Vec<u8>>,
     /// `--page record-export`: the export's days open, for a screenshot.
     receipts_open: bool,
+    /// `--receipt`'s answer: the screenshots' receipt, never sent.
+    receipt_file: Option<Vec<u8>>,
+    /// `--page receipt:<proposal id>`: that line's receipt open, for a screenshot.
+    receipt_open: Option<String>,
     /// `--people`'s file of synthetic answers.
     people_file: Option<std::path::PathBuf>,
     /// A screenshot: the sample's Refunds has the reference set's three Cards.
@@ -889,12 +913,30 @@ impl App {
             })),
             _ => None,
         };
+        // Signed in with KIFF: a line's receipt, read as the session; a screenshot's from
+        // `--receipt`, never sent.
+        let receipt = match (mode, self.kept.borrow().as_ref(), &self.receipt_file) {
+            (Mode::Kiff, _, Some(canned)) => Some(Rc::new(receipt_sheet::ReceiptSource {
+                token: String::new(),
+                languages: vec![],
+                canned: Some(canned.clone()),
+                open: self.receipt_open.clone(),
+            })),
+            (Mode::Kiff, Some(kept), None) => Some(Rc::new(receipt_sheet::ReceiptSource {
+                token: kept.token.clone(),
+                languages: self.languages.clone(),
+                canned: None,
+                open: None,
+            })),
+            _ => None,
+        };
         record::RecordData {
             entries,
             tafs,
             waiting: Rc::new(move |e| !kiff || still_held.contains(&e.id)),
             search,
             receipts,
+            receipt,
         }
     }
 
@@ -1674,6 +1716,23 @@ fn gallery_file(path: Option<&str>) -> Option<tafs_core::recipes::Gallery> {
 
 /// `--access`'s file, as tafs cloud answers `GET /v1/me/access` (a contract file's `answer`, or
 /// the answer itself). None given, none read; a file that can't be read stops the app.
+/// `--activity`'s answer: KIFF's activity for the screenshots' Record.
+fn activity_file(path: Option<&str>) -> Vec<tafs_core::record::ActivityCall> {
+    let Some(path) = path else {
+        return vec![];
+    };
+    match std::fs::read(path)
+        .ok()
+        .and_then(|b| tafs_core::record::read_activity(&b))
+    {
+        Some(calls) => calls,
+        None => {
+            eprintln!("{path} isn't KIFF's activity");
+            std::process::exit(2);
+        }
+    }
+}
+
 fn access_file(
     path: Option<&str>,
 ) -> std::collections::BTreeMap<String, tafs_core::access::Access> {

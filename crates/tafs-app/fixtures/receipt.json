@@ -1,0 +1,36 @@
+{
+  "trace_id": "01KTRACE0FIXTURE",
+  "issued_at": "2026-11-16T03:41:05.400Z",
+  "causal_chain": [
+    {
+      "sequence": 1,
+      "kind": "decision",
+      "occurred_at": "2026-11-16T03:41:03.120Z",
+      "message": "held: over the Card's €100 limit",
+      "data_hash": "9f2c6a0e41b7d3c58e0a",
+      "data": {
+        "amount": {
+          "value": "150.00",
+          "unit": "EUR"
+        }
+      }
+    },
+    {
+      "sequence": 2,
+      "kind": "hold_settled",
+      "occurred_at": "2026-11-16T03:41:04.870Z",
+      "message": "approved once",
+      "data_hash": "4d1be07a93c2f6e1b0d8",
+      "data": {
+        "answer": "approved_once"
+      }
+    },
+    {
+      "sequence": 3,
+      "kind": "tool_executed",
+      "occurred_at": "2026-11-16T03:41:05.310Z",
+      "message": "refund sent to Stripe",
+      "data_hash": "e83f0c5ab21d7946c3fa"
+    }
+  ]
+}

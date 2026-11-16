@@ -52,6 +52,11 @@ pub struct Answer {
     pub by: Option<String>,
     #[serde(default)]
     pub you: Option<bool>,
+    /// Signed by the answerer's device, and which (`signed`, `device`).
+    #[serde(default)]
+    pub signed: Option<bool>,
+    #[serde(default)]
+    pub device: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
@@ -169,6 +174,8 @@ pub struct Entry {
     pub receipt: Option<Receipt>,
     /// KIFF's proposal id, for whether a held call still waits.
     pub proposal: Option<String>,
+    /// KIFF's words for why (`reason`), never its codes.
+    pub reason: Option<String>,
 }
 
 /// `recordID`: KIFF's call id as a stable key.
@@ -328,6 +335,7 @@ pub fn record(
             answer: c.answer.clone(),
             receipt: c.receipt.clone(),
             proposal: Some(c.proposal_id.clone()),
+            reason: c.reason.clone().filter(|r| !r.trim().is_empty()),
         });
     }
     Ok(out)
@@ -428,7 +436,7 @@ impl Entry {
     }
 
     /// `answerer`: "you", or KIFF's role for them.
-    fn answerer(&self, w: &WordBook) -> Result<String, WordsError> {
+    pub fn answerer(&self, w: &WordBook) -> Result<String, WordsError> {
         let Some(answer) = &self.answer else {
             return w.line("record.answerer.someone_else");
         };
