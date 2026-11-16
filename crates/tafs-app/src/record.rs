@@ -6,7 +6,7 @@ use std::collections::BTreeSet;
 use std::rc::Rc;
 
 use gtk::prelude::*;
-use tafs_core::record::{days, spent, Entry, Filter, Tone};
+use tafs_core::record::{days, spent, Entry, Filter, Kind, Tone};
 use tafs_core::words::{upper, WordBook};
 
 use crate::widgets::{one_line, text};
@@ -29,6 +29,8 @@ pub struct RecordData {
     pub search: Option<Rc<crate::record_search::SearchSource>>,
     /// Signed in, for whoever sees every taf's Record: the receipts export.
     pub receipts: Option<Rc<crate::receipts::ReceiptsSource>>,
+    /// Signed in with KIFF: where a line's receipt is read, for its sheet.
+    pub receipt: Option<Rc<crate::receipt_sheet::ReceiptSource>>,
 }
 
 /// Draws the chips and the days again, after a choice.
@@ -40,7 +42,15 @@ struct State {
     open_reads: BTreeSet<String>,
 }
 
-pub fn page(w: Rc<WordBook>, data: Rc<RecordData>) -> gtk::Widget {
+/// `open_taf`: a taf's page, by its key, for a receipt's "Open in the taf's chat".
+pub fn page(w: Rc<WordBook>, data: Rc<RecordData>, open_taf: Rc<dyn Fn(String)>) -> gtk::Widget {
+    // A screenshot's open receipt (`--page receipt:<id>`), once the page is on screen.
+    let shot = data
+        .receipt
+        .as_ref()
+        .and_then(|r| r.open.clone())
+        .and_then(|id| data.entries.iter().find(|e| e.id == id).cloned())
+        .map(|e| (e, open_taf.clone()));
     let column = gtk::Box::new(gtk::Orientation::Vertical, 10);
     column.set_margin_start(16);
     column.set_margin_end(16);
@@ -156,14 +166,14 @@ pub fn page(w: Rc<WordBook>, data: Rc<RecordData>) -> gtk::Widget {
                 h.set_margin_top(6);
                 list.append(&h);
                 for e in &day.lines {
-                    list.append(&row(&w, &data, e));
+                    list.append(&line(&w, &data, &open_taf, e));
                 }
                 if !day.reads.is_empty() {
                     let key = day.title.clone();
                     let open = s.open_reads.contains(&key);
                     if open {
                         for e in &day.reads {
-                            list.append(&row(&w, &data, e));
+                            list.append(&line(&w, &data, &open_taf, e));
                         }
                     }
                     let words = format!(
@@ -210,6 +220,27 @@ pub fn page(w: Rc<WordBook>, data: Rc<RecordData>) -> gtk::Widget {
     scroller.set_child(Some(&column));
     scroller.set_vexpand(true);
     crate::widgets::ground(&scroller);
+    if let Some((e, open_taf)) = shot {
+        let (w, data, done) = (w.clone(), data.clone(), std::cell::Cell::new(false));
+        scroller.connect_map(move |s| {
+            if done.replace(true) {
+                return;
+            }
+            let name = data
+                .tafs
+                .iter()
+                .find(|t| t.key == e.taf)
+                .map(|t| t.name.clone());
+            crate::receipt_sheet::present(
+                w.clone(),
+                data.receipt.clone(),
+                e.clone(),
+                name,
+                open_taf.clone(),
+                s,
+            );
+        });
+    }
     scroller.upcast()
 }
 
@@ -241,8 +272,44 @@ fn chip(title: &str, dot: Option<i64>, selected: bool) -> gtk::Button {
     b
 }
 
+/// A line as the Record lists it: a button opening its receipt (`ReceiptView`), except a line
+/// in tafs itself, which has none.
+fn line(
+    w: &Rc<WordBook>,
+    data: &Rc<RecordData>,
+    open_taf: &Rc<dyn Fn(String)>,
+    e: &Entry,
+) -> gtk::Widget {
+    let (r, label) = row(w, data, e);
+    if e.kind == Kind::InTafs {
+        return r.upcast();
+    }
+    let b = gtk::Button::new();
+    b.add_css_class("flat");
+    b.add_css_class("tafs-record-line");
+    b.set_child(Some(&r));
+    b.update_property(&[gtk::accessible::Property::Label(&label)]);
+    let (w, data, open_taf, e) = (w.clone(), data.clone(), open_taf.clone(), e.clone());
+    b.connect_clicked(move |b| {
+        let name = data
+            .tafs
+            .iter()
+            .find(|t| t.key == e.taf)
+            .map(|t| t.name.clone());
+        crate::receipt_sheet::present(
+            w.clone(),
+            data.receipt.clone(),
+            e.clone(),
+            name,
+            open_taf.clone(),
+            b,
+        );
+    });
+    b.upcast()
+}
+
 /// `RecordRow`: the kind's dot, "Taf · title · amount", its time, and what became of it.
-fn row(w: &WordBook, data: &RecordData, e: &Entry) -> gtk::Box {
+fn row(w: &WordBook, data: &RecordData, e: &Entry) -> (gtk::Box, String) {
     let r = gtk::Box::new(gtk::Orientation::Horizontal, 12);
     r.add_css_class("tafs-record-row");
     let dot = gtk::Box::new(gtk::Orientation::Horizontal, 0);
@@ -288,8 +355,7 @@ fn row(w: &WordBook, data: &RecordData, e: &Entry) -> gtk::Box {
         .unwrap_or_else(|_| e.detail.clone());
     v.append(&text(&detail, 13, 400, &["tafs-soft"]));
     r.append(&v);
-    r.update_property(&[gtk::accessible::Property::Label(&format!(
-        "{named}, {detail}"
-    ))]);
-    r
+    let label = format!("{named}, {detail}");
+    r.update_property(&[gtk::accessible::Property::Label(&label)]);
+    (r, label)
 }

@@ -187,7 +187,14 @@ pub fn build(
                     None => crate::overview::page(&overview, open.clone()),
                 },
                 Selection::NeedsYou => crate::needs_you::page(w.clone(), &needs_you, open.clone()),
-                Selection::Record => crate::record::page(w.clone(), record.clone()),
+                Selection::Record => {
+                    let open = open.clone();
+                    crate::record::page(
+                        w.clone(),
+                        record.clone(),
+                        Rc::new(move |key: String| open(Selection::Taf(key))),
+                    )
+                }
                 Selection::Calendar => {
                     // A taf's work opens its page, by tafs cloud's id.
                     let known: Vec<String> =

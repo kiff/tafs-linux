@@ -181,6 +181,10 @@ button.tafs-filter-bordered.selected { background-color: alpha(@tafs_amber_text,
 /* Plan & usage: a panel's edge in its tone at 50%, the meter's fill, a panel that opens. */
 .tafs-panel.edge-no { border-color: alpha(@tafs_no, 0.5); }
 .tafs-panel.edge-amber { border-color: alpha(@tafs_amber, 0.5); }
+/* A Record line's receipt: checked, its edge in ok at 40%; the timeline's ring and its line. */
+.tafs-panel.edge-ok { border-color: alpha(@tafs_ok, 0.4); }
+.tafs-step-ring { min-width: 10px; min-height: 10px; border-radius: 999px; border: 2px solid @tafs_dim; background-color: @tafs_panel; }
+.tafs-step-rule { min-width: 2px; background-color: @tafs_line; }
 .tafs-meter.ok { color: @tafs_ok; }
 .tafs-meter.amber { color: @tafs_amber_text; }
 .tafs-meter.no { color: @tafs_no; }

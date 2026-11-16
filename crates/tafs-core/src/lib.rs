@@ -26,6 +26,7 @@ pub mod pairing;
 pub mod passkey;
 pub mod people;
 pub mod receipt_check;
+pub mod receipt_view;
 pub mod receipts;
 pub mod recipes;
 pub mod record;

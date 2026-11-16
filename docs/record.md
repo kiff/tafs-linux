@@ -57,8 +57,6 @@ the scripts' first two rounds, newest first: what each Card allowed ("€40, wit
 
 ## Not yet
 
-- **A line's receipt** (`ReceiptView`): a line opens nothing yet.
-- **Search** (`RecordSearchBox`, `RecordResults`, a case's sheet) and **Export receipts**.
 - **What a line acted on** (`naming`, the runs' call refs): KIFF's hash alone names nothing.
 - **"Signed on this computer"** and the receipt's signed mark under a line.
 - **Which vendor refused** a call, by its connection (`vendors`).
@@ -147,4 +145,33 @@ receipt (`GET /v1/receipts/{trace_id}`) is checked here as KIFF's own verificati
 - **The outcome:** no attestation yet is "not signed yet", never a failure. Anything else that
   doesn't check out says why, in the shared `receipt.check.*` words.
 
-Nothing draws it yet. `ReceiptView`, a Record line's receipt, comes next and uses it.
+## A line's receipt
+
+The iPad's `ReceiptView` (`RecordView.swift`) is ported to `tafs-core/src/receipt_view.rs` and
+`crates/tafs-app/src/receipt_sheet.rs`. Every line but one in tafs itself is a button that opens
+it over the window.
+- **The head:** the kind's dot and its state ("Approved once by …" or "Refused by …" once
+  someone answered, else the kind), then the title with its amount (30 bold).
+- **The facts:** Taf, When (with the date, in the account's zone), On (what it acted on, when
+  the line names it), Outcome (bold), Why (KIFF's words, never its codes) and Decided by (who,
+  and "signed on …" when their device signed the answer).
+- **Signed in with KIFF, the receipt is read once** (`GET /v1/receipts/{trace_id}`, off the main
+  loop) and checked as above. The steps under "What happened" and "Show the full receipt" are
+  drawn from the same bytes that were checked, never from a second decode.
+- **The receipt panel** says what the check found:
+  - checked (green): signed by KIFF and unchanged, with the decision and when it was issued,
+    "Show the full receipt", Copy receipt and Share;
+  - KIFF's receipt · not signed yet (amber dot): KIFF signs within a minute; ten minutes on,
+    the receipt's id to tell support;
+  - doesn't check out (red): the line's place, amount or answer differ from what KIFF signed, or
+    the chain changed since; Copy receipt, but no Share;
+  - not read: why, and Try again; while reading, "Checking KIFF's receipt on this computer…".
+- **Share** saves the receipt as KIFF wrote it, byte for byte, where the person picks (a
+  computer has no share sheet); closing the dialog saves nothing.
+- **Open in the taf's chat** opens the taf's page and closes the sheet; **Done** closes it.
+- **Not on Linux:** the "signed on this device" panel. This computer signs no answer, so a line
+  has no signature of its own.
+
+The screenshot (`--page receipt:prop_receipt_1`) reads
+`crates/tafs-app/fixtures/activity.json` and `receipt.json`, both synthetic: a receipt not
+signed yet, since no fixture carries KIFF's signature.
