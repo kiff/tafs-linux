@@ -14,6 +14,7 @@ pub mod card;
 pub mod cards;
 pub mod coach;
 pub mod coach_lines;
+pub mod coach_send;
 pub mod connect;
 pub mod devices;
 pub mod doors;

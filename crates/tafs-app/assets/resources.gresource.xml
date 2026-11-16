@@ -15,5 +15,8 @@
     <file alias="icons/scalable/actions/tafs-checkmark-symbolic.svg">icons/tafs-checkmark-symbolic.svg</file>
     <file alias="icons/scalable/actions/tafs-creditcard-symbolic.svg">icons/tafs-creditcard-symbolic.svg</file>
     <file alias="icons/scalable/actions/tafs-viewfinder-symbolic.svg">icons/tafs-viewfinder-symbolic.svg</file>
+    <file alias="icons/scalable/actions/tafs-bubble-symbolic.svg">icons/tafs-bubble-symbolic.svg</file>
+    <file alias="icons/scalable/actions/tafs-compose-symbolic.svg">icons/tafs-compose-symbolic.svg</file>
+    <file alias="icons/scalable/actions/tafs-archive-symbolic.svg">icons/tafs-archive-symbolic.svg</file>
   </gresource>
 </gresources>

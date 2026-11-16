@@ -10,11 +10,11 @@ use serde_json::{Map, Value};
 
 use crate::work::segment;
 
-type Read<T> = Result<T, ()>;
+pub(crate) type Read<T> = Result<T, ()>;
 
 // MARK: Reading JSON as Swift's `Decodable` does.
 
-fn field<'a>(v: &'a Map<String, Value>, key: &str) -> Option<&'a Value> {
+pub(crate) fn field<'a>(v: &'a Map<String, Value>, key: &str) -> Option<&'a Value> {
     match v.get(key) {
         None | Some(Value::Null) => None,
         Some(x) => Some(x),
@@ -22,7 +22,7 @@ fn field<'a>(v: &'a Map<String, Value>, key: &str) -> Option<&'a Value> {
 }
 
 /// `decode(String.self)`: there, and a string.
-fn text(v: &Map<String, Value>, key: &str) -> Read<String> {
+pub(crate) fn text(v: &Map<String, Value>, key: &str) -> Read<String> {
     field(v, key)
         .and_then(Value::as_str)
         .map(str::to_string)
@@ -30,7 +30,7 @@ fn text(v: &Map<String, Value>, key: &str) -> Read<String> {
 }
 
 /// `decodeIfPresent(String.self)`: absent or null is none, another shape fails.
-fn text_if(v: &Map<String, Value>, key: &str) -> Read<Option<String>> {
+pub(crate) fn text_if(v: &Map<String, Value>, key: &str) -> Read<Option<String>> {
     match field(v, key) {
         None => Ok(None),
         Some(Value::String(s)) => Ok(Some(s.clone())),
@@ -39,11 +39,11 @@ fn text_if(v: &Map<String, Value>, key: &str) -> Read<Option<String>> {
 }
 
 /// `try? decodeIfPresent(String.self)`: anything but a string is none.
-fn text_lenient(v: &Map<String, Value>, key: &str) -> Option<String> {
+pub(crate) fn text_lenient(v: &Map<String, Value>, key: &str) -> Option<String> {
     text_if(v, key).ok().flatten()
 }
 
-fn bool_if(v: &Map<String, Value>, key: &str) -> Read<Option<bool>> {
+pub(crate) fn bool_if(v: &Map<String, Value>, key: &str) -> Read<Option<bool>> {
     match field(v, key) {
         None => Ok(None),
         Some(Value::Bool(b)) => Ok(Some(*b)),
@@ -51,33 +51,33 @@ fn bool_if(v: &Map<String, Value>, key: &str) -> Read<Option<bool>> {
     }
 }
 
-fn int(v: &Value) -> Read<i64> {
+pub(crate) fn int(v: &Value) -> Read<i64> {
     v.as_i64().ok_or(())
 }
 
-fn int_if(v: &Map<String, Value>, key: &str) -> Read<Option<i64>> {
+pub(crate) fn int_if(v: &Map<String, Value>, key: &str) -> Read<Option<i64>> {
     field(v, key).map(int).transpose()
 }
 
 /// `KIFFClient.decoder`'s dates: RFC 3339, with or without fractional seconds.
-fn date_of(v: &Value) -> Read<DateTime<Utc>> {
+pub(crate) fn date_of(v: &Value) -> Read<DateTime<Utc>> {
     let s = v.as_str().ok_or(())?;
     DateTime::parse_from_rfc3339(s)
         .map(|d| d.with_timezone(&Utc))
         .map_err(|_| ())
 }
 
-fn date(v: &Map<String, Value>, key: &str) -> Read<DateTime<Utc>> {
+pub(crate) fn date(v: &Map<String, Value>, key: &str) -> Read<DateTime<Utc>> {
     date_of(field(v, key).ok_or(())?)
 }
 
-fn object(v: &Value) -> Read<&Map<String, Value>> {
+pub(crate) fn object(v: &Value) -> Read<&Map<String, Value>> {
     v.as_object().ok_or(())
 }
 
 /// `decodeIfPresent([T].self)`: absent or null is none; not an array, or one element that fails,
 /// fails.
-fn array_if<T>(
+pub(crate) fn array_if<T>(
     v: &Map<String, Value>,
     key: &str,
     each: impl Fn(&Value) -> Read<T>,
@@ -89,11 +89,15 @@ fn array_if<T>(
     }
 }
 
-fn array<T>(v: &Map<String, Value>, key: &str, each: impl Fn(&Value) -> Read<T>) -> Read<Vec<T>> {
+pub(crate) fn array<T>(
+    v: &Map<String, Value>,
+    key: &str,
+    each: impl Fn(&Value) -> Read<T>,
+) -> Read<Vec<T>> {
     array_if(v, key, each)?.ok_or(())
 }
 
-fn strings(v: &Value) -> Read<String> {
+pub(crate) fn strings(v: &Value) -> Read<String> {
     v.as_str().map(str::to_string).ok_or(())
 }
 
@@ -211,6 +215,9 @@ pub fn conversation_path(taf: &str, session: Option<&str>, proof: bool, can: &[&
     }
     path
 }
+
+/// The session of a message on its way, until tafs cloud's copy takes its place.
+pub const PENDING: &str = "pending";
 
 /// Who wrote a message.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1066,6 +1073,37 @@ impl SetupThread {
         out
     }
 
+    /// The chat the thread is in (`session`): its latest message's or card's, whichever is later.
+    /// A message on its way to tafs cloud has no session yet.
+    pub fn session(&self) -> Option<String> {
+        let message = self
+            .messages
+            .iter()
+            .rev()
+            .find(|m| m.session != PENDING)
+            .map(|m| (m.at, m.session.clone()));
+        // `max(by:)`: the last of equals.
+        let shown = self
+            .components
+            .iter()
+            .fold(None, |best: Option<&ShownComponent>, c| match best {
+                Some(b) if c.first_at < b.first_at => Some(b),
+                _ => Some(c),
+            })
+            .map(|c| (c.first_at, c.session.clone()));
+        [message, shown]
+            .into_iter()
+            .flatten()
+            .fold(
+                None,
+                |best: Option<(DateTime<Utc>, String)>, x| match best {
+                    Some(b) if x.0 < b.0 => Some(b),
+                    _ => Some(x),
+                },
+            )
+            .map(|x| x.1)
+    }
+
     /// The plan, pinned above the thread.
     pub fn plan(&self) -> Option<&ShownComponent> {
         self.components
@@ -1255,6 +1293,60 @@ impl SetupThread {
         }
         Improvement::Preparing
     }
+}
+
+/// What a chat has drawn, in its order (`SteadyOrder.Entry`): each item's id, and an owner's
+/// message's words, to find tafs cloud's copy of it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Entry {
+    pub id: String,
+    pub owner_text: Option<String>,
+}
+
+/// `SteadyOrder.order`: what's on screen never moves while Coach answers. Items drawn keep their
+/// places, new ones go after them in the thread's order, and any earlier than the first drawn go
+/// before. An owner's message drawn from this device and gone now (another id and time, the same
+/// words) gives its place to tafs cloud's copy. Nothing drawn: the thread's own order.
+pub fn steady_order<T>(
+    items: Vec<T>,
+    drawn: &[Entry],
+    id: impl Fn(&T) -> String,
+    at: impl Fn(&T) -> DateTime<Utc>,
+    owner_text: impl Fn(&T) -> Option<String>,
+) -> Vec<T> {
+    if drawn.is_empty() {
+        return items;
+    }
+    let ids: std::collections::HashSet<String> = items.iter().map(&id).collect();
+    let mut slot: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+    for (i, e) in drawn.iter().enumerate() {
+        slot.entry(e.id.clone()).or_insert(i);
+    }
+    let mut taken = std::collections::HashSet::new();
+    for (i, e) in drawn.iter().enumerate() {
+        if ids.contains(&e.id) {
+            continue;
+        }
+        let Some(text) = &e.owner_text else { continue };
+        let copy = items.iter().find(|x| {
+            let k = id(x);
+            !slot.contains_key(&k) && !taken.contains(&k) && owner_text(x).as_ref() == Some(text)
+        });
+        if let Some(copy) = copy {
+            let k = id(copy);
+            slot.insert(k.clone(), i);
+            taken.insert(k);
+        }
+    }
+    let (mut known, fresh): (Vec<T>, Vec<T>) =
+        items.into_iter().partition(|x| slot.contains_key(&id(x)));
+    // A stable sort, as Swift's `sorted` on distinct slots.
+    known.sort_by_key(|x| slot[&id(x)]);
+    let start = known.iter().map(&at).min();
+    let (before, after): (Vec<T>, Vec<T>) = fresh
+        .into_iter()
+        .partition(|x| start.is_some_and(|s| at(x) < s));
+    before.into_iter().chain(known).chain(after).collect()
 }
 
 /// `KIFFMapping.vendorWords`: "stripe-mcp" or "mcp.stripe.com" → "Stripe".
@@ -1553,6 +1645,52 @@ mod tests {
                 .text,
             "declined"
         );
+    }
+
+    #[test]
+    fn the_order_drawn_stays_put() {
+        let t = |s: &str| DateTime::parse_from_rfc3339(s).unwrap().with_timezone(&Utc);
+        // (id, at, owner's words)
+        let item = |id: &str, at: &str, owner: Option<&str>| {
+            (id.to_string(), t(at), owner.map(str::to_string))
+        };
+        let order = |items: Vec<(String, DateTime<Utc>, Option<String>)>, drawn: &[Entry]| {
+            steady_order(items, drawn, |x| x.0.clone(), |x| x.1, |x| x.2.clone())
+                .into_iter()
+                .map(|x| x.0)
+                .collect::<Vec<_>>()
+        };
+        let entry = |id: &str, owner: Option<&str>| Entry {
+            id: id.into(),
+            owner_text: owner.map(str::to_string),
+        };
+        // Drawn: Coach's words, a card, then the owner's message as sent from here.
+        let drawn = [
+            entry("m|coach", None),
+            entry("c|card", None),
+            entry("m|pending", Some("Hi")),
+        ];
+        // tafs cloud's copy lands a little earlier than the card, under another id: it stays
+        // where the sent one was, and Coach's answer goes after.
+        let items = vec![
+            item("m|coach", "2026-10-16T12:00:00Z", None),
+            item("m|sess1|owner|1", "2026-10-16T12:00:01Z", Some("Hi")),
+            item("c|card", "2026-10-16T12:00:02Z", None),
+            item("m|answer", "2026-10-16T12:00:03Z", None),
+            item("m|earlier", "2026-10-16T11:00:00Z", None),
+        ];
+        assert_eq!(
+            order(items.clone(), &drawn),
+            [
+                "m|earlier",
+                "m|coach",
+                "c|card",
+                "m|sess1|owner|1",
+                "m|answer"
+            ]
+        );
+        // Nothing drawn: the thread's own order.
+        assert_eq!(order(items, &[])[0], "m|coach");
     }
 
     #[test]
