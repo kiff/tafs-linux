@@ -20,7 +20,7 @@ pub const HEADER: &str = "Planque-Device-Signature";
 /// What the device signs (`PlanqueClient.message`, planque's `device.Message`): seven lines, no
 /// trailing newline. The base without its trailing slashes, the tenant, the method, the path and
 /// query as sent, the body's SHA-256 in lowercase hex, and the signing time.
-pub fn message(
+fn message(
     base: &str,
     tenant: &str,
     method: &str,
@@ -89,6 +89,53 @@ pub fn grants_read_proof(key: &DeviceKey, device: &str, tenant: &str, base: &str
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// This computer is view-only: planque's one signature from it is the read of the account's
+    /// grants, a safe route. Nothing here can sign an approval, a confirm or any other call, and
+    /// no other file builds planque's message.
+    #[test]
+    fn this_computer_signs_nothing_at_planque_but_the_grants_read() {
+        let root = env!("CARGO_MANIFEST_DIR");
+        let source = std::fs::read_to_string(format!("{root}/src/planque.rs")).unwrap();
+        let code = &source[..source.find("#[cfg(test)]").unwrap()];
+        // One signature, in `grants_read_proof`, over a GET of the grants and nothing else.
+        assert_eq!(code.matches("sign_b64(").count(), 1);
+        assert_eq!(code.matches("message(base, tenant, ").count(), 1);
+        assert!(code.contains(r#"message(base, tenant, "GET", &grants_path(tenant), b"", &at)"#));
+        for route in ["approve", "confirm", "POST", "PUT", "DELETE", "w="] {
+            assert!(!code.contains(&format!("\"{route}")), "{route}");
+        }
+        // No other file in either crate builds planque's request message.
+        let mut files = vec![];
+        for dir in [format!("{root}/src"), format!("{root}/../tafs-app/src")] {
+            let mut stack = vec![std::path::PathBuf::from(dir)];
+            while let Some(d) = stack.pop() {
+                for e in std::fs::read_dir(d).unwrap().flatten() {
+                    let path = e.path();
+                    if path.is_dir() {
+                        stack.push(path);
+                    } else if path.extension().is_some_and(|x| x == "rs") {
+                        files.push(path);
+                    }
+                }
+            }
+        }
+        let builders: Vec<_> = files
+            .iter()
+            .filter(|f| {
+                std::fs::read_to_string(f)
+                    .unwrap()
+                    .contains("planque.request")
+            })
+            .collect();
+        assert_eq!(builders.len(), 1, "{builders:?}");
+        assert!(builders[0].ends_with("planque.rs"));
+        // And the one proof is over that read.
+        let key = DeviceKey::generate();
+        let proof = grants_read_proof(&key, "dev_1", "t_1", PLANQUE);
+        assert!(proof.starts_with("t=") && proof.contains(",v1=") && proof.ends_with(",d=dev_1"));
+        assert!(!proof.contains(",w="));
+    }
     use base64::engine::general_purpose::STANDARD;
     use base64::Engine;
     use p256::ecdsa::signature::Verifier;
