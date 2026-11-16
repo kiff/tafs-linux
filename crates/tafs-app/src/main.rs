@@ -1648,6 +1648,14 @@ impl App {
             tafs_core::account::privacy_url(words.language()),
             env!("CARGO_PKG_VERSION"),
         )
+        .and_then(|l| {
+            // `PlanRow`: tafs cloud's plan line, once the balance is read.
+            tafs_core::account::with_plan(
+                l,
+                words,
+                cloud.as_deref().and_then(|c| c.balance.as_ref()),
+            )
+        })
         .unwrap_or_else(|e| fail(e));
         let me = self.clone();
         let actions: Rc<dyn Fn(AccountAction)> =

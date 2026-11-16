@@ -37,7 +37,7 @@ for screen in welcome sign-in sign-in-code sign-in-narrow pair connected overvie
     calendar-compact) opts=(--sample --signed-in --page calendar --size 1032x1376) ;;
     devices) opts=(--sample --signed-in --page devices) ;;
     devices-sign-out) opts=(--sample --signed-in --page devices-sign-out) ;;
-    account-kiff) opts=(--home shared/contracts/home.json --me crates/tafs-app/fixtures/me-manager.json --account-reads crates/tafs-app/fixtures/account-reads.json --page account) ;;
+    account-kiff) opts=(--home shared/contracts/home.json --me crates/tafs-app/fixtures/me-manager.json --account-reads crates/tafs-app/fixtures/account-reads.json --balance crates/tafs-app/fixtures/balance-home-line.json --page account) ;;
     consent) opts=(--home shared/contracts/home.json --account-reads crates/tafs-app/fixtures/account-reads-not-given.json --page consent) ;;
     kiff-account) opts=(--home shared/contracts/home.json --people crates/tafs-app/fixtures/people-kiff.json --page kiff-account) ;;
     time-zone) opts=(--home shared/contracts/home.json --people crates/tafs-app/fixtures/people-kiff.json --page time-zone) ;;

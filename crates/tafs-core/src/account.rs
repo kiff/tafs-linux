@@ -145,6 +145,13 @@ pub enum Row {
     Destructive(String, Action),
     /// A line in red (why signing out didn't work).
     Problem(String),
+    /// `PlanRow`, once the balance is read: tafs cloud's `plan_line` (16 semibold) in
+    /// `plan_tone`'s colour, and Plan & usage under it (13, amber). It opens Plan & usage.
+    Plan {
+        line: String,
+        tone: crate::usage::Tone,
+        title: String,
+    },
 }
 
 /// What an Opens row opens.
@@ -215,6 +222,8 @@ pub enum Slot {
     Suggestions,
     /// The AI-data consent's row (`AIConsentRow`): given, with Withdraw; else its screen.
     Consent,
+    /// Export my chats (`ExportChatsSection`), with what it exports under it.
+    Export,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -351,6 +360,12 @@ pub fn lines(
                 screen: Screen::TimeZone,
             }],
         });
+        // Their own copy of their chats (`ExportChatsSection`).
+        sections.push(Section {
+            slot: Some(Slot::Export),
+            header: None,
+            rows: vec![],
+        });
     }
     let device = l("device.linux")?;
     sections.push(Section {
@@ -400,6 +415,38 @@ pub fn lines(
         title: l("settings.title")?,
         sections,
     })
+}
+
+/// `PlanRow` once tafs cloud's balance is read with a `plan_line`: the Plan section's row says
+/// it, in `plan_tone`'s colour, with Plan & usage under it. Without one, the title alone stays.
+pub fn with_plan(
+    mut lines: AccountLines,
+    w: &WordBook,
+    balance: Option<&crate::usage::Balance>,
+) -> Result<AccountLines, WordsError> {
+    let Some((line, tone)) = balance.and_then(|b| Some((b.plan_line.clone()?, &b.plan_tone)))
+    else {
+        return Ok(lines);
+    };
+    let title = w.line("usage.title")?;
+    for section in &mut lines.sections {
+        for row in &mut section.rows {
+            if matches!(
+                row,
+                Row::Opens {
+                    screen: Screen::Usage,
+                    ..
+                }
+            ) {
+                *row = Row::Plan {
+                    line: line.clone(),
+                    tone: crate::usage::tone(tone),
+                    title: title.clone(),
+                };
+            }
+        }
+    }
+    Ok(lines)
 }
 
 /// The KIFF account's own screen (`AccountView`): its name, its id when it isn't its name, who is

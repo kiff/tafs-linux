@@ -14,7 +14,10 @@ order:
   KIFF account with its name, and Signed in as with the email, said once (`AccountLines`): none
   when the account is named after it, as a Solo account is.
 - **People & apps** (KIFF): People & groups, Devices, Connect apps.
-- **Plan** (KIFF): Plan & usage, its title alone until the balance is read (`PlanRow`).
+- **Plan** (KIFF, `PlanRow`): once tafs cloud's balance is read with its `plan_line`, that line
+  (16 semibold, in `plan_tone`'s colour: amber for a warning, red while waiting) with Plan & usage
+  under it (13, amber); else Plan & usage alone. Either opens Plan & usage. It's the balance read
+  with Home, for the sidebar's plan line.
 - **Coach** (KIFF, for someone who may use Coach, once read): Show suggestions, a switch, with
   tafs cloud's words for what it does now under it (13, soft), read when Account opens
   (`GET /v1/me/suggestions`). It works for someone who manages Cards (`cards.manage`, none listed
@@ -31,12 +34,17 @@ order:
 - **Language:** the app's language by its own name ("English", "Français"), and Change language.
 - **The AI-data consent** (KIFF, once read, `GET /v1/me/ai-consent`; see below).
 - **Time zone** (KIFF): the account's, from KIFF, else UTC.
+- **Export my chats** (KIFF, `ExportChatsSection`), with what it exports under it: the same row
+  as the KIFF account's (below).
 - **How it works:** "Every action a taf takes goes through KIFF, … Your answers are signed on this
   computer."
 - **Legal:** Terms and Privacy policy, tafs's own pages, saying "(in English)" outside English.
 - **About:** Version, and "They taf. You kiff."
 - **Account actions:** in the sample, Sign in with KIFF and Clear the sample; signed in, Sign out,
   and under it why signing out didn't work.
+
+Until the list's end is in sight, a chevron at its foot, over a fade to the background, says
+there's more below, as the iPad's does. It takes no taps.
 
 ## KIFF's account
 
@@ -79,6 +87,8 @@ The screenshots read `--account-reads` (`{"suggestions": …, "consent": …}`, 
 answers it; nothing is sent): `account-kiff` with `--me crates/tafs-app/fixtures/me-manager.json`
 (an account that may use Coach and manages Cards) and `account-reads.json` (consent given), and
 `consent` (`--page consent`, the screen as after sign-in, `account-reads-not-given.json`).
+`account-kiff` also reads `--balance crates/tafs-app/fixtures/balance-home-line.json`, for the
+Plan row's line.
 
 ## Signing out
 
@@ -96,9 +106,17 @@ Then (`AppModel.signOut`):
 **Clear the sample** forgets the sample and opens the welcome; **Sign in with KIFF** from the
 sample opens the sign-in over it.
 
-## Not yet
+## Against the iPad's, line by line
 
-- Nothing on this screen: every row opens its screen.
+Each section and row of `SettingsView` is here, in its order, with `AccountLines` and `PlanRow`.
+What differs:
+- **The theme's segments** have their words alone: `ThemePicker`'s labels carry SF Symbols,
+  which this computer doesn't have.
+- **How it works** says "Your answers are signed on this computer.", the shared line with this
+  computer's name in it. This computer only views and signs nothing, so the line isn't true
+  here; the shared strings have no other line for a computer that only views yet.
+- **Under Account in the sidebar** is the account's name (`accountLabel`), as the iPad's; its
+  email is on Account itself, in Signed in as.
 
 ## Time zone
 
@@ -233,17 +251,16 @@ nothing. `--page devices-sign-out` opens the question over the sample's iPhone (
 Not on Linux: **Add a device**, since a phone pairs a computer (`PairComputerView`), never the
 computer itself; and **the account's passkeys** (`DevicesView`'s passkeys section), which the
 iPad draws only signed in with KIFF and which aren't ported yet.
-- **Change language** opens **Account › Language** (`LanguagePicker`, `language_picker.rs`):
-  "This computer's language" first, then the app's 8 languages in tafs's order, each named in
-  itself ("Français", "Polski"), the one in use checked (`tafs-core/account.rs` ›
-  `language_rows`). The one in use does nothing. Any other applies at once: it's kept in the
-  config folder (`~/.config/tafs/language`), and the window is drawn again in it, on Account,
-  with no relaunch. Every read is made again, asking tafs cloud and KIFF in the new language
-  first. This computer's language removes the pick, and tafs speaks the desktop's again
-  (`LANGUAGE`, `LANG`). `--lang` still wins, and a screenshot never reads the pick.
-- **Coach's suggestions, the AI-data consent, Export my chats:** with their reads; the iPad draws
-  none until they're read either.
-- **The plan's line** (`plan_line`) in Plan, with tafs cloud's balance.
+## Language
+
+**Change language** opens **Account › Language** (`LanguagePicker`, `language_picker.rs`):
+"This computer's language" first, then the app's 8 languages in tafs's order, each named in
+itself ("Français", "Polski"), the one in use checked (`tafs-core/account.rs` ›
+`language_rows`). The one in use does nothing. Any other applies at once: it's kept in the
+config folder (`~/.config/tafs/language`), and the window is drawn again in it, on Account,
+with no relaunch. Every read is made again, asking tafs cloud and KIFF in the new language
+first. This computer's language removes the pick, and tafs speaks the desktop's again
+(`LANGUAGE`, `LANG`). `--lang` still wins, and a screenshot never reads the pick.
 
 ## Alerts
 

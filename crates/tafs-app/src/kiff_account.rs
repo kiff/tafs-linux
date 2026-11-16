@@ -105,7 +105,7 @@ async fn save_where(
 /// `ExportChatsSection`: Export my chats, "Preparing your chats…" with a spinner while it's
 /// read, then the files saved where the person picks. After it, "Ready: … Share again" saves
 /// them again; when it fails, why in red, and the row says Try again.
-fn export_section(w: &Rc<WordBook>, source: Option<Rc<ExportSource>>) -> gtk::Box {
+pub fn export_section(w: &Rc<WordBook>, source: Option<Rc<ExportSource>>) -> gtk::Box {
     use std::cell::RefCell;
     let g = group();
     let Ok(lines) = tafs_core::export_chats::lines(w) else {
