@@ -62,3 +62,34 @@ the scripts' first two rounds, newest first: what each Card allowed ("€40, wit
 - **What a line acted on** (`naming`, the runs' call refs): KIFF's hash alone names nothing.
 - **"Signed on this computer"** and the receipt's signed mark under a line.
 - **Which vendor refused** a call, by its connection (`vendors`).
+
+## Search (signed in)
+
+The iPad's `RecordSearchBox`, `RecordResults`, `RecordHitRow` and `RecordCaseSheet`
+(`RecordSearchViews.swift`) with `TafsCloud+Record.swift`'s search and case, on Linux:
+`tafs-core/src/record_search.rs` (tested against the pinned `taf-activity.json` entry) and
+`crates/tafs-app/src/record_search.rs`.
+
+- **The box**, under the lead, signed in with KIFF: tafs cloud's words as its placeholder (read once,
+  `GET /v1/record?q=&limit=1`'s `hint`; the app's "Search by order, invoice, amount or action"
+  until they come). What's typed is searched 0.4 s after the last key (`recordTypingPause`), Enter
+  searches at once, the same words aren't searched again, and an emptied box shows the Record at
+  once.
+- **A search** (`GET /v1/record?q=`, what's typed percent-encoded but its letters and digits)
+  stands in for the chips and the days. Its pages, in tafs cloud's groups (or all as one untitled
+  group): each group's title (12 semibold, dim), then each call under its taf's name (11, mono,
+  upper case), drawn as its taf's Activity draws it (`SourceActivityRow`), and what it's about
+  (amber, with ›), which opens its case. "Nothing matched", in tafs cloud's words, when every page
+  is empty; its error in red; More while a next page waits (a cursor tafs cloud refuses, 409,
+  searches again from the top); its end words after the last.
+- **A case** (`GET /v1/record/cases/{about}`, one escaped segment), over the window: what it's
+  about (24 bold), the step that didn't go through in red, in tafs cloud's words, then every call
+  about it, oldest first; Done at the top.
+
+Read as the iPad's decoders: a hit needs its taf's id and an Activity entry that reads; the
+words are forgiven; a blank `about` opens no case. `--home shared/contracts/home.json
+--record-search crates/tafs-app/fixtures/record-search.json --page record-search:1042` (synthetic)
+draws a search, CI's `record-search`; nothing is sent.
+
+Not yet: exporting receipts (`ExportReceiptsRow`); a call from a taf not on Home drawn as the
+iPad's plain panel without its next step (it's drawn as the others here).

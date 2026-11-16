@@ -1,0 +1,195 @@
+{
+  "about": "Synthetic: a Record search for 1042 and its case, built from the pinned taf-activity.json entry, for the Record search's screenshots (--record-search). Made up, not from any account.",
+  "answer": {
+    "page": {
+      "q": "1042",
+      "hint": "Search by order, invoice, amount or action",
+      "groups": [
+        {
+          "id": "today",
+          "title": "Today",
+          "entries": [
+            {
+              "id": "hit-1",
+              "at": "2026-11-01T12:00:00.000Z",
+              "kind": "done",
+              "title": "Refund a payment",
+              "detail": "Done, within its Card",
+              "time": "12:00",
+              "day": "2026-11-01",
+              "day_title": "Today",
+              "call": {
+                "proposal_id": "proposal-0",
+                "actor_id": "agent-example",
+                "action_name": "read_case",
+                "title": "Read a case",
+                "outcome": "allowed",
+                "created_at": "2026-11-01T12:00:00.000Z",
+                "tool_outcome": {
+                  "status": "done"
+                }
+              },
+              "amount_text": "€40.00",
+              "taf": {
+                "id": "taf-aaaa0000000000000000",
+                "name": "Rae"
+              },
+              "about": "Order #1042"
+            },
+            {
+              "id": "hit-2",
+              "at": "2026-11-01T12:00:00.000Z",
+              "kind": "done",
+              "title": "Read a case",
+              "detail": "Done, within its Card",
+              "time": "11:52",
+              "day": "2026-11-01",
+              "day_title": "Today",
+              "call": {
+                "proposal_id": "proposal-0",
+                "actor_id": "agent-example",
+                "action_name": "read_case",
+                "title": "Read a case",
+                "outcome": "allowed",
+                "created_at": "2026-11-01T12:00:00.000Z",
+                "tool_outcome": {
+                  "status": "done"
+                }
+              },
+              "amount_text": null,
+              "taf": {
+                "id": "taf-aaaa0000000000000000",
+                "name": "Rae"
+              },
+              "about": "Order #1042"
+            }
+          ]
+        },
+        {
+          "id": "older",
+          "title": "Earlier this week",
+          "entries": [
+            {
+              "id": "hit-3",
+              "at": "2026-11-01T12:00:00.000Z",
+              "kind": "done",
+              "title": "Send a reply",
+              "detail": "Refused by the app",
+              "time": "Mon 09:10",
+              "day": "2026-11-01",
+              "day_title": "Today",
+              "call": {
+                "proposal_id": "proposal-0",
+                "actor_id": "agent-example",
+                "action_name": "read_case",
+                "title": "Read a case",
+                "outcome": "allowed",
+                "created_at": "2026-11-01T12:00:00.000Z",
+                "tool_outcome": {
+                  "status": "done"
+                }
+              },
+              "amount_text": null,
+              "taf": {
+                "id": "taf-other",
+                "name": "Sam"
+              },
+              "about": "Order #1042"
+            }
+          ]
+        }
+      ],
+      "end_words": "That's every call that matched."
+    },
+    "case": {
+      "about": "Order #1042",
+      "steps": [
+        {
+          "id": "hit-3",
+          "at": "2026-11-01T12:00:00.000Z",
+          "kind": "done",
+          "title": "Send a reply",
+          "detail": "Refused by the app",
+          "time": "Mon 09:10",
+          "day": "2026-11-01",
+          "day_title": "Today",
+          "call": {
+            "proposal_id": "proposal-0",
+            "actor_id": "agent-example",
+            "action_name": "read_case",
+            "title": "Read a case",
+            "outcome": "allowed",
+            "created_at": "2026-11-01T12:00:00.000Z",
+            "tool_outcome": {
+              "status": "done"
+            }
+          },
+          "amount_text": null,
+          "taf": {
+            "id": "taf-other",
+            "name": "Sam"
+          },
+          "about": "Order #1042"
+        },
+        {
+          "id": "hit-2",
+          "at": "2026-11-01T12:00:00.000Z",
+          "kind": "done",
+          "title": "Read a case",
+          "detail": "Done, within its Card",
+          "time": "11:52",
+          "day": "2026-11-01",
+          "day_title": "Today",
+          "call": {
+            "proposal_id": "proposal-0",
+            "actor_id": "agent-example",
+            "action_name": "read_case",
+            "title": "Read a case",
+            "outcome": "allowed",
+            "created_at": "2026-11-01T12:00:00.000Z",
+            "tool_outcome": {
+              "status": "done"
+            }
+          },
+          "amount_text": null,
+          "taf": {
+            "id": "taf-aaaa0000000000000000",
+            "name": "Rae"
+          },
+          "about": "Order #1042"
+        },
+        {
+          "id": "hit-1",
+          "at": "2026-11-01T12:00:00.000Z",
+          "kind": "done",
+          "title": "Refund a payment",
+          "detail": "Done, within its Card",
+          "time": "12:00",
+          "day": "2026-11-01",
+          "day_title": "Today",
+          "call": {
+            "proposal_id": "proposal-0",
+            "actor_id": "agent-example",
+            "action_name": "read_case",
+            "title": "Read a case",
+            "outcome": "allowed",
+            "created_at": "2026-11-01T12:00:00.000Z",
+            "tool_outcome": {
+              "status": "done"
+            }
+          },
+          "amount_text": "€40.00",
+          "taf": {
+            "id": "taf-aaaa0000000000000000",
+            "name": "Rae"
+          },
+          "about": "Order #1042"
+        }
+      ],
+      "failed": {
+        "id": "hit-3",
+        "words": "The reply to the customer didn't go through."
+      }
+    }
+  }
+}

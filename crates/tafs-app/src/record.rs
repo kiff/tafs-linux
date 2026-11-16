@@ -25,6 +25,8 @@ pub struct RecordData {
     pub tafs: Vec<Taf>,
     /// `isWaiting`: whether a held line's call is still held.
     pub waiting: Rc<dyn Fn(&Entry) -> bool>,
+    /// Signed in with KIFF: the search across the person's tafs.
+    pub search: Option<Rc<crate::record_search::SearchSource>>,
 }
 
 /// Draws the chips and the days again, after a choice.
@@ -52,10 +54,22 @@ pub fn page(w: Rc<WordBook>, data: Rc<RecordData>) -> gtk::Widget {
     let tafs_scroll = gtk::ScrolledWindow::new();
     tafs_scroll.set_policy(gtk::PolicyType::Automatic, gtk::PolicyType::Never);
     tafs_scroll.set_child(Some(&tafs_row));
-    column.append(&tafs_scroll);
     let filters_row = gtk::Box::new(gtk::Orientation::Horizontal, 6);
-    column.append(&filters_row);
     let list = gtk::Box::new(gtk::Orientation::Vertical, 10);
+    // Signed in: the search box, and while a search is shown, it stands in for the list.
+    if let Some(source) = &data.search {
+        let (a, b, c) = (tafs_scroll.clone(), filters_row.clone(), list.clone());
+        let showing: Rc<dyn Fn(bool)> = Rc::new(move |searching| {
+            a.set_visible(!searching);
+            b.set_visible(!searching);
+            c.set_visible(!searching);
+        });
+        let ui = crate::record_search::build(w.clone(), source.clone(), showing);
+        column.append(&ui.entry);
+        column.append(&ui.results);
+    }
+    column.append(&tafs_scroll);
+    column.append(&filters_row);
     column.append(&list);
 
     let state = Rc::new(RefCell::new(State {

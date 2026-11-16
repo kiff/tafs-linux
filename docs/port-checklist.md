@@ -32,6 +32,7 @@ ports a file updates its line here.
 | HomeRecipes.swift | 242 | Home with no taf: the recipes | `HomeRecipes` whole: tafs cloud's line, the category chips in their colours narrowing the list, each category's recipes (`RecipeRow`: headline, line, apps with their logos from tafs cloud, the colour's edge); `OwnWordsRow`; `RecipeSheet` whole; `TafsCloud.Recipes` read as its decoders (`recipes.rs`, `tafs-core/recipes.rs`) | Coach, which "Say it in your own words" and "Hand it to Coach" open (both there, dimmed) |
 | RecipeGallery.swift | 135 | The jobs' gallery | `RecipeGallerySheet` browsing (title, "All jobs", every job, each sheet read only with "Try it with Coach"), `ExploreRow`, `RecipeStrip` with See all jobs (`recipes.rs`, `shell.rs`, `tafs-core/recipes.rs`) | `.create` from + New, with its own-words row: with Coach |
 | HaltScreen.swift | 176 | A halt of one taf or every taf | `HaltScreen` whole: halting (one tap, unsigned), Halting… with its parts and Halt again, read every 2 s; `HaltRow` framed on a taf's Card; Halt all in the sidebar (`halt.rs`, `tafs-core/halt.rs`) | Resuming (signed by the device: there, dimmed, with why); Siri's tip (not for Linux) |
+| RecordSearchViews.swift | 192 | The Record's search | `RecordSearchBox`, `RecordResults`, `RecordHitRow`, `RecordCaseSheet`; tafs cloud's search and case read as its decoders (`record_search.rs`, `tafs-core/record_search.rs`) | `ExportReceiptsRow`; a hit from a taf not on Home as its plain panel |
 | HomeSplitView.swift | 584 | The sidebar for the whole app and what it opens | The brand, the screens with Needs you's count, NEEDS YOU's held calls, Your tafs relevant now, Coach and Account at the foot, the chosen row's fill (`shell.rs`, `tafs-core/sidebar.rs`) | What each row opens (title only until each screen is ported); Shared with you; Other agents; tafs being set up and Discard; the recipes strip and Explore; + New and its gallery; the halt-all row (sidebar without `tab`); Unreachable and Plan lines at the foot; Home read from tafs cloud |
 
 ## Not started
@@ -55,7 +56,6 @@ ports a file updates its line here.
 | PairSignInView.swift | 104 | Signing in from another phone | KIFF/Pairing |
 | PlanViews.swift | 268 | Buying credits (held for the owner's money question) | |
 | QuestionsCard.swift | 121 | Several questions at once | QuestionAnswers |
-| RecordSearchViews.swift | 192 | The Record's search | |
 | ReportAnswerSheet.swift | 124 | Report an answer | |
 | SetupChatView.swift | 1946 | Coach's conversation | SetupComponent, SetupShape, SentMessages |
 | SetupShapePanel.swift | 130 | What Coach has made so far | SetupShape |
