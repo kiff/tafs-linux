@@ -745,3 +745,104 @@ fn a_halt_as_tafs_cloud_answers_it() {
         "tafs couldn't halt it. KIFF answered 503"
     );
 }
+
+#[test]
+fn the_record_searched() {
+    use tafs_core::record_search::{self, RecordCase, Search, SearchPage};
+    let activity: Value = serde_json::from_slice(&contract("taf-activity.json")).unwrap();
+    let entry = activity["entries"]
+        .get(0)
+        .cloned()
+        .unwrap_or_else(|| activity["groups"][0]["entries"][0].clone());
+    let mut found = entry.clone();
+    found["taf"] = serde_json::json!({"id": "taf-1", "name": "Rae"});
+    found["about"] = serde_json::json!("Order #1042");
+    let mut blank_about = found.clone();
+    blank_about["about"] = serde_json::json!("  ");
+    let page = SearchPage::read(
+        &serde_json::to_vec(&serde_json::json!({
+            "q": "1042", "hint": "Search an order, an invoice, an amount",
+            "entries": [found, blank_about], "next_cursor": "c2", "none_words": "Nothing matched."
+        }))
+        .unwrap(),
+    )
+    .expect("reads");
+    assert_eq!(page.hint, "Search an order, an invoice, an amount");
+    assert_eq!(page.entries[0].taf_id, "taf-1");
+    assert_eq!(page.entries[0].taf_name, "Rae");
+    assert_eq!(page.entries[0].about.as_deref(), Some("Order #1042"));
+    // A blank about opens no case.
+    assert_eq!(page.entries[1].about, None);
+    // No groups: every entry as one, untitled.
+    let shown = page.shown_groups();
+    assert_eq!(shown.len(), 1);
+    assert_eq!(shown[0].title, "");
+    assert_eq!(shown[0].entries.len(), 2);
+    // More follows: no end words yet; nothing matched only when every page is empty.
+    let s = Search {
+        q: "1042".into(),
+        pages: vec![page],
+        loading: false,
+        error: None,
+    };
+    assert_eq!(s.next_cursor(), Some("c2"));
+    assert_eq!(s.end_words(), None);
+    assert_eq!(s.none_words(), None);
+    let empty =
+        SearchPage::read(br#"{"none_words": "Nothing matched.", "end_words": "That's all."}"#)
+            .unwrap();
+    let s = Search {
+        q: "x".into(),
+        pages: vec![empty],
+        loading: false,
+        error: None,
+    };
+    assert_eq!(s.none_words(), Some("Nothing matched."));
+    assert_eq!(s.end_words(), Some("That's all."));
+
+    // Read as the iPad's decoder: a hit without its taf's id, or entries that aren't a list, fail.
+    let mut no_taf = entry.clone();
+    no_taf["taf"] = serde_json::json!({"name": "Rae"});
+    assert!(SearchPage::read(
+        &serde_json::to_vec(&serde_json::json!({"entries": [no_taf]})).unwrap()
+    )
+    .is_none());
+    assert!(SearchPage::read(br#"{"entries": "x"}"#).is_none());
+    // The words are forgiven.
+    assert_eq!(SearchPage::read(br#"{"hint": 3}"#).unwrap().hint, "");
+
+    // A case: about required, failed forgiven, its words only when there are some.
+    let mut step = entry.clone();
+    step["taf"] = serde_json::json!({"id": "taf-1"});
+    let case = RecordCase::read(
+        &serde_json::to_vec(&serde_json::json!({
+            "about": "Order #1042", "steps": [step],
+            "failed": {"id": "e1", "words": "The refund didn't go through.",
+                       "next": {"kind": "try_later", "words": "Try again later"}}
+        }))
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(case.steps[0].taf_name, "");
+    assert_eq!(case.failed_words(), Some("The refund didn't go through."));
+    assert_eq!(case.failed.unwrap().next.unwrap().kind, "try_later");
+    let case = RecordCase::read(br#"{"about": "x", "failed": "not an object"}"#).unwrap();
+    assert_eq!(case.failed, None);
+    assert!(RecordCase::read(br#"{"steps": []}"#).is_none());
+
+    // The paths: what's typed encoded but its letters and digits; the case's about as one segment.
+    assert_eq!(
+        record_search::search_path("€40 #1042", None, None),
+        "/v1/record?q=%E2%82%AC40%20%231042"
+    );
+    assert_eq!(
+        record_search::search_path("a", Some("c/2"), Some(1)),
+        "/v1/record?q=a&cursor=c%2F2&limit=1"
+    );
+    assert_eq!(
+        record_search::case_path("Order #1042/x"),
+        "/v1/record/cases/Order%20%231042%2Fx"
+    );
+    assert_eq!(record_search::asked("  1042 "), Some("1042".into()));
+    assert_eq!(record_search::asked("   "), None);
+}

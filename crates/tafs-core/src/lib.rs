@@ -23,6 +23,7 @@ pub mod pairing;
 pub mod people;
 pub mod recipes;
 pub mod record;
+pub mod record_search;
 pub mod sample;
 pub mod session;
 pub mod sidebar;
