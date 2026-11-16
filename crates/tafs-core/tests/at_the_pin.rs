@@ -4,7 +4,7 @@
 use chrono::{Local, TimeZone};
 use tafs_core::sample;
 use tafs_core::signin::{device_name, KiffError};
-use tafs_core::words::{placeholders, WordBook, SHIPPED};
+use tafs_core::words::{demonstrative, placeholders, WordBook, SHIPPED};
 
 fn book(lang: &str) -> WordBook {
     WordBook::load(&WordBook::default_root(), lang)
@@ -383,6 +383,68 @@ fn every_line_is_there_in_every_language_with_the_values_english_has() {
             assert_eq!(asked, given, "{lang} {key}");
             let filled: Vec<(&str, &str)> = values.iter().map(|v| (*v, "x")).collect();
             w.get(key, &filled).unwrap();
+        }
+    }
+}
+
+/// The pinned `generate.py`'s `THIS` table, as `(language, starts, before, other)`; none when the pin
+/// doesn't carry it. Its one line reads `THIS = {"fr": ("…", "cet ", "ce ")}`: every quoted string, in
+/// fours.
+fn pinned_this_rules() -> Option<Vec<(String, String, String, String)>> {
+    let source = std::fs::read_to_string(WordBook::default_root().join("generate.py")).ok()?;
+    let line = source.lines().find(|l| l.starts_with("THIS = {"))?;
+    let quoted: Vec<String> = line
+        .split('"')
+        .skip(1)
+        .step_by(2)
+        .map(str::to_string)
+        .collect();
+    assert!(
+        !quoted.is_empty() && quoted.len().is_multiple_of(4),
+        "the pinned THIS line doesn't read as rules: {line}"
+    );
+    Some(
+        quoted
+            .chunks(4)
+            .map(|r| (r[0].clone(), r[1].clone(), r[2].clone(), r[3].clone()))
+            .collect(),
+    )
+}
+
+#[test]
+fn the_this_rule_is_the_pinned_generators() {
+    // `demonstrative` copies the shared generate.py's THIS table: once the pin carries it, each
+    // language's letters and words must be this app's, letter by letter, so the copy can't drift.
+    // Before the pin carries it, no line at the pin may use the form.
+    let Some(rules) = pinned_this_rules() else {
+        for lang in SHIPPED {
+            let w = book(lang);
+            for key in w.keys() {
+                let raw = w.raw(key).map(|v| v.to_string()).unwrap_or_default();
+                assert!(
+                    !raw.contains("|this}") && !raw.contains("|This}"),
+                    "{lang} {key} uses |this before the pin has its rule"
+                );
+            }
+        }
+        return;
+    };
+    for (lang, starts, before, other) in rules {
+        for letter in "abcdefghijklmnopqrstuvwxyzàâäçéèêëîïôöùûüœæ"
+            .chars()
+            .chain(starts.chars())
+        {
+            let name = format!("{letter}x");
+            let word = if starts.contains(letter) {
+                &before
+            } else {
+                &other
+            };
+            assert_eq!(
+                demonstrative(&lang, &name, false),
+                format!("{word}{name}"),
+                "{lang} {name}"
+            );
         }
     }
 }
