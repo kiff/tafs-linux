@@ -1544,6 +1544,11 @@ impl App {
                 (Mode::Kiff, Some(kept)) => connect::ConnectSource::Cloud {
                     token: kept.token.clone(),
                     languages: self.languages.clone(),
+                    connectable: tafs
+                        .iter()
+                        .filter(|t| t.manages)
+                        .filter_map(|t| t.cloud_id.clone())
+                        .collect(),
                 },
                 _ => connect::ConnectSource::None,
             },
