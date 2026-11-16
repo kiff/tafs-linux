@@ -58,6 +58,16 @@ pub fn refuse(w: &WordBook, mode: Mode, act: &tafs_core::signed::Act, slot: &gtk
         Ok(Some(n)) => {
             slot.append(&not_ready(&n));
             slot.set_visible(true);
+            // Measured as it was added, the wrapped line can keep a one-line height: it's
+            // measured again once drawn, so the sheet or screen around it makes room.
+            let slot = slot.clone();
+            gtk::glib::idle_add_local_once(move || {
+                let mut c = slot.first_child();
+                while let Some(w) = c {
+                    w.queue_resize();
+                    c = w.first_child();
+                }
+            });
         }
         _ => slot.set_visible(false),
     }

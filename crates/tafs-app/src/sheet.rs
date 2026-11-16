@@ -43,11 +43,16 @@ pub fn new(title: &str, cancel: &str, confirm: Option<&str>, width: i32) -> Shee
     toolbar.set_content(Some(&scroller));
     crate::widgets::ground(&toolbar);
     let dialog = adw::Dialog::new();
-    // It grows when a line comes under its content, as the can't-approve words do, at its width.
+    // It grows when a line comes under its content, as the can't-approve words do, at its width:
+    // the clamp keeps a long line's natural width from widening it.
     dialog.set_follows_content_size(true);
-    toolbar.set_size_request(width, -1);
+    let clamp = adw::Clamp::new();
+    clamp.set_maximum_size(width);
+    clamp.set_tightening_threshold(width);
+    clamp.set_size_request(width, -1);
     dialog.set_title(title);
-    dialog.set_child(Some(&toolbar));
+    clamp.set_child(Some(&toolbar));
+    dialog.set_child(Some(&clamp));
     {
         let d = dialog.downgrade();
         cancel.connect_clicked(move |_| {

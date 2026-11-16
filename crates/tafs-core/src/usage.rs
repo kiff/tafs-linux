@@ -727,6 +727,144 @@ pub fn request_line(w: &WordBook, r: &PackRequest, u: &KiffUsage) -> Result<Stri
     )
 }
 
+/// What a member asks for (`askAdmin`), unsigned as the session: a raise, or a pack by its id,
+/// with the reason they gave (its first 500 characters, trimmed). None when it asks for nothing.
+pub fn ask_request(
+    raise: bool,
+    pack: Option<&str>,
+    reason: &str,
+) -> Option<crate::signed::Unsigned> {
+    let reason: String = reason.chars().take(500).collect();
+    let mut body = serde_json::Map::new();
+    body.insert("reason".into(), Value::String(reason.trim().to_string()));
+    if raise {
+        body.insert("kind".into(), Value::String("raise".into()));
+    } else {
+        body.insert("pack".into(), Value::String(pack?.to_string()));
+    }
+    crate::signed::Unsigned::new(
+        "POST",
+        PACK_REQUESTS_PATH.into(),
+        serde_json::to_vec(&body).ok()?,
+    )
+}
+
+/// `POST /v1/me/pack-requests` at KIFF.
+pub const PACK_REQUESTS_PATH: &str = "/v1/me/pack-requests";
+
+/// The member takes their request back (`withdrawRequest`), unsigned as the session.
+pub fn withdraw_request(id: &str) -> Option<crate::signed::Unsigned> {
+    crate::signed::Unsigned::new(
+        "POST",
+        format!("{PACK_REQUESTS_PATH}/{}/withdraw", escaped(id)),
+        b"{}".to_vec(),
+    )
+}
+
+/// Declining a member's request (`declineRequest`), which the iPad signs.
+pub fn decline_act(r: &PackRequest) -> crate::signed::Act {
+    crate::signed::Act::DeclineRequest {
+        request: r.id.clone(),
+    }
+}
+
+/// `offeredPacks`: the packs a member may ask for, the First month pack first while tafs cloud
+/// says it can be bought.
+pub fn offered_packs<'a>(u: &'a KiffUsage, balance: Option<&Balance>) -> Vec<&'a Pack> {
+    let first_month = balance
+        .and_then(|b| b.balance.buy.as_ref())
+        .and_then(|b| b.first_month_ready)
+        == Some(true);
+    u.store
+        .as_ref()
+        .map(|s| s.offered(first_month))
+        .unwrap_or_default()
+}
+
+/// `AskAdminView`'s words: Ask an admin, what asking does (for a raise or a pack), Which pack,
+/// Why (optional) and its hint, Ask (Asking… while it's sent), and Cancel.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AskSheet {
+    pub title: String,
+    pub line: String,
+    pub which_pack: String,
+    pub why: String,
+    pub hint: String,
+    pub ask: String,
+    pub asking: String,
+    pub cancel: String,
+}
+
+pub fn ask_sheet(w: &WordBook, raise: bool) -> Result<AskSheet, WordsError> {
+    Ok(AskSheet {
+        title: w.line("usage.requests.ask_admin")?,
+        line: w.line(if raise {
+            "billing.ask.line_raise"
+        } else {
+            "billing.ask.line_pack"
+        })?,
+        which_pack: w.line("usage.requests.which_pack")?,
+        why: w.line("usage.requests.why_optional")?,
+        hint: w.line("billing.what_credits")?,
+        ask: w.line("usage.requests.ask")?,
+        asking: w.line("usage.requests.asking")?,
+        cancel: w.line("common.cancel")?,
+    })
+}
+
+/// Whether Ask may be tapped: the plan asks for something, a pack is chosen when it's a pack,
+/// and nothing is on its way.
+pub fn can_ask(raise: Option<bool>, pack: Option<&str>, sending: bool) -> bool {
+    match raise {
+        None => false,
+        Some(true) => !sending,
+        Some(false) => pack.is_some() && !sending,
+    }
+}
+
+/// `DeclineRequestView`'s words: its question, Note (optional) and its hint, Decline (Declining…
+/// while it's sent), and Cancel.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DeclineSheet {
+    pub title: String,
+    pub question: String,
+    pub note: String,
+    pub hint: String,
+    pub decline: String,
+    pub cancel: String,
+}
+
+pub fn decline_sheet(
+    w: &WordBook,
+    r: &PackRequest,
+    u: &KiffUsage,
+) -> Result<DeclineSheet, WordsError> {
+    Ok(DeclineSheet {
+        title: w.line("coach.approval.decline")?,
+        question: if r.kind == "raise" {
+            w.line("billing.request.decline_raise_title")?
+        } else {
+            w.get(
+                "billing.request.decline_pack_title",
+                &[("pack", &pack_line(w, r.pack.as_deref(), u)?)],
+            )?
+        },
+        note: w.line("usage.requests.note_optional")?,
+        hint: w.line("usage.requests.note_hint")?,
+        decline: w.line("coach.approval.decline")?,
+        cancel: w.line("common.cancel")?,
+    })
+}
+
+/// Why asking didn't go (`notSent`), or withdrawing didn't (`notWithdrawn`).
+pub fn not_sent(w: &WordBook, why: &str) -> Result<String, WordsError> {
+    w.get("billing.request.not_sent", &[("why", why)])
+}
+
+pub fn not_withdrawn(w: &WordBook, why: &str) -> Result<String, WordsError> {
+    w.get("billing.request.not_withdrawn", &[("why", why)])
+}
+
 /// `Date.shown(date: .long)`: the long date in each shipped language ("December 31, 2026",
 /// "31 décembre 2026").
 pub fn long_date(language: &str, day: chrono::NaiveDate) -> String {
@@ -992,5 +1130,59 @@ mod tests {
         assert_eq!(long_date("de", d), "3. Dezember 2026");
         assert_eq!(long_date("pt", d), "3 de dezembro de 2026");
         assert_eq!(long_date("pl", d), "3 grudnia 2026");
+    }
+
+    #[test]
+    fn asking_an_admin_and_withdrawing_are_sent_unsigned() {
+        let raise = ask_request(true, None, "  For the month end  ").unwrap();
+        assert_eq!(
+            (raise.method(), raise.path()),
+            ("POST", "/v1/me/pack-requests")
+        );
+        let body: Value = serde_json::from_slice(raise.body()).unwrap();
+        assert_eq!(body["kind"], "raise");
+        assert_eq!(body["reason"], "For the month end");
+        assert!(body.get("pack").is_none());
+        let pack = ask_request(false, Some("rayo"), &"x".repeat(600)).unwrap();
+        let body: Value = serde_json::from_slice(pack.body()).unwrap();
+        assert_eq!(body["pack"], "rayo");
+        assert_eq!(body["reason"].as_str().unwrap().len(), 500);
+        assert!(body.get("kind").is_none());
+        // A pack request names its pack.
+        assert_eq!(ask_request(false, None, ""), None);
+        let w = withdraw_request("r 1").unwrap();
+        assert_eq!(
+            (w.method(), w.path(), w.body()),
+            ("POST", "/v1/me/pack-requests/r%201/withdraw", &b"{}"[..])
+        );
+        assert!(can_ask(Some(true), None, false));
+        assert!(!can_ask(Some(true), None, true));
+        assert!(!can_ask(Some(false), None, false));
+        assert!(can_ask(Some(false), Some("rayo"), false));
+        assert!(!can_ask(None, Some("rayo"), false));
+    }
+
+    #[test]
+    fn raising_and_declining_are_signed() {
+        let u = KiffUsage::read(
+            br#"{"plan":"solo","store":{"solo_product":"s","packs":[{"id":"rayo","name":"Rayo","line":"Rayo, 1,000 credits","apple_product":"p"}]},"requests":[{"id":"r1","asked_by":"u","kind":"pack","pack":"rayo","status":"open","created_at":"2026-11-01T00:00:00Z","expires_at":"2026-11-30T00:00:00Z"}]}"#,
+        )
+        .unwrap();
+        let r = &u.requests.as_ref().unwrap()[0];
+        let w = WordBook::load(&WordBook::default_root(), "en").unwrap();
+        let d = decline_sheet(&w, r, &u).unwrap();
+        assert_eq!(d.question, "Decline the request for Rayo, 1,000 credits?");
+        assert_eq!(
+            (d.title.as_str(), d.decline.as_str()),
+            ("Decline", "Decline")
+        );
+        for act in [decline_act(r), crate::signed::Act::RaiseLimit] {
+            let (method, path) = act.route();
+            assert!(crate::signed::Unsigned::new(method, path, vec![]).is_none());
+        }
+        let a = ask_sheet(&w, false).unwrap();
+        assert_eq!(a.title, "Ask an admin");
+        assert_eq!(a.hint, "What the credits are for");
+        assert_eq!(offered_packs(&u, None).len(), 1);
     }
 }

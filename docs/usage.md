@@ -13,9 +13,10 @@ It reads each time it opens: until then a panel with a spinner, at the screen's 
   semibold), a bar at `meter_pct` (green, amber when `warning`, red when `waiting`), the `detail`
   (14, soft) and the `warning` (14 semibold, in the state's colour). The panel's edge is red at
   50% while waiting, amber at 50% from the warning. When it couldn't be read, why, in red.
-  Signed in with KIFF, tafs cloud's Raise offer (`raise.words`) is under it behind
-  `ApprovalGate` (`docs/approval.md`): raising is signed, so this computer's line stands in the
-  button's place.
+  Signed in with KIFF, tafs cloud's Raise offer (`raise.words`) is under it. Raising is signed
+  (`raiseLimit`), so its tap is the tap that would sign: under it, where the iPad says why the
+  limit wasn't raised, "This device can't approve. Approve on another device signed in to your
+  account." Nothing is sent (`docs/approval.md` › A view-only computer).
 - **KIFF's plan** (`GET /v1/me/usage` at KIFF), signed in with KIFF, in the iPad's order:
   - who bills it (`billingPanel`): "Billed by Apple", "Billed by Google Play", "Billed by KIFF"
     or "Managed by your company's agreement", none when no plan is billed; after a move from
@@ -29,11 +30,39 @@ It reads each time it opens: until then a panel with a spinner, at the screen's 
     primary style while the balance waits;
   - for someone who manages billing (`requestsPanel`): REQUESTS in the amber, each open request
     ("Someone asks to raise the spend limit.", "Someone asks for {pack}.") with its reason, Raise
-    the limit where tafs cloud offers it (behind `ApprovalGate`, so this computer's line in its
-    place), and Decline.
+    the limit where tafs cloud offers it, and Decline.
 
-  The other buttons are there, dimmed, until asking and answering are ported. When KIFF's read fails,
-  why, once, in red, after the credits.
+  When KIFF's read fails, why, once, in red, after the credits.
+
+## Asking, withdrawing, answering
+
+The iPad doesn't sign a member's asks, so they work here, at KIFF as the session:
+- **Ask an admin** opens `AskAdminView`: Cancel, "Ask an admin", what asking does (for a raise or
+  a pack), WHICH PACK on Solo (the packs on sale, the First month pack first while tafs cloud
+  says it can be bought), WHY (OPTIONAL) with "What the credits are for", and Ask. Ask works once
+  a pack is chosen where one is asked for, and says "Asking…" while it's sent.
+  - It sends `POST /v1/me/pack-requests` with the reason (its first 500 characters, trimmed),
+    and `kind: raise` or the pack's id.
+  - Asked, the sheet closes and the screen reads again.
+  - Not asked, "The request didn't go. {why}" in red in the sheet, and in the plan's message on
+    the screen.
+- **Withdraw** sends `POST /v1/me/pack-requests/{id}/withdraw`, then the screen reads again.
+  When it fails, the plan's message says "The request wasn't withdrawn. {why}".
+
+The plan's message (`planMessage`) is a panel after the balance, in the soft colour.
+
+An admin's answers are signed (`docs/approval.md` › A view-only computer), and nothing is sent:
+- **Raise the limit** on a member's raise request: its tap says this computer can't approve, in
+  the plan's message's place.
+- **Decline** opens `DeclineRequestView`: Cancel, "Decline", its question ("Decline the request
+  to raise the spend limit?", "Decline the request for {pack}?"), NOTE (OPTIONAL) with "Why, for
+  them", and Decline in red. Its tap says this computer can't approve, above the button where the
+  iPad says why it wasn't declined, and the sheet stays open.
+
+Each send is an unsigned call (`tafs_core::signed::Unsigned`), which can't be one KIFF takes only
+signed. A screenshot's account (`--usage`) sends nothing. `--page usage-ask` opens Ask an
+admin's sheet (CI's `usage-ask`, the member's file), and `--page usage-decline` opens the first
+request's Decline with Decline tapped (`usage-decline`).
 - **Credits** (`CreditsPanel`), from `GET /v1/usage/credits`, unless the balance says
   `credits_panel: false` (no plan and no run lately): CREDITS, Last period and This period, then
   the period's `words` (17 semibold). Choosing Last period reads `?period=previous` the first
@@ -67,10 +96,7 @@ it signed in with KIFF from a file of synthetic answers (`balance`, `credits`, `
 
 ## Not yet
 
-- **Raise the limit**, which signs with this computer's key, and the read after it; declining
-  a request, signed too.
-- **Asking an admin** (`AskAdminView`) and withdrawing a request.
 - **Buying** packs and Solo, and approving a member's pack (which buys it): the iPad's are the
-  App Store's, and Linux has no store yet.
+  App Store's. They're held for the owner's money question.
 - **Refreshing in place**: the iPad pulls to refresh; here the screen reads again when it opens,
-  and a taf's runs have Try again.
+  after an ask or a withdrawal, and a taf's runs have Try again.

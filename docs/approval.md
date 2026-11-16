@@ -21,9 +21,7 @@ This computer has no Face ID or Touch ID, and its key is in software, so it is a
 - **`ApprovalNotice`** and `approvalBlocked` (`approval::notice`, `approval::approval_blocked`):
   the same words for a button that stays where it is, disabled.
 
-Linux draws it in place of:
-- "Did this happen?"'s No and Yes (`docs/needs-you.md`);
-- the balance's Raise offer and a member's raise request's Raise the limit (`docs/usage.md`).
+Linux draws it in place of "Did this happen?"'s No and Yes (`docs/needs-you.md`).
 
 ## A view-only computer
 
@@ -46,7 +44,8 @@ them. Each signed act (`signed::Act`) names the call the iPad would make, and th
 that none of them can be made.
 
 The acts drawn this way: People & groups' changes, signing another device out, and the
-account's time zone (`docs/account.md`).
+account's time zone (`docs/account.md`); Raise the limit and declining a request
+(`docs/usage.md`).
 
 Not on Linux: `ReadinessReader` reads again when the app comes back, but this computer's state
 never changes. `openTafsSettings` opens tafs' iOS settings, which don't exist here, and
