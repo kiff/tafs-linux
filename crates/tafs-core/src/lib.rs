@@ -11,6 +11,7 @@ pub mod card;
 pub mod cards;
 pub mod connect;
 pub mod devices;
+pub mod halt;
 pub mod held;
 pub mod home;
 pub mod keys;

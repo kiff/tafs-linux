@@ -654,3 +654,100 @@ fn the_jobs_gallery() {
     assert_eq!(g.explore(), None);
     assert!(Gallery::read(b"[]").is_none());
 }
+
+#[test]
+fn a_halt_as_tafs_cloud_answers_it() {
+    use tafs_core::halt::{self, Action, State};
+    let w = WordBook::load(&WordBook::default_root(), "en").unwrap();
+    let read = |v: serde_json::Value| halt::read(&serde_json::to_vec(&v).unwrap());
+    // Halting: the parts that hold it, and Halt again.
+    let h = read(
+        serde_json::json!({"halt": {"state": "halting", "runtime": true, "kiff": true,
+        "planque": false, "account": false}}),
+    )
+    .expect("reads");
+    assert_eq!(h.state, State::Halting);
+    let l = halt::lines(&w, &h, Some("Rae"), "a passkey", "Not from this computer.").unwrap();
+    assert_eq!(l.title, "Halt");
+    assert_eq!(l.name, "Rae");
+    assert_eq!(l.headline, "Halting…");
+    let (who, parts) = l.parts.unwrap();
+    assert_eq!(who, "Who holds the halt");
+    assert_eq!(
+        parts
+            .iter()
+            .map(|p| (p.held, p.status.as_str()))
+            .collect::<Vec<_>>(),
+        [(true, "Done"), (true, "Done"), (false, "Waiting")]
+    );
+    assert!(matches!(l.action, Action::Halting { .. }));
+
+    // Running: no parts, and one tap to halt; the account's says "all".
+    let running = halt::Halt::running();
+    let l = halt::lines(&w, &running, None, "a passkey", "").unwrap();
+    assert_eq!(l.title, "Halt all");
+    assert_eq!(l.name, "All your tafs");
+    assert_eq!(
+        l.explanation,
+        "Halting stops your tafs until you resume. A call already sent may still arrive."
+    );
+    assert_eq!(l.parts, None);
+    assert_eq!(l.action, Action::Halt("Halt all now".into()));
+    assert_eq!(
+        halt::row(&w, &running, false).unwrap(),
+        ("Halt".into(), "Stop it until you resume".into(), false)
+    );
+
+    // Halted: resuming is signed, so this computer says why; halted with the account, nothing.
+    let halted = read(
+        serde_json::json!({"halt": {"state": "halted", "halted_at": "2026-11-16T09:30:00Z",
+        "runtime": true, "kiff": true, "planque": true, "account": false, "stopped": 2}}),
+    )
+    .unwrap();
+    assert_eq!(halted.stopped, Some(2));
+    let l = halt::lines(
+        &w,
+        &halted,
+        Some("Rae"),
+        "a passkey",
+        "Not from this computer.",
+    )
+    .unwrap();
+    assert_eq!(l.headline, "Halted");
+    assert!(l.explanation.starts_with("Since "));
+    assert_eq!(
+        l.action,
+        Action::Resume {
+            button: "Resume with a passkey".into(),
+            why: "Not from this computer.".into()
+        }
+    );
+    let mut with_all = halted.clone();
+    with_all.account = true;
+    let l = halt::lines(&w, &with_all, Some("Rae"), "a passkey", "").unwrap();
+    assert_eq!(l.action, Action::None);
+    assert_eq!(
+        l.with_all.as_deref(),
+        Some("Halted with all your tafs. Resume them all to let it run.")
+    );
+    assert_eq!(halt::row(&w, &halted, true).unwrap().2, true);
+
+    // Read as the iPad's synthesized decoder: a state it doesn't know, a missing part, or a time
+    // that isn't one fails the read.
+    for bad in [
+        serde_json::json!({"halt": {"state": "paused", "runtime": true, "kiff": true, "planque": true, "account": false}}),
+        serde_json::json!({"halt": {"state": "halted", "runtime": true, "kiff": true, "account": false}}),
+        serde_json::json!({"halt": {"state": "halted", "halted_at": "yesterday", "runtime": true, "kiff": true, "planque": true, "account": false}}),
+        serde_json::json!({"state": "halted"}),
+    ] {
+        assert!(read(bad.clone()).is_none(), "{bad}");
+    }
+    // The paths, a taf's id as one segment.
+    assert_eq!(halt::path(None), "/v1/halt");
+    assert_eq!(halt::path(Some("taf-1")), "/v1/tafs/taf-1/halt");
+    assert_eq!(halt::path(Some("a/b c")), "/v1/tafs/a%2Fb%20c/halt");
+    assert_eq!(
+        halt::not_halted(&w, false, "KIFF answered 503").unwrap(),
+        "tafs couldn't halt it. KIFF answered 503"
+    );
+}

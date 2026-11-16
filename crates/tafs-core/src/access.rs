@@ -92,7 +92,7 @@ pub fn read_shares(body: &[u8]) -> Option<Vec<Share>> {
         .collect()
 }
 
-fn escaped(v: &str) -> String {
+pub fn escaped(v: &str) -> String {
     url::form_urlencoded::byte_serialize(v.as_bytes())
         .collect::<String>()
         .replace('+', "%20")
