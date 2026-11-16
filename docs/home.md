@@ -148,6 +148,16 @@ As the iPad's sidebar (`HomeSplitView`, `tafSections`, `otherAgents`):
 - The screenshot (`--home crates/tafs-app/fixtures/home-others.json`, synthetic) is CI's
   `sidebar-others`.
 
+## The plan's line
+
+At the sidebar's foot, above Account (`PlanLine`): the plan, only when it needs the owner. That's
+tafs cloud's `home_line` from the balance (`GET /v1/usage/balance`), which is read with the
+account, as the iPad reads it with each refresh. The line shows a dot and the words, red while
+the plan waits on the owner (`plan_tone` `waiting`), else the amber. Then Plan & usage (12
+semibold, amber), and a click opens it. A balance that can't be read, or with no `home_line`,
+shows nothing. The sample has none. The screenshot (`--balance
+crates/tafs-app/fixtures/balance-home-line.json`, synthetic) is CI's `sidebar-plan`.
+
 ## Not yet
 
 - **What each row opens:** each screen but the Overview shows its title until it's ported.
@@ -160,5 +170,6 @@ As the iPad's sidebar (`HomeSplitView`, `tafSections`, `otherAgents`):
 - **A room's end on a later day** shows its date as 2026-11-16 00:00, not in the language's words
   yet.
 - **Tafs being set up** (and Discard) and **+ New** with Coach.
-- **The Unreachable and Plan lines** at the foot.
+- **The Unreachable line** at the foot: Linux reads the account once and doesn't try again by
+  itself yet.
 - **Coach mode:** its button opens its title for now.

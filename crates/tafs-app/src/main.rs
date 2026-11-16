@@ -68,6 +68,8 @@ struct Cloud {
     used_by: std::collections::BTreeMap<String, String>,
     /// Each tafs cloud taf's last run, by its id.
     reports: std::collections::BTreeMap<String, tafs_core::access::RunReport>,
+    /// The balance, read with each refresh for the sidebar's plan line (`refreshBalance`).
+    balance: Option<tafs_core::usage::Balance>,
 }
 
 /// The window's size, a laptop's, as the screenshots are saved.
@@ -112,6 +114,8 @@ struct Options {
     work: Option<String>,
     /// With `--home`: a page of a taf's runs as tafs cloud answers `GET /v1/tafs/{id}/work/runs`.
     runs: Option<String>,
+    /// With `--home`: the balance as tafs cloud answers `GET /v1/usage/balance`.
+    balance: Option<String>,
     /// With `--runs`: a run's own page as tafs cloud answers `GET /v1/tafs/{id}/requests/{run}`.
     request: Option<String>,
     /// `--size WxH`: the window's size, for a screenshot of a narrower layout.
@@ -120,7 +124,7 @@ struct Options {
 }
 
 const USAGE: &str = "tafs [--lang en|de|fr|es|it|pt|nl|pl] [--theme light|dark] [--sample] [--signed-in] [--view-only [--paired]]
-     [--home contract.json] [--usage answers.json] [--people answers.json] [--unproven answers.json] [--recipes answers.json] [--gallery answers.json] [--halt answer.json] [--record-search answers.json] [--access answer.json] [--receipts answer.json] [--activity answer.json] [--receipt answer.json] [--work answer.json] [--runs answer.json] [--request answer.json] [--size WxH] [--page welcome|sign-in|pair|recipe:<id>|gallery|halt-all|halt:<id>|record-search:<q>|record-export|receipt:<proposal id>|run:<taf id>|pin-sheet|overview|needs-you|record|calendar|calendar-week|usage|connect-apps|account|kiff-account|time-zone|alerts|devices|people|taf|taf-card] [--screenshot out.png]";
+     [--home contract.json] [--usage answers.json] [--people answers.json] [--unproven answers.json] [--recipes answers.json] [--gallery answers.json] [--halt answer.json] [--record-search answers.json] [--access answer.json] [--receipts answer.json] [--activity answer.json] [--receipt answer.json] [--work answer.json] [--runs answer.json] [--request answer.json] [--balance answer.json] [--size WxH] [--page welcome|sign-in|pair|recipe:<id>|gallery|halt-all|halt:<id>|record-search:<q>|record-export|receipt:<proposal id>|run:<taf id>|pin-sheet|overview|needs-you|record|calendar|calendar-week|usage|connect-apps|account|kiff-account|time-zone|alerts|devices|people|taf|taf-card] [--screenshot out.png]";
 
 fn options() -> Result<Options, String> {
     let mut o = Options::default();
@@ -146,6 +150,7 @@ fn options() -> Result<Options, String> {
             "--receipt" => o.receipt = Some(value()?),
             "--work" => o.work = Some(value()?),
             "--runs" => o.runs = Some(value()?),
+            "--balance" => o.balance = Some(value()?),
             "--request" => o.request = Some(value()?),
             "--size" => {
                 let v = value()?;
@@ -357,6 +362,7 @@ fn activate(app: &adw::Application, o: &Options) {
             access: access_file(o.access.as_deref()),
             used_by: Default::default(),
             reports: Default::default(),
+            balance: balance_file(o.balance.as_deref()),
         }),
         None => {
             eprintln!("{path} isn't Home as tafs cloud answers it");
@@ -660,7 +666,13 @@ impl App {
                     .ok()
                     .filter(|a| a.status == 200)
                     .and_then(|a| tafs_core::recipes::Gallery::read(&a.body));
+                // The balance alone, for the plan's line: quietly, a failure shows none.
+                let balance = kiff::cloud(&token, &languages, tafs_core::usage::BALANCE_PATH)
+                    .ok()
+                    .filter(|a| a.status == 200)
+                    .and_then(|a| tafs_core::usage::Balance::read(&a.body));
                 Read::Cloud(Box::new(Cloud {
+                    balance,
                     home,
                     held,
                     account,
@@ -1150,9 +1162,16 @@ impl App {
                 None,
             ),
             (_, Some(c)) => {
-                let (model, mut tafs) =
-                    home_model(words, &c.home, &c.held, &c.activity, &c.access, at)
-                        .unwrap_or_else(|e| fail(e));
+                let (model, mut tafs) = home_model(
+                    words,
+                    &c.home,
+                    &c.held,
+                    &c.activity,
+                    &c.access,
+                    c.balance.as_ref(),
+                    at,
+                )
+                .unwrap_or_else(|e| fail(e));
                 // Who uses each taf this person manages, and each tafs cloud taf's last run.
                 for o in tafs.iter_mut() {
                     let agent = c
@@ -1570,6 +1589,7 @@ fn home_model(
     exceptions: &[CardException],
     activity: &[tafs_core::record::ActivityCall],
     access: &std::collections::BTreeMap<String, tafs_core::access::Access>,
+    balance: Option<&tafs_core::usage::Balance>,
     at: chrono::DateTime<chrono::Local>,
 ) -> Result<(SidebarModel, Vec<tafs_core::overview::OverviewTaf>), tafs_core::words::WordsError> {
     let tafs: Vec<tafs_core::home::Taf> = h
@@ -1625,6 +1645,7 @@ fn home_model(
         .collect();
     let model = SidebarModel {
         list_loaded: true,
+        plan: balance.and_then(|b| b.home_line.clone().map(|l| (l, b.plan_tone.clone()))),
         tafs: rows,
         held,
         cloud_needs_you: h.needs_you.as_ref().map(|n| n.count),
@@ -1742,6 +1763,7 @@ fn kiff_model() -> SidebarModel {
         account_halt: None,
         shared: Default::default(),
         others: vec![],
+        plan: None,
     }
 }
 
@@ -1829,6 +1851,24 @@ fn gallery_file(path: Option<&str>) -> Option<tafs_core::recipes::Gallery> {
 
 /// `--access`'s file, as tafs cloud answers `GET /v1/me/access` (a contract file's `answer`, or
 /// the answer itself). None given, none read; a file that can't be read stops the app.
+/// `--balance`'s answer (a contract file's `answer`, or the answer itself): the screenshots'
+/// plan line. None given, none shown; a file that can't be read stops the app.
+fn balance_file(path: Option<&str>) -> Option<tafs_core::usage::Balance> {
+    let path = path?;
+    let read = std::fs::read(path).ok().and_then(|b| {
+        let v: serde_json::Value = serde_json::from_slice(&b).ok()?;
+        let a = v.get("answer").cloned().unwrap_or(v);
+        tafs_core::usage::Balance::read(&serde_json::to_vec(&a).ok()?)
+    });
+    match read {
+        Some(b) => Some(b),
+        None => {
+            eprintln!("{path} isn't a balance as tafs cloud answers it");
+            std::process::exit(2);
+        }
+    }
+}
+
 /// `--activity`'s answer: KIFF's activity for the screenshots' Record.
 fn activity_file(path: Option<&str>) -> Vec<tafs_core::record::ActivityCall> {
     let Some(path) = path else {
