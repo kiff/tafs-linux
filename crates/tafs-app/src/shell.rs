@@ -520,36 +520,48 @@ fn sidebar(
         }
     }
 
+    // A taf's row (`tafLinks`, `tafRow`): its avatar, name and what it's doing, opening its page.
+    let taf_row = |taf: &tafs_core::sidebar::TafRow| {
+        let b = gtk::Box::new(gtk::Orientation::Horizontal, 12);
+        b.append(&avatar(&taf.initial, taf.color_index, 34));
+        let v = gtk::Box::new(gtk::Orientation::Vertical, 2);
+        v.set_hexpand(true);
+        v.set_valign(gtk::Align::Center);
+        v.append(&one_line(&taf.name, 15, 600, &["row-title"]));
+        v.append(&one_line(
+            &taf.now,
+            13,
+            400,
+            &["taf-now", tone_class(taf.tone)],
+        ));
+        b.append(&v);
+        b.set_margin_top(2);
+        b.set_margin_bottom(2);
+        let row = sidebar_row(&b, 60);
+        row.update_property(&[gtk::accessible::Property::Label(&format!(
+            "{}, {}",
+            taf.name, taf.now
+        ))]);
+        row
+    };
+
     // YOUR TAFS: those relevant now; all of them are on the Overview.
     if let Some(label) = &lines.your_tafs_label {
         add(section(label, false), None);
         for taf in &lines.your_tafs {
-            let b = gtk::Box::new(gtk::Orientation::Horizontal, 12);
-            b.append(&avatar(&taf.initial, taf.color_index, 34));
-            let v = gtk::Box::new(gtk::Orientation::Vertical, 2);
-            v.set_hexpand(true);
-            v.set_valign(gtk::Align::Center);
-            v.append(&one_line(&taf.name, 15, 600, &["row-title"]));
-            v.append(&one_line(
-                &taf.now,
-                13,
-                400,
-                &["taf-now", tone_class(taf.tone)],
-            ));
-            b.append(&v);
-            b.set_margin_top(2);
-            b.set_margin_bottom(2);
-            let row = sidebar_row(&b, 60);
-            row.update_property(&[gtk::accessible::Property::Label(&format!(
-                "{}, {}",
-                taf.name, taf.now
-            ))]);
-            add(row, Some(Selection::Taf(taf.key.clone())));
+            add(taf_row(taf), Some(Selection::Taf(taf.key.clone())));
         }
         if let Some(none) = &lines.no_tafs {
             let l = text(none, 13, 400, &["tafs-dim"]);
             let row = sidebar_row(&l, 0);
             add(row, None);
+        }
+    }
+    // SHARED WITH YOU: the tafs shared with this person to use, relevant now.
+    if let Some(label) = &lines.shared_label {
+        add(section(label, false), None);
+        for taf in &lines.shared {
+            add(taf_row(taf), Some(Selection::Taf(taf.key.clone())));
         }
     }
 
@@ -606,6 +618,14 @@ fn sidebar(
                 b.connect_clicked(move |b| crate::recipes::gallery(&pane, b));
                 add(sidebar_row(&b, 44), None);
             }
+        }
+    }
+
+    // OTHER AGENTS WITH CARDS: agents made through KIFF's API, not run by tafs, apart.
+    if let Some(label) = &lines.others_label {
+        add(section(label, false), None);
+        for taf in &lines.others {
+            add(taf_row(taf), Some(Selection::Taf(taf.key.clone())));
         }
     }
 

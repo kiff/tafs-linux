@@ -115,6 +115,11 @@ pub struct SidebarModel {
     pub cloud_needs_you: Option<i64>,
     /// The account's halt, where it's offered (`showsAccountHalt`): its row, and its state.
     pub account_halt: Option<crate::halt::Halt>,
+    /// The tafs shared with this person to use, not theirs to manage (`sharedWithMe`), by key:
+    /// KIFF's answer says use without manage; a taf whose answer isn't in yet counts as theirs.
+    pub shared: std::collections::BTreeSet<String>,
+    /// Agents made through KIFF's API, not run by tafs (`otherAgents`): their Cards, apart.
+    pub others: Vec<TafRow>,
 }
 
 /// Everything the sidebar draws, top to foot.
@@ -130,6 +135,12 @@ pub struct SidebarLines {
     pub your_tafs: Vec<TafRow>,
     /// The line under Your tafs with no taf at all.
     pub no_tafs: Option<String>,
+    /// SHARED WITH YOU, with the tafs shared with this person that are relevant now.
+    pub shared_label: Option<String>,
+    pub shared: Vec<TafRow>,
+    /// OTHER AGENTS WITH CARDS, with every one of them.
+    pub others_label: Option<String>,
+    pub others: Vec<TafRow>,
     /// Coach's button, for those who may use it.
     pub coach: Option<String>,
     pub account: String,
@@ -253,13 +264,17 @@ impl SidebarModel {
         let held_label =
             (!held.is_empty()).then(|| upper(&w.line("needs_you.title").unwrap_or_default()));
 
-        // As one sidebar for the whole app, only the tafs relevant now: all of them are on the Overview.
-        let relevant: Vec<TafRow> = self
-            .tafs
-            .iter()
-            .filter(|(_, r)| *r)
-            .map(|(t, _)| t.clone())
-            .collect();
+        // As one sidebar for the whole app, only the tafs relevant now: all of them are on the
+        // Overview. Theirs, then the ones shared with them (`tafSections`); someone with only
+        // shared tafs sees just those.
+        let relevant = |shared: bool| -> Vec<TafRow> {
+            self.tafs
+                .iter()
+                .filter(|(t, r)| *r && self.shared.contains(&t.key) == shared)
+                .map(|(t, _)| t.clone())
+                .collect()
+        };
+        let (relevant, shared) = (relevant(false), relevant(true));
         let shows = !relevant.is_empty() || self.tafs.is_empty();
         let no_tafs = if self.mode == Mode::Kiff && self.list_loaded && self.tafs.is_empty() {
             Some(match &self.home_words {
@@ -289,6 +304,14 @@ impl SidebarModel {
                 .transpose()?,
             your_tafs: if shows { relevant } else { vec![] },
             no_tafs: if shows { no_tafs } else { None },
+            shared_label: (!shared.is_empty())
+                .then(|| w.line("home.shared_you").map(|s| upper(&s)))
+                .transpose()?,
+            shared,
+            others_label: (!self.others.is_empty())
+                .then(|| w.line("home.other_agents").map(|s| upper(&s)))
+                .transpose()?,
+            others: self.others.clone(),
             coach: self
                 .coach_available()
                 .then(|| w.line("coach.title"))
@@ -366,6 +389,61 @@ pub fn by_recent<T>(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn row(key: &str) -> TafRow {
+        TafRow {
+            key: key.into(),
+            name: key.to_uppercase(),
+            initial: initial(key),
+            color_index: 0,
+            now: "Working".into(),
+            badge: None,
+            tone: Tone::default(),
+        }
+    }
+
+    fn signed_in(tafs: Vec<(TafRow, bool)>) -> SidebarModel {
+        SidebarModel {
+            mode: Mode::Kiff,
+            screenshot_signed_in: false,
+            may_use_coach: false,
+            held: vec![],
+            tafs,
+            list_loaded: true,
+            home_words: None,
+            account_name: None,
+            cloud_needs_you: None,
+            account_halt: None,
+            shared: Default::default(),
+            others: vec![],
+        }
+    }
+
+    #[test]
+    fn shared_tafs_and_other_agents_have_their_own_sections() {
+        let w = WordBook::load(&WordBook::default_root(), "en").unwrap();
+        let mut m = signed_in(vec![(row("a"), true), (row("b"), true), (row("c"), false)]);
+        m.shared = ["b".to_string(), "c".to_string()].into();
+        m.others = vec![row("x")];
+        let l = m.lines(&w).unwrap();
+        let keys = |rows: &[TafRow]| rows.iter().map(|r| r.key.clone()).collect::<Vec<_>>();
+        // Theirs, then the shared ones relevant now (c isn't); every other agent.
+        assert_eq!(keys(&l.your_tafs), ["a"]);
+        assert_eq!(l.shared_label.as_deref(), Some("SHARED WITH YOU"));
+        assert_eq!(keys(&l.shared), ["b"]);
+        assert_eq!(l.others_label.as_deref(), Some("OTHER AGENTS WITH CARDS"));
+        assert_eq!(keys(&l.others), ["x"]);
+        // Someone with only shared tafs sees just those: no Your tafs.
+        let mut only = signed_in(vec![(row("b"), true)]);
+        only.shared = ["b".to_string()].into();
+        let l = only.lines(&w).unwrap();
+        assert_eq!(l.your_tafs_label, None);
+        assert_eq!(keys(&l.shared), ["b"]);
+        assert_eq!(l.others_label, None);
+        // None shared and no other agents: neither section.
+        let l = signed_in(vec![(row("a"), true)]).lines(&w).unwrap();
+        assert_eq!((l.shared_label, l.others_label), (None, None));
+    }
 
     #[test]
     fn the_list_is_waiting_then_most_recent_then_tafs_cloud_s_order() {

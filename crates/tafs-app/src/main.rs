@@ -810,10 +810,12 @@ impl App {
                     }
                 })
                 .collect(),
+            // Its tafs, and the agents not run by tafs (`otherAgents`), whose rows open a page too.
             (_, Some(c)) => c
                 .home
                 .tafs
                 .iter()
+                .chain(&c.home.others)
                 .filter_map(|h| {
                     let cards = tafs_core::home::full_cards(w, h, w.language()).ok()?;
                     let health = tafs_core::home::Health::read(&h.health);
@@ -1148,8 +1150,9 @@ impl App {
                 None,
             ),
             (_, Some(c)) => {
-                let (model, mut tafs) = home_model(words, &c.home, &c.held, &c.activity, at)
-                    .unwrap_or_else(|e| fail(e));
+                let (model, mut tafs) =
+                    home_model(words, &c.home, &c.held, &c.activity, &c.access, at)
+                        .unwrap_or_else(|e| fail(e));
                 // Who uses each taf this person manages, and each tafs cloud taf's last run.
                 for o in tafs.iter_mut() {
                     let agent = c
@@ -1566,6 +1569,7 @@ fn home_model(
     h: &Home,
     exceptions: &[CardException],
     activity: &[tafs_core::record::ActivityCall],
+    access: &std::collections::BTreeMap<String, tafs_core::access::Access>,
     at: chrono::DateTime<chrono::Local>,
 ) -> Result<(SidebarModel, Vec<tafs_core::overview::OverviewTaf>), tafs_core::words::WordsError> {
     let tafs: Vec<tafs_core::home::Taf> = h
@@ -1606,11 +1610,26 @@ fn home_model(
         .iter()
         .map(|t| tafs_core::home::overview_taf(t))
         .collect();
+    // `sharedWithMe`: KIFF's answer says use without manage; no answer yet is not "shared".
+    let shared = tafs
+        .iter()
+        .filter(|t| access.get(&t.agent).is_some_and(|a| !a.manage))
+        .map(|t| t.key.clone())
+        .collect();
+    // Agents made through KIFF's API, not run by tafs: their Cards, apart (`otherAgents`).
+    let others = h
+        .others
+        .iter()
+        .filter_map(|o| tafs_core::home::taf(w, o).ok())
+        .map(|t| tafs_core::home::row(&t))
+        .collect();
     let model = SidebarModel {
         list_loaded: true,
         tafs: rows,
         held,
         cloud_needs_you: h.needs_you.as_ref().map(|n| n.count),
+        shared,
+        others,
         ..kiff_model()
     };
     Ok((model, overview))
@@ -1721,6 +1740,8 @@ fn kiff_model() -> SidebarModel {
         account_name: None,
         cloud_needs_you: None,
         account_halt: None,
+        shared: Default::default(),
+        others: vec![],
     }
 }
 

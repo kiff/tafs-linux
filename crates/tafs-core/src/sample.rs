@@ -125,6 +125,8 @@ pub fn sidebar(
         account_name: None,
         cloud_needs_you: None,
         account_halt: None,
+        shared: Default::default(),
+        others: vec![],
     })
 }
 
