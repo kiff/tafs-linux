@@ -1862,8 +1862,6 @@ fn gallery_file(path: Option<&str>) -> Option<tafs_core::recipes::Gallery> {
     }
 }
 
-/// `--access`'s file, as tafs cloud answers `GET /v1/me/access` (a contract file's `answer`, or
-/// the answer itself). None given, none read; a file that can't be read stops the app.
 /// `--balance`'s answer (a contract file's `answer`, or the answer itself): the screenshots'
 /// plan line. None given, none shown; a file that can't be read stops the app.
 fn balance_file(path: Option<&str>) -> Option<tafs_core::usage::Balance> {
@@ -1899,6 +1897,8 @@ fn activity_file(path: Option<&str>) -> Vec<tafs_core::record::ActivityCall> {
     }
 }
 
+/// `--access`'s file, as tafs cloud answers `GET /v1/me/access` (a contract file's `answer`, or
+/// the answer itself). None given, none read; a file that can't be read stops the app.
 fn access_file(
     path: Option<&str>,
 ) -> std::collections::BTreeMap<String, tafs_core::access::Access> {
