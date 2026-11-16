@@ -174,10 +174,31 @@ without `subject`, `role` or `status`, fails the read. The sample has no account
 `--people <file>` with `--home` draws it from synthetic answers
 (`crates/tafs-app/fixtures/people-kiff.json`), CI's `people`.
 
-Not yet: **every change** (a group, its name, deleting it, adding or removing someone, making a
-manager), each the person's act signed with an approval key: "+ Group", the group's actions and
-Add someone are there, dimmed, and removing or changing someone (the iPad's swipe and context
-menu) isn't drawn, until this computer can approve.
+**Every change is signed on the iPad** (`changePeople`, behind Face ID, each a call KIFF takes
+only signed). This computer only views, so it draws each one as the iPad does, up to the
+signature, and sends nothing (`tafs-core/src/signed.rs`, `docs/approval.md` › A view-only
+computer):
+- **+ Group** opens `GroupNameSheet` with Cancel, "New group", and Create, which works once a
+  name is typed (trimmed). Under the field: "Add its people next, then share a taf with it from
+  the taf's page."
+- **A group's actions** (the ⋯ button, for whoever manages people, never on Everyone):
+  - **Rename** opens the same sheet, "Rename Finance", with its name in the field, Save, and "Only
+    the name changes: its people and tafs stay.";
+  - **Delete** asks "Delete Finance?", with what it does and Delete Finance in red.
+- **A person's menu** (the iPad's context menu and swipe: a right click or a long press here):
+  - Make the manager, or Make a member, for whoever manages people;
+  - Remove from Finance, in red, where the iPad's `mayRemove` lets them.
+- **Add someone to Finance** opens `AddToGroupSheet`, "Add to Finance": As the group's manager,
+  with what a manager does (for whoever manages people), then THE ACCOUNT'S PEOPLE not in it yet,
+  each with their badge; "Everyone on the account is here. …" when no one is left.
+
+Create, Save, Delete, each menu item and each person in the add sheet is the tap that would
+sign. It says "This device can't approve. Approve on another device signed in to your account."
+In a sheet, the words go under its content and the sheet stays open. On the screen, they go
+where the iPad says why a change didn't go, above the groups.
+
+`--page people-rename` opens the rename sheet over Finance with Save tapped (CI's
+`people-rename`), and `--page people-add` opens the add sheet (`people-add`).
 
 ## Devices
 

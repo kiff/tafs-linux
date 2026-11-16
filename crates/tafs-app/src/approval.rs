@@ -39,3 +39,26 @@ pub fn gate(w: &WordBook, mode: Mode, button: &impl IsA<gtk::Widget>) -> gtk::Wi
         _ => button.clone().upcast(),
     }
 }
+
+/// Where the can't-approve words go once a tap would have signed: hidden until then.
+pub fn refusal_slot() -> gtk::Box {
+    let slot = gtk::Box::new(gtk::Orientation::Vertical, 0);
+    slot.set_widget_name("cantSign");
+    slot.set_visible(false);
+    slot
+}
+
+/// The tap that would sign `act` (`tafs_core::signed::tap`): this computer sends nothing, and
+/// `slot` says it can't approve here. In the sample, which signs nothing, the tap does nothing.
+pub fn refuse(w: &WordBook, mode: Mode, act: &tafs_core::signed::Act, slot: &gtk::Box) {
+    while let Some(c) = slot.first_child() {
+        slot.remove(&c);
+    }
+    match tafs_core::signed::tap(w, mode, act) {
+        Ok(Some(n)) => {
+            slot.append(&not_ready(&n));
+            slot.set_visible(true);
+        }
+        _ => slot.set_visible(false),
+    }
+}

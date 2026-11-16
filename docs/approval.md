@@ -25,6 +25,28 @@ Linux draws it in place of:
 - "Did this happen?"'s No and Yes (`docs/needs-you.md`);
 - the balance's Raise offer and a member's raise request's Raise the limit (`docs/usage.md`).
 
+## A view-only computer
+
+Linux never signs. For each act the iPad signs, this computer draws the iPad's button, and the
+sheet the iPad opens before signing, with its fields. The tap that would sign shows
+`ApprovalNotReady`'s words where the iPad says why an act didn't go, and nothing is sent
+(`tafs-core/src/signed.rs` › `tap`, app `approval::refuse`). The sample, which the iPad never
+signs for, does nothing on that tap.
+
+`signed::signed` says which calls KIFF takes only signed, as the iPad's `KIFFClient` lists them:
+- `signsSetup`: a taf's draft, alert targets, keys, the time zone, deleting the account, raising
+  the limit, an approval window, groups and sharing, declining a request, "Did this happen?",
+  resuming, and confirming a draft or ending its trial;
+- `grantsAuthority`;
+- the session's approval key and its relink;
+- what the iPad signs beforehand: a device signed out, a computer's pairing, a passkey.
+
+A call this computer makes as the session is a `signed::Unsigned`, which can't be made for any of
+them. Each signed act (`signed::Act`) names the call the iPad would make, and the tests check
+that none of them can be made.
+
+The acts drawn this way: People & groups' changes (`docs/account.md`).
+
 Not on Linux: `ReadinessReader` reads again when the app comes back, but this computer's state
 never changes. `openTafsSettings` opens tafs' iOS settings, which don't exist here, and
 `Unsupported` offers neither button anyway.
