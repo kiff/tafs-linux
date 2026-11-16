@@ -10,6 +10,7 @@ mod fido_key;
 mod halt;
 mod kiff;
 mod kiff_account;
+mod knocks;
 mod needs_you;
 mod overview;
 mod pairing;
@@ -118,6 +119,9 @@ struct Options {
     receipt: Option<String>,
     /// With `--home`: a taf's work as tafs cloud answers `GET /v1/tafs/{id}/work`, never sent.
     work: Option<String>,
+    /// With `--home`: a taf's doors as tafs cloud answers `GET /v1/tafs/{id}/doors`; its knocks'
+    /// answers send nothing.
+    doors: Option<String>,
     /// With `--home`: a page of a taf's runs as tafs cloud answers `GET /v1/tafs/{id}/work/runs`.
     runs: Option<String>,
     /// With `--home`: the balance as tafs cloud answers `GET /v1/usage/balance`.
@@ -130,7 +134,7 @@ struct Options {
 }
 
 const USAGE: &str = "tafs [--lang en|de|fr|es|it|pt|nl|pl] [--theme light|dark] [--sample] [--signed-in] [--view-only [--paired]]
-     [--home contract.json] [--usage answers.json] [--people answers.json] [--unproven answers.json] [--recipes answers.json] [--gallery answers.json] [--halt answer.json] [--record-search answers.json] [--access answer.json] [--receipts answer.json] [--activity answer.json] [--calls answer.json] [--receipt answer.json] [--work answer.json] [--runs answer.json] [--request answer.json] [--balance answer.json] [--size WxH] [--page welcome|sign-in|pair|recipe:<id>|gallery|halt-all|halt:<id>|record-search:<q>|record-export|receipt:<proposal id>|run:<taf id>|pin-sheet|overview|needs-you|record|calendar|calendar-week|usage|connect-apps|account|kiff-account|time-zone|alerts|devices|people|taf|taf-card] [--screenshot out.png]";
+     [--home contract.json] [--usage answers.json] [--people answers.json] [--unproven answers.json] [--recipes answers.json] [--gallery answers.json] [--halt answer.json] [--record-search answers.json] [--access answer.json] [--receipts answer.json] [--activity answer.json] [--calls answer.json] [--receipt answer.json] [--work answer.json] [--doors answer.json] [--runs answer.json] [--request answer.json] [--balance answer.json] [--size WxH] [--page welcome|sign-in|pair|recipe:<id>|gallery|halt-all|halt:<id>|record-search:<q>|record-export|receipt:<proposal id>|run:<taf id>|pin-sheet|overview|needs-you|record|calendar|calendar-week|usage|connect-apps|account|kiff-account|time-zone|alerts|devices|people|taf|taf-card] [--screenshot out.png]";
 
 fn options() -> Result<Options, String> {
     let mut o = Options::default();
@@ -156,6 +160,7 @@ fn options() -> Result<Options, String> {
             "--calls" => o.calls = Some(value()?),
             "--receipt" => o.receipt = Some(value()?),
             "--work" => o.work = Some(value()?),
+            "--doors" => o.doors = Some(value()?),
             "--runs" => o.runs = Some(value()?),
             "--balance" => o.balance = Some(value()?),
             "--request" => o.request = Some(value()?),
@@ -293,6 +298,7 @@ fn activate(app: &adw::Application, o: &Options) {
         problem: RefCell::new(None),
         home_file: o.home.as_ref().map(std::path::PathBuf::from),
         work_file: o.work.as_ref().map(std::path::PathBuf::from),
+        doors_file: o.doors.as_ref().map(std::path::PathBuf::from),
         runs_file: o.runs.as_ref().map(std::path::PathBuf::from),
         request_file: o.request.as_ref().map(std::path::PathBuf::from),
         open_run: o.page.as_deref().is_some_and(|p| p.starts_with("run:")),
@@ -499,6 +505,8 @@ struct App {
     home_file: Option<std::path::PathBuf>,
     /// `--work`'s answer: the screenshots' work, never sent.
     work_file: Option<std::path::PathBuf>,
+    /// `--doors`: a taf's doors as tafs cloud answers them, for its knocks' screenshot.
+    doors_file: Option<std::path::PathBuf>,
     /// `--runs`'s page: the screenshots' runs, never sent.
     runs_file: Option<std::path::PathBuf>,
     /// `--request`'s page: the screenshots' run, never sent.
@@ -786,6 +794,16 @@ impl App {
             },
             _ => work_panel::WorkSource::None,
         };
+        // Where its doors are read and its knocks answered: tafs cloud as the session; a
+        // screenshot's from `--doors`, and its answers send nothing.
+        let doors = match (self.kept.borrow().as_ref(), &self.doors_file) {
+            (_, Some(file)) => knocks::DoorsSource::File(file.clone()),
+            (Some(kept), None) => knocks::DoorsSource::Cloud {
+                token: kept.token.clone(),
+                languages: self.languages.clone(),
+            },
+            _ => knocks::DoorsSource::None,
+        };
         // Where its runs are read and Run now sent: tafs cloud as the session; a screenshot's
         // first page from `--runs`, and its Run now sends nothing.
         let runs = match (self.kept.borrow().as_ref(), &self.runs_file) {
@@ -839,6 +857,7 @@ impl App {
                         cloud_id: None,
                         source: taf::ActivitySource::None,
                         work: work_panel::WorkSource::None,
+                        doors: knocks::DoorsSource::None,
                         health: None,
                         runs: runs_panel::RunsSource::None,
                         runs_line: None,
@@ -880,6 +899,15 @@ impl App {
                         time_zone_words: zones.0,
                         schedule_time_zone_words: zones.1,
                         work: work.clone(),
+                        // Its knocks, where tafs cloud offers doors (`doorsOffered`); a
+                        // screenshot's `--doors` stands for the offer.
+                        doors: if self.doors_file.is_some()
+                            || c.home.doors_offered.as_ref().is_some_and(|d| !d.is_empty())
+                        {
+                            doors.clone()
+                        } else {
+                            knocks::DoorsSource::None
+                        },
                         health,
                         runs: runs.clone(),
                         runs_line,

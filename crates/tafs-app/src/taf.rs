@@ -47,6 +47,9 @@ pub struct TafPage {
     /// tafs cloud's id for it, and where its Activity is read from.
     pub cloud_id: Option<String>,
     pub source: ActivitySource,
+    /// Where its doors are read and its knocks answered (`TafKnocksPanel`), where tafs cloud
+    /// offers doors.
+    pub doors: crate::knocks::DoorsSource,
     /// Where its work is read (`WorkPanel`), and its health as Home read it.
     pub work: crate::work_panel::WorkSource,
     pub health: Option<tafs_core::home::Health>,
@@ -156,6 +159,15 @@ pub fn page(
     let body = gtk::Box::new(gtk::Orientation::Vertical, 16);
     body.set_margin_top(4);
     body.set_margin_bottom(12);
+    // `TafActivityList.parts`: for whoever manages the taf, its doors' knocks come first.
+    if let (false, true, Some(id)) = (t.sample, t.manages, &t.cloud_id) {
+        body.append(&crate::knocks::panel_for(
+            w.clone(),
+            id.clone(),
+            Some(t.name.clone()),
+            t.doors.clone(),
+        ));
+    }
     if !t.held.is_empty() {
         body.append(&eyebrow(
             &w.line("needs_you.title").unwrap_or_default(),

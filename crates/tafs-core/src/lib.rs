@@ -13,6 +13,7 @@ pub mod card;
 pub mod cards;
 pub mod connect;
 pub mod devices;
+pub mod doors;
 pub mod export_chats;
 pub mod halt;
 pub mod held;
