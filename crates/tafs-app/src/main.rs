@@ -386,6 +386,7 @@ fn activate(app: &adw::Application, o: &Options) {
             &window,
             std::sync::Arc::new(|_| Err(fido_key::KeyError::Key(Failure::NoKey))),
             std::sync::Arc::new(|| Ok(5)),
+            std::sync::Arc::new(|| {}),
             Rc::new(|_| {}),
         );
     }

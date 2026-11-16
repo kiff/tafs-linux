@@ -28,6 +28,25 @@ pub type Attempt = Arc<dyn Fn(&mut Pin) -> Result<(), KeyError> + Send + Sync>;
 pub type ReadTries = Arc<dyn Fn() -> Result<i32, KeyError> + Send + Sync>;
 /// Hears once: none once approved, or why the sheet closed.
 pub type Done = Rc<dyn Fn(Option<KeyError>)>;
+/// Stops the request at the key (`OpenKey::cancel`, as macOS 12's sheet does), from the main
+/// loop while `Attempt` waits on its thread.
+pub type StopKey = Arc<dyn Fn() + Send + Sync>;
+
+/// The sheet closing (Cancel, Escape, or its window closed): while the key waits for its touch,
+/// the request is stopped at the key, so a touch after the sheet said "cancelled" signs nothing.
+/// The attempt then answers `Cancelled`, and its caller sends nothing.
+struct Closing {
+    touching: Rc<Cell<bool>>,
+    stop: StopKey,
+}
+
+impl Closing {
+    fn closed(&self) {
+        if self.touching.get() {
+            (self.stop)();
+        }
+    }
+}
 
 /// The line for why the key gave no approval, and whether the sheet stays open. A cancel says
 /// nothing; anything that isn't the key's own failure is the key failing to sign.
@@ -50,6 +69,7 @@ pub fn present(
     parent: &impl IsA<gtk::Widget>,
     attempt: Attempt,
     read_tries: ReadTries,
+    stop: StopKey,
     done: Done,
 ) {
     let Ok(l) = words::sheet(&w) else {
@@ -230,11 +250,69 @@ pub fn present(
     }
     {
         let (field, finish) = (field.clone(), finish.clone());
+        let closing = Closing {
+            touching: touching.clone(),
+            stop,
+        };
         dialog.connect_closed(move |_| {
             field.set_text("");
+            closing.closed();
             finish(Some(KeyError::Cancelled));
         });
     }
     dialog.present(Some(parent));
     field.grab_focus();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::{Condvar, Mutex};
+
+    /// A stand-in attempt that waits for the key's touch until it's stopped: closing the sheet
+    /// while it waits stops it, and it answers `Cancelled`, never an approval.
+    #[test]
+    fn closing_while_the_key_waits_stops_it_at_the_key() {
+        let stopped = Arc::new((Mutex::new(false), Condvar::new()));
+        let s = stopped.clone();
+        let attempt = std::thread::spawn(move || {
+            let (lock, wake) = &*s;
+            let mut stop = lock.lock().unwrap();
+            while !*stop {
+                let (next, timeout) = wake
+                    .wait_timeout(stop, std::time::Duration::from_secs(5))
+                    .unwrap();
+                stop = next;
+                if timeout.timed_out() {
+                    // The touch came: without the stop, the key would sign.
+                    return Ok::<(), KeyError>(());
+                }
+            }
+            Err(KeyError::Cancelled)
+        });
+        let s = stopped.clone();
+        let closing = Closing {
+            touching: Rc::new(Cell::new(true)),
+            stop: Arc::new(move || {
+                let (lock, wake) = &*s;
+                *lock.lock().unwrap() = true;
+                wake.notify_all();
+            }),
+        };
+        closing.closed();
+        assert_eq!(attempt.join().unwrap(), Err(KeyError::Cancelled));
+    }
+
+    /// Closed before any PIN went to the key: there's nothing to stop.
+    #[test]
+    fn closing_before_the_key_is_asked_stops_nothing() {
+        let calls = Arc::new(Mutex::new(0));
+        let c = calls.clone();
+        let closing = Closing {
+            touching: Rc::new(Cell::new(false)),
+            stop: Arc::new(move || *c.lock().unwrap() += 1),
+        };
+        closing.closed();
+        assert_eq!(*calls.lock().unwrap(), 0);
+    }
 }

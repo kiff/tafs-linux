@@ -127,7 +127,9 @@ How it behaves:
 - **Anything else** (an answer KIFF would refuse, a libfido2 that's missing) says the key
   couldn't sign, never that the key declined.
 - **The sheet stays open to try again,** except for a locked key. Cancel or closing it approves
-  nothing.
+  nothing. If the key is waiting for its touch at that moment, the request is stopped at the key
+  (`StopKey`, `OpenKey::cancel`, as macOS 12's sheet does), so a touch afterwards signs nothing.
+  The attempt then answers `Cancelled`, and its caller sends nothing.
 - **The PIN** is taken from the field as bytes and the field emptied at once. It's handed to
   the key once off the main loop, then cleared. As on macOS 12, GTK's own entry held the
   characters while they were typed, and this app can't zero that memory.
