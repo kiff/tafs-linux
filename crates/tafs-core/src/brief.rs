@@ -565,6 +565,55 @@ pub(crate) fn encode(s: &str, keep: &[u8]) -> String {
     out
 }
 
+/// Home's labels (`labels`, `LabelList`), in the order to show them: read one by one, so a
+/// label the app can't read is left out, and another shape is none, never Home unread.
+pub fn label_list(v: &Value) -> Option<Vec<Label>> {
+    if v.is_null() {
+        return None;
+    }
+    Some(
+        v.as_array()
+            .map(|a| a.iter().map(Label::read).filter(Label::usable).collect())
+            .unwrap_or_default(),
+    )
+}
+
+/// A taf's labels on Home, by id (`LabelIDs`); another shape reads as none.
+pub fn label_ids(v: &Value) -> Vec<String> {
+    v.as_array()
+        .map(|a| {
+            a.iter()
+                .filter_map(Value::as_str)
+                .filter(|s| !s.is_empty())
+                .map(str::to_string)
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// Home's words for the labels' first chip (`labels_words.all`); none when it sent none.
+pub fn labels_all(v: &Value) -> Option<String> {
+    text(v.as_object()?, "all")
+}
+
+/// `labels(of:)`: a taf's labels' names, in the account's order (Home's `labels` on the taf).
+pub fn names_of(labels: &[Label], ids: &[String]) -> Vec<String> {
+    labels
+        .iter()
+        .filter(|l| ids.contains(&l.id))
+        .map(|l| l.name.clone())
+        .collect()
+}
+
+/// `filtered(_:)`: whether a taf carrying `ids` is listed under the chip chosen. All, or a label
+/// that's gone, lists them all; the order never changes.
+pub fn listed(labels: &[Label], selected: Option<&str>, ids: &[String]) -> bool {
+    match selected {
+        Some(id) if labels.iter().any(|l| l.id == id) => ids.iter().any(|x| x == id),
+        _ => true,
+    }
+}
+
 /// One chip of a row (`LabelChip`): its words, its count, the amber dot, chosen or not, and what
 /// a tap does.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -950,6 +999,77 @@ mod tests {
         assert_eq!(b.open_decisions(&aside).count(), 1);
         aside.insert("d1".to_string());
         assert_eq!(b.open_decisions(&aside).count(), 0);
+    }
+
+    /// Home's labels as tafs cloud sends them (docs/labels.md): in order, `waiting` a count,
+    /// `headline` an object, `labels_words.all`, and each taf's ids. A label or a field the app
+    /// can't read is left out, never Home.
+    #[test]
+    fn homes_labels_read_as_sent() {
+        let v: Value = serde_json::from_str(
+            r#"[{"id":"l1","name":"Money","color":"money","count":2,"waiting":1,"headline":{"words":"2 tafs working · Money"}},{"id":"l2","name":"Ops","color":"operations","count":1,"waiting":0},{"id":"","name":"x"},7]"#,
+        )
+        .unwrap();
+        let labels = label_list(&v).unwrap();
+        let ids: Vec<_> = labels.iter().map(|l| l.id.as_str()).collect();
+        assert_eq!(ids, ["l1", "l2"]);
+        assert_eq!(labels[0].waiting, 1);
+        assert_eq!(labels[0].color, "money");
+        assert_eq!(
+            labels[0].headline.as_deref(),
+            Some("2 tafs working · Money")
+        );
+        assert_eq!(labels[1].headline, None);
+        assert_eq!(label_list(&Value::Null), None, "none sent");
+        assert_eq!(
+            label_list(&serde_json::json!({"id":"l1"})),
+            Some(vec![]),
+            "another shape: none, and Home still reads"
+        );
+        assert_eq!(
+            labels_all(&serde_json::json!({"all":"All"})).as_deref(),
+            Some("All")
+        );
+        assert_eq!(labels_all(&serde_json::json!("All")), None);
+        assert_eq!(
+            label_ids(&serde_json::json!(["l1", "", 3, "l2"])),
+            ["l1", "l2"]
+        );
+        assert!(label_ids(&serde_json::json!("l1")).is_empty());
+    }
+
+    /// The tafs list's chips filter without reordering; a label that's gone lists them all.
+    #[test]
+    fn the_list_filters_by_label_without_reordering() {
+        let l = |id: &str, name: &str| Label {
+            id: id.into(),
+            name: name.into(),
+            ..Default::default()
+        };
+        let labels = [l("m", "Money"), l("o", "Ops")];
+        let ids = |v: &[&str]| v.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        let tafs = [ids(&["o", "m"]), ids(&[]), ids(&["o"])];
+        let shown = |sel: Option<&str>| {
+            tafs.iter()
+                .enumerate()
+                .filter(|(_, t)| listed(&labels, sel, t))
+                .map(|(i, _)| i)
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(shown(None), [0, 1, 2]);
+        assert_eq!(shown(Some("o")), [0, 2], "in the list's order");
+        assert_eq!(shown(Some("m")), [0]);
+        assert_eq!(
+            shown(Some("gone")),
+            [0, 1, 2],
+            "a label that's gone: them all"
+        );
+        assert_eq!(
+            names_of(&labels, &ids(&["o", "m"])),
+            ["Money", "Ops"],
+            "in the account's order"
+        );
+        assert!(names_of(&labels, &ids(&["x"])).is_empty());
     }
 
     /// All, two labels, then "+N"; the chosen one inverted, tapped again back to All.

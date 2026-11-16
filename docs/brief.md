@@ -41,7 +41,8 @@ read is left out, never the brief with it.
   "All", `home.labels_all`), two labels with their counts and an amber dot while one of their tafs
   waits, then "+N", which shows them all. The chosen chip is inverted; tapped again, it's All. A
   chip reads the brief again for that label (`GET /v1/brief?label=`), and what was put aside here
-  comes back; a read that fails or finds nothing is Needs you, as on the iPad.
+  comes back; a read that fails or finds nothing is Needs you, as on the iPad. The same chips sit
+  over the Overview's grid, from Home's labels ([the sidebar and the Overview](home.md)).
 - **Two columns** on a wide pane, decisions beside Done, the next move and the rest under Done;
   one column when the pane is under 640 pixels, in the iPhone's order (decisions, next move, Done, the rest).
 - **Each decision** (`DecisionCard`): its taf's avatar and name (found by tafs cloud's id), and at

@@ -1,6 +1,7 @@
 //! The Overview beside the sidebar (`OverviewView`): the title, its drawing, NEEDS YOU's calls,
 //! and one grid of the tafs, each line opening its taf.
 
+use std::cell::RefCell;
 use std::rc::Rc;
 
 use gtk::prelude::*;
@@ -8,6 +9,11 @@ use tafs_core::overview::OverviewLines;
 use tafs_core::sidebar::Selection;
 
 use crate::widgets::{avatar, eyebrow, one_line, symbol, text};
+
+thread_local! {
+    /// `--page overview-label:<id>`: the Overview opens filtered to that label, for a screenshot.
+    pub static CHOSEN: RefCell<Option<String>> = const { RefCell::new(None) };
+}
 
 /// The column's widest, from the leading edge of a centred column (`frame(maxWidth: 980)`).
 const MAX_WIDTH: i32 = 980;
@@ -56,7 +62,16 @@ pub fn page(o: &OverviewLines, open: Rc<dyn Fn(Selection)>) -> gtk::Widget {
         column.append(&section);
     }
 
-    column.append(&table(o, &open));
+    // The labels' chips, filtering the grid under them without reordering it; the list opens on
+    // All every time.
+    let listing = Rc::new(Listing {
+        o: o.clone(),
+        open: open.clone(),
+        list: gtk::Box::new(gtk::Orientation::Vertical, 20),
+        shown: RefCell::new((CHOSEN.with(|c| c.borrow().clone()), false)),
+    });
+    column.append(&listing.list);
+    listing.draw();
     column.append(&text(&o.each_line_opens, 12, 400, &["tafs-dim"]));
 
     let clamp = adw::Clamp::new();
@@ -70,6 +85,45 @@ pub fn page(o: &OverviewLines, open: Rc<dyn Fn(Selection)>) -> gtk::Widget {
     scroller.set_vexpand(true);
     crate::widgets::ground(&scroller);
     scroller.upcast()
+}
+
+/// The chips and the grid under them, drawn again when a chip is tapped: the label chosen, and
+/// whether "+N" showed them all.
+struct Listing {
+    o: OverviewLines,
+    open: Rc<dyn Fn(Selection)>,
+    list: gtk::Box,
+    shown: RefCell<(Option<String>, bool)>,
+}
+
+impl Listing {
+    fn draw(self: &Rc<Self>) {
+        while let Some(c) = self.list.first_child() {
+            self.list.remove(&c);
+        }
+        let (selected, expanded) = self.shown.borrow().clone();
+        if !self.o.labels.is_empty() {
+            let (choose, expand) = (self.clone(), self.clone());
+            self.list.append(&crate::brief::chips_row(
+                &tafs_core::brief::chips(
+                    &self.o.labels,
+                    selected.as_deref(),
+                    &self.o.labels_all,
+                    expanded,
+                ),
+                Rc::new(move |label| {
+                    choose.shown.borrow_mut().0 = label;
+                    choose.draw();
+                }),
+                Rc::new(move || {
+                    expand.shown.borrow_mut().1 = true;
+                    expand.draw();
+                }),
+            ));
+        }
+        self.list
+            .append(&table(&self.o, &self.open, selected.as_deref()));
+    }
 }
 
 /// A held call, or what else waits: an amber dot, its words, and its time or a chevron, on the
@@ -100,7 +154,7 @@ fn held_row(title: &str, trailing: Option<&str>, chevron: bool) -> gtk::Button {
 
 /// One grid, so each heading sits over its column: TAF, NOW, CARD, LAST RESULT, a line between
 /// rows, each line opening its taf.
-fn table(o: &OverviewLines, open: &Rc<dyn Fn(Selection)>) -> gtk::Grid {
+fn table(o: &OverviewLines, open: &Rc<dyn Fn(Selection)>, label: Option<&str>) -> gtk::Grid {
     let grid = gtk::Grid::new();
     grid.set_column_homogeneous(true);
     grid.set_column_spacing(16);
@@ -111,7 +165,11 @@ fn table(o: &OverviewLines, open: &Rc<dyn Fn(Selection)>) -> gtk::Grid {
         grid.attach(&h, i as i32, 0, 1, 1);
     }
     let mut y = 1;
-    for row in &o.rows {
+    let rows = o
+        .rows
+        .iter()
+        .filter(|r| tafs_core::brief::listed(&o.labels, label, &r.label_ids));
+    for row in rows {
         let line = gtk::Separator::new(gtk::Orientation::Horizontal);
         line.add_css_class("tafs-line");
         grid.attach(&line, 0, y, 4, 1);
@@ -124,6 +182,14 @@ fn table(o: &OverviewLines, open: &Rc<dyn Fn(Selection)>) -> gtk::Grid {
         names.append(&one_line(&row.name, 15, 600, &["tafs-ink"]));
         if !row.used_by.is_empty() {
             names.append(&one_line(&row.used_by, 12, 400, &["tafs-dim"]));
+        }
+        // Its labels, as small grey chips: two, then "+N" (`TafLabels`).
+        if !row.labels.is_empty() {
+            let chips = gtk::Box::new(gtk::Orientation::Horizontal, 4);
+            for words in &row.labels {
+                chips.append(&one_line(words, 11, 500, &["tafs-taf-label"]));
+            }
+            names.append(&chips);
         }
         taf.append(&names);
         taf.set_valign(gtk::Align::Start);

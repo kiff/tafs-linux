@@ -351,6 +351,8 @@ button.tafs-outline.coach { color: @tafs_coach; border-color: alpha(@tafs_coach,
 button.tafs-label-chip { background-color: @tafs_panel; background-image: none; color: @tafs_ink; border: 1px solid @tafs_line;
   border-radius: 999px; padding: 0 12px; min-height: 32px; box-shadow: none; }
 button.tafs-label-chip.selected { background-color: @tafs_ink; color: @tafs_on_fill; border-color: @tafs_ink; }
+/* A taf's labels on its line (`TafLabels`): 11 medium, soft, on the raised colour. */
+.tafs-taf-label { color: @tafs_soft; background-color: @tafs_raised; border-radius: 999px; padding: 2px 7px; }
 .tafs-chip-dot { background-color: @tafs_amber; border-radius: 999px; min-width: 6px; min-height: 6px; }
 "#;
 

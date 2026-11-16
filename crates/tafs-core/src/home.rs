@@ -336,6 +336,10 @@ pub struct HomeTaf {
     /// Its doors, for its avatar's rim and Needs you's knocks; absent when it has none.
     #[serde(default)]
     pub doors: Option<Vec<DoorLight>>,
+    /// Its labels by id (docs/labels.md), only on a taf that has any; another shape is none
+    /// (`LabelIDs`).
+    #[serde(default)]
+    pub labels: Value,
 }
 
 impl HomeTaf {
@@ -537,6 +541,13 @@ pub struct Home {
     /// "Set all aside" (`coach_waiting_clear`).
     #[serde(default)]
     pub coach_waiting_clear: Option<crate::waits::CoachWaitingClear>,
+    /// The account's labels, in the order to show them (docs/labels.md); absent with no labelled
+    /// taf, and no chips are drawn. Read leniently (`LabelList`): never fails Home.
+    #[serde(default)]
+    pub labels: Value,
+    /// The words for the labels' first chip (`labels_words.all`).
+    #[serde(default)]
+    pub labels_words: Value,
 }
 
 impl Home {
@@ -544,6 +555,16 @@ impl Home {
     /// as it was.
     pub fn read(body: &[u8]) -> Option<Home> {
         serde_json::from_slice(body).ok()
+    }
+
+    /// `homeLabels`: the account's labels, in order; none with no labelled taf.
+    pub fn labels(&self) -> Vec<crate::brief::Label> {
+        crate::brief::label_list(&self.labels).unwrap_or_default()
+    }
+
+    /// `homeLabelsAll`: Home's word for the first chip, when it sent one.
+    pub fn labels_all(&self) -> Option<String> {
+        crate::brief::labels_all(&self.labels_words)
     }
 
     /// `headlineWords`: tafs cloud's words for Home's line; none when it sent none the app can draw.
@@ -587,6 +608,8 @@ pub struct Taf {
     pub knocks: i64,
     /// A door with a knock waiting (`doors.contains { $0.knocks > 0 }`), for `relevantNow`.
     pub knocked: bool,
+    /// Its labels by id (`CloudTaf.labels`).
+    pub labels: Vec<String>,
 }
 
 fn window(w: &WordBook, raw: &str, words: Option<&WindowWords>) -> Result<Window, WordsError> {
@@ -669,6 +692,12 @@ pub fn taf(w: &WordBook, h: &HomeTaf) -> Result<Taf, WordsError> {
             .filter(|c| !c.is_empty())
             .map_or(1, Vec::len),
         revoked: !h.card.active,
+        // Only a tafs cloud taf carries labels (`cloudTaf(for:)?.labels`).
+        labels: if h.id.is_some() {
+            crate::brief::label_ids(&h.labels)
+        } else {
+            vec![]
+        },
     })
 }
 
@@ -803,6 +832,7 @@ pub fn overview_taf(t: &Taf) -> OverviewTaf {
             last_run: t.last_run.map(|x| crate::account_time::short_time(&x)),
         }),
         used_by: String::new(),
+        labels: t.labels.clone(),
     }
 }
 

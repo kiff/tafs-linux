@@ -168,7 +168,7 @@ struct Options {
 }
 
 const USAGE: &str = "tafs [--lang en|de|fr|es|it|pt|nl|pl] [--theme light|dark] [--sample] [--signed-in] [--view-only [--paired]]
-     [--home contract.json] [--usage answers.json] [--people answers.json] [--unproven answers.json] [--recipes answers.json] [--gallery answers.json] [--halt answer.json] [--record-search answers.json] [--access answer.json] [--receipts answer.json] [--activity answer.json] [--calls answer.json] [--receipt answer.json] [--work answer.json] [--doors answer.json] [--account-reads answers.json] [--me answer.json] [--memory answer.json] [--runs answer.json] [--request answer.json] [--balance answer.json] [--coach answer.json] [--coach-chats answer.json] [--chat answer.json [--report]] [--brief answer.json] [--size WxH] [--page welcome|sign-in|pair|recipe:<id>|gallery|halt-all|halt:<id>|record-search:<q>|record-export|receipt:<proposal id>|run:<taf id>|pin-sheet|coach|overview|needs-you|brief-answer:<decision id>|record|calendar|calendar-week|usage|connect-apps|account|kiff-account|time-zone|alerts|devices|people|taf|taf-card|taf-setup|consent|connected|sign-in-code] [--screenshot out.png]";
+     [--home contract.json] [--usage answers.json] [--people answers.json] [--unproven answers.json] [--recipes answers.json] [--gallery answers.json] [--halt answer.json] [--record-search answers.json] [--access answer.json] [--receipts answer.json] [--activity answer.json] [--calls answer.json] [--receipt answer.json] [--work answer.json] [--doors answer.json] [--account-reads answers.json] [--me answer.json] [--memory answer.json] [--runs answer.json] [--request answer.json] [--balance answer.json] [--coach answer.json] [--coach-chats answer.json] [--chat answer.json [--report]] [--brief answer.json] [--size WxH] [--page welcome|sign-in|pair|recipe:<id>|gallery|halt-all|halt:<id>|record-search:<q>|record-export|receipt:<proposal id>|run:<taf id>|pin-sheet|coach|overview|overview-label:<id>|needs-you|brief-answer:<decision id>|record|calendar|calendar-week|usage|connect-apps|account|kiff-account|time-zone|alerts|devices|people|taf|taf-card|taf-setup|consent|connected|sign-in-code] [--screenshot out.png]";
 
 fn options() -> Result<Options, String> {
     let mut o = Options::default();
@@ -415,6 +415,13 @@ fn activate(app: &adw::Application, o: &Options) {
             .as_deref()
             .is_some_and(|p| p.starts_with("taf-setup:")),
     });
+    if let Some(id) = o
+        .page
+        .as_deref()
+        .and_then(|p| p.strip_prefix("overview-label:"))
+    {
+        overview::CHOSEN.with(|c| *c.borrow_mut() = Some(id.to_string()));
+    }
     if let Some(id) = o
         .page
         .as_deref()
@@ -1536,6 +1543,19 @@ impl App {
         let overview =
             tafs_core::overview::lines(words, &tafs, &model.held, count, &needs_you_words)
                 .unwrap_or_else(|e| fail(e));
+        // Home's labels, as chips over the grid and on each taf's line (docs/labels.md); none
+        // sent, none drawn. The sample's are the iPad's screenshots' only.
+        let overview = match (mode, cloud.as_deref()) {
+            (Mode::Kiff, Some(c)) => tafs_core::overview::with_labels(
+                words,
+                overview,
+                c.home.labels(),
+                c.home.labels_all().as_deref(),
+                c.brief.as_ref(),
+            )
+            .unwrap_or_else(|e| fail(e)),
+            _ => overview,
+        };
         let holders: Vec<tafs_core::needs_you::Holder> = model
             .tafs
             .iter()
