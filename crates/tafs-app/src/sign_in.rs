@@ -1,6 +1,9 @@
-//! Sign in with KIFF (`SignInView`): this computer shows a code, the person approves it in KIFF
-//! in their browser, and this computer receives a session. Shown as the iPad's sheet: a dialog
-//! over the welcome, with Cancel.
+//! Sign in (`SignInView`, the approved redesign): two halves, as on an iPad or a Mac. On the
+//! left, "Sign in with KIFF" with Continue: this computer shows a code, the person approves it in
+//! KIFF in their browser, and this computer receives a session. On the right, "Sign in with your
+//! phone": the pairing QR at once (`PairSignInView(embedded: true)`, `pairing.rs`). A narrow window
+//! stacks them. Shown as the iPad's sheet: a dialog over the welcome, with Cancel. Either way ends
+//! on the celebration (`connected.rs`). Every word is a shared key; the drawings carry no text.
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -17,6 +20,11 @@ use tafs_core::words::WordBook;
 
 use crate::kiff::Kiff;
 use crate::widgets::{eyebrow, icon_for, outline, panel, primary, symbol, text};
+
+thread_local! {
+    /// A screenshot's sign-in with Continue already tapped (`--page sign-in-code`).
+    pub static CONTINUED: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
 
 /// What the person reads while it starts, waits, or after it stopped.
 struct Ui {
@@ -68,15 +76,15 @@ impl Clock for Waiting {
     }
 }
 
-/// The sign-in. `done` gets the kept session once KIFF hands it over and the keyring holds it.
-/// `pair` opens the pairing (`PairSignInView`): signing in from the person's other phone.
+/// The sign-in. `done` gets the kept session once KIFF hands it over, or the phone pairs this
+/// computer, and the keyring holds it. `preview`: a screenshot's, which reaches nothing: Continue
+/// shows the code given, and the phone's half a code made here, never claimed.
 pub fn present(
     parent: &impl IsA<gtk::Widget>,
     window: &gtk::Window,
     w: Rc<WordBook>,
     languages: Vec<&'static str>,
     done: Rc<dyn Fn(KeptSession)>,
-    pair: Rc<dyn Fn()>,
     preview: Option<DeviceStart>,
 ) {
     let l = {
@@ -85,13 +93,28 @@ pub fn present(
     };
     let device = l("device.linux");
 
-    let content = gtk::Box::new(gtk::Orientation::Vertical, 20);
-    content.set_margin_start(24);
-    content.set_margin_end(24);
-    content.set_margin_top(12);
-    content.set_margin_bottom(24);
-
-    content.append(&text(&l("sign_in.with_kiff"), 34, 700, &["tafs-ink"]));
+    // The usual way (`kiffHalf`): the drawing, "Sign in with KIFF", Continue; then the code.
+    let half = gtk::Box::new(gtk::Orientation::Vertical, 24);
+    half.set_margin_start(32);
+    half.set_margin_end(32);
+    half.set_margin_top(32);
+    half.set_margin_bottom(32);
+    half.append(&crate::connected::kiff_art());
+    let title = text(&l("sign_in.with_kiff"), 30, 700, &["tafs-ink"]);
+    title.set_xalign(0.5);
+    title.set_justify(gtk::Justification::Center);
+    half.append(&title);
+    let continue_button = primary(&l("common.continue"));
+    continue_button.set_widget_name("signIn.continue");
+    continue_button.set_halign(gtk::Align::Center);
+    continue_button.set_hexpand(false);
+    continue_button.set_size_request(320, -1);
+    half.append(&continue_button);
+    // Shown once Continue is tapped, at most 420 wide.
+    let content = gtk::Box::new(gtk::Orientation::Vertical, 16);
+    content.set_halign(gtk::Align::Center);
+    content.set_size_request(380, -1);
+    content.set_visible(false);
     content.append(&text(
         &w.get("sign_in.lead", &[("device", &device)]).unwrap(),
         15,
@@ -147,29 +170,73 @@ pub fn present(
     content.append(&code_box);
 
     let starting = gtk::Spinner::new();
-    starting.set_halign(gtk::Align::Start);
+    starting.set_halign(gtk::Align::Center);
     content.append(&starting);
+    half.append(&content);
 
     let problem = text("", 14, 400, &["tafs-no"]);
-    content.append(&problem);
+    problem.set_xalign(0.5);
+    problem.set_justify(gtk::Justification::Center);
+    half.append(&problem);
     let try_again = outline(&l("common.try_again"));
-    content.append(&try_again);
+    try_again.set_halign(gtk::Align::Center);
+    try_again.set_hexpand(false);
+    half.append(&try_again);
+    let terms = agreement(&w);
+    terms.set_xalign(0.5);
+    terms.set_justify(gtk::Justification::Center);
+    terms.set_halign(gtk::Align::Center);
+    terms.set_size_request(380, -1);
+    half.append(&terms);
 
-    // "Sign in with your other phone" (`PairSignInView`): this sign-in stops, and the pairing
-    // opens: the QR and its check code, for the other phone to scan and approve.
-    let pair_button = outline(&l("sign_in.pair_start"));
-    pair_button.set_widget_name("signIn.pair");
-    content.append(&pair_button);
+    // The other way (`phoneHalf`): this computer's pairing QR, scanned and approved from the
+    // person's phone, on the raised colour.
+    let dialog = adw::Dialog::new();
+    let finished: Rc<dyn Fn(KeptSession)> = {
+        let (dialog, done) = (dialog.clone(), done.clone());
+        Rc::new(move |kept| {
+            dialog.close();
+            done(kept);
+        })
+    };
+    let phone = Rc::new(crate::pairing::body(
+        w.clone(),
+        languages.clone(),
+        None,
+        finished,
+        preview.is_some(),
+        true,
+    ));
+    let phone_half = gtk::Box::new(gtk::Orientation::Vertical, 0);
+    phone_half.add_css_class("tafs-raised");
+    phone_half.append(&phone.root);
 
-    let spacer = gtk::Box::new(gtk::Orientation::Vertical, 0);
-    spacer.set_vexpand(true);
-    content.append(&spacer);
-    content.append(&agreement(&w));
-
+    // Side by side, each half as wide as the other; a narrow window stacks them.
+    let halves = gtk::Box::new(gtk::Orientation::Horizontal, 0);
+    halves.set_homogeneous(true);
+    half.set_valign(gtk::Align::Start);
+    halves.append(&half);
+    halves.append(&phone_half);
     let scroller = gtk::ScrolledWindow::new();
     scroller.set_hscrollbar_policy(gtk::PolicyType::Never);
-    scroller.set_child(Some(&content));
+    scroller.set_child(Some(&halves));
     scroller.set_vexpand(true);
+    let bin = adw::BreakpointBin::new();
+    bin.set_size_request(320, 400);
+    bin.set_child(Some(&scroller));
+    let narrow = adw::Breakpoint::new(adw::BreakpointCondition::new_length(
+        adw::BreakpointConditionLengthType::MaxWidth,
+        // Below both halves' least (each 380 wide inside 32 on each side), with room to spare.
+        920.0,
+        adw::LengthUnit::Px,
+    ));
+    narrow.add_setter(
+        &halves,
+        "orientation",
+        Some(&gtk::Orientation::Vertical.to_value()),
+    );
+    narrow.add_setter(&halves, "homogeneous", Some(&false.to_value()));
+    bin.add_breakpoint(narrow);
 
     let header = adw::HeaderBar::new();
     header.set_show_end_title_buttons(false);
@@ -181,13 +248,12 @@ pub fn present(
     header.set_title_widget(Some(&gtk::Label::new(None)));
     let toolbar = adw::ToolbarView::new();
     toolbar.add_top_bar(&header);
-    toolbar.set_content(Some(&scroller));
+    toolbar.set_content(Some(&bin));
     crate::widgets::ground(&toolbar);
 
-    let dialog = adw::Dialog::new();
     dialog.set_child(Some(&toolbar));
-    dialog.set_content_width(560);
-    dialog.set_content_height(700);
+    dialog.set_content_width(1000);
+    dialog.set_content_height(720);
     dialog.set_title(&l("sign_in.with_kiff"));
 
     let ui = Rc::new(Ui {
@@ -343,16 +409,13 @@ pub fn present(
         });
     }
     {
-        // Closing stops this sign-in's polling (below), as the iPad's `task?.cancel()`.
-        let dialog = dialog.clone();
-        pair_button.connect_clicked(move |_| {
-            dialog.close();
-            pair();
+        // Closing stops both ways: this sign-in's polling and the pairing's claims, as the iPad's
+        // `task?.cancel()`.
+        let (run, phone) = (run.clone(), phone.clone());
+        dialog.connect_closed(move |_| {
+            run.borrow().cancelled.store(true, Ordering::SeqCst);
+            phone.stop();
         });
-    }
-    {
-        let run = run.clone();
-        dialog.connect_closed(move |_| run.borrow().cancelled.store(true, Ordering::SeqCst));
     }
     // Back from approving in the browser: ask KIFF at once.
     {
@@ -364,14 +427,33 @@ pub fn present(
         });
     }
 
+    // Continue: the code is asked for and shown (`begin`).
+    {
+        let (content, current, ui, w, begin) = (
+            content.clone(),
+            current.clone(),
+            ui.clone(),
+            w.clone(),
+            begin.clone(),
+        );
+        continue_button.connect_clicked(move |b| {
+            b.set_visible(false);
+            content.set_visible(true);
+            match &preview {
+                // A screenshot: a code as KIFF would show it, without reaching KIFF.
+                Some(start) => {
+                    *current.borrow_mut() = Some(start.clone());
+                    show(&ui, &w, Some(start), None);
+                }
+                None => begin(),
+            }
+        });
+    }
+    show(&ui, &w, None, None);
+    ui.starting.set_visible(false);
     dialog.present(Some(parent));
-    match preview {
-        // A screenshot: a code as KIFF would show it, without reaching KIFF.
-        Some(start) => {
-            *current.borrow_mut() = Some(start.clone());
-            show(&ui, &w, Some(&start), None);
-        }
-        None => begin(),
+    if CONTINUED.with(|c| c.replace(false)) {
+        continue_button.emit_clicked();
     }
 }
 

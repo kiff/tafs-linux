@@ -5,6 +5,31 @@ over it as a dialog, the iPad's sheet. The flow is KIFF's device authorization, 
 use (KIFF's desktop client contract §1.1). The logic is in `tafs-core/src/signin.rs` and tested
 there; the screen is `crates/tafs-app/src/sign_in.rs`.
 
+## The sign-in: two halves
+
+The approved redesign (tafs#1240's `SignInView` for an iPad or a Mac), a dialog 1000 wide:
+
+- **On the left, the usual way** (`kiffHalf`): a drawing of KIFF's sign-in (a card with the app's
+  mark, two lines and its button, under a lock, on a soft amber circle), "Sign in with KIFF" (30
+  bold), and **Continue** (the brand's button, 320 wide). Continue starts the flow below, and its
+  code and its steps show in its place, at most 420 wide. The terms line is under it.
+- **On the right, the other way** (`phoneHalf`), on the raised colour: this computer's
+  [pairing](pairing.md), its QR shown at once, "Sign in with your phone", "Scan with tafs" with
+  a viewfinder, where to scan it (`sign_in.pair_how`), the check code in its panel with "It will
+  ask whether this computer shows {code}." (`sign_in.pair_check`), and the wait.
+- **A narrow window** (under 920, both halves' least) stacks them, the phone's under KIFF's, and
+  scrolls.
+- **Either way ends on the celebration** (`ConnectedView`, `crates/tafs-app/src/connected.rs`),
+  over the account just opened: the computer and the phone joined, a check between them; "You're
+  connected." and "Let's build great things together." (30 bold); **Let's go**, which closes it.
+- **The drawings are shapes only**, drawn here: no letter, number or word (rule 14). Every word is
+  a shared key.
+- Cancel closes it, and stops both: the browser's wait and the pairing's claims.
+
+`--page sign-in` draws it with nothing reached; `--page sign-in-code` with Continue tapped and a
+made-up code; `--size 700x900` narrow; `--page connected` the celebration (CI's `sign-in`,
+`sign-in-code`, `sign-in-narrow`, `connected`).
+
 ## The welcome
 
 The mascot (96), "tafs" (48 bold), the lead (16, soft), and its three points: Inside the Card,
@@ -43,10 +68,7 @@ with the view-only notice when KIFF's `approval_mode` says `view` (or says nothi
 | Waiting | YOUR CODE in its amber-edged panel, Open KIFF to approve, the link with Copy, "Waiting for your approval…" |
 | Stopped | why, in plain words by status (`PlainError`): offline, busy, down, or "The sign-in code expired. Start again.", and Try again |
 
-Under them, "Sign in with your other phone" (`PairSignInView`): this sign-in stops (its wait for the
-browser ends, as the iPad's `task?.cancel()`), and this computer's [pairing](pairing.md) opens: the
-QR and its check code, for the person's phone to scan and approve. Then the
-terms line, Terms and Privacy policy linked in the app's language (`kiff.dev/<lang>/tafs/terms`,
+Under them, the terms line, Terms and Privacy policy linked in the app's language (`kiff.dev/<lang>/tafs/terms`,
 `/<lang>/tafs/privacy` for de, es, fr, it, nl, pl and pt), and in English, saying "(in English)",
 for any other language (`kiff.dev/tafs/terms`, `/tafs/privacy`). Account's Legal rows do the same. Cancel closes it and stops the poll.
 

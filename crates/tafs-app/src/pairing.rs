@@ -26,7 +26,7 @@ use tafs_core::signin::{self, Cancelled, Clock, KiffError, Stopped};
 use tafs_core::words::WordBook;
 
 use crate::kiff::Kiff;
-use crate::widgets::{primary, text};
+use crate::widgets::{outline, primary, text};
 
 /// The QR code's side on screen, as tafs-macos draws it, and its white margin.
 const SIDE: i32 = 220;
@@ -83,6 +83,8 @@ struct Ui {
     starting: gtk::Spinner,
     note: gtk::Label,
     again: gtk::Button,
+    /// The sign-in's half: "It will ask whether this computer shows {code}." (`pairCheck`).
+    check_line: Option<gtk::Label>,
 }
 
 /// A QR code drawn as squares, crisp at any scale: black modules on white, with a white margin
@@ -147,6 +149,15 @@ fn show(ui: &Ui, w: &WordBook, step: &Step) {
             *ui.modules.borrow_mut() = pairing::qr(&code.text);
             ui.qr.queue_draw();
             ui.check.set_label(&code.check);
+            if let Some(line) = &ui.check_line {
+                line.set_label(
+                    &w.get(
+                        "sign_in.pair_check",
+                        &[("device", &device), ("code", &code.check)],
+                    )
+                    .unwrap_or_default(),
+                );
+            }
         }
         Step::Expired => {
             ui.note
@@ -178,53 +189,49 @@ fn why(e: &KiffError, w: &WordBook) -> String {
     why.trim_end_matches('.').to_string()
 }
 
-/// The pairing. `replaced` is the view-only session this computer has, if any: it is signed out
-/// at KIFF once the new one is kept. `done` gets the new kept session. `preview` shows a code
-/// made here without reaching KIFF or the keyring, for a screenshot.
-pub fn present(
-    parent: &impl IsA<gtk::Widget>,
+/// A pairing on screen: what it draws, and how to stop it (closing what holds it).
+pub struct Pairing {
+    pub root: gtk::Box,
+    attempt: Rc<RefCell<Arc<AtomicBool>>>,
+}
+
+impl Pairing {
+    /// Stops its claims: a session KIFF hands over after this ends at KIFF at once.
+    pub fn stop(&self) {
+        self.attempt.borrow().store(true, Ordering::SeqCst);
+    }
+}
+
+/// The pairing, started. Alone (`present`): the title, the QR, where to scan it, the check code,
+/// the wait. `embedded`: the sign-in's right half (`PairSignInView(embedded: true)`), the QR first,
+/// "Sign in with your phone", "Scan with tafs", then where to scan it and the check code in its
+/// panel. `done` gets the kept session; whoever holds the pairing closes.
+pub fn body(
     w: Rc<WordBook>,
     languages: Vec<&'static str>,
     replaced: Option<KeptSession>,
     done: Rc<dyn Fn(KeptSession)>,
     preview: bool,
-) {
+    embedded: bool,
+) -> Pairing {
     let l = {
         let w = w.clone();
         move |k: &str| w.line(k).unwrap_or_else(|e| panic!("{e}"))
     };
     let device = l("device.linux");
 
-    let content = gtk::Box::new(gtk::Orientation::Vertical, 18);
+    let content = gtk::Box::new(gtk::Orientation::Vertical, if embedded { 22 } else { 18 });
     content.set_margin_start(32);
     content.set_margin_end(32);
-    content.set_margin_top(12);
+    content.set_margin_top(if embedded { 32 } else { 12 });
     content.set_margin_bottom(32);
-
-    let title = text(
-        &w.get("pair.title", &[("device", &device)]).unwrap(),
-        24,
-        700,
-        &["tafs-ink"],
-    );
-    title.set_xalign(0.5);
-    title.set_justify(gtk::Justification::Center);
-    content.append(&title);
-
-    let code_box = gtk::Box::new(gtk::Orientation::Vertical, 18);
-    let modules: Rc<RefCell<Option<QrModules>>> = Rc::new(RefCell::new(None));
-    let qr = qr_area(modules.clone());
-    qr.update_property(&[gtk::accessible::Property::Label(
-        &w.get("pair.title", &[("device", &device)]).unwrap(),
-    )]);
-    code_box.append(&qr);
     let centred = |label: gtk::Label| {
         label.set_xalign(0.5);
         label.set_justify(gtk::Justification::Center);
         label
     };
-    code_box.append(&centred(text(
-        &w.get(
+    let steps = || {
+        w.get(
             "pair.steps",
             &[
                 ("account", &l("settings.title")),
@@ -232,64 +239,113 @@ pub fn present(
                 ("pair", &l("settings.devices.pair")),
             ],
         )
-        .unwrap(),
-        14,
-        400,
-        &["tafs-dim"],
-    )));
-    code_box.append(&centred(text(
-        &w.get("pair.check_code_lead", &[("device", &device)])
-            .unwrap(),
-        14,
-        400,
-        &["tafs-ink"],
-    )));
+        .unwrap()
+    };
+
+    let modules: Rc<RefCell<Option<QrModules>>> = Rc::new(RefCell::new(None));
+    let qr = qr_area(modules.clone());
+    qr.update_property(&[gtk::accessible::Property::Label(
+        &w.get("pair.title", &[("device", &device)]).unwrap(),
+    )]);
     let check = gtk::Label::new(None);
     check.set_selectable(true);
-    check.set_halign(gtk::Align::Center);
     check.add_css_class("tafs-code");
-    check.add_css_class("tafs-check-code");
-    code_box.append(&check);
     let wait_row = gtk::Box::new(gtk::Orientation::Horizontal, 8);
-    wait_row.set_halign(gtk::Align::Center);
     let spinner = gtk::Spinner::new();
     spinner.start();
     wait_row.append(&spinner);
-    wait_row.append(&text(&l("pair.waiting"), 14, 400, &["tafs-soft"]));
-    code_box.append(&wait_row);
-    content.append(&code_box);
-
+    let code_box = gtk::Box::new(gtk::Orientation::Vertical, 18);
     let starting = gtk::Spinner::new();
     starting.set_halign(gtk::Align::Center);
-    content.append(&starting);
+    let check_line_label = text("", 13, 400, &["tafs-dim"]);
+
+    if embedded {
+        // The QR first, on its white card, then the half's title and how to scan it.
+        let card = gtk::Box::new(gtk::Orientation::Vertical, 0);
+        card.add_css_class("tafs-qr-card");
+        card.set_halign(gtk::Align::Center);
+        card.append(&qr);
+        code_box.append(&card);
+        content.append(&code_box);
+        starting.set_size_request(-1, SIDE + 2 * MARGIN);
+        content.append(&starting);
+        content.append(&centred(text(
+            &l("sign_in.with_phone"),
+            30,
+            700,
+            &["tafs-ink"],
+        )));
+        let scan = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+        scan.set_halign(gtk::Align::Center);
+        scan.append(&crate::widgets::symbol("tafs-viewfinder-symbolic", 17));
+        scan.append(&text(&l("sign_in.scan_with_tafs"), 17, 400, &["tafs-soft"]));
+        content.append(&scan);
+        // Once there's a code: where to scan it, then the check code in its panel, and the wait.
+        let lines = gtk::Box::new(gtk::Orientation::Vertical, 14);
+        lines.set_halign(gtk::Align::Center);
+        lines.set_size_request(380, -1);
+        lines.append(&text(
+            &w.get(
+                "sign_in.pair_how",
+                &[
+                    ("account", &l("settings.title")),
+                    ("devices", &l("settings.devices.title")),
+                    ("add", &l("settings.devices.pair")),
+                ],
+            )
+            .unwrap(),
+            14,
+            400,
+            &["tafs-dim"],
+        ));
+        let p = crate::widgets::panel(true);
+        p.append(&crate::widgets::eyebrow(&l("sign_in.your_code"), false));
+        check.set_xalign(0.0);
+        p.append(&check);
+        p.append(&check_line_label);
+        lines.append(&p);
+        wait_row.append(&text(&l("sign_in.pair_waiting"), 14, 400, &["tafs-soft"]));
+        lines.append(&wait_row);
+        // Shown with the QR, once there's a code.
+        code_box
+            .bind_property("visible", &lines, "visible")
+            .sync_create()
+            .build();
+        content.append(&lines);
+    } else {
+        let title = text(
+            &w.get("pair.title", &[("device", &device)]).unwrap(),
+            24,
+            700,
+            &["tafs-ink"],
+        );
+        title.set_xalign(0.5);
+        title.set_justify(gtk::Justification::Center);
+        content.append(&title);
+        code_box.append(&qr);
+        code_box.append(&centred(text(&steps(), 14, 400, &["tafs-dim"])));
+        code_box.append(&centred(text(
+            &w.get("pair.check_code_lead", &[("device", &device)])
+                .unwrap(),
+            14,
+            400,
+            &["tafs-ink"],
+        )));
+        check.set_halign(gtk::Align::Center);
+        check.add_css_class("tafs-check-code");
+        code_box.append(&check);
+        wait_row.set_halign(gtk::Align::Center);
+        wait_row.append(&text(&l("pair.waiting"), 14, 400, &["tafs-soft"]));
+        code_box.append(&wait_row);
+        content.append(&code_box);
+        content.append(&starting);
+    }
     let note = centred(text("", 14, 400, &[]));
     content.append(&note);
-    let again = primary("");
+    let again = if embedded { outline("") } else { primary("") };
     again.set_halign(gtk::Align::Center);
+    again.set_hexpand(false);
     content.append(&again);
-
-    let scroller = gtk::ScrolledWindow::new();
-    scroller.set_hscrollbar_policy(gtk::PolicyType::Never);
-    scroller.set_child(Some(&content));
-    scroller.set_vexpand(true);
-
-    let header = adw::HeaderBar::new();
-    header.set_show_end_title_buttons(false);
-    header.set_show_start_title_buttons(false);
-    let cancel = gtk::Button::with_label(&l("common.cancel"));
-    cancel.add_css_class("flat");
-    header.pack_start(&cancel);
-    header.set_title_widget(Some(&gtk::Label::new(None)));
-    let toolbar = adw::ToolbarView::new();
-    toolbar.add_top_bar(&header);
-    toolbar.set_content(Some(&scroller));
-    crate::widgets::ground(&toolbar);
-
-    let dialog = adw::Dialog::new();
-    dialog.set_child(Some(&toolbar));
-    dialog.set_content_width(520);
-    dialog.set_content_height(680);
-    dialog.set_title(&w.get("pair.title", &[("device", &device)]).unwrap());
 
     let ui = Rc::new(Ui {
         code_box,
@@ -299,19 +355,19 @@ pub fn present(
         starting,
         note,
         again,
+        check_line: embedded.then_some(check_line_label),
     });
     // The attempt on screen: a new one stops the last, and closing stops it.
     let attempt: Rc<RefCell<Arc<AtomicBool>>> =
         Rc::new(RefCell::new(Arc::new(AtomicBool::new(false))));
 
     let begin: Rc<dyn Fn()> = {
-        let (ui, attempt, w, languages, done, dialog, replaced) = (
+        let (ui, attempt, w, languages, done, replaced) = (
             ui.clone(),
             attempt.clone(),
             w.clone(),
             languages.clone(),
             done.clone(),
-            dialog.clone(),
             replaced.clone(),
         );
         Rc::new(move || {
@@ -319,12 +375,11 @@ pub fn present(
             let cancelled = Arc::new(AtomicBool::new(false));
             *attempt.borrow_mut() = cancelled.clone();
             show(&ui, &w, &Step::Starting);
-            let (ui, w, languages, done, dialog, replaced) = (
+            let (ui, w, languages, done, replaced) = (
                 ui.clone(),
                 w.clone(),
                 languages.clone(),
                 done.clone(),
-                dialog.clone(),
                 replaced.clone(),
             );
             glib::spawn_future_local(async move {
@@ -394,10 +449,7 @@ pub fn present(
                     return;
                 }
                 match finished {
-                    Ok(kept) => {
-                        dialog.close();
-                        done(kept);
-                    }
+                    Ok(kept) => done(kept),
                     Err(Stopped::Cancelled) => {}
                     Err(Stopped::Failed(KiffError::Expired)) => show(&ui, &w, &Step::Expired),
                     Err(Stopped::Failed(e)) => show(&ui, &w, &Step::Failed(why(&e, &w))),
@@ -405,23 +457,10 @@ pub fn present(
             });
         })
     };
-
     {
         let begin = begin.clone();
         ui.again.connect_clicked(move |_| begin());
     }
-    {
-        let dialog = dialog.clone();
-        cancel.connect_clicked(move |_| {
-            dialog.close();
-        });
-    }
-    {
-        let attempt = attempt.clone();
-        dialog.connect_closed(move |_| attempt.borrow().store(true, Ordering::SeqCst));
-    }
-
-    dialog.present(Some(parent));
     if preview {
         // A screenshot: a code made here, never claimed.
         let key = DeviceKey::generate();
@@ -438,4 +477,72 @@ pub fn present(
     } else {
         begin();
     }
+    Pairing {
+        root: content,
+        attempt,
+    }
+}
+
+/// The pairing alone, as a dialog over what's open, with Cancel: from the welcome, or to pair a
+/// view-only computer again.
+pub fn present(
+    parent: &impl IsA<gtk::Widget>,
+    w: Rc<WordBook>,
+    languages: Vec<&'static str>,
+    replaced: Option<KeptSession>,
+    done: Rc<dyn Fn(KeptSession)>,
+    preview: bool,
+) {
+    let device = w.line("device.linux").unwrap_or_default();
+    let dialog = adw::Dialog::new();
+    let close_and_done: Rc<dyn Fn(KeptSession)> = {
+        let dialog = dialog.clone();
+        Rc::new(move |kept| {
+            dialog.close();
+            done(kept);
+        })
+    };
+    let pairing = Rc::new(body(
+        w.clone(),
+        languages,
+        replaced,
+        close_and_done,
+        preview,
+        false,
+    ));
+    let scroller = gtk::ScrolledWindow::new();
+    scroller.set_hscrollbar_policy(gtk::PolicyType::Never);
+    scroller.set_child(Some(&pairing.root));
+    scroller.set_vexpand(true);
+
+    let header = adw::HeaderBar::new();
+    header.set_show_end_title_buttons(false);
+    header.set_show_start_title_buttons(false);
+    let cancel = gtk::Button::with_label(&w.line("common.cancel").unwrap_or_default());
+    cancel.add_css_class("flat");
+    header.pack_start(&cancel);
+    header.set_title_widget(Some(&gtk::Label::new(None)));
+    let toolbar = adw::ToolbarView::new();
+    toolbar.add_top_bar(&header);
+    toolbar.set_content(Some(&scroller));
+    crate::widgets::ground(&toolbar);
+
+    dialog.set_child(Some(&toolbar));
+    dialog.set_content_width(520);
+    dialog.set_content_height(680);
+    dialog.set_title(
+        &w.get("pair.title", &[("device", &device)])
+            .unwrap_or_default(),
+    );
+    {
+        let dialog = dialog.clone();
+        cancel.connect_clicked(move |_| {
+            dialog.close();
+        });
+    }
+    {
+        let pairing = pairing.clone();
+        dialog.connect_closed(move |_| pairing.stop());
+    }
+    dialog.present(Some(parent));
 }

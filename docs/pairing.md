@@ -9,6 +9,8 @@ signs this computer's key. The iPad has no computer side to port (it has the pho
 
 ## Where it opens
 
+- **The sign-in's right half** (`PairSignInView(embedded: true)`), its QR shown as soon as the
+  sign-in opens, in the half's own words ([sign-in](sign-in.md)).
 - **The welcome**, under its buttons: "Already use tafs on your phone? Add this computer with it."
 - **The view-only notice** beside the sidebar: **Add this computer**. The pairing replaces the
   view-only session (below). Once paired, the notice has no button and says approvals go to the

@@ -6,6 +6,7 @@ mod alerts;
 mod approval;
 mod calendar;
 mod connect;
+mod connected;
 mod devices;
 mod fido_key;
 mod halt;
@@ -144,7 +145,7 @@ struct Options {
 }
 
 const USAGE: &str = "tafs [--lang en|de|fr|es|it|pt|nl|pl] [--theme light|dark] [--sample] [--signed-in] [--view-only [--paired]]
-     [--home contract.json] [--usage answers.json] [--people answers.json] [--unproven answers.json] [--recipes answers.json] [--gallery answers.json] [--halt answer.json] [--record-search answers.json] [--access answer.json] [--receipts answer.json] [--activity answer.json] [--calls answer.json] [--receipt answer.json] [--work answer.json] [--doors answer.json] [--account-reads answers.json] [--me answer.json] [--memory answer.json] [--runs answer.json] [--request answer.json] [--balance answer.json] [--size WxH] [--page welcome|sign-in|pair|recipe:<id>|gallery|halt-all|halt:<id>|record-search:<q>|record-export|receipt:<proposal id>|run:<taf id>|pin-sheet|overview|needs-you|record|calendar|calendar-week|usage|connect-apps|account|kiff-account|time-zone|alerts|devices|people|taf|taf-card|taf-setup|consent] [--screenshot out.png]";
+     [--home contract.json] [--usage answers.json] [--people answers.json] [--unproven answers.json] [--recipes answers.json] [--gallery answers.json] [--halt answer.json] [--record-search answers.json] [--access answer.json] [--receipts answer.json] [--activity answer.json] [--calls answer.json] [--receipt answer.json] [--work answer.json] [--doors answer.json] [--account-reads answers.json] [--me answer.json] [--memory answer.json] [--runs answer.json] [--request answer.json] [--balance answer.json] [--size WxH] [--page welcome|sign-in|pair|recipe:<id>|gallery|halt-all|halt:<id>|record-search:<q>|record-export|receipt:<proposal id>|run:<taf id>|pin-sheet|overview|needs-you|record|calendar|calendar-week|usage|connect-apps|account|kiff-account|time-zone|alerts|devices|people|taf|taf-card|taf-setup|consent|connected|sign-in-code] [--screenshot out.png]";
 
 fn options() -> Result<Options, String> {
     let mut o = Options::default();
@@ -419,6 +420,10 @@ fn activate(app: &adw::Application, o: &Options) {
         _ if o.sample => app_state.open_shell(Mode::Sample, false, None),
         _ if from_file.is_some() => {
             app_state.open_shell(Mode::Kiff, o.view_only, from_file.clone());
+            // `--page connected`: the celebration after signing in, over the shell.
+            if o.page.as_deref() == Some("connected") {
+                connected::present(&app_state.window, &app_state.words);
+            }
             // `--page consent`: the AI-data consent's screen, as after sign-in, from `--account-reads`.
             if o.page.as_deref() == Some("consent") {
                 if let Some(file) = &app_state.account_reads_file {
@@ -462,9 +467,14 @@ fn activate(app: &adw::Application, o: &Options) {
             }
         }
         _ if o.view_only => app_state.open_shell(Mode::Kiff, true, None),
-        (Some("welcome") | Some("sign-in") | Some("pair"), _) | (_, None) => {
+        (Some("welcome") | Some("sign-in") | Some("sign-in-code") | Some("pair"), _)
+        | (_, None) => {
             app_state.show_welcome();
-            if o.page.as_deref() == Some("sign-in") {
+            // `--page sign-in-code`: Continue already tapped, the code on screen.
+            if o.page.as_deref() == Some("sign-in-code") {
+                sign_in::CONTINUED.with(|c| c.set(true));
+            }
+            if matches!(o.page.as_deref(), Some("sign-in") | Some("sign-in-code")) {
                 // A screenshot shows a code without reaching KIFF.
                 app_state.present_sign_in(screenshot.then(|| sign_in::preview(lang)));
             }
@@ -646,7 +656,7 @@ impl App {
     /// the one the new one replaces. `preview`: a code made here, for a screenshot.
     fn present_pairing(self: &Rc<Self>, preview: bool) {
         let me = self.clone();
-        let done: Rc<dyn Fn(KeptSession)> = Rc::new(move |kept| me.open_account(kept));
+        let done: Rc<dyn Fn(KeptSession)> = Rc::new(move |kept| me.connected(kept));
         pairing::present(
             &self.window,
             self.words.clone(),
@@ -660,19 +670,22 @@ impl App {
     /// Sign in with KIFF over what's open.
     fn present_sign_in(self: &Rc<Self>, preview: Option<tafs_core::signin::DeviceStart>) {
         let me = self.clone();
-        let done: Rc<dyn Fn(KeptSession)> = Rc::new(move |kept| me.open_account(kept));
-        // A screenshot's sign-in pairs as a preview too: a code made here, never claimed.
-        let (me, previewing) = (self.clone(), preview.is_some());
-        let pair: Rc<dyn Fn()> = Rc::new(move || me.present_pairing(previewing));
+        let done: Rc<dyn Fn(KeptSession)> = Rc::new(move |kept| me.connected(kept));
         sign_in::present(
             &self.window,
             self.window.upcast_ref(),
             self.words.clone(),
             self.languages.clone(),
             done,
-            pair,
             preview,
         );
+    }
+
+    /// Signed in just now, by KIFF or by pairing: the account opens, and the celebration shows
+    /// over it, once (`justConnected`, `ConnectedView`).
+    fn connected(self: &Rc<Self>, kept: KeptSession) {
+        self.open_account(kept);
+        connected::present(&self.window, &self.words);
     }
 
     /// Signed in: the shell at once, then the account (`GET /v1/me`), Home and the held calls,

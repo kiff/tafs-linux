@@ -258,6 +258,8 @@ button.tafs-knock-do { background: @tafs_amber; color: white; font-size: 14px; f
 button.tafs-knock-pair { background: none; color: @tafs_ink; font-size: 14px; font-weight: 500; border-radius: 999px; padding: 8px 12px; border: 1px solid alpha(@tafs_ink, 0.2); box-shadow: none; min-height: 0; }
 button.tafs-knock-ignore { background: none; color: @tafs_soft; font-size: 14px; font-weight: 500; padding: 8px 12px; border: none; box-shadow: none; min-height: 0; }
 .tafs-do-it-field { background-color: @tafs_panel; border: 1px solid @tafs_line; border-radius: 12px; padding: 6px; font-size: 15px; }
+/* The sign-in's phone half: the QR on its white card, 20 round, with a soft shadow. */
+.tafs-qr-card { background-color: white; border-radius: 20px; padding: 16px; box-shadow: 0 10px 18px alpha(black, 0.14); }
 "#;
 
 /// The style sheet for one appearance.
