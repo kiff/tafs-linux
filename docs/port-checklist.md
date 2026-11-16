@@ -10,12 +10,13 @@ ports a file updates its line here.
 | iPad file | Lines | What | Models | Linux |
 | :- | -: | :- | :- | :- |
 | OnboardingView.swift | 63 | The welcome: what tafs is, Sign in with KIFF, Try it with sample data | AppModel.startSample | `welcome.rs`, with board 1 (first run) drawn in shapes (`illustrations.rs`) |
-| AIConsentView.swift | 74 | The AI-data consent screen and Account's row | `AIConsent`, `allowAI`, `notNowAI`, `withdrawAI`, `loadAIConsent` | `ai_consent.rs`, `tafs-core/ai_consent.rs`: the screen after sign-in and from Account, Allow with the words' version (a 409 shows the newer words), Not now for the session, Withdraw; a refused model turn has none to ask on Linux (no chat yet) |
+| AIConsentView.swift | 74 | The AI-data consent screen and Account's row | `AIConsent`, `allowAI`, `notNowAI`, `withdrawAI`, `loadAIConsent` | `ai_consent.rs`, `tafs-core/ai_consent.rs`: the screen after sign-in and from Account, Allow with the words' version (a 409 shows the newer words), Not now for the session, Withdraw; and a turn refused for want of it, in Coach's and a taf's chat |
 | ApprovalSetupView.swift | 102 | Why this device can't approve, in an approval's place: `ApprovalGate`, `ApprovalNotice`, `ApprovalNotReady` | `ApprovalReadiness` (Biometry.swift): every state's words, `approvalBlocked` | `approval.rs`, `tafs-core/approval.rs`: this computer is `Unsupported` (no Face ID or Touch ID), so its line alone; `ReadinessReader` reads a value that never changes here, and `openTafsSettings` opens iOS settings |
 | DeleteAccountView.swift | 60 | Deleting the account: the warning, What goes, Delete account, Cancel | `deleteAccount` (signed: not on Linux) | `kiff_account.rs` › `delete_sheet`, `tafs-core/account.rs` › `delete_lines`; Delete account is `ApprovalGate`'s line, since this computer can't confirm, and the footer naming Face ID goes with it |
 | ExportChatsView.swift | 82 | Export my chats: preparing, the files, Ready… Share again, Try again | `exportChats`, `splitExport` | `kiff_account.rs` › `export_section`, `tafs-core/export_chats.rs`; saved in a folder the person picks, as Linux has no share sheet |
 | PairSignInView.swift | 104 | Signing in from another phone: the QR, the check code, the wait, the claim | KIFF/Pairing (§5.8) | The sign-in's right half (`embedded`, as tafs#1240), and the welcome's line, open this computer's pairing (`pairing.rs`, `tafs-core/pairing.rs`, from tafs-macos): the same QR, check code, wait and claim, with a computer's key (`passkey` kind, software key store) in a phone's place |
 | RecordSearchViews.swift | 192 | The Record's search, its cases and Export receipts | `searchRecord`, `recordCase`, `exportReceipts` | `RecordSearchBox`, `RecordResults`, `RecordHitRow` (a taf not on Home as its plain panel), `RecordCaseSheet` (`record_search.rs`, `tafs-core/record_search.rs`); `ExportReceiptsRow`, the files saved in a folder the person picks (`receipts.rs`, `tafs-core/receipts.rs`) |
+| ReportAnswerSheet.swift | 124 | Report an answer | `ReportReason`, `reportAnswer`, `canReport`, `ReportOutcome` | `reportable` on a taf's answers and Coach's (a right click or a long press), `ReportAnswerSheet` whole: the reasons, the note and its limit, the footer, Send, why it wasn't sent, the thanks or already (`report_sheet.rs`, `tafs-core/report.rs`) |
 
 ## Partial
 
@@ -60,7 +61,6 @@ ports a file updates its line here.
 | CoachToolsStep.swift | 255 | Coach's tools still to give | |
 | MicButton.swift | 122 | The mic in a chat's message bar | |
 | PlanViews.swift | 268 | Buying credits (held for the owner's money question) | |
-| ReportAnswerSheet.swift | 124 | Report an answer | |
 | SetupShapePanel.swift | 130 | What Coach has made so far | SetupShape |
 | TafKnobView.swift | 377 | The taf's remote | KnobNavigation |
 | TafSetupViews.swift | 512 | A taf's Setup | |
@@ -113,6 +113,7 @@ ports a file updates its line here.
 | KIFF/SigningTime.swift | `SigningTime.next` (`planque::signing_time`) |
 | KIFF/KIFFClient.swift (this device) | `thisDeviceID` (`devices::this_device_id`) |
 | App/AppModel.swift (Coach) | `loadSetup`'s Coach, `loadSetupThread`'s read order (chats, proof, conversation), `setupCardState` without a grant, `activityWords` (`coach.rs`, `coach_lines.rs`); `setupTarget`, `submitSetup`, `deliverSetupOnce` (no stream, no files, no improve), `withSent`, `markSetupSent`, `settleSetupChat`, `followNewSetupChat`, `settleSetupAwaiting`, `settleSetupSteering` (in memory), `retrySetup`, `editUnsent`, `followSetup`'s reads, `stopSetup`, `newSetupChat`, `coachChatIsEmpty`, `openSetupChat`, `loadSetupChats`, `archiveSetupChat`, `loadArchivedSetupChats`, `unarchiveSetupChat`, `cardRef`, `isAnswered`, `answer`, `answerValue`, `waitsForCredits`, `chatLimit` (`tafs-core/coach_send.rs`, `coach.rs`) |
+| KIFF/TafsCloud.swift (reporting) | `ReportReason`, `AnswerReport`, `reportAnswer` (`tafs-core/report.rs`) |
 | KIFF/TafsCloud.swift (a taf's chat) | `Thread`, `conversation(_:)`, `thread(_:)` with `Capped` and `AskCoachCard.Lenient`; `sendMessage` to `.live`, `steer`, `stop` (Coach's, shared) (`tafs-core/taf_chat.rs`, `coach_send.rs`) |
 | App/AppModel.swift (a taf's chat) | `ChatState`, `chatThinking`, `loadChat`, `deliverChatOnce` (no stream, no files, no sample), `markSent`, `submitChat`, `busyWords`, `clearBusyUnsent`, `settleChatAwaiting`, `settleSteering` (in memory), `retryChat`, `editUnsentChat`, `capStops`, `capWords`, `stopChat`, `ChatItem`, `chatItems` (no knocks, outcomes or stream), `heldWaitsForWords`, `withheldUntilWords`, `heldAfterItsWords`, `followChat`'s reads, `awaitingReply`, `tafActivityWords` without `toolTitle` (`tafs-core/taf_chat.rs`, `coach_lines.rs`) |
 | Model/QuestionAnswers.swift | `QuestionAnswers.words` (`coach_lines::question_words`), `encode`, `QuestionSelection` (`coach_send.rs`) |
@@ -121,4 +122,4 @@ ports a file updates its line here.
 
 ## Coverage
 
-Ported 7, partial 27, not started 12, not for Linux 4: the 50 view files at the pin.
+Ported 8, partial 27, not started 11, not for Linux 4: the 50 view files at the pin.

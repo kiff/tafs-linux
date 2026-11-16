@@ -67,6 +67,9 @@ out, as every other read does.
   why, Edit (back to the box) and Retry (`UnsentBubble`); a send refused because the account is
   halted offers Resume, which opens Halt all. tafs cloud's `steering.not_sent` shows the same way,
   once.
+- **Reporting Coach's answer:** an answer of Coach's with tafs cloud's id has Report this answer in
+  its menu (a right click or a long press), which sends `POST /v1/tafs/{setup}/messages/{id}/report`
+  with the answer's chat, as a taf's answer does ([chat.md](chat.md#reporting-an-answer)).
 - **Reading again** (`followSetup`): while the page is open, every second while Coach works, else
   every three, for 100 reads after the owner last wrote; one read at a time, and none once the page
   is closed. Linux has no stream: there's no live work, no reveal and no pin of a sent message.

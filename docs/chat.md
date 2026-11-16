@@ -101,6 +101,25 @@ In the iPad's order, in a column at most 720 wide:
 - **The box:** "Message Rae", or "Write the next message" while it works; Send on the brand sweep, its
   label "Send to Rae while it works" then; Stop in the ink. Ctrl+Enter sends.
 
+## Reporting an answer
+
+Each of the taf's answers that tafs cloud has an id for (`canReport`: never the owner's words, a
+kickoff, or one on its way) has a menu, on a right click or a long press, with **Report this answer**
+(`reportable`). Coach's answers have the same ([coach.md](coach.md)). It opens a sheet
+(`ReportAnswerSheet`, `crates/tafs-app/src/report_sheet.rs`, `tafs-core/src/report.rs`): Cancel,
+"Report this answer", Send; "What's wrong with it?" and the four reasons (Offensive, Harmful, Wrong,
+Other), the one chosen checked in the amber; "Add a note (optional)", with "A note is at most 1,000
+characters." under one longer; "A person at KIFF reads your report, with the answer as it was
+written." Send is there once a reason is chosen and the note fits, and sends, as the session,
+unsigned, `POST /v1/tafs/{id}/messages/{message}/report` with `{"reason", "note"?, "session"}`: the
+note trimmed and left out when blank, the answer's chat as `session` (Coach's by Coach's taf). The
+answer, `{"report": {"id", "at", "new"}}`, is read as strictly as the iPad's `AnswerReport`. Sent, the
+sheet says "Thanks. Someone at KIFF will read your report.", or "You've already reported this
+answer." when `new` is false, with Done. Not sent, it says "Not sent: " and why, and stays open to send
+again: tafs cloud's words when its refusal has them, "This answer isn't on tafs cloud any more." for a
+404, else "It didn't reach KIFF. Try again.". `--report` (with `--chat`) opens it over the chat's last
+answer that can be reported; its Send sends nothing.
+
 ## Not yet
 
 - **The stream** (`streamMessage`, `resumeChat`): the live answer and its work block (`LiveWork`),
@@ -120,5 +139,5 @@ In the iPad's order, in a column at most 720 wide:
 report, a question and its answer, a setting handed to Coach, a message by email and its answer, a
 connection refused, a message a stopped run never read, and the cost cap) and `taf-chat-working`
 (`taf-chat-working.json`: at work, with Stop, the dots, a message the run hasn't read and one tafs
-cloud holds). Both are synthetic, shaped as tafs cloud's `coach-conversation.json` and the iPad's
+cloud holds) and `taf-report` (Report this answer over the chat). Both are synthetic, shaped as tafs cloud's `coach-conversation.json` and the iPad's
 `TafsCloud.Thread`: there's no contract for a taf's own thread at the pin.

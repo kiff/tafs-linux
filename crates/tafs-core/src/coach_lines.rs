@@ -220,10 +220,12 @@ pub enum Line {
         text: String,
         answered: Option<String>,
     },
-    /// Coach's words (Markdown), under its work.
+    /// Coach's words (Markdown), under its work; tafs cloud's id for them and their chat when
+    /// they can be reported.
     Coach {
         work: Option<WorkLines>,
         text: String,
+        report: Option<crate::report::Reported>,
     },
     Card {
         card_ref: String,
@@ -1378,6 +1380,7 @@ fn message(w: &WordBook, thread: &SetupThread, m: &ChatMessage) -> Result<Line, 
                 .map(|work| work_lines(w, work))
                 .transpose()?,
             text: m.text.clone(),
+            report: crate::report::reportable(m),
         },
     })
 }
@@ -1519,9 +1522,17 @@ mod tests {
                 answered: None
             }
         );
-        let Line::Coach { work, .. } = &l.lines[2] else {
+        let Line::Coach { work, report, .. } = &l.lines[2] else {
             panic!("{:?}", l.lines[2])
         };
+        // Coach's answer can be reported, by tafs cloud's id for it and its chat.
+        assert_eq!(
+            report,
+            &Some(crate::report::Reported {
+                message: "run2.3".into(),
+                session: "sess1".into()
+            })
+        );
         let work = work.as_ref().unwrap();
         assert_eq!(work.summary, "Worked for 1 min 1 s");
         assert_eq!(work.steps[0].words, "Working on the connection");

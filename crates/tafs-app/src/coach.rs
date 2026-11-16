@@ -481,6 +481,41 @@ impl Page {
         Some(crate::chat::post(&self.w, &kept.token, languages, path, body).await)
     }
 
+    /// Coach's answer's menu (`reportable(_:in: nil)`): Report this answer, by Coach's taf.
+    fn reportable(self: &Rc<Self>, on: &gtk::Box, r: &tafs_core::report::Reported) {
+        let to = match &self.source {
+            CoachSource::Cloud {
+                kept,
+                languages,
+                signed_out,
+            } => crate::report_sheet::ReportTo::Cloud {
+                token: kept.token.clone(),
+                languages: languages.clone(),
+                signed_out: signed_out.clone(),
+            },
+            _ => crate::report_sheet::ReportTo::Nowhere,
+        };
+        let Some(taf) = self.conv.borrow().setup.clone() else {
+            return;
+        };
+        let (w, r, at) = (self.w.clone(), r.clone(), on.clone());
+        crate::chat::menu_on(
+            on,
+            vec![(
+                self.w.line("report.menu").unwrap_or_default(),
+                Rc::new(move || {
+                    crate::report_sheet::open(
+                        w.clone(),
+                        at.upcast_ref(),
+                        taf.clone(),
+                        r.clone(),
+                        to.clone(),
+                    )
+                }),
+            )],
+        );
+    }
+
     /// The AI-data consent's screen, for a turn tafs cloud refused for want of it.
     fn consent(&self, refusal: &[u8]) {
         let (
@@ -1102,7 +1137,18 @@ fn draw_thread(page: &Rc<Page>, lines: &CoachLines, drawn: &Drawn) {
                 text: words,
                 answered,
             } => owner(words, answered.as_deref(), false),
-            Line::Coach { work, text: words } => crate::chat::answer(work.as_ref(), words).upcast(),
+            Line::Coach {
+                work,
+                text: words,
+                report,
+            } => {
+                let v = crate::chat::answer(work.as_ref(), words);
+                // Its menu: Report this answer, where it can be reported.
+                if let Some(r) = report {
+                    page.reportable(&v, r);
+                }
+                v.upcast()
+            }
             Line::Card { card_ref, card } => {
                 let c = card_view(page, card_ref, card);
                 c.set_widget_name(&format!("card.{card_ref}"));

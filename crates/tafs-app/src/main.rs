@@ -27,6 +27,7 @@ mod receipts;
 mod recipes;
 mod record;
 mod record_search;
+mod report_sheet;
 mod runs_panel;
 mod setup_pane;
 mod shell;
@@ -152,13 +153,15 @@ struct Options {
     /// With `--home`: a taf's chat as tafs cloud answers `GET /v1/tafs/{id}/conversation`, read
     /// from a file: nothing is sent.
     chat: Option<String>,
+    /// With `--chat`: Report this answer open over its last answer that can be reported.
+    report: bool,
     /// `--size WxH`: the window's size, for a screenshot of a narrower layout.
     size: Option<(i32, i32)>,
     screenshot: Option<String>,
 }
 
 const USAGE: &str = "tafs [--lang en|de|fr|es|it|pt|nl|pl] [--theme light|dark] [--sample] [--signed-in] [--view-only [--paired]]
-     [--home contract.json] [--usage answers.json] [--people answers.json] [--unproven answers.json] [--recipes answers.json] [--gallery answers.json] [--halt answer.json] [--record-search answers.json] [--access answer.json] [--receipts answer.json] [--activity answer.json] [--calls answer.json] [--receipt answer.json] [--work answer.json] [--doors answer.json] [--account-reads answers.json] [--me answer.json] [--memory answer.json] [--runs answer.json] [--request answer.json] [--balance answer.json] [--coach answer.json] [--coach-chats answer.json] [--chat answer.json] [--size WxH] [--page welcome|sign-in|pair|recipe:<id>|gallery|halt-all|halt:<id>|record-search:<q>|record-export|receipt:<proposal id>|run:<taf id>|pin-sheet|coach|overview|needs-you|record|calendar|calendar-week|usage|connect-apps|account|kiff-account|time-zone|alerts|devices|people|taf|taf-card|taf-setup|consent|connected|sign-in-code] [--screenshot out.png]";
+     [--home contract.json] [--usage answers.json] [--people answers.json] [--unproven answers.json] [--recipes answers.json] [--gallery answers.json] [--halt answer.json] [--record-search answers.json] [--access answer.json] [--receipts answer.json] [--activity answer.json] [--calls answer.json] [--receipt answer.json] [--work answer.json] [--doors answer.json] [--account-reads answers.json] [--me answer.json] [--memory answer.json] [--runs answer.json] [--request answer.json] [--balance answer.json] [--coach answer.json] [--coach-chats answer.json] [--chat answer.json [--report]] [--size WxH] [--page welcome|sign-in|pair|recipe:<id>|gallery|halt-all|halt:<id>|record-search:<q>|record-export|receipt:<proposal id>|run:<taf id>|pin-sheet|coach|overview|needs-you|record|calendar|calendar-week|usage|connect-apps|account|kiff-account|time-zone|alerts|devices|people|taf|taf-card|taf-setup|consent|connected|sign-in-code] [--screenshot out.png]";
 
 fn options() -> Result<Options, String> {
     let mut o = Options::default();
@@ -194,6 +197,7 @@ fn options() -> Result<Options, String> {
             "--coach" => o.coach = Some(value()?),
             "--coach-chats" => o.coach_chats = Some(value()?),
             "--chat" => o.chat = Some(value()?),
+            "--report" => o.report = true,
             "--size" => {
                 let v = value()?;
                 let (w, h) = v.split_once('x').ok_or("--size takes WxH")?;
@@ -359,6 +363,7 @@ fn activate(app: &adw::Application, o: &Options) {
         coach_file: o.coach.as_ref().map(std::path::PathBuf::from),
         coach_chats: o.coach_chats.as_ref().map(std::path::PathBuf::from),
         chat_file: o.chat.as_ref().map(std::path::PathBuf::from),
+        open_report: o.report,
         open_run: o.page.as_deref().is_some_and(|p| p.starts_with("run:")),
         usage_file: o.usage.as_ref().map(std::path::PathBuf::from),
         people_file: o.people.as_ref().map(std::path::PathBuf::from),
@@ -612,6 +617,8 @@ struct App {
     coach_chats: Option<std::path::PathBuf>,
     /// `--chat`: a taf's chat from a file, never sent.
     chat_file: Option<std::path::PathBuf>,
+    /// `--report`: Report this answer open over the chat.
+    open_report: bool,
     /// `--page run:<taf id>`: that taf's first kept run open, for a screenshot.
     open_run: bool,
     /// `--usage`'s file of synthetic answers.
@@ -960,7 +967,10 @@ impl App {
         // Where its chat is read and what's written goes: tafs cloud as the session, signed in with
         // KIFF; a screenshot's from `--chat`, never sent.
         let chat = match (mode, self.kept.borrow().as_ref(), &self.chat_file) {
-            (Mode::Kiff, _, Some(file)) => taf_chat::ChatSource::File(file.clone()),
+            (Mode::Kiff, _, Some(file)) => taf_chat::ChatSource::File {
+                thread: file.clone(),
+                report: self.open_report,
+            },
             (Mode::Kiff, Some(kept), None) => taf_chat::ChatSource::Cloud {
                 token: kept.token.clone(),
                 languages: self.languages.clone(),

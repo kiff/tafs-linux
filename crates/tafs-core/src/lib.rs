@@ -38,6 +38,7 @@ pub mod receipts;
 pub mod recipes;
 pub mod record;
 pub mod record_search;
+pub mod report;
 pub mod runs;
 pub mod sample;
 pub mod security_key;

@@ -331,8 +331,10 @@ pub fn menu_on(widget: &impl IsA<gtk::Widget>, items: Vec<(String, std::rc::Rc<d
         });
         popover.popup();
     });
+    // Before a selectable label's own menu: this is the message's.
     let click = gtk::GestureClick::new();
     click.set_button(gtk::gdk::BUTTON_SECONDARY);
+    click.set_propagation_phase(gtk::PropagationPhase::Capture);
     {
         let (open, at) = (open.clone(), widget.clone());
         click.connect_pressed(move |g, _, x, y| {
@@ -342,6 +344,7 @@ pub fn menu_on(widget: &impl IsA<gtk::Widget>, items: Vec<(String, std::rc::Rc<d
     }
     widget.add_controller(click);
     let press = gtk::GestureLongPress::new();
+    press.set_propagation_phase(gtk::PropagationPhase::Capture);
     {
         let at = widget.clone();
         press.connect_pressed(move |_, x, y| open(x, y, &at));

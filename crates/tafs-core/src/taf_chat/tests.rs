@@ -930,3 +930,31 @@ fn a_taf_s_answer_carries_its_work_folded_in_its_words() {
         .iter()
         .any(|x| matches!(x, Line::Taf { work: None, .. })));
 }
+
+#[test]
+fn only_the_taf_s_answers_with_an_id_can_be_reported() {
+    let w = en();
+    let c = chat_of(std::str::from_utf8(&fixture("taf-chat.json")).unwrap());
+    let l = lines(
+        &w,
+        &c,
+        &Whose {
+            name: Some("Rae"),
+            ask_coach: false,
+        },
+        &[],
+        at("2026-11-16T10:00:00Z"),
+    )
+    .unwrap();
+    let reported: Vec<crate::report::Reported> = l
+        .lines
+        .iter()
+        .filter_map(|x| match x {
+            Line::Taf { report, .. } => report.clone(),
+            _ => None,
+        })
+        .collect();
+    let ids: Vec<&str> = reported.iter().map(|r| r.message.as_str()).collect();
+    assert_eq!(ids, ["run4.3", "run5.2", "door1.2", "run7.4"]);
+    assert_eq!(reported[1].session, "sesn_9");
+}

@@ -648,13 +648,6 @@ pub fn withheld_until_words(items: Vec<Item<'_>>, now: DateTime<Utc>) -> Vec<Ite
 
 // MARK: What the chat draws.
 
-/// A message an answer's menu can report (`ReportedAnswer`): tafs cloud's id for it, and its chat.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ReportedAnswer {
-    pub message: String,
-    pub session: String,
-}
-
 /// One line of a taf's chat.
 #[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -682,7 +675,8 @@ pub enum Line {
         refused: Option<Refused>,
         /// How it went back through its door, and whether that failed.
         stamp: Option<(String, bool)>,
-        report: Option<ReportedAnswer>,
+        /// tafs cloud's id for it and its chat, when it can be reported (`reportable`).
+        report: Option<crate::report::Reported>,
     },
     /// A call KIFF holds for the owner: its card, by its key.
     Held(String),
@@ -956,7 +950,7 @@ fn message(w: &WordBook, m: &ChatMessage) -> Result<Line, WordsError> {
             counted: m.counted.clone(),
             refused: m.refused_lines().cloned(),
             stamp: door.map(|d| door_stamp(w, d, false)).transpose()?,
-            report: None,
+            report: crate::report::reportable(m),
         },
     })
 }

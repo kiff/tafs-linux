@@ -32,7 +32,11 @@ pub enum ChatSource {
         signed_out: Rc<dyn Fn()>,
     },
     /// A thread as tafs cloud answers it, from a file (`--chat`): nothing is read again or sent.
-    File(std::path::PathBuf),
+    /// `report`: Report this answer opens over its last answer that can be reported (`--report`).
+    File {
+        thread: std::path::PathBuf,
+        report: bool,
+    },
     /// No chat here: the sample's, and a taf tafs cloud doesn't run.
     None,
 }
@@ -144,7 +148,10 @@ pub fn pane(w: Rc<WordBook>, taf: ChatTaf, source: ChatSource) -> gtk::Widget {
     });
     wire_composer(&page);
     match page.source.clone() {
-        ChatSource::File(path) => {
+        ChatSource::File {
+            thread: path,
+            report,
+        } => {
             let read = std::fs::read(&path)
                 .ok()
                 .and_then(|b| serde_json::from_slice::<serde_json::Value>(&b).ok())
@@ -166,6 +173,28 @@ pub fn pane(w: Rc<WordBook>, taf: ChatTaf, source: ChatSource) -> gtk::Widget {
                 }
             }
             page.draw();
+            if report {
+                let last = page
+                    .chat
+                    .borrow()
+                    .thread
+                    .messages
+                    .iter()
+                    .rev()
+                    .find_map(tafs_core::report::reportable);
+                if let Some(r) = last {
+                    let (w, taf, at) = (page.w.clone(), page.taf.id.clone(), page.root.clone());
+                    glib::idle_add_local_once(move || {
+                        crate::report_sheet::open(
+                            w,
+                            at.upcast_ref(),
+                            taf,
+                            r,
+                            crate::report_sheet::ReportTo::Nowhere,
+                        )
+                    });
+                }
+            }
         }
         ChatSource::Cloud { .. } => {
             page.draw();
@@ -723,9 +752,13 @@ impl Page {
                     counted,
                     refused,
                     stamp,
-                    ..
+                    report,
                 } => {
                     let v = gtk::Box::new(gtk::Orientation::Vertical, 6);
+                    // Its menu: Report this answer, where it can be reported.
+                    if let Some(r) = report {
+                        self.reportable(&v, r);
+                    }
                     if let Some(work) = work {
                         v.append(&crate::chat::work_summary(work));
                     }
@@ -860,6 +893,38 @@ impl Page {
         }
         v.append(&b);
         v.upcast()
+    }
+
+    /// The answer's menu (`reportable`): Report this answer, which opens its sheet.
+    fn reportable(self: &Rc<Self>, on: &gtk::Box, r: &tafs_core::report::Reported) {
+        let to = match &self.source {
+            ChatSource::Cloud {
+                token,
+                languages,
+                signed_out,
+            } => crate::report_sheet::ReportTo::Cloud {
+                token: token.clone(),
+                languages: languages.clone(),
+                signed_out: signed_out.clone(),
+            },
+            _ => crate::report_sheet::ReportTo::Nowhere,
+        };
+        let (w, taf, r, at) = (self.w.clone(), self.taf.id.clone(), r.clone(), on.clone());
+        crate::chat::menu_on(
+            on,
+            vec![(
+                self.w.line("report.menu").unwrap_or_default(),
+                Rc::new(move || {
+                    crate::report_sheet::open(
+                        w.clone(),
+                        at.upcast_ref(),
+                        taf.clone(),
+                        r.clone(),
+                        to.clone(),
+                    )
+                }),
+            )],
+        );
     }
 
     /// `UnsentBubble`: the words dimmed, then why. A send refused for a halt says so, and where
