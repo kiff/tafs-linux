@@ -873,7 +873,7 @@ impl App {
                 .home
                 .tafs
                 .iter()
-                .chain(&c.home.others)
+                .chain(c.home.other_agents())
                 .filter_map(|h| {
                     let cards = tafs_core::home::full_cards(w, h, w.language()).ok()?;
                     let health = tafs_core::home::Health::read(&h.health);
@@ -1124,6 +1124,7 @@ impl App {
         let Some(token) = self.kept.borrow().as_ref().map(|k| k.token.clone()) else {
             return;
         };
+        // Names for the alerts: `others` whole, as it repeats the tafs being set up.
         let tafs: Vec<(String, String)> = cloud
             .home
             .tafs
@@ -1298,7 +1299,7 @@ impl App {
                 .home
                 .tafs
                 .iter()
-                .chain(&c.home.others)
+                .chain(c.home.other_agents())
                 .any(|t| t.id.is_some());
             if manages_cards && (cloud_tafs || h.state != tafs_core::halt::State::Running) {
                 model.account_halt = Some(h);
@@ -1345,7 +1346,7 @@ impl App {
                         c.home
                             .tafs
                             .iter()
-                            .chain(&c.home.others)
+                            .chain(c.home.other_agents())
                             .find(|t| t.id.as_deref() == Some(taf))
                             .is_some_and(|t| {
                                 tafs_core::access::manages(c.access.get(&t.kiff_agent))
@@ -1719,7 +1720,7 @@ fn home_model(
         .collect();
     // Agents made through KIFF's API, not run by tafs: their Cards, apart (`otherAgents`).
     let others = h
-        .others
+        .other_agents()
         .iter()
         .filter_map(|o| tafs_core::home::taf(w, o).ok())
         .map(|t| tafs_core::home::row(&t))
@@ -1732,6 +1733,11 @@ fn home_model(
         cloud_needs_you: h.needs_you.as_ref().map(|n| n.count),
         shared,
         others,
+        setting_up: h
+            .setting_up()
+            .iter()
+            .map(|s| (s.row(), s.discard.as_ref().map(|d| d.button.clone())))
+            .collect(),
         ..kiff_model()
     };
     Ok((model, overview))
@@ -1844,6 +1850,7 @@ fn kiff_model() -> SidebarModel {
         account_halt: None,
         shared: Default::default(),
         others: vec![],
+        setting_up: vec![],
         plan: None,
     }
 }

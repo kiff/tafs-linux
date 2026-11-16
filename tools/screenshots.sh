@@ -13,7 +13,7 @@ export XDG_CONFIG_HOME=$(mktemp -d)
 mkdir -p "$XDG_CONFIG_HOME/gtk-4.0"
 printf '[Settings]\ngtk-font-name=Inter 11\ngtk-hint-font-metrics=1\n' > "$XDG_CONFIG_HOME/gtk-4.0/settings.ini"
 missing=0
-for screen in welcome sign-in pair overview overview-home needs-you needs-you-waits needs-you-happened record taf taf-card taf-home taf-home-card taf-card-lines taf-work taf-run taf-knocks taf-units usage usage-kiff usage-kiff-member connect-apps devices people kiff-account time-zone alerts calendar calendar-week calendar-compact account sidebar-sample sidebar-others sidebar-plan view-only view-only-paired recipes recipe-sheet gallery-strip gallery halt-all halt-one record-search record-export record-receipt record-on delete-account pin-sheet; do
+for screen in welcome sign-in pair overview overview-home needs-you needs-you-waits needs-you-happened record taf taf-card taf-home taf-home-card taf-card-lines taf-work taf-run taf-knocks taf-units usage usage-kiff usage-kiff-member connect-apps devices people kiff-account time-zone alerts calendar calendar-week calendar-compact account sidebar-sample sidebar-others sidebar-setting-up sidebar-plan view-only view-only-paired recipes recipe-sheet gallery-strip gallery halt-all halt-one record-search record-export record-receipt record-on delete-account pin-sheet; do
   case $screen in
     welcome) opts=(--page welcome) ;;
     sign-in) opts=(--page sign-in) ;;
@@ -47,6 +47,7 @@ for screen in welcome sign-in pair overview overview-home needs-you needs-you-wa
     taf-card) opts=(--sample --signed-in --page taf-card) ;;
     taf-home-card) opts=(--home shared/contracts/home.json --page taf-card:taf-aaaa0000000000000000) ;;
     sidebar-plan) opts=(--home shared/contracts/home.json --balance crates/tafs-app/fixtures/balance-home-line.json --page overview) ;;
+    sidebar-setting-up) opts=(--home crates/tafs-app/fixtures/home-setting-up.json --page overview) ;;
     sidebar-others) opts=(--home crates/tafs-app/fixtures/home-others.json --page overview) ;;
     sidebar-sample) opts=(--sample) ;;
     view-only) opts=(--view-only) ;;

@@ -127,6 +127,7 @@ pub fn sidebar(
         account_halt: None,
         shared: Default::default(),
         others: vec![],
+        setting_up: vec![],
         plan: None,
     })
 }

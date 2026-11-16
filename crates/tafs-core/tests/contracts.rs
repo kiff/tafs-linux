@@ -90,6 +90,49 @@ fn a_field_the_ipad_requires_fails_the_read() {
 }
 
 #[test]
+fn tafs_being_set_up_read_as_the_ipad_reads_them() {
+    let mut answer: Value = serde_json::from_slice(&contract("home.json")).unwrap();
+    // The contract sends `setting_up`, so `others` isn't drawn.
+    assert!(Home::read(&serde_json::to_vec(&answer).unwrap())
+        .unwrap()
+        .other_agents()
+        .is_empty());
+    answer["setting_up"] = serde_json::json!([
+        {"name": "Invoice chaser", "kiff_agent": "ic", "color": 3,
+         "finish": {"taf": "coach", "session": "s1", "words": " Finish it "},
+         "discard": {"words": {"button": "Discard", "yes": "Discard", "no": 4}, "cards": ["c1"]}},
+        {"name": "Half", "finish": {"taf": "coach", "words": "No session"},
+         "discard": {"words": {"button": "Discard"}}},
+        {"kiff_agent": "nameless"},
+        "not an item",
+        {"name": 7}
+    ]);
+    let h = Home::read(&serde_json::to_vec(&answer).unwrap()).expect("never fails Home");
+    let s = h.setting_up();
+    assert_eq!(
+        s.iter().map(|s| s.name.as_str()).collect::<Vec<_>>(),
+        ["Invoice chaser", "Half"]
+    );
+    assert_eq!(s[0].finish.as_deref(), Some("Finish it"));
+    assert_eq!(
+        s[0].discard
+            .as_ref()
+            .map(|d| (d.button.as_str(), d.no.as_str())),
+        Some(("Discard", ""))
+    );
+    assert_eq!(s[0].row().key, "agent:ic");
+    assert_eq!((s[1].finish.clone(), s[1].discard.clone()), (None, None));
+    assert_eq!(s[1].row().key, "setting-up:Half");
+    assert_eq!(s[1].row().now, "");
+    // Without `setting_up`, every other agent is drawn.
+    answer.as_object_mut().unwrap().remove("setting_up");
+    answer["others"] = answer["tafs"].clone();
+    let h = Home::read(&serde_json::to_vec(&answer).unwrap()).unwrap();
+    assert!(h.setting_up().is_empty());
+    assert_eq!(h.other_agents().len(), 1);
+}
+
+#[test]
 fn each_state_in_the_apps_words() {
     let w = en();
     let base: Value = serde_json::from_slice(&contract("home.json")).unwrap();
