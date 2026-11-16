@@ -64,8 +64,8 @@ account's items), the Overview from the `home.json` contract, Needs you (and wit
 page and its Card tab, Plan & usage and Account over the sample, Plan & usage signed in with
 KIFF from synthetic answers (managing billing, and as a member), Connect apps, Devices, People & groups, the KIFF account and its time zone picker (from synthetic answers), Alerts, the
 calendar's Day and Week (and Day at an upright iPad's size, `--size 1032x1376`), a tafs cloud
-taf's page and its Card tab from the contracts (and with its work and runs, and a run's own page), the sidebar over the plain sample, and Home with no taf and a recipe's sheet, the strip and the gallery, the halt screens, a Record search, the receipts export open, a Record line's receipt, the Delete account sheet, the security key's PIN sheet, the
-view-only notice (and once paired) in en, fr and pt, light and dark: 252 pictures, as the `screenshots`
+taf's page and its Card tab from the contracts (and with its work and runs, and a run's own page), the sidebar over the plain sample (and with an agent not run by tafs), and Home with no taf and a recipe's sheet, the strip and the gallery, the halt screens, a Record search, the receipts export open, a Record line's receipt, the Delete account sheet, the security key's PIN sheet, the
+view-only notice (and once paired) in en, fr and pt, light and dark: 258 pictures, as the `screenshots`
 artifact of the run. The job fails if any is missing.
 
 ## The AppImage

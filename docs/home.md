@@ -135,6 +135,19 @@ The iPad settles this when the list loads and when the app comes back, so it doe
 the owner looks at it. This computer reads the account afresh each time it opens, so each read
 settles it.
 
+## Shared with you, and other agents
+
+As the iPad's sidebar (`HomeSplitView`, `tafSections`, `otherAgents`):
+- **Your tafs** is the tafs this person manages that are relevant now.
+- **Shared with you** comes under it: the tafs KIFF says they may use but not manage
+  (`sharedWithMe`, from `GET /v1/me/access`), relevant now. A taf whose answer isn't in yet counts
+  as theirs, so nothing moves into "Shared with you" and back. Someone with only shared tafs sees
+  just those, with no Your tafs.
+- **Other agents with Cards** comes last, after the recipes strip: every agent made through KIFF's
+  API that tafs doesn't run (Home's `others`), apart. Each opens its page.
+- The screenshot (`--home crates/tafs-app/fixtures/home-others.json`, synthetic) is CI's
+  `sidebar-others`.
+
 ## Not yet
 
 - **What each row opens:** each screen but the Overview shows its title until it's ported.
@@ -146,7 +159,6 @@ settles it.
 - **The account's name** under Account, and its zone for times: from KIFF's account read.
 - **A room's end on a later day** shows its date as 2026-11-16 00:00, not in the language's words
   yet.
-- **Shared with you, Other agents, tafs being set up** (and Discard), the recipes strip and
-  Explore, **+ New** and its gallery, the halt-all row: with Home's read and their screens.
+- **Tafs being set up** (and Discard) and **+ New** with Coach.
 - **The Unreachable and Plan lines** at the foot.
 - **Coach mode:** its button opens its title for now.
