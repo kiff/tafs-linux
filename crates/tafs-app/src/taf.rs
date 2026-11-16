@@ -62,7 +62,12 @@ pub enum ActivitySource {
     None,
 }
 
-pub fn page(w: Rc<WordBook>, t: &TafPage, entries: Rc<Vec<Entry>>) -> gtk::Widget {
+pub fn page(
+    w: Rc<WordBook>,
+    t: &TafPage,
+    entries: Rc<Vec<Entry>>,
+    halt_row: Option<gtk::Button>,
+) -> gtk::Widget {
     let outer = gtk::Box::new(gtk::Orientation::Vertical, 12);
     outer.set_margin_start(16);
     outer.set_margin_end(16);
@@ -232,7 +237,14 @@ pub fn page(w: Rc<WordBook>, t: &TafPage, entries: Rc<Vec<Entry>>) -> gtk::Widge
     scroller.set_vexpand(true);
     let card_scroller = gtk::ScrolledWindow::new();
     card_scroller.set_hscrollbar_policy(gtk::PolicyType::Never);
-    card_scroller.set_child(Some(&card_pane(&w, t)));
+    let card = card_pane(&w, t);
+    // `HaltRow(tafID:framed:)`, at the Card's foot as on the iPad.
+    if let Some(row) = halt_row {
+        row.set_margin_start(16);
+        row.set_margin_end(16);
+        card.append(&row);
+    }
+    card_scroller.set_child(Some(&card));
     card_scroller.set_vexpand(true);
     let panes = gtk::Stack::new();
     panes.add_named(&scroller, Some("activity"));

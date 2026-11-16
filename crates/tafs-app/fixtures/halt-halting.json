@@ -1,0 +1,12 @@
+{
+  "about": "Synthetic: a halt as tafs cloud answers it, halting, with two of its three parts holding it, for the halt screens' screenshots (--halt). Made up, not from any account.",
+  "answer": {
+    "halt": {
+      "state": "halting",
+      "runtime": true,
+      "kiff": true,
+      "planque": false,
+      "account": false
+    }
+  }
+}

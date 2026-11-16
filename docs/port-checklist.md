@@ -31,6 +31,7 @@ ports a file updates its line here.
 | YourStepCard.swift | 46 | A step a taf handed its owner | The card whole, with the vouched link opening in the browser (`needs_you.rs`, `tafs-core/waits.rs`) | Done and Skip it (signed: dimmed) |
 | HomeRecipes.swift | 242 | Home with no taf: the recipes | `HomeRecipes` whole: tafs cloud's line, the category chips in their colours narrowing the list, each category's recipes (`RecipeRow`: headline, line, apps with their logos from tafs cloud, the colour's edge); `OwnWordsRow`; `RecipeSheet` whole; `TafsCloud.Recipes` read as its decoders (`recipes.rs`, `tafs-core/recipes.rs`) | Coach, which "Say it in your own words" and "Hand it to Coach" open (both there, dimmed) |
 | RecipeGallery.swift | 135 | The jobs' gallery | `RecipeGallerySheet` browsing (title, "All jobs", every job, each sheet read only with "Try it with Coach"), `ExploreRow`, `RecipeStrip` with See all jobs (`recipes.rs`, `shell.rs`, `tafs-core/recipes.rs`) | `.create` from + New, with its own-words row: with Coach |
+| HaltScreen.swift | 176 | A halt of one taf or every taf | `HaltScreen` whole: halting (one tap, unsigned), Halting… with its parts and Halt again, read every 2 s; `HaltRow` framed on a taf's Card; Halt all in the sidebar (`halt.rs`, `tafs-core/halt.rs`) | Resuming (signed by the device: there, dimmed, with why); Siri's tip (not for Linux) |
 | HomeSplitView.swift | 584 | The sidebar for the whole app and what it opens | The brand, the screens with Needs you's count, NEEDS YOU's held calls, Your tafs relevant now, Coach and Account at the foot, the chosen row's fill (`shell.rs`, `tafs-core/sidebar.rs`) | What each row opens (title only until each screen is ported); Shared with you; Other agents; tafs being set up and Discard; the recipes strip and Explore; + New and its gallery; the halt-all row (sidebar without `tab`); Unreachable and Plan lines at the foot; Home read from tafs cloud |
 
 ## Not started
@@ -49,7 +50,6 @@ ports a file updates its line here.
 | DoorsView.swift | 923 | A taf's Doors tab | |
 | DriveViews.swift | 73 | Coach asks to drive the app | |
 | ExportChatsView.swift | 82 | Export my chats | |
-| HaltScreen.swift | 176 | A halt of one taf or every taf | |
 | MicButton.swift | 122 | The mic in a chat's message bar | |
 | NotificationSettingsView.swift | 138 | Account › Alerts | |
 | PairSignInView.swift | 104 | Signing in from another phone | KIFF/Pairing |

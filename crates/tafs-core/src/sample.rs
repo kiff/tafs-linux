@@ -124,6 +124,7 @@ pub fn sidebar(
         home_words: None,
         account_name: None,
         cloud_needs_you: None,
+        account_halt: None,
     })
 }
 

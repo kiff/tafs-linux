@@ -4,6 +4,7 @@ mod account;
 mod calendar;
 mod connect;
 mod devices;
+mod halt;
 mod kiff;
 mod kiff_account;
 mod needs_you;
@@ -50,6 +51,8 @@ struct Cloud {
     recipes: Option<tafs_core::recipes::Recipes>,
     /// Every ready-made job (`gallery`); none read, no Explore row and no strip.
     gallery: Option<tafs_core::recipes::Gallery>,
+    /// The account's halt (`refreshHalt(nil)`); none read, running.
+    account_halt: Option<tafs_core::halt::Halt>,
     /// What this person may do with each taf, by KIFF agent (`GET /v1/me/access`).
     access: std::collections::BTreeMap<String, tafs_core::access::Access>,
     /// Who each taf this person manages is shared with, in the Overview's words, by KIFF agent.
@@ -83,13 +86,15 @@ struct Options {
     recipes: Option<String>,
     /// With `--home`: tafs cloud's gallery answer from a file, for the Explore row and the strip.
     gallery: Option<String>,
+    /// With `--home`: a halt as tafs cloud answers it, for the halt screens' screenshots.
+    halt: Option<String>,
     /// `--size WxH`: the window's size, for a screenshot of a narrower layout.
     size: Option<(i32, i32)>,
     screenshot: Option<String>,
 }
 
 const USAGE: &str = "tafs [--lang en|de|fr|es|it|pt|nl|pl] [--theme light|dark] [--sample] [--signed-in] [--view-only [--paired]]
-     [--home contract.json] [--usage answers.json] [--people answers.json] [--unproven answers.json] [--recipes answers.json] [--gallery answers.json] [--size WxH] [--page welcome|sign-in|pair|recipe:<id>|gallery|overview|needs-you|record|calendar|calendar-week|usage|connect-apps|account|kiff-account|time-zone|devices|people|taf|taf-card] [--screenshot out.png]";
+     [--home contract.json] [--usage answers.json] [--people answers.json] [--unproven answers.json] [--recipes answers.json] [--gallery answers.json] [--halt answer.json] [--size WxH] [--page welcome|sign-in|pair|recipe:<id>|gallery|halt-all|halt:<id>|overview|needs-you|record|calendar|calendar-week|usage|connect-apps|account|kiff-account|time-zone|devices|people|taf|taf-card] [--screenshot out.png]";
 
 fn options() -> Result<Options, String> {
     let mut o = Options::default();
@@ -107,6 +112,7 @@ fn options() -> Result<Options, String> {
             "--unproven" => o.unproven = Some(value()?),
             "--recipes" => o.recipes = Some(value()?),
             "--gallery" => o.gallery = Some(value()?),
+            "--halt" => o.halt = Some(value()?),
             "--size" => {
                 let v = value()?;
                 let (w, h) = v.split_once('x').ok_or("--size takes WxH")?;
@@ -166,6 +172,8 @@ fn selection_of(page: Option<&str>) -> Selection {
         Some("taf") | Some("taf-card") => Selection::Taf("refunds".into()),
         // With `--home`, the contract's first taf.
         Some(other) if other.starts_with("taf:") => Selection::Taf(other["taf:".len()..].into()),
+        Some("halt-all") => Selection::HaltAll,
+        Some(other) if other.starts_with("halt:") => Selection::Halt(other["halt:".len()..].into()),
         Some(other) if other.starts_with("taf-card:") => {
             Selection::Taf(other["taf-card:".len()..].into())
         }
@@ -233,6 +241,7 @@ fn activate(app: &adw::Application, o: &Options) {
         home_file: o.home.as_ref().map(std::path::PathBuf::from),
         usage_file: o.usage.as_ref().map(std::path::PathBuf::from),
         people_file: o.people.as_ref().map(std::path::PathBuf::from),
+        halt_file: halt_file(o.halt.as_deref()),
         calendar_day: o.page.as_deref() == Some("calendar"),
         screenshot: o.screenshot.is_some(),
         on_card: o
@@ -258,6 +267,7 @@ fn activate(app: &adw::Application, o: &Options) {
             unproven: unproven_file(o.unproven.as_deref()),
             recipes: recipes_file(o.recipes.as_deref()),
             gallery: gallery_file(o.gallery.as_deref()),
+            account_halt: o.halt.as_deref().map(|p| halt_file(Some(p)).unwrap()),
             access: Default::default(),
             used_by: Default::default(),
             reports: Default::default(),
@@ -357,6 +367,8 @@ struct App {
     home_file: Option<std::path::PathBuf>,
     /// `--usage`'s file of synthetic answers.
     usage_file: Option<std::path::PathBuf>,
+    /// `--halt`'s answer: the screenshots' halt, never sent to tafs cloud.
+    halt_file: Option<tafs_core::halt::Halt>,
     /// `--people`'s file of synthetic answers.
     people_file: Option<std::path::PathBuf>,
     /// A screenshot: the sample's Refunds has the reference set's three Cards.
@@ -499,6 +511,11 @@ impl App {
                     .ok()
                     .filter(|a| a.status == 200)
                     .and_then(|a| tafs_core::recipes::Recipes::read(&a.body));
+                // The account's halt, for the sidebar's Halt all: none read, it reads running.
+                let account_halt = kiff::halt(&token, &languages, None, false)
+                    .ok()
+                    .filter(|a| a.status == 200)
+                    .and_then(|a| tafs_core::halt::read(&a.body));
                 // `loadGallery`: a read that fails leaves none.
                 let gallery = kiff::gallery(&token, &languages)
                     .ok()
@@ -512,6 +529,7 @@ impl App {
                     unproven,
                     recipes,
                     gallery,
+                    account_halt,
                     access,
                     used_by,
                     reports,
@@ -804,6 +822,25 @@ impl App {
             .and_then(|r| r.home_words())
             .map(str::to_string);
         let account = cloud.as_ref().and_then(|c| c.account.clone());
+        // `showsAccountHalt`: signed in with KIFF, to someone who manages Cards, while a tafs
+        // cloud taf runs, and whenever the account is halted or halting, since that row is
+        // where it's resumed from.
+        if let (Mode::Kiff, Some(c)) = (mode, cloud.as_deref()) {
+            let h = c
+                .account_halt
+                .clone()
+                .unwrap_or_else(tafs_core::halt::Halt::running);
+            let manages_cards = account.as_ref().is_none_or(|a| a.allows("cards.manage"));
+            let cloud_tafs = c
+                .home
+                .tafs
+                .iter()
+                .chain(&c.home.others)
+                .any(|t| t.id.is_some());
+            if manages_cards && (cloud_tafs || h.state != tafs_core::halt::State::Running) {
+                model.account_halt = Some(h);
+            }
+        }
         if let Some(a) = &account {
             model.account_name = Some(a.name());
             // `mayUseCoach`: Coach's access, until that's read, the account's members.manage.
@@ -912,6 +949,21 @@ impl App {
                     Some(f) => usage::UsageSource::File(f.clone()),
                     None => usage::UsageSource::None,
                 },
+            },
+            // A halt is read and sent as the session, signed in with KIFF.
+            halt: match (mode, self.kept.borrow().as_ref(), &self.halt_file) {
+                // `--halt`: the screenshots' answer, never sent to tafs cloud.
+                (Mode::Kiff, _, Some(h)) => Some(Rc::new(halt::HaltSource {
+                    token: String::new(),
+                    languages: vec![],
+                    canned: Some(h.clone()),
+                })),
+                (Mode::Kiff, Some(kept), None) => Some(Rc::new(halt::HaltSource {
+                    token: kept.token.clone(),
+                    languages: self.languages.clone(),
+                    canned: None,
+                })),
+                _ => None,
             },
             // The gallery, signed in with KIFF once read: Explore jobs, and with tafs the strip.
             gallery: match (mode, cloud.as_deref()) {
@@ -1287,6 +1339,7 @@ fn kiff_model() -> SidebarModel {
         home_words: None,
         account_name: None,
         cloud_needs_you: None,
+        account_halt: None,
     }
 }
 
@@ -1304,6 +1357,23 @@ fn recipes_file(path: Option<&str>) -> Option<tafs_core::recipes::Recipes> {
         Some(r) => Some(r),
         None => {
             eprintln!("{path} isn't the recipes as tafs cloud answers them");
+            std::process::exit(2);
+        }
+    }
+}
+
+/// `--halt`'s file, as tafs cloud answers a halt (`{ "halt": … }`, a contract file's `answer`, or
+/// the answer itself). None given, none; a file that can't be read stops the app.
+fn halt_file(path: Option<&str>) -> Option<tafs_core::halt::Halt> {
+    let path = path?;
+    let answer = std::fs::read(path).ok().and_then(|b| {
+        let v: serde_json::Value = serde_json::from_slice(&b).ok()?;
+        serde_json::to_vec(&v.get("answer").cloned().unwrap_or(v)).ok()
+    });
+    match answer.and_then(|a| tafs_core::halt::read(&a)) {
+        Some(h) => Some(h),
+        None => {
+            eprintln!("{path} isn't a halt as tafs cloud answers it");
             std::process::exit(2);
         }
     }

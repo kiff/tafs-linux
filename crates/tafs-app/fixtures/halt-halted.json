@@ -1,0 +1,14 @@
+{
+  "about": "Synthetic: a halt as tafs cloud answers it, halted at 09:30 UTC with every part holding it, for the halt screens' screenshots (--halt). Made up, not from any account.",
+  "answer": {
+    "halt": {
+      "state": "halted",
+      "halted_at": "2026-11-16T09:30:00Z",
+      "runtime": true,
+      "kiff": true,
+      "planque": true,
+      "account": false,
+      "stopped": 1
+    }
+  }
+}
