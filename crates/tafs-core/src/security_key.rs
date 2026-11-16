@@ -309,6 +309,80 @@ pub fn attestation_object(format: &str, statement: &[u8], authenticator_data: &[
     out
 }
 
+/// What the PIN sheet says for each of the key's answers (tafs-macos `SecurityKeyWords.swift`), in
+/// the shared words (`approval.security_key.*`). Every failure says nothing was approved; where
+/// nothing was refused, the request is kept.
+pub mod words {
+    use super::Failure;
+    use crate::words::{WordBook, WordsError};
+
+    /// The line for why the key gave no approval.
+    pub fn line(w: &WordBook, failure: Failure) -> Result<String, WordsError> {
+        let key = match failure {
+            Failure::NoKey => "approval.security_key.no_key",
+            Failure::SeveralKeys => "approval.security_key.several_keys",
+            Failure::NotFido2 => "approval.security_key.not_fido2",
+            Failure::PinTooShort => "approval.security_key.pin_too_short",
+            Failure::PinTooLong => "approval.security_key.pin_too_long",
+            Failure::PinNotSet => "approval.security_key.no_pin_set",
+            Failure::WrongPin {
+                tries_left: Some(left),
+            } if left > 0 => {
+                return w.count("approval.security_key.wrong_pin", left as i64, &[]);
+            }
+            Failure::WrongPin { .. } => "approval.security_key.wrong_pin_no_count",
+            Failure::PinBlocked => "approval.security_key.locked",
+            Failure::PinPaused => "approval.security_key.pin_paused",
+            Failure::NotThisKey => "approval.security_key.not_this_key",
+            Failure::TimedOut => "approval.security_key.timed_out",
+            Failure::Denied => "approval.security_key.not_allowed",
+            Failure::Removed => "approval.security_key.unplugged",
+            Failure::PinMissing | Failure::PinUsed | Failure::Failed { .. } => {
+                "approval.security_key.failed"
+            }
+        };
+        w.line(key)
+    }
+
+    /// Anything else that stopped the approval: an answer KIFF would refuse (no user
+    /// verification among them) is the key failing to sign, never the key's own decline.
+    pub fn failed(w: &WordBook) -> Result<String, WordsError> {
+        w.line("approval.security_key.failed")
+    }
+
+    /// The tries left before the key locks, read before the PIN is asked, when the key says.
+    pub fn tries_left(w: &WordBook, count: i32) -> Result<String, WordsError> {
+        w.count("approval.security_key.tries_left", count as i64, &[])
+    }
+
+    /// Whether the sheet stays open to try again: anything but a locked key.
+    pub fn may_try_again(failure: Option<Failure>) -> bool {
+        failure != Some(Failure::PinBlocked)
+    }
+
+    /// The sheet's own words: its title, what it asks, the field, the touch, and its buttons.
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    pub struct SheetLines {
+        pub title: String,
+        pub enter_pin: String,
+        pub pin: String,
+        pub touch: String,
+        pub cancel: String,
+        pub approve: String,
+    }
+
+    pub fn sheet(w: &WordBook) -> Result<SheetLines, WordsError> {
+        Ok(SheetLines {
+            title: w.line("approval.security_key.title")?,
+            enter_pin: w.line("approval.security_key.enter_pin")?,
+            pin: w.line("approval.security_key.pin")?,
+            touch: w.line("approval.security_key.touch")?,
+            cancel: w.line("common.cancel")?,
+            approve: w.line("approval.approve")?,
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -466,5 +540,104 @@ mod tests {
         assert_eq!(cbor_head(2, 23), [0x57]);
         assert_eq!(cbor_head(2, 300), [0x59, 0x01, 0x2c]);
         assert_eq!(cbor_head(2, 70_000), [0x5a, 0x00, 0x01, 0x11, 0x70]);
+    }
+
+    fn book(lang: &str) -> crate::words::WordBook {
+        crate::words::WordBook::load(&crate::words::WordBook::default_root(), lang).unwrap()
+    }
+
+    /// macOS 12's `SecurityKeyWordsTests`.
+    #[test]
+    fn each_failure_says_its_own_shared_line() {
+        let w = book("en");
+        let cases = [
+            (Failure::NoKey, "approval.security_key.no_key"),
+            (Failure::SeveralKeys, "approval.security_key.several_keys"),
+            (Failure::NotFido2, "approval.security_key.not_fido2"),
+            (Failure::PinTooShort, "approval.security_key.pin_too_short"),
+            (Failure::PinTooLong, "approval.security_key.pin_too_long"),
+            (Failure::PinNotSet, "approval.security_key.no_pin_set"),
+            (
+                Failure::WrongPin { tries_left: None },
+                "approval.security_key.wrong_pin_no_count",
+            ),
+            (Failure::PinBlocked, "approval.security_key.locked"),
+            (Failure::PinPaused, "approval.security_key.pin_paused"),
+            (Failure::NotThisKey, "approval.security_key.not_this_key"),
+            (Failure::TimedOut, "approval.security_key.timed_out"),
+            (Failure::Denied, "approval.security_key.not_allowed"),
+            (Failure::Removed, "approval.security_key.unplugged"),
+            (Failure::Failed { code: -9 }, "approval.security_key.failed"),
+            (Failure::PinMissing, "approval.security_key.failed"),
+            (Failure::PinUsed, "approval.security_key.failed"),
+        ];
+        for (failure, key) in cases {
+            assert_eq!(
+                words::line(&w, failure).unwrap(),
+                w.line(key).unwrap(),
+                "{key}"
+            );
+        }
+        assert_eq!(
+            words::failed(&w).unwrap(),
+            w.line("approval.security_key.failed").unwrap()
+        );
+        assert_ne!(
+            words::failed(&w).unwrap(),
+            w.line("approval.security_key.not_allowed").unwrap()
+        );
+    }
+
+    #[test]
+    fn a_wrong_pin_says_the_tries_left_in_each_languages_plural() {
+        let w = book("en");
+        let wrong = |n| {
+            words::line(
+                &w,
+                Failure::WrongPin {
+                    tries_left: Some(n),
+                },
+            )
+            .unwrap()
+        };
+        assert_eq!(wrong(1), "Wrong PIN. 1 try left before the key locks.");
+        assert_eq!(wrong(5), "Wrong PIN. 5 tries left before the key locks.");
+        assert_eq!(
+            wrong(0),
+            w.line("approval.security_key.wrong_pin_no_count").unwrap()
+        );
+        let pl = book("pl");
+        assert_eq!(
+            words::tries_left(&pl, 3).unwrap(),
+            "Zostały 3 próby, zanim klucz się zablokuje."
+        );
+        assert_eq!(
+            words::tries_left(&pl, 5).unwrap(),
+            "Zostało 5 prób, zanim klucz się zablokuje."
+        );
+        for lang in crate::words::SHIPPED {
+            let w = book(lang);
+            words::sheet(&w).unwrap();
+            for n in [1, 2, 5, 8] {
+                words::tries_left(&w, n).unwrap();
+                words::line(
+                    &w,
+                    Failure::WrongPin {
+                        tries_left: Some(n),
+                    },
+                )
+                .unwrap();
+            }
+        }
+    }
+
+    #[test]
+    fn a_locked_key_closes_the_sheet() {
+        assert!(!words::may_try_again(Some(Failure::PinBlocked)));
+        assert!(words::may_try_again(Some(Failure::WrongPin {
+            tries_left: Some(2)
+        })));
+        assert!(words::may_try_again(Some(Failure::NoKey)));
+        assert!(words::may_try_again(None));
     }
 }

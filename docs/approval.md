@@ -112,5 +112,28 @@ Nothing calls it while it's switched off. Its tests ask with no key plugged in: 
 is installed it finds none, and where it isn't, it says it's missing. Either way, no PIN is left
 held.
 
-Next come the PIN sheet (its `approval.security_key.*` words, once they're at the pin), then
-registering the key through pairing, with S1's `credential_proof`.
+**The PIN sheet** (`crates/tafs-app/src/pin_sheet.rs`) is ported from macOS 12's `PINSheet.swift`,
+with its words from `SecurityKeyWords.swift` (`security_key::words`). It shows:
+- the title ("Approve with your security key", 15 semibold) and what it asks (14, soft);
+- the tries left, read from the key before the PIN is asked (13, dim);
+- PIN, then the field; "Touch your security key." in amber while the key waits;
+- each failure in its own shared `approval.security_key.*` line (13, red);
+- Cancel and Approve.
+
+How it behaves:
+- **Each failure has its own line:** no key, several keys, a key that can't check a PIN, no PIN
+  set, a PIN that's too short or too long, a wrong PIN with the tries left in each language's
+  plural, locked, three in a row, another key, not touched in time, not allowed, unplugged.
+- **Anything else** (an answer KIFF would refuse, a libfido2 that's missing) says the key
+  couldn't sign, never that the key declined.
+- **The sheet stays open to try again,** except for a locked key. Cancel or closing it approves
+  nothing.
+- **The PIN** is taken from the field as bytes and the field emptied at once. It's handed to
+  the key once off the main loop, then cleared. As on macOS 12, GTK's own entry held the
+  characters while they were typed, and this app can't zero that memory.
+
+It's switched off: only `--page pin-sheet` shows it, with canned answers (five tries left, no key
+plugged in). No key is asked, and nothing is signed.
+
+Next come registering the key through pairing, with S1's `credential_proof`, and the approval
+route.
