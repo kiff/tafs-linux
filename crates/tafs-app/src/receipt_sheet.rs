@@ -392,6 +392,7 @@ fn load(
             .await
             .unwrap_or((Panel::Failed(String::new()), vec![], false, None));
         clear(&happened);
+        happened.set_visible(false);
         clear(&receipt);
         // Only what KIFF signed for this line: the rest stays in the full receipt, under its panel.
         if shows && !steps.is_empty() {
@@ -400,6 +401,7 @@ fn load(
                 false,
             ));
             happened.append(&timeline(&steps));
+            happened.set_visible(true);
         }
         receipt.append(&receipt_panel(&w, &e, &p, raw.as_deref(), &steps, &again));
     });
@@ -480,6 +482,7 @@ pub fn present(
     // What happened, and the receipt: read when the sheet opens, if the line has one. Signed
     // out of KIFF (the sample) nothing is read, and the panel says it's checking, as the iPad.
     let happened = gtk::Box::new(gtk::Orientation::Vertical, 8);
+    happened.set_visible(false);
     column.append(&happened);
     let receipt = gtk::Box::new(gtk::Orientation::Vertical, 0);
     column.append(&receipt);
