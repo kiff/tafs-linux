@@ -1,0 +1,81 @@
+name: AppImage
+
+# tafs for Linux as the AppImage for Ubuntu, built on Ubuntu 24.04, whose glibc is its floor.
+# On a pull request that changes the packaging, it's built and its own --help is run, as a check.
+# Run by hand with a version, it's also attached to a **draft** release: publishing is the
+# owner's yes, never this workflow's.
+on:
+  pull_request:
+    paths:
+      - tools/appimage.sh
+      - packaging/**
+      - .github/workflows/appimage.yml
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "The release's version, as v0.1.0"
+        required: true
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  appimage:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: The version, before anything is built or tagged
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          if ! [[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "The version is v and three numbers, as v0.1.0: not '$VERSION'." >&2
+            exit 1
+          fi
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: GTK 4, libadwaita, and the icon theme to bundle
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq libgtk-4-dev libadwaita-1-dev adwaita-icon-theme file
+      - name: Rust
+        run: rustup toolchain install stable --profile minimal && rustup default stable
+      - name: Words and contracts at the pin
+        run: tools/sync.sh
+      - name: Build
+        run: cargo build --release -p tafs
+      - name: AppImage
+        env:
+          VERSION: ${{ inputs.version || 'check' }}
+        run: tools/appimage.sh "$VERSION"
+      - name: It starts
+        # Its usage line and nothing else: no display, no keyring, nothing sent.
+        run: |
+          app=$(ls tafs-*-x86_64.AppImage)
+          file "$app"
+          APPIMAGE_EXTRACT_AND_RUN=1 "./$app" --help 2>&1 | grep -q '^tafs \['
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: appimage
+          path: tafs-*-x86_64.AppImage
+          if-no-files-found: error
+
+  draft:
+    if: github.event_name == 'workflow_dispatch'
+    needs: appimage
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: appimage
+      - name: A draft release, never published from here
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          gh release create "$VERSION" tafs-*-x86_64.AppImage \
+            --repo "$GITHUB_REPOSITORY" --draft --target "$GITHUB_SHA" \
+            --title "tafs for Linux $VERSION" \
+            --notes "The AppImage for Ubuntu 24.04 and newer (x86_64). A draft until the owner says yes."
