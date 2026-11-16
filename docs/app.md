@@ -88,8 +88,9 @@ libadwaita 1.1, and the app needs GTK 4.14 and libadwaita 1.5. Reaching 22.04 wo
 building those two from source on 22.04, or shipping a Flatpak.
 
 **In CI** (`.github/workflows/appimage.yml`):
-- A pull request that changes the packaging builds the AppImage, runs its `--help` (which loads
-  every bundled library and starts nothing), and keeps the file as the run's `appimage`
-  artifact.
-- Run by hand with a version (`v` and three numbers, as `v0.1.0`: anything else is refused before a tag is made), it also attaches the file to a **draft** release.
-  Publishing it is the owner's yes, never the workflow's.
+- A pull request that changes the packaging builds the AppImage and runs its `--help` (which
+  loads every bundled library and starts nothing). The file isn't kept: the repository is public,
+  and a run's artifact would be a copy anyone signed in to GitHub could download.
+- Run by hand with a version (`v` and three numbers, as `v0.1.0`: anything else is refused before
+  a tag is made), one job builds it, checks it starts, and attaches it with its `SHA256SUMS` to a
+  **draft** release, its only copy. Publishing it is the owner's yes, never the workflow's.

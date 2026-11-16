@@ -23,11 +23,42 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  # A pull request: built and started, as a check. The file isn't kept: this repository is
+  # public, and a run's artifact would be a copy anyone signed in to GitHub could download.
   appimage:
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-24.04
     steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          # The token isn't written into .git/config, where the build's code could read it.
+          persist-credentials: false
+      - name: GTK 4, libadwaita, and the icon theme to bundle
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq libgtk-4-dev libadwaita-1-dev adwaita-icon-theme file
+      - name: Rust
+        run: rustup toolchain install stable --profile minimal && rustup default stable
+      - name: Words and contracts at the pin
+        run: tools/sync.sh
+      - name: Build
+        run: cargo build --release -p tafs
+      - name: AppImage
+        run: tools/appimage.sh check
+      - name: It starts
+        # Its usage line and nothing else: no display, no keyring, nothing sent.
+        run: |
+          app=$(ls tafs-*-x86_64.AppImage)
+          file "$app"
+          APPIMAGE_EXTRACT_AND_RUN=1 "./$app" --help 2>&1 | grep -q '^tafs \['
+
+  # Run by hand with a version: built, started, and attached to a draft release in the same job,
+  # so the draft is its only copy. Never published from here.
+  draft:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
       - name: The version, before anything is built or tagged
-        if: github.event_name == 'workflow_dispatch'
         env:
           VERSION: ${{ inputs.version }}
         run: |
@@ -36,6 +67,9 @@ jobs:
             exit 1
           fi
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          # The token isn't written into .git/config, where the build's code could read it.
+          persist-credentials: false
       - name: GTK 4, libadwaita, and the icon theme to bundle
         run: sudo apt-get update -qq && sudo apt-get install -y -qq libgtk-4-dev libadwaita-1-dev adwaita-icon-theme file
       - name: Rust
@@ -46,36 +80,21 @@ jobs:
         run: cargo build --release -p tafs
       - name: AppImage
         env:
-          VERSION: ${{ inputs.version || 'check' }}
+          VERSION: ${{ inputs.version }}
         run: tools/appimage.sh "$VERSION"
       - name: It starts
-        # Its usage line and nothing else: no display, no keyring, nothing sent.
         run: |
           app=$(ls tafs-*-x86_64.AppImage)
           file "$app"
           APPIMAGE_EXTRACT_AND_RUN=1 "./$app" --help 2>&1 | grep -q '^tafs \['
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: appimage
-          path: tafs-*-x86_64.AppImage
-          if-no-files-found: error
-
-  draft:
-    if: github.event_name == 'workflow_dispatch'
-    needs: appimage
-    runs-on: ubuntu-24.04
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
-        with:
-          name: appimage
+      - name: Its SHA-256, for the owner to check the download against
+        run: sha256sum tafs-*-x86_64.AppImage | tee SHA256SUMS
       - name: A draft release, never published from here
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ inputs.version }}
         run: |
-          gh release create "$VERSION" tafs-*-x86_64.AppImage \
+          gh release create "$VERSION" tafs-*-x86_64.AppImage SHA256SUMS \
             --repo "$GITHUB_REPOSITORY" --draft --target "$GITHUB_SHA" \
             --title "tafs for Linux $VERSION" \
-            --notes "The AppImage for Ubuntu 24.04 and newer (x86_64). A draft until the owner says yes."
+            --notes "The AppImage for Ubuntu 24.04 and newer (x86_64), with its SHA-256. A draft until the owner says yes."
