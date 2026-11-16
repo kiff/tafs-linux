@@ -13,10 +13,13 @@ export XDG_CONFIG_HOME=$(mktemp -d)
 mkdir -p "$XDG_CONFIG_HOME/gtk-4.0"
 printf '[Settings]\ngtk-font-name=Inter 11\ngtk-hint-font-metrics=1\n' > "$XDG_CONFIG_HOME/gtk-4.0/settings.ini"
 missing=0
-for screen in welcome sign-in pair overview overview-home needs-you needs-you-waits needs-you-happened record taf taf-card taf-home taf-home-card taf-card-lines taf-work taf-run taf-knocks taf-setup taf-units usage usage-kiff usage-kiff-member connect-apps connect-apps-narrow devices people kiff-account account-kiff consent time-zone alerts calendar calendar-week calendar-compact account sidebar-sample sidebar-others sidebar-setting-up sidebar-plan view-only view-only-paired recipes recipe-sheet gallery-strip gallery halt-all halt-one record-search record-export record-receipt record-on delete-account pin-sheet; do
+for screen in welcome sign-in sign-in-code sign-in-narrow pair connected overview overview-home needs-you needs-you-waits needs-you-happened record taf taf-card taf-home taf-home-card taf-card-lines taf-work taf-run taf-knocks taf-setup taf-units usage usage-kiff usage-kiff-member connect-apps connect-apps-narrow devices people kiff-account account-kiff consent time-zone alerts calendar calendar-week calendar-compact account sidebar-sample sidebar-others sidebar-setting-up sidebar-plan view-only view-only-paired recipes recipe-sheet gallery-strip gallery halt-all halt-one record-search record-export record-receipt record-on delete-account pin-sheet; do
   case $screen in
     welcome) opts=(--page welcome) ;;
     sign-in) opts=(--page sign-in) ;;
+    sign-in-code) opts=(--page sign-in-code) ;;
+    sign-in-narrow) opts=(--size 700x900 --page sign-in) ;;
+    connected) opts=(--home shared/contracts/home.json --page connected) ;;
     pair) opts=(--page pair) ;;
     overview) opts=(--sample --signed-in) ;;
     overview-home) opts=(--home shared/contracts/home.json) ;;
