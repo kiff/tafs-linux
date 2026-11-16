@@ -115,7 +115,11 @@ iPad does, and tafs cloud marks no card. The token, the key and the signature ar
 - **The title**, inline, as the iPad's navigation bar, on Coach's own wash.
 - **The plan** (`SetupPlan`) pinned above the thread: "Plan · 1 of 3" and the step it's at,
   opening to every step with its mark.
-- **The thread** in the iPad's order (`SetupThread.items`): a card that waits after what Coach
+- **The thread** in the order already drawn (`SteadyOrder`, iPad tafs#1241, Android's
+  `Chat.steady`): what's on screen keeps its place while Coach answers, new items go after it, and
+  the owner's message sent from here gives its place to tafs cloud's copy (another id and time, the
+  same words), so neither it nor a card moves when the copy lands. Another conversation, or a new
+  one once its chat is known, starts in the thread's own order (`SetupThread.items`): a card that waits after what Coach
   wrote with it, up to the owner's next message or its answer. A time where parts are an hour or
   more apart, and at the top. The owner's words on the right, on the brand sweep, an answer to a
   card in their own words ("Approve", "€50") and none at all when the card shows it, and

@@ -631,6 +631,9 @@ pub struct Conversation {
     pub generation: u64,
     /// Coach's chats, newest first, for Previous conversations.
     pub chats: Vec<Chat>,
+    /// What the thread has drawn, in its order (`SteadyOrder`); another conversation starts from
+    /// nothing.
+    pub drawn: Vec<crate::coach::Entry>,
 }
 
 impl Conversation {
@@ -877,6 +880,7 @@ impl Conversation {
     /// `settleSetupChat`: once a new conversation's first message went, its chat is the one shown.
     pub fn settle_chat(&mut self, session: &str) {
         if self.fresh {
+            self.drawn.clear();
             self.chat = Some(session.into());
             self.fresh = false;
         }
@@ -892,6 +896,7 @@ impl Conversation {
         self.generation += 1;
         self.chat = Some(session.into());
         self.fresh = false;
+        self.drawn.clear();
         self.sent.retain(|m| m.id() == sent);
         self.thread = SetupThread {
             messages: self.sent.clone(),
@@ -1030,6 +1035,7 @@ impl Conversation {
     /// A new conversation (`newSetupChat`): an empty chat, and the next message starts it.
     pub fn new_chat(&mut self) {
         self.generation += 1;
+        self.drawn.clear();
         self.chat = None;
         self.fresh = true;
         self.thread = SetupThread::default();
@@ -1044,6 +1050,7 @@ impl Conversation {
     /// One of Coach's chats reopened (`openSetupChat`): shown alone, and messages go on in it.
     pub fn open_chat(&mut self, session: &str) {
         self.generation += 1;
+        self.drawn.clear();
         self.sending = false;
         self.chat = Some(session.into());
         self.fresh = false;
@@ -1561,6 +1568,54 @@ mod tests {
         c.open_chat("sess2");
         assert_eq!(c.chat.as_deref(), Some("sess2"));
         assert!(!c.fresh);
+    }
+
+    #[test]
+    fn the_owners_message_keeps_its_place_when_tafs_clouds_copy_lands() {
+        use crate::coach_lines::{conversation_lines, Line};
+        let w = WordBook::load(&WordBook::default_root(), "en").unwrap();
+        let mut c = conversation();
+        let now = at("2026-10-16T13:00:00Z");
+        let Submit::Send(d) = c.submit("And chargebacks", now) else {
+            panic!()
+        };
+        c.delivered(
+            &d,
+            &Sent {
+                session: "sess1".into(),
+                new_session: false,
+                message: Some("run3.in".into()),
+            },
+            now,
+        );
+        let mode = crate::sidebar::Mode::Kiff;
+        let drawn = conversation_lines(&w, &c, &[], mode, now).unwrap();
+        c.drawn = drawn.order.clone();
+        let last = |l: &crate::coach_lines::CoachLines| {
+            l.lines
+                .iter()
+                .rev()
+                .find_map(|x| match x {
+                    Line::Owner { text, .. } => Some(text.clone()),
+                    Line::Coach { text, .. } => Some(text.clone()),
+                    _ => None,
+                })
+                .unwrap()
+        };
+        assert_eq!(last(&drawn), "And chargebacks");
+        // tafs cloud's copy carries its own time, before Coach's last words: it stays last.
+        let mut read = c.thread.clone();
+        read.messages.retain(|m| m.session != PENDING);
+        let mut copy = mine("And chargebacks", "2026-10-16T12:00:30Z", Some("run3.in"));
+        copy.session = "sess1".into();
+        read.messages.push(copy);
+        c.took(read.clone(), now);
+        let steady = conversation_lines(&w, &c, &[], mode, now).unwrap();
+        assert_eq!(last(&steady), "And chargebacks");
+        // Drawn from nothing, it's in the thread's own order.
+        c.drawn.clear();
+        let own = conversation_lines(&w, &c, &[], mode, now).unwrap();
+        assert_eq!(last(&own), "Refunds is set up.");
     }
 
     #[test]

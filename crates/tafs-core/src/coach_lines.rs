@@ -255,6 +255,8 @@ pub struct CoachLines {
     /// What tafs cloud holds for this chat, to go once Coach is done (`QueuedBubble`), and that it
     /// waits.
     pub queued: Option<(String, String)>,
+    /// The thread's items in the order drawn, to keep it (`rememberDrawn`).
+    pub order: Vec<crate::coach::Entry>,
 }
 
 /// The message box (`composer`): what it says while empty, and its button's words.
@@ -1166,8 +1168,11 @@ pub fn lines(
         listed,
         mode,
         now,
-        thread.working.is_some(),
-        false,
+        Here {
+            thinking: thread.working.is_some(),
+            unsent: false,
+            drawn: &[],
+        },
     )
 }
 
@@ -1186,9 +1191,20 @@ pub fn conversation_lines(
         listed,
         mode,
         now,
-        c.thinking(),
-        !c.unsent.is_empty(),
+        Here {
+            thinking: c.thinking(),
+            unsent: !c.unsent.is_empty(),
+            drawn: &c.drawn,
+        },
     )
+}
+
+/// What the conversation holds here beside the thread: Coach at work or awaited, a message not
+/// sent, and the order drawn.
+struct Here<'a> {
+    thinking: bool,
+    unsent: bool,
+    drawn: &'a [crate::coach::Entry],
 }
 
 fn lines_while(
@@ -1197,11 +1213,19 @@ fn lines_while(
     listed: &[Listed],
     mode: Mode,
     now: DateTime<Utc>,
-    thinking: bool,
-    unsent: bool,
+    here: Here,
 ) -> Result<CoachLines, WordsError> {
+    let Here {
+        thinking,
+        unsent,
+        drawn,
+    } = here;
     // An answer to a card the thread shows reads once, as the card's outcome: no bubble repeats
     // it. One that didn't go through keeps its bubble, which says so.
+    let owner_text = |i: &Item| match i {
+        Item::Message(m) if m.from == From::Owner => Some(m.text.clone()),
+        _ => None,
+    };
     let items: Vec<Item> = thread
         .items()
         .into_iter()
@@ -1210,6 +1234,15 @@ fn lines_while(
                 !a.failed() && thread.components.iter().any(|c| c.component.id == a.id)
             }),
             _ => true,
+        })
+        .collect();
+    // In the order already drawn: nothing moves when tafs cloud's copy lands (`SteadyOrder`).
+    let items = crate::coach::steady_order(items, drawn, Item::id, Item::at, owner_text);
+    let order = items
+        .iter()
+        .map(|i| crate::coach::Entry {
+            id: i.id(),
+            owner_text: owner_text(i),
         })
         .collect();
     let mut out = Vec::new();
@@ -1288,6 +1321,7 @@ fn lines_while(
             Some(m) => Some((m.text.clone(), w.line("chat.held")?)),
             None => None,
         },
+        order,
     })
 }
 

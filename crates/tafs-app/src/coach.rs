@@ -1015,6 +1015,10 @@ impl Page {
                 self.error.set_visible(true);
             }
         }
+        // What's drawn keeps its place from now on (`rememberDrawn`).
+        if let Ok(lines) = &now.lines {
+            self.conv.borrow_mut().drawn = lines.order.clone();
+        }
         *self.drawn.borrow_mut() = Some(now);
         // The thread follows what arrives while its latest is in view, and lands there first.
         let follow = first || at_bottom || self.follow.replace(false);
