@@ -1567,7 +1567,7 @@ fn coachs_thread_reads_in_every_language() {
         .push(json!({"at": "2026-10-16T12:04:00Z", "taf": "Rae", "said": "Done.", "away": true}));
     let threads = [
         every,
-        read("../tafs-app/fixtures/coach-wider.json"),
+        read("../../shared/contracts/coach-wider.json"),
         json!({"messages": []}),
     ];
     let listed = [Listed {

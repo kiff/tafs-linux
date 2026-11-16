@@ -1440,13 +1440,8 @@ mod tests {
             assert_eq!(t.components.len(), 3, "{other}: the card stays");
             assert_eq!(t.components[1].component.wider_words(), None, "{other}");
         }
-        // The app's own fixture carries it too.
-        let path = format!(
-            "{}/../tafs-app/fixtures/coach-wider.json",
-            env!("CARGO_MANIFEST_DIR")
-        );
-        let file: Value = serde_json::from_slice(&std::fs::read(path).unwrap()).unwrap();
-        let t = thread(&file["answer"]).unwrap();
+        // tafs cloud's own contract for it: if its shape changes, this fails.
+        let t = thread(&contract("coach-wider.json")).unwrap();
         assert!(t.components.iter().any(|c| c
             .component
             .wider_words()

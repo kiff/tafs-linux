@@ -104,5 +104,5 @@ iPad does, and tafs cloud marks no card. The token, the key and the signature ar
 
 `--page coach --coach <answer.json>` (with `--home`) draws a conversation from a file: nothing is
 read or sent. `tools/screenshots.sh` saves `coach` (the contract's conversation) and `coach-wider`
-(`crates/tafs-app/fixtures/coach-wider.json`: the same chat with an approval waiting under its
-wider line).
+(tafs's own contract, `contracts/coach-wider.json`: an approval waiting under its wider line). The
+tests read the same contract, so a change in tafs cloud's shape fails them here.

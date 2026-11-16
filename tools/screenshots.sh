@@ -80,7 +80,7 @@ for screen in welcome sign-in sign-in-code sign-in-narrow pair connected overvie
     gallery) opts=(--home shared/contracts/home.json --gallery crates/tafs-app/fixtures/gallery.json --recipes crates/tafs-app/fixtures/recipes.json --page gallery) ;;
     # Coach's conversation from tafs cloud's contract, and one with an approval waiting under its wider line.
     coach) opts=(--home shared/contracts/home.json --me crates/tafs-app/fixtures/me-manager.json --coach shared/contracts/coach-conversation.json --page coach) ;;
-    coach-wider) opts=(--home shared/contracts/home.json --me crates/tafs-app/fixtures/me-manager.json --coach crates/tafs-app/fixtures/coach-wider.json --page coach) ;;
+    coach-wider) opts=(--home shared/contracts/home.json --me crates/tafs-app/fixtures/me-manager.json --coach shared/contracts/coach-wider.json --page coach) ;;
     recipe-sheet) opts=(--home crates/tafs-app/fixtures/home-empty.json --recipes crates/tafs-app/fixtures/recipes.json --page recipe:refunds) ;;
   esac
   for lang in en fr pt; do
