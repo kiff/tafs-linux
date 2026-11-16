@@ -398,17 +398,11 @@ fn show(ui: &Ui, w: &WordBook, start: Option<&DeviceStart>, problem: Option<Stri
 }
 
 /// "By signing in, you agree to KIFF's Terms … and its Privacy policy.", the two names linked
-/// wherever the language puts them, each saying the page is in English outside English
-/// (`Legal.agreement`, `Legal.label`).
+/// wherever the language puts them, to the pages in the app's language where kiff.dev has them,
+/// else in English, saying so (`Legal.agreement`, `Legal.label`).
 pub fn agreement(w: &WordBook) -> gtk::Label {
     let label_of = |key: &str| {
-        let words = w.line(key).unwrap_or_default();
-        if w.language() == "en" {
-            words
-        } else {
-            w.get("settings.legal_in_english", &[("label", &words)])
-                .unwrap_or(words)
-        }
+        tafs_core::account::legal_label(w, key).unwrap_or_else(|_| w.line(key).unwrap_or_default())
     };
     let line = w
         .get("sign_in.agree", &[("terms", "\u{1}"), ("privacy", "\u{2}")])
@@ -418,12 +412,12 @@ pub fn agreement(w: &WordBook) -> gtk::Label {
         match c {
             '\u{1}' => markup.push_str(&format!(
                 "<a href=\"{}\">{}</a>",
-                TERMS,
+                tafs_core::account::terms_url(w.language()),
                 glib::markup_escape_text(&label_of("settings.terms"))
             )),
             '\u{2}' => markup.push_str(&format!(
                 "<a href=\"{}\">{}</a>",
-                PRIVACY,
+                tafs_core::account::privacy_url(w.language()),
                 glib::markup_escape_text(&label_of("settings.privacy_policy"))
             )),
             c => markup.push_str(&glib::markup_escape_text(&c.to_string())),
@@ -436,7 +430,3 @@ pub fn agreement(w: &WordBook) -> gtk::Label {
     label.add_css_class("tafs-dim");
     label
 }
-
-/// tafs's own pages on kiff.dev (`Legal.terms`, `Legal.privacy`), in English only for now.
-pub const TERMS: &str = "https://kiff.dev/tafs/terms";
-pub const PRIVACY: &str = "https://kiff.dev/tafs/privacy";
