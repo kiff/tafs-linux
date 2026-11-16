@@ -257,6 +257,8 @@ mod imp {
         pub draw: RefCell<Option<Draw>>,
         /// Whether it gives up height on a short screen (`Board.shrinking`).
         pub shrinks: std::cell::Cell<bool>,
+        /// At the leading edge of its row, not in its middle (`Board.leading`).
+        pub leading: std::cell::Cell<bool>,
         /// Its redraw when the appearance changes, let go with it.
         pub dark: RefCell<Option<glib::SignalHandlerId>>,
     }
@@ -308,7 +310,12 @@ mod imp {
             // In the middle of the room it's given. A shadow or a sparkle may reach past the
             // board's edge, as on the iPad, which doesn't clip it: room for that all round.
             let (dw, dh) = (w * scale, h * scale);
-            let (x, y) = ((room_w - dw) / 2.0, (room_h - dh) / 2.0);
+            let x = if self.leading.get() {
+                0.0
+            } else {
+                (room_w - dw) / 2.0
+            };
+            let y = (room_h - dh) / 2.0;
             let spill = 24.0 * scale;
             let cr = snapshot.append_cairo(&gtk::graphene::Rect::new(
                 (x - spill) as f32,
@@ -337,6 +344,12 @@ impl Board {
     /// rather than push the screen's words and buttons off it (`OnboardingView`).
     pub fn shrinking(self) -> Self {
         self.imp().shrinks.set(true);
+        self
+    }
+
+    /// At the leading edge of its row, as a board in a column aligned to its leading edge.
+    pub fn leading(self) -> Self {
+        self.imp().leading.set(true);
         self
     }
 }
@@ -511,5 +524,120 @@ pub fn overview() -> Board {
             130.0,
             90.0,
         );
+    })
+}
+
+/// Coach's spark: four curved points, on a 100 by 100 grid scaled to `size` at `x`, `y`.
+fn spark(cr: &cairo::Context, x: f64, y: f64, size: f64) {
+    let p = |a: f64, b: f64| (x + a * size / 100.0, y + b * size / 100.0);
+    let curve = |c1: (f64, f64), c2: (f64, f64), to: (f64, f64)| {
+        cr.curve_to(c1.0, c1.1, c2.0, c2.1, to.0, to.1);
+    };
+    let start = p(50.0, 0.0);
+    cr.move_to(start.0, start.1);
+    curve(p(54.0, 34.0), p(66.0, 46.0), p(100.0, 50.0));
+    curve(p(66.0, 54.0), p(54.0, 66.0), p(50.0, 100.0));
+    curve(p(46.0, 66.0), p(34.0, 54.0), p(0.0, 50.0));
+    curve(p(34.0, 46.0), p(46.0, 34.0), start);
+    cr.close_path();
+}
+
+/// The spark in the brand's sweep.
+fn brand_spark(cr: &cairo::Context, x: f64, y: f64, size: f64) {
+    spark(cr, x, y, size);
+    let _ = cr.set_source(brand(x, y, size, 0.0));
+    let _ = cr.fill();
+}
+
+/// A ring round `cx`, `cy`: its track, then `filled` of it from the top, clockwise, in `hex`.
+fn ring(
+    cr: &cairo::Context,
+    (cx, cy, r, width): (f64, f64, f64, f64),
+    track: f64,
+    filled: f64,
+    (hex, alpha): (u32, f64),
+) {
+    let ink = tone("ink");
+    cr.new_sub_path();
+    cr.arc(cx, cy, r, 0.0, 2.0 * PI);
+    rgb(cr, ink, track);
+    cr.set_line_width(width);
+    let _ = cr.stroke();
+    cr.new_sub_path();
+    cr.arc(cx, cy, r, -PI / 2.0, -PI / 2.0 + filled * 2.0 * PI);
+    rgb(cr, hex, alpha);
+    cr.set_line_cap(cairo::LineCap::Round);
+    let _ = cr.stroke();
+    cr.set_line_cap(cairo::LineCap::Butt);
+}
+
+/// One of Coach's first steps at `x`, `y`, under its rings: a dot and a line, 18 in.
+fn step(cr: &cairo::Context, x: f64, y: f64, (hex, alpha): (u32, f64), line: f64) {
+    sheet(cr, x, y, 170.0, 110.0, 22.0);
+    dot(cr, x + 18.0, y + 18.0, 30.0, hex, alpha);
+    bar(cr, x + 18.0, y + 64.0, 110.0, line);
+}
+
+/// Board 7, Coach with no taf or one: its spark beside one card, room for more. Coach's empty chat,
+/// at its leading edge.
+pub fn coach_first() -> Board {
+    board(610.0, 280.0, 300.0, |cr| {
+        halo(cr, 10.0, 10.0, 260.0);
+        brand_spark(cr, 70.0, 70.0, 140.0);
+        spark(cr, 215.0, 40.0, 40.0);
+        rgb(cr, tone("amber"), 0.6);
+        let _ = cr.fill();
+        // The card, 150 × 180, its pieces 20 in.
+        sheet(cr, 310.0, 80.0, 150.0, 180.0, 22.0);
+        let (x, y) = (330.0, 100.0);
+        mark(cr, x, y, 40.0, 12.0);
+        bar(cr, x, y + 58.0, 90.0, 0.85);
+        bar(cr, x, y + 78.0, 70.0, 0.18);
+        capsule(cr, x, y + 118.0, 110.0, 30.0, tone("amber"), 0.25);
+        // Room for the next: a dashed outline, its 4-wide dashes inside its edge.
+        rounded(cr, 482.0, 97.0, 114.0, 154.0, 20.0);
+        rgb(cr, tone("ink"), 0.22);
+        cr.set_line_width(4.0);
+        cr.set_dash(&[10.0, 7.0], 0.0);
+        let _ = cr.stroke();
+        // The dotted way from the spark to the card.
+        cr.move_to(250.0, 170.5);
+        cr.line_to(300.0, 170.5);
+        rgb(cr, tone("amber"), 0.7);
+        cr.set_line_width(5.0);
+        cr.set_line_cap(cairo::LineCap::Round);
+        cr.set_dash(&[0.0, 9.0], 0.0);
+        let _ = cr.stroke();
+        cr.set_dash(&[], 0.0);
+        cr.set_line_cap(cairo::LineCap::Butt);
+    })
+}
+
+/// Board 9, a wide window: Coach starting for the first time, its spark in rings filling. Coach
+/// before it's started.
+pub fn coach_starting() -> Board {
+    board(600.0, 490.0, 300.0, |cr| {
+        ring(
+            cr,
+            (300.0, 160.0, 140.0, 10.0),
+            0.07,
+            0.625,
+            (tone("amber"), 1.0),
+        );
+        ring(
+            cr,
+            (300.0, 160.0, 108.0, 8.0),
+            0.06,
+            0.38,
+            (tone("blue"), 0.7),
+        );
+        brand_spark(cr, 240.0, 100.0, 120.0);
+        faded(cr, 0.9, || step(cr, 20.0, 360.0, (tone("ok"), 1.0), 0.15));
+        step(cr, 215.0, 360.0, (tone("amber"), 1.0), 0.15);
+        faded(cr, 0.55, || {
+            step(cr, 410.0, 360.0, (tone("ink"), 0.15), 0.1)
+        });
+        dot(cr, 100.0, 70.0, 14.0, tone("pink"), 0.4);
+        dot(cr, 490.0, 50.0, 18.0, tone("amber_text"), 0.4);
     })
 }

@@ -100,6 +100,7 @@ button.tafs-account:hover { background-color: alpha(@tafs_ink, 0.04); }
 /* Coach (`SetupChatView`): its own wash; the owner's words on the brand sweep, corners of 18; cards'
    edges in their state's colour; an answered card's line on the raised colour at 60%. */
 .tafs-coach-wash { background-color: @tafs_coach_wash; }
+.tafs-coach-text { color: @tafs_coach; }
 .tafs-coach-title { border-bottom: 1px solid @tafs_line; }
 .tafs-owner-bubble { background-image: linear-gradient(135deg, BRAND0, BRAND1, BRAND2); color: white; border-radius: 18px; padding: 10px 14px; }
 .tafs-owner-bubble.steered { opacity: 0.8; }

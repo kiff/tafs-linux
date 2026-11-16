@@ -87,6 +87,8 @@ struct Page {
     /// What's drawn now, so a read that changed nothing draws nothing.
     drawn: RefCell<Option<Drawn>>,
     reading: Cell<bool>,
+    /// Read, and the account has no Coach yet: starting it is signed, on the phone.
+    no_coach: Cell<bool>,
     polls: RefCell<Polls>,
     /// The thread goes to its latest at the next draw.
     follow: Cell<bool>,
@@ -207,6 +209,7 @@ pub fn page(
         typing: RefCell::new(None),
         drawn: RefCell::new(None),
         reading: Cell::new(false),
+        no_coach: Cell::new(false),
         polls: RefCell::new(Polls::default()),
         follow: Cell::new(true),
         root: root.clone(),
@@ -264,6 +267,16 @@ pub fn page(
                         let p = page.clone();
                         glib::idle_add_local_once(move || p.previous());
                     }
+                }
+                // `GET /v1/setup` with no Coach yet: its start.
+                None if std::fs::read(&path)
+                    .ok()
+                    .and_then(|b| serde_json::from_slice::<serde_json::Value>(&b).ok())
+                    .and_then(|v| serde_json::to_vec(v.get("answer").unwrap_or(&v)).ok())
+                    .is_some_and(|b| coach::setup_id(&b) == Ok(None)) =>
+                {
+                    page.no_coach.set(true);
+                    page.draw();
                 }
                 None => {
                     eprintln!(
@@ -453,8 +466,12 @@ impl Page {
                 self.conv.borrow_mut().setup = Some(id);
                 self.load_thread().await;
             }
-            // No Coach yet: the empty chat's words. Starting it is signed, on the phone.
-            Ok(None) => self.draw(),
+            // No Coach yet: its start, which is signed, on the phone.
+            Ok(None) => {
+                self.no_coach.set(true);
+                *self.drawn.borrow_mut() = None;
+                self.draw();
+            }
             Err(Fail::SignedOut) => self.signed_out(),
             Err(Fail::Why(why)) => {
                 self.conv.borrow_mut().error = Some(self.not_loaded(&why));
@@ -1179,9 +1196,17 @@ fn eyebrow_in(s: &str, tone: Tone) -> gtk::Label {
 
 fn draw_thread(page: &Rc<Page>, lines: &CoachLines, drawn: &Drawn) {
     let column = &page.column;
+    if page.no_coach.get() {
+        column.append(&intro(&page.w));
+        return;
+    }
     if let Some((title, line)) = &lines.starts {
         let v = gtk::Box::new(gtk::Orientation::Vertical, 12);
         v.set_margin_top(16);
+        // Board 7, Coach with no taf or one yet: room for more.
+        if page.listed.len() <= 1 {
+            v.append(&crate::illustrations::coach_first().leading());
+        }
         v.append(&text(title, 26, 700, &["tafs-ink"]));
         v.append(&text(line, 15, 400, &["tafs-soft"]));
         column.append(&v);
@@ -1281,6 +1306,26 @@ fn draw_thread(page: &Rc<Page>, lines: &CoachLines, drawn: &Drawn) {
         v.append(&n);
         column.append(&v);
     }
+}
+
+/// Coach before it's started (`introBefore`): board 9, "Coach mode", and, where Start would be,
+/// why this computer can't: starting Coach is signed, so it's done on the phone.
+fn intro(w: &WordBook) -> gtk::Widget {
+    let v = gtk::Box::new(gtk::Orientation::Vertical, 14);
+    v.set_margin_top(24);
+    v.append(&crate::illustrations::coach_starting());
+    v.append(&text(
+        &w.line("coach.coach_mode").unwrap_or_default(),
+        30,
+        700,
+        &["tafs-coach-text"],
+    ));
+    if let Ok(tafs_core::approval::Gate::NotReady(n)) =
+        tafs_core::approval::gate(w, Mode::Kiff, tafs_core::approval::THIS_COMPUTER)
+    {
+        v.append(&crate::approval::not_ready(&n));
+    }
+    v.upcast()
 }
 
 /// `UnsentBubble`: the words dimmed, "Not sent · why", then Edit and Retry; for a send refused

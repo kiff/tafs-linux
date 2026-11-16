@@ -14,9 +14,9 @@ each goes to tafs cloud as the session (`kiff::cloud_send`, which reaches tafs c
 In the iPad's order (`loadSetup`, `loadSetupThread`), at tafs cloud as the session:
 
 1. **Coach's taf:** `GET /v1/setup`'s `setup.id` (`setupRead`, contract `setup-coach.json`), read
-   as strictly as the iPad's `CloudTaf`. No Coach yet: the empty chat ("Ask anything about your
-   tafs"); starting Coach is signed, so it's done on the phone. Linux sends no `X-Time-Zone` with
-   it: on a new account that header sets the account's zone, and this computer changes nothing.
+   as strictly as the iPad's `CloudTaf`. No Coach yet: its start (`introBefore`), board 9 and
+   "Coach mode", with why this computer can't in Start's place: starting Coach is signed, so it's
+   done on the phone. Linux sends no `X-Time-Zone` with it: on a new account that header sets the account's zone, and this computer changes nothing.
 2. **Its newest conversation:** `GET /v1/tafs/{id}/chats` (contract `coach-chats.json`), the chat
    with the latest `updated`. Without the list, the conversation reads without a session, as on
    the iPad.
@@ -112,7 +112,10 @@ iPad does, and tafs cloud marks no card. The token, the key and the signature ar
 
 ## What's drawn
 
-- **The title**, inline, as the iPad's navigation bar, on Coach's own wash.
+- **The title**, inline, as the iPad's navigation bar, on Coach's own wash, with New conversation
+  and the menu at its trailing edge.
+- **The empty chat:** board 7 while the account has no taf or one, "Ask anything about your tafs"
+  and what Coach does.
 - **The plan** (`SetupPlan`) pinned above the thread: "Plan · 1 of 3" and the step it's at,
   opening to every step with its mark.
 - **The thread** in the order already drawn (`SteadyOrder`, iPad tafs#1241, Android's
@@ -165,6 +168,8 @@ read or sent. `tools/screenshots.sh` saves `coach` (the contract's conversation,
 Stop), `coach-wider` (tafs's own contract, `contracts/coach-wider.json`: an approval waiting under
 its wider line; the tests read the same contract, so a change in tafs cloud's shape fails them
 here), `coach-asks` (`crates/tafs-app/fixtures/coach-asks.json`: Coach at rest with a confirm and a
-questions card waiting, a message its run never read as Not sent, and one tafs cloud holds) and
+questions card waiting, a message its run never read as Not sent, and one tafs cloud holds),
+`coach-empty` (`crates/tafs-app/fixtures/coach-empty.json` with no taf: board 7 over the empty
+chat), `coach-start` (`shared/contracts/setup-start.json`: no Coach yet, board 9) and
 `coach-chats` (`--coach-chats shared/contracts/coach-chats.json`: Previous conversations open over
 the contract's conversation).
