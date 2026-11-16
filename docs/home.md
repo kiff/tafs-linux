@@ -15,6 +15,8 @@ From the top:
   - **Needs you's count** at its row's end is a plain grey number, none at zero (`.badge`):
     tafs cloud's count when it sends one, else the held calls (`needsYouCount`). A screen reader
     hears "Needs you, 2".
+  - **Once tafs cloud sends a brief**, Needs you's row says its name ("Your brief",
+    `needsYouTabTitle`), with the same count, and opens [Your brief](brief.md).
 - **NEEDS YOU**, when calls are held: the eyebrow in the amber, then each call: an 8-point amber
   dot, "Deploys: Run migration 0042_orders_index" (14 semibold) and "Schema migrations: always
   asks you · answer by 03:02" (12, soft), each on one line, cut short. Times are 24-hour, this

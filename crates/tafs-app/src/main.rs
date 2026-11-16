@@ -4,6 +4,7 @@ mod account;
 mod ai_consent;
 mod alerts;
 mod approval;
+mod brief;
 mod calendar;
 mod chat;
 mod coach;
@@ -83,6 +84,9 @@ struct Cloud {
     reports: std::collections::BTreeMap<String, tafs_core::access::RunReport>,
     /// The balance, read with each refresh for the sidebar's plan line (`refreshBalance`).
     balance: Option<tafs_core::usage::Balance>,
+    /// "Your brief" (`GET /v1/brief`), read with the list: none (a 404, an error, nothing in
+    /// it) keeps Needs you as today.
+    brief: Option<tafs_core::brief::Brief>,
 }
 
 /// The window's size, a laptop's, as the screenshots are saved.
@@ -155,13 +159,16 @@ struct Options {
     chat: Option<String>,
     /// With `--chat`: Report this answer open over its last answer that can be reported.
     report: bool,
+    /// With `--home`: "Your brief" as tafs cloud answers `GET /v1/brief`; every read is it, and
+    /// Later sends nothing.
+    brief: Option<String>,
     /// `--size WxH`: the window's size, for a screenshot of a narrower layout.
     size: Option<(i32, i32)>,
     screenshot: Option<String>,
 }
 
 const USAGE: &str = "tafs [--lang en|de|fr|es|it|pt|nl|pl] [--theme light|dark] [--sample] [--signed-in] [--view-only [--paired]]
-     [--home contract.json] [--usage answers.json] [--people answers.json] [--unproven answers.json] [--recipes answers.json] [--gallery answers.json] [--halt answer.json] [--record-search answers.json] [--access answer.json] [--receipts answer.json] [--activity answer.json] [--calls answer.json] [--receipt answer.json] [--work answer.json] [--doors answer.json] [--account-reads answers.json] [--me answer.json] [--memory answer.json] [--runs answer.json] [--request answer.json] [--balance answer.json] [--coach answer.json] [--coach-chats answer.json] [--chat answer.json [--report]] [--size WxH] [--page welcome|sign-in|pair|recipe:<id>|gallery|halt-all|halt:<id>|record-search:<q>|record-export|receipt:<proposal id>|run:<taf id>|pin-sheet|coach|overview|needs-you|record|calendar|calendar-week|usage|connect-apps|account|kiff-account|time-zone|alerts|devices|people|taf|taf-card|taf-setup|consent|connected|sign-in-code] [--screenshot out.png]";
+     [--home contract.json] [--usage answers.json] [--people answers.json] [--unproven answers.json] [--recipes answers.json] [--gallery answers.json] [--halt answer.json] [--record-search answers.json] [--access answer.json] [--receipts answer.json] [--activity answer.json] [--calls answer.json] [--receipt answer.json] [--work answer.json] [--doors answer.json] [--account-reads answers.json] [--me answer.json] [--memory answer.json] [--runs answer.json] [--request answer.json] [--balance answer.json] [--coach answer.json] [--coach-chats answer.json] [--chat answer.json [--report]] [--brief answer.json] [--size WxH] [--page welcome|sign-in|pair|recipe:<id>|gallery|halt-all|halt:<id>|record-search:<q>|record-export|receipt:<proposal id>|run:<taf id>|pin-sheet|coach|overview|needs-you|brief-answer:<decision id>|record|calendar|calendar-week|usage|connect-apps|account|kiff-account|time-zone|alerts|devices|people|taf|taf-card|taf-setup|consent|connected|sign-in-code] [--screenshot out.png]";
 
 fn options() -> Result<Options, String> {
     let mut o = Options::default();
@@ -198,6 +205,7 @@ fn options() -> Result<Options, String> {
             "--coach-chats" => o.coach_chats = Some(value()?),
             "--chat" => o.chat = Some(value()?),
             "--report" => o.report = true,
+            "--brief" => o.brief = Some(value()?),
             "--size" => {
                 let v = value()?;
                 let (w, h) = v.split_once('x').ok_or("--size takes WxH")?;
@@ -244,6 +252,7 @@ fn main() -> glib::ExitCode {
 fn selection_of(page: Option<&str>) -> Selection {
     match page {
         Some("needs-you") => Selection::NeedsYou,
+        Some(other) if other.starts_with("brief-answer:") => Selection::NeedsYou,
         Some("record") => Selection::Record,
         Some("calendar") | Some("calendar-week") => Selection::Calendar,
         Some("usage") => Selection::Usage,
@@ -364,6 +373,7 @@ fn activate(app: &adw::Application, o: &Options) {
         coach_chats: o.coach_chats.as_ref().map(std::path::PathBuf::from),
         chat_file: o.chat.as_ref().map(std::path::PathBuf::from),
         open_report: o.report,
+        brief_file: o.brief.as_ref().map(std::path::PathBuf::from),
         open_run: o.page.as_deref().is_some_and(|p| p.starts_with("run:")),
         usage_file: o.usage.as_ref().map(std::path::PathBuf::from),
         people_file: o.people.as_ref().map(std::path::PathBuf::from),
@@ -405,6 +415,13 @@ fn activate(app: &adw::Application, o: &Options) {
             .as_deref()
             .is_some_and(|p| p.starts_with("taf-setup:")),
     });
+    if let Some(id) = o
+        .page
+        .as_deref()
+        .and_then(|p| p.strip_prefix("brief-answer:"))
+    {
+        brief::ANSWERED.with(|a| *a.borrow_mut() = Some(id.to_string()));
+    }
     if o.page.as_deref() == Some("delete-account") {
         kiff_account::OPEN_DELETE.with(|d| d.set(true));
     }
@@ -454,6 +471,15 @@ fn activate(app: &adw::Application, o: &Options) {
             used_by: Default::default(),
             reports: Default::default(),
             balance: balance_file(o.balance.as_deref()),
+            brief: o.brief.as_deref().map(|path| {
+                std::fs::read(path)
+                    .ok()
+                    .and_then(|body| brief::read_answer(&body, &app_state.words))
+                    .unwrap_or_else(|| {
+                        eprintln!("{path} isn't a brief as tafs cloud answers GET /v1/brief");
+                        std::process::exit(2);
+                    })
+            }),
         }),
         None => {
             eprintln!("{path} isn't Home as tafs cloud answers it");
@@ -619,6 +645,8 @@ struct App {
     chat_file: Option<std::path::PathBuf>,
     /// `--report`: Report this answer open over the chat.
     open_report: bool,
+    /// `--brief`'s answer: the screenshots' brief, every read of it, never sent.
+    brief_file: Option<std::path::PathBuf>,
     /// `--page run:<taf id>`: that taf's first kept run open, for a screenshot.
     open_run: bool,
     /// `--usage`'s file of synthetic answers.
@@ -822,7 +850,14 @@ impl App {
                     .ok()
                     .filter(|a| a.status == 200)
                     .and_then(|a| tafs_core::usage::Balance::read(&a.body));
+                // Your brief, read with the list: tafs cloud answering `/v1/brief` is what turns
+                // it on (a 404, an error or a brief with nothing in it keeps Needs you as today).
+                let brief = kiff::cloud(&token, &languages, &tafs_core::brief::Brief::path(None))
+                    .ok()
+                    .filter(|a| a.status == 200)
+                    .and_then(|a| brief::read_answer(&a.body, &words));
                 Read::Cloud(Box::new(Cloud {
+                    brief,
                     balance,
                     home,
                     held,
@@ -1460,6 +1495,11 @@ impl App {
             .and_then(|c| c.recipes.as_ref())
             .and_then(|r| r.home_words())
             .map(str::to_string);
+        // Needs you's row says tafs cloud's name for the brief once there is one
+        // (`needsYouTabTitle`).
+        if let (Mode::Kiff, Some(b)) = (mode, cloud.as_ref().and_then(|c| c.brief.as_ref())) {
+            model.brief_tab = Some(b.words.tab.clone()).filter(|t| !t.is_empty());
+        }
         let account = cloud.as_ref().and_then(|c| c.account.clone());
         // `showsAccountHalt`: signed in with KIFF, to someone who manages Cards, while a tafs
         // cloud taf runs, and whenever the account is halted or halting, since that row is
@@ -1579,7 +1619,65 @@ impl App {
         };
         let tafs =
             Rc::new(self.taf_pages(mode, &model, cloud.as_deref(), may_answer, at, signed_out));
+        // Your brief, signed in with KIFF once tafs cloud sends one: read again for a label at
+        // tafs cloud as the session, or a screenshot's from `--brief`, never sent.
+        let brief = match (
+            mode,
+            cloud.as_deref(),
+            self.kept.borrow().as_ref(),
+            &self.brief_file,
+        ) {
+            (Mode::Kiff, Some(c), kept, file) => c.brief.clone().and_then(|b| {
+                let source = match (file, kept) {
+                    (Some(f), _) => brief::BriefSource::File(f.clone()),
+                    (None, Some(kept)) => brief::BriefSource::Cloud {
+                        token: kept.token.clone(),
+                        languages: self.languages.clone(),
+                    },
+                    (None, None) => return None,
+                };
+                // What Needs you holds that the brief can match by its `ref`, and what it can't
+                // carry (`briefNeedsYouLine`).
+                let mut items: Vec<String> = model
+                    .held
+                    .iter()
+                    .filter_map(|h| h.kiff_id.as_ref().map(|id| format!("hold:{id}")))
+                    .collect();
+                items.extend(
+                    c.home
+                        .your_steps
+                        .iter()
+                        .flatten()
+                        .map(|s| format!("step:{}", s.handoff)),
+                );
+                let others = model.held.iter().filter(|h| h.kiff_id.is_none()).count()
+                    + c.home.card_unit_exceptions.as_ref().map_or(0, Vec::len)
+                    + if may_answer { c.unproven.len() } else { 0 }
+                    + c.home.coach_waiting.as_ref().map_or(0, Vec::len);
+                Some(Rc::new(brief::BriefPane {
+                    brief: b,
+                    source,
+                    may_use_coach: model.may_use_coach,
+                    tafs: tafs
+                        .iter()
+                        .filter_map(|t| {
+                            Some(brief::BriefTaf {
+                                cloud_id: t.cloud_id.clone()?,
+                                key: t.key.clone(),
+                                name: t.name.clone(),
+                                initial: t.initial.clone(),
+                                color: t.color,
+                            })
+                        })
+                        .collect(),
+                    needs_you_items: items,
+                    needs_you_others: others as i64,
+                }))
+            }),
+            _ => None,
+        };
         let screens = shell::Screens {
+            brief,
             overview,
             needs_you,
             account: account_lines,
@@ -1994,6 +2092,7 @@ fn home_model(
     let model = SidebarModel {
         list_loaded: true,
         plan: balance.and_then(|b| b.home_line.clone().map(|l| (l, b.plan_tone.clone()))),
+        brief_tab: None,
         tafs: rows,
         held,
         cloud_needs_you: h.needs_you.as_ref().map(|n| n.count),
@@ -2118,6 +2217,7 @@ fn kiff_model() -> SidebarModel {
         others: vec![],
         setting_up: vec![],
         plan: None,
+        brief_tab: None,
     }
 }
 

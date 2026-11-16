@@ -130,6 +130,7 @@ pub fn sidebar(
         others: vec![],
         setting_up: vec![],
         plan: None,
+        brief_tab: None,
     })
 }
 
