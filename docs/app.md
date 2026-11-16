@@ -94,3 +94,20 @@ building those two from source on 22.04, or shipping a Flatpak.
 - Run by hand with a version (`v` and three numbers, as `v0.1.0`: anything else is refused before
   a tag is made), one job builds it, checks it starts, and attaches it with its `SHA256SUMS` to a
   **draft** release, its only copy. Publishing it is the owner's yes, never the workflow's.
+
+**Signing.** The draft job signs `SHA256SUMS` with tafs for Linux's OpenPGP key
+(`tools/sign.sh`): an armored detached signature, `SHA256SUMS.asc`, attached beside it. Whoever
+downloads checks the signature with the public key, then the AppImage against `SHA256SUMS`:
+
+```
+gpg --verify SHA256SUMS.asc SHA256SUMS && sha256sum -c SHA256SUMS
+```
+
+- The key is two secrets in the `linux-signing` environment, `TAFS_SIGNING_KEY` (armored) and
+  `TAFS_SIGNING_PASSPHRASE`. Only the signing step reads them. They're imported into a keyring
+  made for the step and removed after it, from stdin, never a file or the command line.
+- **While the environment holds no key, the draft goes out unsigned** and the step says so.
+  Adding the key is a value in the environment, not a change here; its public half then goes in
+  `packaging/` and on the download page.
+- A pull request that changes the packaging runs the same step with a throwaway key made in the
+  job, so the signing is known to work before the real key exists.

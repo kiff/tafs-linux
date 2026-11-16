@@ -8,6 +8,7 @@ on:
   pull_request:
     paths:
       - tools/appimage.sh
+      - tools/sign.sh
       - packaging/**
       - .github/workflows/appimage.yml
   workflow_dispatch:
@@ -49,12 +50,25 @@ jobs:
           app=$(ls tafs-*-x86_64.AppImage)
           file "$app"
           APPIMAGE_EXTRACT_AND_RUN=1 "./$app" --help 2>&1 | grep -q '^tafs \['
+      - name: Signing, as a dry run with a throwaway key
+        # The release's signing step, run with a key made here and thrown away, so the step is
+        # known to work before the real key exists. Nothing signed here is kept.
+        run: |
+          sha256sum tafs-*-x86_64.AppImage > SHA256SUMS
+          export GNUPGHOME=$(mktemp -d)
+          gpg --batch --quiet --pinentry-mode loopback --passphrase '' --quick-gen-key 'tafs dry run <dry-run@invalid>' ed25519 sign 1d
+          TAFS_SIGNING_KEY=$(gpg --batch --armor --export-secret-keys) TAFS_SIGNING_PASSPHRASE='' tools/sign.sh SHA256SUMS
+          test -s SHA256SUMS.asc
+          rm -rf "$GNUPGHOME"
 
   # Run by hand with a version: built, started, and attached to a draft release in the same job,
   # so the draft is its only copy. Never published from here.
   draft:
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-24.04
+    # The signing key's secrets live in this environment. While it holds none, the draft goes out
+    # unsigned and says so; adding the key is a value, not a change here.
+    environment: linux-signing
     permissions:
       contents: write
     steps:
@@ -89,12 +103,19 @@ jobs:
           APPIMAGE_EXTRACT_AND_RUN=1 "./$app" --help 2>&1 | grep -q '^tafs \['
       - name: Its SHA-256, for the owner to check the download against
         run: sha256sum tafs-*-x86_64.AppImage | tee SHA256SUMS
+      - name: SHA256SUMS signed, once the signing key exists
+        # Only this step sees the key; the build's own code never does.
+        env:
+          TAFS_SIGNING_KEY: ${{ secrets.TAFS_SIGNING_KEY }}
+          TAFS_SIGNING_PASSPHRASE: ${{ secrets.TAFS_SIGNING_PASSPHRASE }}
+        run: tools/sign.sh SHA256SUMS
       - name: A draft release, never published from here
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ inputs.version }}
         run: |
-          gh release create "$VERSION" tafs-*-x86_64.AppImage SHA256SUMS \
+          signature=$(ls SHA256SUMS.asc 2>/dev/null || true)
+          gh release create "$VERSION" tafs-*-x86_64.AppImage SHA256SUMS $signature \
             --repo "$GITHUB_REPOSITORY" --draft --target "$GITHUB_SHA" \
             --title "tafs for Linux $VERSION" \
             --notes "The AppImage for Ubuntu 24.04 and newer (x86_64), with its SHA-256. A draft until the owner says yes."
