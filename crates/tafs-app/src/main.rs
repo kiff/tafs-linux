@@ -1181,6 +1181,14 @@ impl App {
                 })),
                 _ => None,
             },
+            // Export my chats, as the session: a kept one only, never a screenshot's.
+            export: match (mode, self.kept.borrow().as_ref(), self.screenshot) {
+                (Mode::Kiff, Some(kept), false) => Some(Rc::new(kiff_account::ExportSource {
+                    token: kept.token.clone(),
+                    languages: self.languages.clone(),
+                })),
+                _ => None,
+            },
             // The gallery, signed in with KIFF once read: Explore jobs, and with tafs the strip.
             gallery: match (mode, cloud.as_deref()) {
                 (Mode::Kiff, Some(c)) => c.gallery.clone().map(|gallery| {

@@ -235,10 +235,10 @@ pub fn taf_activity(token: &str, languages: &[&str], path: &str) -> Result<Answe
 }
 
 /// A read on tafs cloud as the session, by its path (Plan & usage's balance and credits).
-/// `GET /v1/record/receipts` at tafs cloud as the session (`exportReceipts`): files to save,
-/// so up to 32 MB is read, and an answer longer than that is refused whole rather than saved
-/// cut short.
-pub fn receipts(token: &str, languages: &[&str], path: &str) -> Result<Answer, KiffError> {
+/// A GET at tafs cloud as the session whose answer is saved as files (`exportReceipts`,
+/// `exportChats`): up to 32 MB is read, and an answer longer than that is refused whole rather
+/// than saved cut short.
+pub fn cloud_file(token: &str, languages: &[&str], path: &str) -> Result<Answer, KiffError> {
     const MOST: u64 = 32 << 20;
     let url = format!("{}{path}", tafs_core::home::TAFS_CLOUD);
     if !may_send_to(&url) {

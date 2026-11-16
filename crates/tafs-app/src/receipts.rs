@@ -30,7 +30,7 @@ fn export(w: &WordBook, source: &ReceiptsSource, from: &str, to: &str) -> Result
     if let Some(body) = &source.canned {
         return Ok(Export::read(body, from, to));
     }
-    let a = crate::kiff::receipts(&source.token, &source.languages, &receipts::path(from, to))
+    let a = crate::kiff::cloud_file(&source.token, &source.languages, &receipts::path(from, to))
         .map_err(|e| e.words(w).unwrap_or_default())?;
     if !(200..300).contains(&a.status) {
         return Err(tafs_core::signin::refusal(&a, Some(w))

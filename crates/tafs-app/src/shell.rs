@@ -46,6 +46,8 @@ pub struct Screens {
     pub zones: crate::zones::ZonesSource,
     /// Where a halt is read and sent, signed in with KIFF: the halt screens and the taf page's row.
     pub halt: Option<Rc<crate::halt::HaltSource>>,
+    /// Where Export my chats reads, signed in with KIFF from a kept session.
+    pub export: Option<Rc<crate::kiff_account::ExportSource>>,
     /// The jobs' gallery, signed in with KIFF: "Explore jobs" and, with tafs, the strip.
     pub gallery: Option<Rc<crate::recipes::GalleryPane>>,
     /// Home with no taf, when tafs cloud lists its recipes (`homeListsRecipes`): they take the
@@ -83,6 +85,7 @@ pub fn build(
         recipes,
         gallery,
         halt,
+        export,
     } = screens;
     let entries = Rc::new(record.entries.clone());
     let lines = model.lines(&w).unwrap_or_else(|e| panic!("{e}"));
@@ -216,6 +219,7 @@ pub fn build(
                         people_known.account.clone(),
                         Rc::new(move || open(Selection::Account)),
                         Rc::new(move || to_zone(Selection::TimeZone)),
+                        export.clone(),
                     )
                 }
                 Selection::TimeZone => {
