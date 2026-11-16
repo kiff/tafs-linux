@@ -1148,8 +1148,8 @@ impl App {
                 None,
             ),
             (_, Some(c)) => {
-                let (model, mut tafs) =
-                    home_model(words, &c.home, &c.held, at).unwrap_or_else(|e| fail(e));
+                let (model, mut tafs) = home_model(words, &c.home, &c.held, &c.activity, at)
+                    .unwrap_or_else(|e| fail(e));
                 // Who uses each taf this person manages, and each tafs cloud taf's last run.
                 for o in tafs.iter_mut() {
                     let agent = c
@@ -1558,13 +1558,14 @@ fn read_contract(path: &str) -> Option<Home> {
     Home::read(&serde_json::to_vec(file.get("answer")?).ok()?)
 }
 
-/// The account's sidebar and Overview from Home and KIFF's held calls: the tafs a call waits on
-/// first, then in tafs cloud's order (`waitingFirst`), Your tafs those relevant now, and tafs
-/// cloud's count of what waits.
+/// The account's sidebar and Overview from Home, KIFF's held calls and its activity: the tafs a
+/// call waits on first, then the one with the newest call in the Record, then tafs cloud's order
+/// (`listedTafs`, `byRecent`); Your tafs those relevant now, and tafs cloud's count of what waits.
 fn home_model(
     w: &WordBook,
     h: &Home,
     exceptions: &[CardException],
+    activity: &[tafs_core::record::ActivityCall],
     at: chrono::DateTime<chrono::Local>,
 ) -> Result<(SidebarModel, Vec<tafs_core::overview::OverviewTaf>), tafs_core::words::WordsError> {
     let tafs: Vec<tafs_core::home::Taf> = h
@@ -1583,11 +1584,15 @@ fn home_model(
         held.push(tafs_core::held::held(w, e, &key)?);
     }
     let waits = |t: &tafs_core::home::Taf| held.iter().any(|c| c.taf == t.key);
-    let ordered: Vec<&tafs_core::home::Taf> = tafs
-        .iter()
-        .filter(|t| waits(t))
-        .chain(tafs.iter().filter(|t| !waits(t)))
-        .collect();
+    // Its newest call in the Record, by its KIFF agent.
+    let latest = |t: &tafs_core::home::Taf| {
+        activity
+            .iter()
+            .filter(|c| c.actor_id.as_deref() == Some(t.agent.as_str()))
+            .map(|c| c.created_at)
+            .max()
+    };
+    let ordered = tafs_core::sidebar::by_recent(&tafs, waits, latest);
     let rows = ordered
         .iter()
         .map(|t| {

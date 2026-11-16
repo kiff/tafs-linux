@@ -343,9 +343,49 @@ pub fn initial(name: &str) -> String {
         .unwrap_or_default()
 }
 
+/// The tafs as listed (`listedTafs`, `byRecent`): a taf waiting on the owner first, then the
+/// one used or at work most recently (`latest`, its newest Record entry), so the taf the owner
+/// just worked with is at the top. Tafs with nothing yet keep tafs cloud's order, after the rest.
+/// The iPad settles this when the list loads and when the app comes back; this computer reads
+/// the account afresh each time, so each read settles it.
+pub fn by_recent<T>(
+    tafs: &[T],
+    waiting: impl Fn(&T) -> bool,
+    latest: impl Fn(&T) -> Option<chrono::DateTime<chrono::Utc>>,
+) -> Vec<&T> {
+    let mut listed: Vec<(usize, &T)> = tafs.iter().enumerate().collect();
+    // A stable sort, as the iPad's tie on tafs cloud's order (`a.offset < b.offset`).
+    listed.sort_by(|(_, a), (_, b)| {
+        waiting(b)
+            .cmp(&waiting(a))
+            .then_with(|| latest(b).cmp(&latest(a)))
+    });
+    listed.into_iter().map(|(_, t)| t).collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_list_is_waiting_then_most_recent_then_tafs_cloud_s_order() {
+        use chrono::TimeZone;
+        let at = |h| Some(chrono::Utc.with_ymd_and_hms(2026, 11, 16, h, 0, 0).unwrap());
+        // (key, waiting, latest)
+        let tafs = [
+            ("a", false, None),
+            ("b", false, at(3)),
+            ("c", true, at(1)),
+            ("d", false, at(5)),
+            ("e", false, None),
+            ("f", true, None),
+        ];
+        let listed: Vec<&str> = by_recent(&tafs, |t| t.1, |t| t.2)
+            .iter()
+            .map(|t| t.0)
+            .collect();
+        assert_eq!(listed, ["c", "f", "d", "b", "a", "e"]);
+    }
     use chrono::{Duration, TimeZone};
 
     fn at(h: u32, m: u32) -> DateTime<Local> {

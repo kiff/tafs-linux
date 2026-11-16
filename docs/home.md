@@ -123,13 +123,25 @@ can't sign approvals itself. Approve on your phone, or with a passkey." (`pair.a
 has no button, as tafs-macos #90 does on macOS 12. The kept session says it was
 paired (`KeptSession.paired`); a session kept before that reads as not paired.
 
+## The order
+
+The sidebar's tafs and the Overview's rows are in the iPad's order (`listedTafs`, `byRecent`,
+`tafs-core/src/sidebar.rs` › `by_recent`):
+- a taf a call waits on comes first;
+- then the one used most recently, by its newest call in the Record (KIFF's activity, by its
+  agent);
+- then the tafs with nothing yet, in tafs cloud's order.
+The iPad settles this when the list loads and when the app comes back, so it doesn't move while
+the owner looks at it. This computer reads the account afresh each time it opens, so each read
+settles it.
+
 ## Not yet
 
 - **What each row opens:** each screen but the Overview shows its title until it's ported.
 - **Reading Home again:** it's read once, after signing in or at launch. A 401 there signs this
   computer out ([sign-in](sign-in.md)).
-- **Its order:** tafs cloud's, until the Record and the chats are read for the iPad's most-recent
-  order (`listedTafs`).
+- **Its order, in part:** a connection its vendor signed out doesn't count as waiting yet (planque's
+  grants aren't read), and a taf's chat doesn't count as being at work (chats aren't on Linux).
 - **Held calls, steps and knocks** from KIFF: until they're read, Your tafs is what ran or changed.
 - **The account's name** under Account, and its zone for times: from KIFF's account read.
 - **A room's end on a later day** shows its date as 2026-11-16 00:00, not in the language's words
