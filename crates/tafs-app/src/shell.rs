@@ -111,7 +111,7 @@ pub fn build(
     let selection: Rc<RefCell<Option<Selection>>> = Rc::new(RefCell::new(None));
     let rows: Rc<RefCell<Vec<(gtk::ListBoxRow, Selection)>>> = Rc::new(RefCell::new(Vec::new()));
     let has_tafs = !model.tafs.is_empty();
-    let (sidebar, list, account_icon, account_button, coach_button) =
+    let (sidebar, list, account_icon, account_button, coach_button, plan_button) =
         sidebar(&w, &lines, &rows, gallery.as_ref(), has_tafs);
     root.append(&sidebar);
     root.append(&detail);
@@ -401,6 +401,10 @@ pub fn build(
         let select = select.clone();
         coach.connect_clicked(move |_| select(Selection::Coach));
     }
+    if let Some(plan) = plan_button {
+        let select = select.clone();
+        plan.connect_clicked(move |_| select(Selection::Usage));
+    }
     *holder.borrow_mut() = Some(select.clone());
     select(first);
     Shell { root }
@@ -418,6 +422,7 @@ fn sidebar(
     gtk::ListBox,
     gtk::Image,
     gtk::Button,
+    Option<gtk::Button>,
     Option<gtk::Button>,
 ) {
     let pane = gtk::Box::new(gtk::Orientation::Vertical, 0);
@@ -641,6 +646,34 @@ fn sidebar(
     foot.set_margin_end(16);
     foot.set_margin_top(12);
     foot.set_margin_bottom(12);
+    // The plan, only when it needs the owner (`PlanLine`): tafs cloud's words, then Plan & usage,
+    // which it opens.
+    let mut plan_button = None;
+    if let Some(plan) = &lines.plan {
+        let class = match plan.tone {
+            tafs_core::sidebar::Tone::No => "tafs-no",
+            _ => "tafs-amber-text",
+        };
+        let b = gtk::Button::new();
+        b.add_css_class("tafs-plain");
+        let h = gtk::Box::new(gtk::Orientation::Horizontal, 6);
+        let dot = gtk::Label::new(Some("●"));
+        dot.add_css_class(class);
+        dot.add_css_class("tafs-plan-dot");
+        dot.set_valign(gtk::Align::Start);
+        h.append(&dot);
+        let words = text(&plan.words, 13, 400, &[class]);
+        words.set_hexpand(true);
+        h.append(&words);
+        let title = one_line(&plan.title, 12, 600, &["tafs-amber-text"]);
+        title.set_valign(gtk::Align::Start);
+        h.append(&title);
+        b.set_child(Some(&h));
+        b.set_widget_name("plan-line");
+        b.update_property(&[gtk::accessible::Property::Label(&plan.accessible)]);
+        foot.append(&b);
+        plan_button = Some(b);
+    }
     let mut coach_button = None;
     if let Some(coach) = &lines.coach {
         let b = gtk::Button::new();
@@ -672,7 +705,7 @@ fn sidebar(
     account.update_property(&[gtk::accessible::Property::Label(&lines.account_accessible)]);
     foot.append(&account);
     pane.append(&foot);
-    (pane, list, icon, account, coach_button)
+    (pane, list, icon, account, coach_button, plan_button)
 }
 
 /// A row's line colour: dim, or what went wrong in the amber, or red when it's failing.

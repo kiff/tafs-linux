@@ -1,0 +1,9 @@
+{
+  "about": "Synthetic: a balance as tafs cloud answers GET /v1/usage/balance while the plan needs the owner, with its line for the sidebar's foot (`home_line`).",
+  "answer": {
+    "balance": {"state": "warning", "meter_pct": 92, "words": "Solo · 8% of this month's credits left", "detail": "Renews on 1 December"},
+    "plan_line": "8% of this month's credits left",
+    "plan_tone": "warning",
+    "home_line": "8% of this month's credits left"
+  }
+}

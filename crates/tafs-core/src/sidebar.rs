@@ -120,6 +120,20 @@ pub struct SidebarModel {
     pub shared: std::collections::BTreeSet<String>,
     /// Agents made through KIFF's API, not run by tafs (`otherAgents`): their Cards, apart.
     pub others: Vec<TafRow>,
+    /// tafs cloud's line for the plan, only when it needs the owner, and its tone (the balance
+    /// read's `home_line`, `plan_tone`).
+    pub plan: Option<(String, String)>,
+}
+
+/// The plan's line at the sidebar's foot (`PlanLine`): tafs cloud's words, in red while it
+/// waits on the owner, else the amber; then Plan & usage, which it opens.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PlanLine {
+    pub words: String,
+    pub tone: Tone,
+    pub title: String,
+    /// What a screen reader says: the words, then where it goes.
+    pub accessible: String,
 }
 
 /// Everything the sidebar draws, top to foot.
@@ -141,6 +155,8 @@ pub struct SidebarLines {
     /// OTHER AGENTS WITH CARDS, with every one of them.
     pub others_label: Option<String>,
     pub others: Vec<TafRow>,
+    /// The plan, only when it needs the owner, signed in with KIFF.
+    pub plan: Option<PlanLine>,
     /// Coach's button, for those who may use it.
     pub coach: Option<String>,
     pub account: String,
@@ -312,6 +328,26 @@ impl SidebarModel {
                 .then(|| w.line("home.other_agents").map(|s| upper(&s)))
                 .transpose()?,
             others: self.others.clone(),
+            plan: match (&self.plan, self.mode) {
+                (Some((words, tone)), Mode::Kiff) => {
+                    let title = w.line("usage.title")?;
+                    Some(PlanLine {
+                        accessible: format!(
+                            "{words}. {}",
+                            w.get("home.opens_plan", &[("title", &title)])?
+                        ),
+                        words: words.clone(),
+                        // `UsageView.color(planTone, calm: amberText)`.
+                        tone: if tone == "waiting" {
+                            Tone::No
+                        } else {
+                            Tone::Amber
+                        },
+                        title,
+                    })
+                }
+                _ => None,
+            },
             coach: self
                 .coach_available()
                 .then(|| w.line("coach.title"))
@@ -416,6 +452,7 @@ mod tests {
             account_halt: None,
             shared: Default::default(),
             others: vec![],
+            plan: None,
         }
     }
 
@@ -443,6 +480,30 @@ mod tests {
         // None shared and no other agents: neither section.
         let l = signed_in(vec![(row("a"), true)]).lines(&w).unwrap();
         assert_eq!((l.shared_label, l.others_label), (None, None));
+    }
+
+    #[test]
+    fn the_plan_line_shows_only_when_tafs_cloud_sends_one() {
+        let w = WordBook::load(&WordBook::default_root(), "en").unwrap();
+        let mut m = signed_in(vec![]);
+        assert_eq!(m.lines(&w).unwrap().plan, None);
+        m.plan = Some(("Your trial ends tomorrow".into(), "warning".into()));
+        let p = m.lines(&w).unwrap().plan.unwrap();
+        assert_eq!(p.words, "Your trial ends tomorrow");
+        assert_eq!(p.tone, Tone::Amber);
+        assert_eq!(p.title, "Plan & usage");
+        assert_eq!(
+            p.accessible,
+            "Your trial ends tomorrow. Opens Plan & usage."
+        );
+        // Waiting on the owner: red. Any other tone: the amber.
+        m.plan = Some(("Tasks paused".into(), "waiting".into()));
+        assert_eq!(m.lines(&w).unwrap().plan.unwrap().tone, Tone::No);
+        m.plan = Some(("x".into(), "ok".into()));
+        assert_eq!(m.lines(&w).unwrap().plan.unwrap().tone, Tone::Amber);
+        // The sample has no plan line.
+        m.mode = Mode::Sample;
+        assert_eq!(m.lines(&w).unwrap().plan, None);
     }
 
     #[test]
