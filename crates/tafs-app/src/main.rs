@@ -26,7 +26,7 @@ mod welcome;
 mod widgets;
 mod zones;
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 use adw::prelude::*;
@@ -252,6 +252,8 @@ fn activate(app: &adw::Application, o: &Options) {
         kept: RefCell::new(None),
         sign_out_error: RefCell::new(None),
         cloud: RefCell::new(None),
+        held_seen: RefCell::new(None),
+        held_watch: Cell::new(0),
         problem: RefCell::new(None),
         home_file: o.home.as_ref().map(std::path::PathBuf::from),
         usage_file: o.usage.as_ref().map(std::path::PathBuf::from),
@@ -278,6 +280,18 @@ fn activate(app: &adw::Application, o: &Options) {
             .as_deref()
             .is_some_and(|p| p == "taf-card" || p.starts_with("taf-card:")),
     });
+    // A hold's notification, clicked (`app.open-hold`): Needs you, read again. A screenshot
+    // sends none.
+    if !screenshot {
+        let action = gio::SimpleAction::new("open-hold", Some(glib::VariantTy::STRING));
+        let me = Rc::downgrade(&app_state);
+        action.connect_activate(move |_, _| {
+            if let Some(me) = me.upgrade() {
+                me.open_hold();
+            }
+        });
+        app.add_action(&action);
+    }
 
     // What opens: the sample when asked, else the kept session, else the welcome. A screenshot
     // never reads or writes the keyring.
@@ -390,6 +404,12 @@ struct App {
     sign_out_error: RefCell<Option<String>>,
     /// What was last read for the account.
     cloud: RefCell<Option<Rc<Cloud>>>,
+    /// The held calls already known, by KIFF's id: notified, or waiting when the account was
+    /// read. None until the account is read, and after signing out.
+    held_seen: RefCell<Option<std::collections::BTreeSet<String>>>,
+    /// The minute's read of held calls in force: a new account read, or signing out, ends the
+    /// last one.
+    held_watch: Cell<u64>,
     /// The welcome's line for why it's there, while it's open.
     problem: RefCell<Option<gtk::Label>>,
     /// `--home`'s contract file, for the screenshots' tafs cloud reads.
@@ -441,6 +461,13 @@ impl App {
     fn show_welcome(self: &Rc<Self>) {
         // Signed out: no account, so this computer's zone.
         tafs_core::account_time::use_zone(None);
+        // Signed out: the minute's read ends, and the last account's notifications never stay.
+        self.held_watch.set(self.held_watch.get() + 1);
+        if let (Some(seen), Some(app)) = (self.held_seen.take(), self.window.application()) {
+            for hold in seen {
+                app.withdraw_notification(&tafs_core::hold_alert::tag(&hold));
+            }
+        }
         *self.kept.borrow_mut() = None;
         *self.cloud.borrow_mut() = None;
         *self.sign_out_error.borrow_mut() = None;
@@ -588,7 +615,9 @@ impl App {
                         Some(word) => ApprovalMode::from_kiff(Some(word)).is_view_only(),
                         None => view_only,
                     };
-                    me.open_shell(Mode::Kiff, view_only, Some(Rc::new(*cloud)));
+                    let cloud = Rc::new(*cloud);
+                    me.open_shell(Mode::Kiff, view_only, Some(cloud.clone()));
+                    me.watch_holds(&cloud);
                 }
                 Read::SignedOut => me.signed_out_by_kiff(),
                 Read::Nothing => {}
@@ -840,6 +869,106 @@ impl App {
             search,
             receipts,
         }
+    }
+
+    /// While tafs runs, KIFF's held calls read once a minute, as Windows does (a computer gets no
+    /// push): each call held since the last read is notified (`HoldNotification`), and a call no
+    /// longer held loses its notification (`removeAlerts(forHold:)`). What waited when the account
+    /// was read isn't announced: it's in Needs you. Only for someone who answers held calls
+    /// (`canAnswerHolds`). A 401 signs this computer out, as any read.
+    fn watch_holds(self: &Rc<Self>, cloud: &Cloud) {
+        use tafs_core::hold_alert;
+        let watch = self.held_watch.get() + 1;
+        self.held_watch.set(watch);
+        // Notifications already shown for holds of this account stay theirs.
+        let mut seen = self.held_seen.take().unwrap_or_default();
+        seen.extend(cloud.held.iter().map(|h| h.id.clone()));
+        *self.held_seen.borrow_mut() = Some(seen);
+        let notifies = hold_alert::notifies(
+            cloud
+                .account
+                .as_ref()
+                .and_then(|a| a.capabilities.as_deref()),
+        );
+        let Some(token) = self.kept.borrow().as_ref().map(|k| k.token.clone()) else {
+            return;
+        };
+        let tafs: Vec<(String, String)> = cloud
+            .home
+            .tafs
+            .iter()
+            .chain(&cloud.home.others)
+            .map(|t| (t.kiff_agent.clone(), t.name.clone()))
+            .collect();
+        let (me, languages) = (self.clone(), self.languages.clone());
+        glib::spawn_future_local(async move {
+            loop {
+                glib::timeout_future(hold_alert::PERIOD).await;
+                if me.held_watch.get() != watch {
+                    return;
+                }
+                let (token, languages) = (token.clone(), languages.clone());
+                let read = gio::spawn_blocking(move || kiff::held(&token, &languages).ok())
+                    .await
+                    .ok()
+                    .flatten();
+                if me.held_watch.get() != watch {
+                    return;
+                }
+                let Some(answer) = read else { continue };
+                if answer.status == 401 {
+                    me.signed_out_by_kiff();
+                    return;
+                }
+                // A read that fails changes nothing: the next minute reads again.
+                let Some(holds) = (answer.status == 200)
+                    .then(|| tafs_core::held::read_held(&answer.body))
+                    .flatten()
+                else {
+                    continue;
+                };
+                let Some(app) = me.window.application() else {
+                    continue;
+                };
+                let seen = me.held_seen.borrow().clone();
+                for hold in hold_alert::gone(seen.as_ref(), &holds) {
+                    app.withdraw_notification(&hold_alert::tag(&hold));
+                }
+                if notifies {
+                    for hold in hold_alert::fresh(seen.as_ref(), &holds) {
+                        let named = hold_alert::named(
+                            &me.words,
+                            hold,
+                            tafs.iter().map(|(a, n)| (a.as_str(), n.as_str())),
+                        )
+                        .ok()
+                        .flatten();
+                        let Ok(lines) = hold_alert::lines(&me.words, hold, named.as_deref()) else {
+                            continue;
+                        };
+                        let n = gio::Notification::new(&lines.title);
+                        n.set_body(Some(&lines.body));
+                        n.set_default_action_and_target_value(
+                            "app.open-hold",
+                            Some(&lines.hold.to_variant()),
+                        );
+                        app.send_notification(Some(&hold_alert::tag(&lines.hold)), &n);
+                    }
+                }
+                *me.held_seen.borrow_mut() = Some(holds.iter().map(|h| h.id.clone()).collect());
+            }
+        });
+    }
+
+    /// A hold's notification, clicked: the account read again, opening on Needs you
+    /// (`PushDelegate.open`).
+    fn open_hold(self: &Rc<Self>) {
+        self.window.present();
+        let Some(kept) = self.kept.borrow().clone() else {
+            return;
+        };
+        *self.first.borrow_mut() = Selection::NeedsYou;
+        self.open_account(kept);
     }
 
     /// KIFF ended the session: forgotten here with its key, and the welcome says so.

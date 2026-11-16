@@ -14,6 +14,7 @@ pub mod connect;
 pub mod devices;
 pub mod halt;
 pub mod held;
+pub mod hold_alert;
 pub mod home;
 pub mod keys;
 pub mod language;
