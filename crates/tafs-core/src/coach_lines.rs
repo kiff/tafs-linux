@@ -328,6 +328,43 @@ pub fn unsent(
         .collect()
 }
 
+/// One of Coach's chats in Previous conversations (`SetupChatsList`): what the owner asked, when it
+/// last changed, and whether it's the one shown.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ChatRow {
+    pub session: String,
+    pub title: String,
+    pub when: String,
+    pub shown: bool,
+}
+
+/// The chats, in tafs cloud's order (newest first).
+pub fn chat_rows(
+    w: &WordBook,
+    chats: &[crate::coach::Chat],
+    shown: Option<&str>,
+) -> Result<Vec<ChatRow>, WordsError> {
+    chats
+        .iter()
+        .map(|c| {
+            Ok(ChatRow {
+                session: c.session.clone(),
+                title: if c.title.trim().is_empty() {
+                    w.line("coach.chats.untitled")?
+                } else {
+                    c.title.clone()
+                },
+                when: format!(
+                    "{}, {}",
+                    crate::home::long_date(w.language(), crate::account_time::day(&c.updated)),
+                    crate::account_time::short_time(&c.updated)
+                ),
+                shown: shown == Some(c.session.as_str()),
+            })
+        })
+        .collect()
+}
+
 /// How the last run ended (`ended`): stopped by the owner.
 pub fn ended(
     w: &WordBook,

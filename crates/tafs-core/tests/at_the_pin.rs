@@ -1632,6 +1632,29 @@ fn what_is_sent_to_coach_reads_in_every_language() {
         assert!(ended(&w, Some(Ended::Stopped)).unwrap().is_some());
         assert!(!answered_of(&w, 1, 2).unwrap().contains('{'), "{lang}");
         Refusal::read(409, b"{}").words(&w).unwrap();
+        let chats = [tafs_core::coach::Chat {
+            session: "s".into(),
+            started: at,
+            updated: at,
+            title: " ".into(),
+        }];
+        let rows = tafs_core::coach_lines::chat_rows(&w, &chats, Some("s"))
+            .unwrap_or_else(|e| panic!("{lang}: {e}"));
+        assert!(rows[0].shown && !rows[0].title.trim().is_empty(), "{lang}");
+        for key in [
+            "coach.chats.previous",
+            "coach.chats.archive",
+            "coach.chats.archive_title",
+            "coach.chats.archive_body",
+            "coach.chats.archived",
+            "coach.chats.none",
+            "coach.chats.nothing_archived",
+            "coach.chats.put_back",
+            "coach.new_conversation",
+            "coach.conversations",
+        ] {
+            assert!(w.line(key).is_ok(), "{lang}: {key}");
+        }
         for key in [
             "coach.answer_did_not_reach_setup",
             "coach.conversation_not_loaded",

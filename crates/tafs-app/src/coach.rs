@@ -12,8 +12,8 @@ use std::cell::{Cell, RefCell};
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
+use adw::prelude::*;
 use gtk::glib;
-use gtk::prelude::*;
 use tafs_core::coach::{self, Kind, SetupThread};
 use tafs_core::coach_lines::{
     ApprovalLines, Card, CoachLines, ComposerLines, Line, Listed, Mark, Outcome, PlanLines,
@@ -32,8 +32,12 @@ use crate::widgets::{eyebrow, outline, panel, primary, symbol, text};
 /// Where Coach's conversation is read from, and where what's written goes.
 #[derive(Clone)]
 pub enum CoachSource {
-    /// A conversation as tafs cloud answers it, from a file: nothing is read again or sent.
-    File(std::path::PathBuf),
+    /// A conversation as tafs cloud answers it, from a file: nothing is read again or sent. With
+    /// `chats`, Coach's chats as tafs cloud lists them, and Previous conversations open over it.
+    File {
+        thread: std::path::PathBuf,
+        chats: Option<std::path::PathBuf>,
+    },
     /// tafs cloud, as the session, with this device's proof when it has a key and KIFF names
     /// this computer. `signed_out` is called when tafs cloud says the session is over.
     Cloud {
@@ -87,6 +91,7 @@ struct Page {
     /// The thread goes to its latest at the next draw.
     follow: Cell<bool>,
     root: gtk::Box,
+    tools: gtk::Box,
     column: gtk::Box,
     plan_slot: gtk::Box,
     scroller: gtk::ScrolledWindow,
@@ -135,9 +140,36 @@ pub fn page(
     title.set_xalign(0.5);
     title.set_margin_top(14);
     title.set_margin_bottom(12);
-    let bar = gtk::Box::new(gtk::Orientation::Vertical, 0);
+    let bar = gtk::CenterBox::new();
     bar.add_css_class("tafs-coach-title");
-    bar.append(&title);
+    bar.set_center_widget(Some(&title));
+    // New conversation, and the menu with Previous conversations, at its trailing edge.
+    let tools = gtk::Box::new(gtk::Orientation::Horizontal, 4);
+    tools.set_margin_end(10);
+    tools.set_valign(gtk::Align::Center);
+    let new_chat = gtk::Button::new();
+    new_chat.add_css_class("tafs-bar-icon");
+    new_chat.set_child(Some(&symbol("tafs-compose-symbolic", 18)));
+    new_chat.set_tooltip_text(w.line("coach.new_conversation").ok().as_deref());
+    new_chat.update_property(&[gtk::accessible::Property::Label(
+        &w.line("coach.new_conversation").unwrap_or_default(),
+    )]);
+    new_chat.set_widget_name("coach.new");
+    tools.append(&new_chat);
+    let menu = gtk::MenuButton::new();
+    menu.add_css_class("tafs-bar-icon");
+    menu.set_icon_name("view-more-symbolic");
+    menu.update_property(&[gtk::accessible::Property::Label(
+        &w.line("coach.conversations").unwrap_or_default(),
+    )]);
+    let previous = gtk::Button::with_label(&w.line("coach.chats.previous").unwrap_or_default());
+    previous.add_css_class("flat");
+    let popover = gtk::Popover::new();
+    popover.set_child(Some(&previous));
+    menu.set_popover(Some(&popover));
+    tools.append(&menu);
+    tools.set_visible(false);
+    bar.set_end_widget(Some(&tools));
     root.append(&bar);
     let plan_slot = gtk::Box::new(gtk::Orientation::Vertical, 0);
     root.append(&plan_slot);
@@ -178,6 +210,7 @@ pub fn page(
         polls: RefCell::new(Polls::default()),
         follow: Cell::new(true),
         root: root.clone(),
+        tools,
         column,
         plan_slot,
         scroller,
@@ -185,10 +218,28 @@ pub fn page(
         composer,
     });
     wire_composer(&page);
+    {
+        let p = Rc::downgrade(&page);
+        new_chat.connect_clicked(move |_| {
+            if let Some(p) = p.upgrade() {
+                p.new_conversation();
+            }
+        });
+        let p = Rc::downgrade(&page);
+        previous.connect_clicked(move |_| {
+            popover.popdown();
+            if let Some(p) = p.upgrade() {
+                p.previous();
+            }
+        });
+    }
 
     match page.source.clone() {
         CoachSource::None => {}
-        CoachSource::File(path) => {
+        CoachSource::File {
+            thread: path,
+            chats,
+        } => {
             let read = std::fs::read(&path)
                 .ok()
                 .and_then(|b| serde_json::from_slice::<serde_json::Value>(&b).ok())
@@ -199,9 +250,20 @@ pub fn page(
                     {
                         let mut c = page.conv.borrow_mut();
                         c.setup = Some(String::new());
+                        c.chat = t.session();
                         c.took(t, chrono::Utc::now());
                     }
                     page.draw();
+                    if let Some(chats) = chats {
+                        page.conv.borrow_mut().chats = std::fs::read(&chats)
+                            .ok()
+                            .and_then(|b| serde_json::from_slice::<serde_json::Value>(&b).ok())
+                            .and_then(|v| serde_json::to_vec(v.get("answer").unwrap_or(&v)).ok())
+                            .and_then(|b| coach::chats(&b))
+                            .unwrap_or_default();
+                        let p = page.clone();
+                        glib::idle_add_local_once(move || p.previous());
+                    }
                 }
                 None => {
                     eprintln!(
@@ -531,7 +593,7 @@ impl Page {
     /// Send (`send`, `submitSetup`): the words leave the box; a message goes now, or, while Coach
     /// works, to its run. Words that weren't taken go back in the box.
     fn send(self: &Rc<Self>) {
-        if matches!(self.source, CoachSource::File(_)) {
+        if matches!(self.source, CoachSource::File { .. }) {
             return;
         }
         let words = self.draft();
@@ -699,7 +761,7 @@ impl Page {
 
     /// Stop (`stopSetup`): Coach's current run is cancelled, then the thread read again.
     fn stop(self: &Rc<Self>) {
-        if matches!(self.source, CoachSource::File(_)) {
+        if matches!(self.source, CoachSource::File { .. }) {
             return;
         }
         let (Some(session), Some(setup)) = ({
@@ -754,7 +816,7 @@ impl Page {
     /// followed; a card that doesn't wait any more (409) is read again, and any other failure
     /// says so under the card.
     fn answer(self: &Rc<Self>, id: &str, kind: Kind, words: &str) {
-        if matches!(self.source, CoachSource::File(_)) {
+        if matches!(self.source, CoachSource::File { .. }) {
             return;
         }
         let (Some(send), generation) = ({
@@ -806,7 +868,7 @@ impl Page {
 
     /// Retry on a message that didn't go (`retrySetup`): sent once more; not taken, it goes back.
     fn retry(self: &Rc<Self>, id: u64) {
-        if matches!(self.source, CoachSource::File(_)) {
+        if matches!(self.source, CoachSource::File { .. }) {
             return;
         }
         let Some((at, message)) = self.conv.borrow_mut().retry(id) else {
@@ -857,6 +919,7 @@ impl Page {
         let empty = self.draft().trim().is_empty();
         let k = &self.composer;
         k.bar.set_visible(c.setup.is_some());
+        self.tools.set_visible(c.setup.is_some());
         k.placeholder.set_label(&placeholder);
         k.placeholder.set_visible(self.draft().is_empty());
         k.view
@@ -2007,4 +2070,522 @@ fn questions_card(page: &Rc<Page>, card_ref: &str, card: &Card) -> gtk::Widget {
         p.append(&n);
     }
     p.upcast()
+}
+
+/// Previous conversations' list, and Archived's, filled again on each change.
+type Fill = Rc<RefCell<Option<Rc<dyn Fn()>>>>;
+
+fn refill(fill: &Fill) {
+    let f = fill.borrow().clone();
+    if let Some(f) = f {
+        f();
+    }
+}
+
+impl Page {
+    /// A read at tafs cloud as the session, off the main thread: the body of a 2xx. None for a
+    /// screenshot, or a read that didn't go; a 401 signs out.
+    async fn get(&self, path: String) -> Option<Vec<u8>> {
+        let CoachSource::Cloud {
+            kept, languages, ..
+        } = self.source.clone()
+        else {
+            return None;
+        };
+        let a = gtk::gio::spawn_blocking(move || {
+            crate::kiff::cloud(&kept.token, &languages, &path).ok()
+        })
+        .await
+        .ok()
+        .flatten()?;
+        if a.status == 401 {
+            self.signed_out();
+            return None;
+        }
+        (200..300).contains(&a.status).then_some(a.body)
+    }
+
+    /// Forgets what was drawn and picked: another conversation is drawn from nothing.
+    fn redraw_from_nothing(self: &Rc<Self>) {
+        self.selections.borrow_mut().clear();
+        self.chatting.borrow_mut().clear();
+        *self.typing.borrow_mut() = None;
+        *self.drawn.borrow_mut() = None;
+        *self.polls.borrow_mut() = Polls::default();
+        self.draw();
+    }
+
+    /// New conversation (`newConversation`): an empty chat, and the next message starts it. One
+    /// that's empty already stays, and shows its top. The box gets the keyboard.
+    fn new_conversation(self: &Rc<Self>) {
+        if self.conv.borrow().is_empty() {
+            self.scroller.vadjustment().set_value(0.0);
+        } else {
+            self.conv.borrow_mut().new_chat();
+            self.redraw_from_nothing();
+        }
+        self.composer.view.grab_focus();
+    }
+
+    /// One of Coach's chats reopened (`openSetupChat`): shown alone, and messages go on in it.
+    fn open_chat(self: &Rc<Self>, session: &str) {
+        if matches!(self.source, CoachSource::File { .. }) {
+            return;
+        }
+        self.conv.borrow_mut().open_chat(session);
+        self.redraw_from_nothing();
+        let p = self.clone();
+        glib::spawn_future_local(async move { p.load_thread().await });
+    }
+
+    /// `SetupChatsList`: Coach's chats, newest first, each by what the owner asked; one opens it,
+    /// Archive takes it out of the list once confirmed, and Archived lists the ones put away.
+    fn previous(self: &Rc<Self>) {
+        let Some(window) = self.root.root() else {
+            return;
+        };
+        let w = self.w.clone();
+        let l = |k: &str| w.line(k).unwrap_or_default();
+        let dialog = adw::Dialog::new();
+        dialog.set_content_width(520);
+        dialog.set_content_height(560);
+        let nav = adw::NavigationView::new();
+        dialog.set_child(Some(&nav));
+        let note: Rc<RefCell<Option<String>>> = Rc::new(RefCell::new(None));
+        let list = gtk::Box::new(gtk::Orientation::Vertical, 8);
+        let fill: Fill = Rc::new(RefCell::new(None));
+        let archived = self.archived_page(&dialog);
+        let fill_now: Rc<dyn Fn()> = {
+            let (p, list, note, dialog, nav, w) = (
+                Rc::downgrade(self),
+                list.clone(),
+                note.clone(),
+                dialog.downgrade(),
+                nav.downgrade(),
+                w.clone(),
+            );
+            let fill = Rc::downgrade(&fill);
+            Rc::new(move || {
+                let (Some(p), Some(dialog), Some(nav)) =
+                    (p.upgrade(), dialog.upgrade(), nav.upgrade())
+                else {
+                    return;
+                };
+                while let Some(c) = list.first_child() {
+                    list.remove(&c);
+                }
+                if let Some(n) = note.borrow().as_ref() {
+                    list.append(&text(n, 13, 400, &["tafs-no"]));
+                }
+                let rows = {
+                    let c = p.conv.borrow();
+                    let shown = if c.fresh { None } else { c.chat.clone() };
+                    tafs_core::coach_lines::chat_rows(&w, &c.chats, shown.as_deref())
+                        .unwrap_or_default()
+                };
+                if rows.is_empty() {
+                    let none = text(
+                        &w.line("coach.chats.none").unwrap_or_default(),
+                        14,
+                        400,
+                        &["tafs-dim"],
+                    );
+                    none.set_xalign(0.5);
+                    none.set_margin_top(24);
+                    none.set_margin_bottom(24);
+                    list.append(&none);
+                }
+                for row in rows {
+                    let h = chat_row(&row);
+                    {
+                        let (p, dialog, session) =
+                            (Rc::downgrade(&p), dialog.downgrade(), row.session.clone());
+                        h.0.connect_clicked(move |_| {
+                            if let Some(d) = dialog.upgrade() {
+                                d.close();
+                            }
+                            if let Some(p) = p.upgrade() {
+                                p.open_chat(&session);
+                            }
+                        });
+                    }
+                    let archive =
+                        gtk::Button::with_label(&w.line("coach.chats.archive").unwrap_or_default());
+                    archive.add_css_class("tafs-unsent-act");
+                    archive.set_valign(gtk::Align::Center);
+                    {
+                        let (p, dialog, session, note, fill) = (
+                            Rc::downgrade(&p),
+                            dialog.downgrade(),
+                            row.session.clone(),
+                            note.clone(),
+                            fill.clone(),
+                        );
+                        archive.connect_clicked(move |_| {
+                            let (Some(p), Some(dialog)) = (p.upgrade(), dialog.upgrade()) else {
+                                return;
+                            };
+                            let fill = fill.upgrade();
+                            p.ask_archive(&dialog, &session, note.clone(), fill);
+                        });
+                    }
+                    h.1.append(&archive);
+                    list.append(&h.1);
+                }
+                let to_archived = gtk::Button::new();
+                to_archived.add_css_class("tafs-chat-row");
+                let a = gtk::Box::new(gtk::Orientation::Horizontal, 10);
+                let icon = symbol("tafs-archive-symbolic", 16);
+                icon.add_css_class("tafs-ink");
+                icon.set_accessible_role(gtk::AccessibleRole::Presentation);
+                a.append(&icon);
+                a.append(&text(
+                    &w.line("coach.chats.archived").unwrap_or_default(),
+                    15,
+                    400,
+                    &["tafs-ink"],
+                ));
+                to_archived.set_child(Some(&a));
+                let archived = archived.clone();
+                let nav = nav.downgrade();
+                to_archived.connect_clicked(move |_| {
+                    if let Some(nav) = nav.upgrade() {
+                        nav.push(&archived);
+                    }
+                });
+                let line = gtk::Box::new(gtk::Orientation::Horizontal, 0);
+                line.add_css_class("tafs-chat-line");
+                to_archived.set_hexpand(true);
+                line.append(&to_archived);
+                list.append(&line);
+            })
+        };
+        *fill.borrow_mut() = Some(fill_now.clone());
+        fill_now();
+        nav.add(&sheet_page(
+            &l("coach.chats.previous"),
+            &list,
+            &dialog,
+            &l("record.filter.done"),
+        ));
+        // The list's filler lives as long as the sheet.
+        let keep = fill.clone();
+        dialog.connect_closed(move |_| {
+            keep.borrow_mut().take();
+        });
+        dialog.present(Some(&window));
+        // `.task { loadSetupChats() }`: read again as it opens.
+        let p = self.clone();
+        glib::spawn_future_local(async move {
+            let Some(setup) = p.conv.borrow().setup.clone() else {
+                return;
+            };
+            let Some(chats) = p
+                .get(coach::chats_path(&setup))
+                .await
+                .and_then(|b| coach::chats(&b))
+            else {
+                return;
+            };
+            p.conv.borrow_mut().chats = chats;
+            refill(&fill);
+        });
+    }
+
+    /// Archive's question, then the archive (`archiveSetupChat`): the one shown gives way to a new
+    /// conversation; refused, why is said in the list.
+    fn ask_archive(
+        self: &Rc<Self>,
+        dialog: &adw::Dialog,
+        session: &str,
+        note: Rc<RefCell<Option<String>>>,
+        fill: Option<Fill>,
+    ) {
+        let l = |k: &str| self.w.line(k).unwrap_or_default();
+        let ask = adw::AlertDialog::new(
+            Some(&l("coach.chats.archive_title")),
+            Some(&l("coach.chats.archive_body")),
+        );
+        ask.add_response("cancel", &l("common.cancel"));
+        ask.add_response("archive", &l("coach.chats.archive"));
+        ask.set_default_response(Some("cancel"));
+        ask.set_close_response("cancel");
+        let (p, session) = (self.clone(), session.to_string());
+        ask.connect_response(None, move |_, response| {
+            if response != "archive" {
+                return;
+            }
+            let (p, session, note, fill) = (p.clone(), session.clone(), note.clone(), fill.clone());
+            glib::spawn_future_local(async move {
+                *note.borrow_mut() = None;
+                let Some(setup) = p.conv.borrow().setup.clone() else {
+                    return;
+                };
+                let why = match p
+                    .post(coach_send::archive_path(&setup, &session), b"{}".to_vec())
+                    .await
+                {
+                    None => return,
+                    Some(Ok(a)) if a.status == 401 => return p.signed_out(),
+                    Some(Ok(a)) if (200..300).contains(&a.status) => {
+                        match coach_send::archived(&a.body) {
+                            Some(_) => None,
+                            None => {
+                                Some(tafs_core::signin::plain_words(&p.w, 200).unwrap_or_default())
+                            }
+                        }
+                    }
+                    Some(Ok(a)) => Some(
+                        Refusal::read(a.status, &a.body)
+                            .words(&p.w)
+                            .unwrap_or_default(),
+                    ),
+                    Some(Err(why)) => Some(why),
+                };
+                match why {
+                    None => {
+                        if p.conv.borrow_mut().archived(&session) {
+                            p.redraw_from_nothing();
+                        }
+                    }
+                    Some(why) => {
+                        *note.borrow_mut() = Some(
+                            p.w.get("taf.not_archived", &[("why", &why)])
+                                .or_else(|_| p.w.line("coach.not_archived_try_again"))
+                                .unwrap_or(why),
+                        );
+                    }
+                }
+                if let Some(f) = fill {
+                    refill(&f);
+                }
+            });
+        });
+        ask.present(Some(dialog));
+    }
+
+    /// `ArchivedSetupChats`: the chats put away, read as it opens; one opens it, Put back returns it
+    /// to the list.
+    fn archived_page(self: &Rc<Self>, dialog: &adw::Dialog) -> adw::NavigationPage {
+        let w = self.w.clone();
+        let list = gtk::Box::new(gtk::Orientation::Vertical, 8);
+        let chats: Rc<RefCell<Vec<coach::Chat>>> = Rc::new(RefCell::new(Vec::new()));
+        let note: Rc<RefCell<Option<String>>> = Rc::new(RefCell::new(None));
+        let fill: Fill = Rc::new(RefCell::new(None));
+        let fill_now: Rc<dyn Fn()> = {
+            let (p, list, chats, note, dialog, w) = (
+                Rc::downgrade(self),
+                list.clone(),
+                chats.clone(),
+                note.clone(),
+                dialog.downgrade(),
+                w.clone(),
+            );
+            let fill = Rc::downgrade(&fill);
+            Rc::new(move || {
+                let Some(p) = p.upgrade() else { return };
+                while let Some(c) = list.first_child() {
+                    list.remove(&c);
+                }
+                if let Some(n) = note.borrow().as_ref() {
+                    list.append(&text(n, 13, 400, &["tafs-no"]));
+                }
+                let rows = tafs_core::coach_lines::chat_rows(&w, &chats.borrow(), None)
+                    .unwrap_or_default();
+                if rows.is_empty() {
+                    let none = text(
+                        &w.line("coach.chats.nothing_archived").unwrap_or_default(),
+                        14,
+                        400,
+                        &["tafs-dim"],
+                    );
+                    none.set_xalign(0.5);
+                    none.set_margin_top(24);
+                    list.append(&none);
+                }
+                for row in rows {
+                    let h = chat_row(&row);
+                    {
+                        let (p, dialog, session) =
+                            (Rc::downgrade(&p), dialog.clone(), row.session.clone());
+                        h.0.connect_clicked(move |_| {
+                            if let Some(d) = dialog.upgrade() {
+                                d.close();
+                            }
+                            if let Some(p) = p.upgrade() {
+                                p.open_chat(&session);
+                            }
+                        });
+                    }
+                    let back = gtk::Button::with_label(
+                        &w.line("coach.chats.put_back").unwrap_or_default(),
+                    );
+                    back.add_css_class("tafs-unsent-act");
+                    back.set_valign(gtk::Align::Center);
+                    {
+                        let (p, session, chats, note, fill) = (
+                            Rc::downgrade(&p),
+                            row.session.clone(),
+                            chats.clone(),
+                            note.clone(),
+                            fill.clone(),
+                        );
+                        back.connect_clicked(move |_| {
+                            let Some(p) = p.upgrade() else { return };
+                            let (session, chats, note, fill) =
+                                (session.clone(), chats.clone(), note.clone(), fill.clone());
+                            glib::spawn_future_local(async move {
+                                *note.borrow_mut() = None;
+                                let Some(setup) = p.conv.borrow().setup.clone() else {
+                                    return;
+                                };
+                                let why = match p
+                                    .post(
+                                        coach_send::unarchive_path(&setup, &session),
+                                        b"{}".to_vec(),
+                                    )
+                                    .await
+                                {
+                                    None => return,
+                                    Some(Ok(a)) if a.status == 401 => return p.signed_out(),
+                                    Some(Ok(a)) if (200..300).contains(&a.status) => {
+                                        match coach_send::archived(&a.body) {
+                                            Some(_) => None,
+                                            None => Some(
+                                                tafs_core::signin::plain_words(&p.w, 200)
+                                                    .unwrap_or_default(),
+                                            ),
+                                        }
+                                    }
+                                    Some(Ok(a)) => Some(
+                                        Refusal::read(a.status, &a.body)
+                                            .words(&p.w)
+                                            .unwrap_or_default(),
+                                    ),
+                                    Some(Err(why)) => Some(why),
+                                };
+                                match why {
+                                    None => {
+                                        chats.borrow_mut().retain(|c| c.session != session);
+                                        // Back in the list: Previous conversations reads it again.
+                                        if let Some(read) = p
+                                            .get(coach::chats_path(&setup))
+                                            .await
+                                            .and_then(|b| coach::chats(&b))
+                                        {
+                                            p.conv.borrow_mut().chats = read;
+                                        }
+                                    }
+                                    Some(why) => {
+                                        *note.borrow_mut() = Some(
+                                            p.w.get("taf.not_put_back", &[("why", &why)])
+                                                .or_else(|_| {
+                                                    p.w.line("coach.not_put_back_try_again")
+                                                })
+                                                .unwrap_or(why),
+                                        );
+                                    }
+                                }
+                                if let Some(f) = fill.upgrade() {
+                                    refill(&f);
+                                }
+                            });
+                        });
+                    }
+                    h.1.append(&back);
+                    list.append(&h.1);
+                }
+            })
+        };
+        *fill.borrow_mut() = Some(fill_now.clone());
+        fill_now();
+        let title = w.line("coach.chats.archived").unwrap_or_default();
+        let page = sheet_page(
+            &title,
+            &list,
+            dialog,
+            &w.line("record.filter.done").unwrap_or_default(),
+        );
+        // Read each time it's shown (`.task { loadArchivedSetupChats() }`).
+        let (p, chats, fill2) = (Rc::downgrade(self), chats.clone(), fill.clone());
+        page.connect_showing(move |_| {
+            let Some(p) = p.upgrade() else { return };
+            let (chats, fill) = (chats.clone(), fill2.clone());
+            glib::spawn_future_local(async move {
+                let Some(setup) = p.conv.borrow().setup.clone() else {
+                    return;
+                };
+                if let Some(read) = p
+                    .get(coach_send::archived_path(&setup))
+                    .await
+                    .and_then(|b| coach::chats(&b))
+                {
+                    *chats.borrow_mut() = read;
+                    refill(&fill);
+                }
+            });
+        });
+        // The page holds its own list's filler until it goes.
+        let keep = fill.clone();
+        page.connect_destroy(move |_| {
+            keep.borrow_mut().take();
+        });
+        page
+    }
+}
+
+/// A chat in a list: the button that opens it (its title in two lines at most and when it last
+/// changed), in a row that takes its act at the end.
+fn chat_row(row: &tafs_core::coach_lines::ChatRow) -> (gtk::Button, gtk::Box) {
+    let h = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+    h.add_css_class("tafs-chat-line");
+    if row.shown {
+        h.add_css_class("shown");
+    }
+    let b = gtk::Button::new();
+    b.add_css_class("tafs-chat-row");
+    b.set_hexpand(true);
+    let v = gtk::Box::new(gtk::Orientation::Vertical, 4);
+    let t = text(&row.title, 15, 400, &["tafs-ink"]);
+    t.set_lines(2);
+    t.set_ellipsize(gtk::pango::EllipsizeMode::End);
+    v.append(&t);
+    v.append(&text(&row.when, 12, 400, &["tafs-dim"]));
+    b.set_child(Some(&v));
+    h.append(&b);
+    (b, h)
+}
+
+/// A sheet's page: its title in the bar with Done, and its list.
+fn sheet_page(
+    title: &str,
+    list: &gtk::Box,
+    dialog: &adw::Dialog,
+    done: &str,
+) -> adw::NavigationPage {
+    list.set_margin_start(16);
+    list.set_margin_end(16);
+    list.set_margin_top(8);
+    list.set_margin_bottom(16);
+    let scroller = gtk::ScrolledWindow::new();
+    scroller.set_hscrollbar_policy(gtk::PolicyType::Never);
+    scroller.set_vexpand(true);
+    scroller.set_child(Some(list));
+    let header = adw::HeaderBar::new();
+    header.set_show_end_title_buttons(false);
+    let d = gtk::Button::with_label(done);
+    d.add_css_class("tafs-unsent-act");
+    d.add_css_class("strong");
+    let dialog = dialog.downgrade();
+    d.connect_clicked(move |_| {
+        if let Some(dialog) = dialog.upgrade() {
+            dialog.close();
+        }
+    });
+    header.pack_end(&d);
+    let toolbar = adw::ToolbarView::new();
+    toolbar.add_top_bar(&header);
+    toolbar.set_content(Some(&scroller));
+    crate::widgets::ground(&toolbar);
+    adw::NavigationPage::new(&toolbar, title)
 }

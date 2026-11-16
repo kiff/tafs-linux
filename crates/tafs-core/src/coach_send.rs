@@ -46,6 +46,37 @@ pub fn answer_path(taf: &str, component: &str) -> String {
     )
 }
 
+/// `POST /v1/tafs/{id}/chats/{session}/archive` (`archiveChat`): out of the list on every device.
+pub fn archive_path(taf: &str, session: &str) -> String {
+    format!(
+        "/v1/tafs/{}/chats/{}/archive",
+        segment(taf),
+        segment(session)
+    )
+}
+
+/// `POST /v1/tafs/{id}/chats/{session}/unarchive` (`unarchiveChat`): back in the list.
+pub fn unarchive_path(taf: &str, session: &str) -> String {
+    format!(
+        "/v1/tafs/{}/chats/{}/unarchive",
+        segment(taf),
+        segment(session)
+    )
+}
+
+/// `GET /v1/tafs/{id}/chats/archived` (`archivedChats`), read as `chats`.
+pub fn archived_path(taf: &str) -> String {
+    format!("/v1/tafs/{}/chats/archived", segment(taf))
+}
+
+/// Archive's and Put back's answer: `{"archived": Bool}`, or it can't be read.
+pub fn archived(body: &[u8]) -> Option<bool> {
+    serde_json::from_slice::<Value>(body)
+        .ok()?
+        .get("archived")?
+        .as_bool()
+}
+
 /// Which chat a message goes into (`ChatTarget`): the live one, one the owner reopened, or a new
 /// one; and whether the app follows a new chat tafs cloud starts after a hand-over.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -968,6 +999,34 @@ impl Conversation {
         }
     }
 
+    /// Nothing in it yet (`coachChatIsEmpty`): no message, card or answer, sent or on its way.
+    /// New conversation keeps it.
+    pub fn is_empty(&self) -> bool {
+        self.thread.items().is_empty()
+            && self.sent.is_empty()
+            && self.unsent.is_empty()
+            && self
+                .thread
+                .steering
+                .as_ref()
+                .is_none_or(|s| s.held.is_none())
+            && !self.thinking()
+    }
+
+    /// A chat archived (`archiveSetupChat`): out of the list; the one shown gives way to a new
+    /// conversation. True when it did.
+    pub fn archived(&mut self, session: &str) -> bool {
+        self.chats.retain(|c| c.session != session);
+        let shown = match &self.chat {
+            Some(c) => c == session,
+            None => self.thread.session().as_deref() == Some(session),
+        };
+        if shown {
+            self.new_chat();
+        }
+        shown
+    }
+
     /// A new conversation (`newSetupChat`): an empty chat, and the next message starts it.
     pub fn new_chat(&mut self) {
         self.generation += 1;
@@ -1477,6 +1536,31 @@ mod tests {
         assert!(p.read_now(&c));
         c.awaiting = Some(now);
         assert_eq!(Polls::interval(&c), WORKING_POLL);
+    }
+
+    #[test]
+    fn archiving_the_chat_shown_starts_a_new_one() {
+        assert_eq!(
+            archive_path("taf-1", "sess 1"),
+            "/v1/tafs/taf-1/chats/sess%201/archive"
+        );
+        assert_eq!(
+            unarchive_path("taf-1", "s"),
+            "/v1/tafs/taf-1/chats/s/unarchive"
+        );
+        assert_eq!(archived_path("taf-1"), "/v1/tafs/taf-1/chats/archived");
+        assert_eq!(archived(br#"{"archived":true}"#), Some(true));
+        assert_eq!(archived(br#"{"archived":"yes"}"#), None);
+        let mut c = conversation();
+        assert!(!c.is_empty());
+        assert!(!c.archived("other"));
+        assert!(!c.fresh);
+        assert!(c.archived("sess1"));
+        assert!(c.fresh && c.is_empty());
+        let mut c = conversation();
+        c.open_chat("sess2");
+        assert_eq!(c.chat.as_deref(), Some("sess2"));
+        assert!(!c.fresh);
     }
 
     #[test]

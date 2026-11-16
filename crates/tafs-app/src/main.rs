@@ -145,13 +145,15 @@ struct Options {
     /// With `--home`: Coach's conversation as tafs cloud answers
     /// `GET /v1/tafs/{id}/conversation/{session}`, read from a file: nothing is sent.
     coach: Option<String>,
+    /// With `--coach`: Coach's chats as tafs cloud answers them, opening Previous conversations.
+    coach_chats: Option<String>,
     /// `--size WxH`: the window's size, for a screenshot of a narrower layout.
     size: Option<(i32, i32)>,
     screenshot: Option<String>,
 }
 
 const USAGE: &str = "tafs [--lang en|de|fr|es|it|pt|nl|pl] [--theme light|dark] [--sample] [--signed-in] [--view-only [--paired]]
-     [--home contract.json] [--usage answers.json] [--people answers.json] [--unproven answers.json] [--recipes answers.json] [--gallery answers.json] [--halt answer.json] [--record-search answers.json] [--access answer.json] [--receipts answer.json] [--activity answer.json] [--calls answer.json] [--receipt answer.json] [--work answer.json] [--doors answer.json] [--account-reads answers.json] [--me answer.json] [--memory answer.json] [--runs answer.json] [--request answer.json] [--balance answer.json] [--coach answer.json] [--size WxH] [--page welcome|sign-in|pair|recipe:<id>|gallery|halt-all|halt:<id>|record-search:<q>|record-export|receipt:<proposal id>|run:<taf id>|pin-sheet|coach|overview|needs-you|record|calendar|calendar-week|usage|connect-apps|account|kiff-account|time-zone|alerts|devices|people|taf|taf-card|taf-setup|consent|connected|sign-in-code] [--screenshot out.png]";
+     [--home contract.json] [--usage answers.json] [--people answers.json] [--unproven answers.json] [--recipes answers.json] [--gallery answers.json] [--halt answer.json] [--record-search answers.json] [--access answer.json] [--receipts answer.json] [--activity answer.json] [--calls answer.json] [--receipt answer.json] [--work answer.json] [--doors answer.json] [--account-reads answers.json] [--me answer.json] [--memory answer.json] [--runs answer.json] [--request answer.json] [--balance answer.json] [--coach answer.json] [--coach-chats answer.json] [--size WxH] [--page welcome|sign-in|pair|recipe:<id>|gallery|halt-all|halt:<id>|record-search:<q>|record-export|receipt:<proposal id>|run:<taf id>|pin-sheet|coach|overview|needs-you|record|calendar|calendar-week|usage|connect-apps|account|kiff-account|time-zone|alerts|devices|people|taf|taf-card|taf-setup|consent|connected|sign-in-code] [--screenshot out.png]";
 
 fn options() -> Result<Options, String> {
     let mut o = Options::default();
@@ -185,6 +187,7 @@ fn options() -> Result<Options, String> {
             "--balance" => o.balance = Some(value()?),
             "--request" => o.request = Some(value()?),
             "--coach" => o.coach = Some(value()?),
+            "--coach-chats" => o.coach_chats = Some(value()?),
             "--size" => {
                 let v = value()?;
                 let (w, h) = v.split_once('x').ok_or("--size takes WxH")?;
@@ -348,6 +351,7 @@ fn activate(app: &adw::Application, o: &Options) {
         runs_file: o.runs.as_ref().map(std::path::PathBuf::from),
         request_file: o.request.as_ref().map(std::path::PathBuf::from),
         coach_file: o.coach.as_ref().map(std::path::PathBuf::from),
+        coach_chats: o.coach_chats.as_ref().map(std::path::PathBuf::from),
         open_run: o.page.as_deref().is_some_and(|p| p.starts_with("run:")),
         usage_file: o.usage.as_ref().map(std::path::PathBuf::from),
         people_file: o.people.as_ref().map(std::path::PathBuf::from),
@@ -597,6 +601,8 @@ struct App {
     request_file: Option<std::path::PathBuf>,
     /// `--coach`'s answer: the screenshots' Coach conversation, never sent.
     coach_file: Option<std::path::PathBuf>,
+    /// `--coach-chats`: Previous conversations open over it, with these chats.
+    coach_chats: Option<std::path::PathBuf>,
     /// `--page run:<taf id>`: that taf's first kept run open, for a screenshot.
     open_run: bool,
     /// `--usage`'s file of synthetic answers.
@@ -1706,7 +1712,10 @@ impl App {
             // Coach, signed in with KIFF: its conversation read as the session with this device's
             // proof, or a screenshot's from `--coach`, never sent. The sample has no Coach.
             coach: match (mode, self.kept.borrow().as_ref(), &self.coach_file) {
-                (Mode::Kiff, _, Some(f)) => coach::CoachSource::File(f.clone()),
+                (Mode::Kiff, _, Some(f)) => coach::CoachSource::File {
+                    thread: f.clone(),
+                    chats: self.coach_chats.clone(),
+                },
                 (Mode::Kiff, Some(kept), None) => coach::CoachSource::Cloud {
                     kept: Box::new(kept.clone()),
                     languages: self.languages.clone(),

@@ -69,6 +69,15 @@ out, as every other read does.
 - **Reading again** (`followSetup`): while the page is open, every second while Coach works, else
   every three, for 100 reads after the owner last wrote; one read at a time, and none once the page
   is closed. Linux has no stream: there's no live work, no reveal and no pin of a sent message.
+- **New conversation** (the pencil in the bar, `newSetupChat`): an empty chat, and the next
+  message starts it (`new_chat: true`); the chat tafs cloud answers is the one shown from then on.
+  One that's empty already stays, and shows its top.
+- **Previous conversations** (the bar's menu, `SetupChatsList`): Coach's chats, newest first, read
+  again as it opens, each by what the owner asked and when it last changed, the one shown on the
+  raised colour; one opens it alone, and messages go on in it (`openSetupChat`). Archive asks first
+  ("Archive this conversation?") and then `POST /v1/tafs/{id}/chats/{session}/archive`; the one
+  shown gives way to a new conversation. Archived (`GET /v1/tafs/{id}/chats/archived`) opens one,
+  or puts it back (`POST …/unarchive`). A refusal is said at the top of the list.
 - **The box** keeps what's typed while the app runs (`setupDraft`); signing out clears it. Ctrl+Enter
   sends (the iPad's ⌘↩). A screenshot's conversation (`--coach`) sends nothing: Send, Stop and the
   cards' answers do nothing there.
@@ -132,13 +141,15 @@ iPad does, and tafs cloud marks no card. The token, the key and the signature ar
 - **Approving:** Approve, Decline, a sign-in's button and Not now, and a drive's Approve. This
   computer can't approve; the phone does (Decline, Not now and a drive's decline are unsigned
   answers on the iPad, but stay with the phone with the rest of the card here).
+- Setting a chat aside from Needs you; New conversation's choice of a taf to improve
+  (`startSwitch`, `improveTaf`).
 - The microphone and attachments; the recipes on an empty chat; Copy and Delete on a message not
   sent (the iPad's context menu); an improvement's first message (`improve`).
 - What the iPad reads beside the thread: planque's grant (its words, terms and profile) and KIFF's
   draft of a Card on an approval.
 - The live stream (`LiveWork`, revealing, pinning a sent message, a run that failed part-way with
   Retry), the Needs you bar and ↓, landing on the waiting card (it lands at the latest), New
-  conversation, Previous conversations and archiving, Coach's tools row, "Taking shape"
+  Coach's tools row, "Taking shape"
   (`SetupShapePanel`), a dial card (`KnobDraftCard`), a drive's steps and why it ended, and a result's
   See version.
 - A refused connection's lines are decoded but not drawn: the iPad's Coach doesn't draw them.
@@ -149,5 +160,7 @@ iPad does, and tafs cloud marks no card. The token, the key and the signature ar
 read or sent. `tools/screenshots.sh` saves `coach` (the contract's conversation, Coach at work: the box with
 Stop), `coach-wider` (tafs's own contract, `contracts/coach-wider.json`: an approval waiting under
 its wider line; the tests read the same contract, so a change in tafs cloud's shape fails them
-here) and `coach-asks` (`crates/tafs-app/fixtures/coach-asks.json`: Coach at rest with a confirm
-and a questions card waiting, a message its run never read as Not sent, and one tafs cloud holds).
+here), `coach-asks` (`crates/tafs-app/fixtures/coach-asks.json`: Coach at rest with a confirm and a
+questions card waiting, a message its run never read as Not sent, and one tafs cloud holds) and
+`coach-chats` (`--coach-chats shared/contracts/coach-chats.json`: Previous conversations open over
+the contract's conversation).
