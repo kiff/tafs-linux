@@ -13,6 +13,7 @@ mod pairing;
 mod people;
 mod recipes;
 mod record;
+mod record_search;
 mod shell;
 mod sign_in;
 mod store;
@@ -88,13 +89,15 @@ struct Options {
     gallery: Option<String>,
     /// With `--home`: a halt as tafs cloud answers it, for the halt screens' screenshots.
     halt: Option<String>,
+    /// With `--home`: a Record search page (and a case) as tafs cloud answers them.
+    record_search: Option<String>,
     /// `--size WxH`: the window's size, for a screenshot of a narrower layout.
     size: Option<(i32, i32)>,
     screenshot: Option<String>,
 }
 
 const USAGE: &str = "tafs [--lang en|de|fr|es|it|pt|nl|pl] [--theme light|dark] [--sample] [--signed-in] [--view-only [--paired]]
-     [--home contract.json] [--usage answers.json] [--people answers.json] [--unproven answers.json] [--recipes answers.json] [--gallery answers.json] [--halt answer.json] [--size WxH] [--page welcome|sign-in|pair|recipe:<id>|gallery|halt-all|halt:<id>|overview|needs-you|record|calendar|calendar-week|usage|connect-apps|account|kiff-account|time-zone|devices|people|taf|taf-card] [--screenshot out.png]";
+     [--home contract.json] [--usage answers.json] [--people answers.json] [--unproven answers.json] [--recipes answers.json] [--gallery answers.json] [--halt answer.json] [--record-search answers.json] [--size WxH] [--page welcome|sign-in|pair|recipe:<id>|gallery|halt-all|halt:<id>|record-search:<q>|overview|needs-you|record|calendar|calendar-week|usage|connect-apps|account|kiff-account|time-zone|devices|people|taf|taf-card] [--screenshot out.png]";
 
 fn options() -> Result<Options, String> {
     let mut o = Options::default();
@@ -113,6 +116,7 @@ fn options() -> Result<Options, String> {
             "--recipes" => o.recipes = Some(value()?),
             "--gallery" => o.gallery = Some(value()?),
             "--halt" => o.halt = Some(value()?),
+            "--record-search" => o.record_search = Some(value()?),
             "--size" => {
                 let v = value()?;
                 let (w, h) = v.split_once('x').ok_or("--size takes WxH")?;
@@ -173,6 +177,7 @@ fn selection_of(page: Option<&str>) -> Selection {
         // With `--home`, the contract's first taf.
         Some(other) if other.starts_with("taf:") => Selection::Taf(other["taf:".len()..].into()),
         Some("halt-all") => Selection::HaltAll,
+        Some(other) if other.starts_with("record-search:") => Selection::Record,
         Some(other) if other.starts_with("halt:") => Selection::Halt(other["halt:".len()..].into()),
         Some(other) if other.starts_with("taf-card:") => {
             Selection::Taf(other["taf-card:".len()..].into())
@@ -242,6 +247,12 @@ fn activate(app: &adw::Application, o: &Options) {
         usage_file: o.usage.as_ref().map(std::path::PathBuf::from),
         people_file: o.people.as_ref().map(std::path::PathBuf::from),
         halt_file: halt_file(o.halt.as_deref()),
+        record_search_file: record_search_file(o.record_search.as_deref()),
+        record_query: o
+            .page
+            .as_deref()
+            .and_then(|p| p.strip_prefix("record-search:"))
+            .map(str::to_string),
         calendar_day: o.page.as_deref() == Some("calendar"),
         screenshot: o.screenshot.is_some(),
         on_card: o
@@ -369,6 +380,13 @@ struct App {
     usage_file: Option<std::path::PathBuf>,
     /// `--halt`'s answer: the screenshots' halt, never sent to tafs cloud.
     halt_file: Option<tafs_core::halt::Halt>,
+    /// `--page record-search:<q>`: what's typed in the Record's box, for a screenshot.
+    record_query: Option<String>,
+    /// `--record-search`'s answers: the screenshots' search page and case, never sent.
+    record_search_file: Option<(
+        tafs_core::record_search::SearchPage,
+        Option<tafs_core::record_search::RecordCase>,
+    )>,
     /// `--people`'s file of synthetic answers.
     people_file: Option<std::path::PathBuf>,
     /// A screenshot: the sample's Refunds has the reference set's three Cards.
@@ -752,10 +770,28 @@ impl App {
             .map(|id| tafs_core::record::record_id(&id))
             .collect();
         let kiff = mode == Mode::Kiff;
+        // Signed in: the search across the person's tafs, at tafs cloud as the session; a
+        // screenshot's answers from `--record-search`, never sent.
+        let search = match (mode, self.kept.borrow().as_ref(), &self.record_search_file) {
+            (Mode::Kiff, _, Some(canned)) => Some(Rc::new(record_search::SearchSource {
+                token: String::new(),
+                languages: vec![],
+                canned: Some(canned.clone()),
+                initial: self.record_query.clone(),
+            })),
+            (Mode::Kiff, Some(kept), None) => Some(Rc::new(record_search::SearchSource {
+                token: kept.token.clone(),
+                languages: self.languages.clone(),
+                canned: None,
+                initial: None,
+            })),
+            _ => None,
+        };
         record::RecordData {
             entries,
             tafs,
             waiting: Rc::new(move |e| !kiff || still_held.contains(&e.id)),
+            search,
         }
     }
 
@@ -1357,6 +1393,35 @@ fn recipes_file(path: Option<&str>) -> Option<tafs_core::recipes::Recipes> {
         Some(r) => Some(r),
         None => {
             eprintln!("{path} isn't the recipes as tafs cloud answers them");
+            std::process::exit(2);
+        }
+    }
+}
+
+/// `--record-search`'s file: `{ "page": …, "case": … }`, the search page and a case as tafs cloud
+/// answers them (a contract file's `answer`, or the answers themselves). A file that can't be
+/// read stops the app.
+fn record_search_file(
+    path: Option<&str>,
+) -> Option<(
+    tafs_core::record_search::SearchPage,
+    Option<tafs_core::record_search::RecordCase>,
+)> {
+    use tafs_core::record_search::{RecordCase, SearchPage};
+    let path = path?;
+    let read = std::fs::read(path).ok().and_then(|b| {
+        let v: serde_json::Value = serde_json::from_slice(&b).ok()?;
+        let a = v.get("answer").cloned().unwrap_or(v);
+        let page = SearchPage::read(&serde_json::to_vec(a.get("page")?).ok()?)?;
+        let case = a
+            .get("case")
+            .and_then(|c| RecordCase::read(&serde_json::to_vec(c).ok()?));
+        Some((page, case))
+    });
+    match read {
+        Some(r) => Some(r),
+        None => {
+            eprintln!("{path} isn't a Record search as tafs cloud answers it");
             std::process::exit(2);
         }
     }

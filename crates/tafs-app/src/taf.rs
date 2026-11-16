@@ -780,7 +780,7 @@ fn cloud_activity(w: Rc<WordBook>, id: String, source: ActivitySource) -> gtk::B
 }
 
 /// `SourceActivityRow`: its title and detail, its time and amount at its end, and its next step.
-fn source_row(e: &tafs_core::activity::ActivityEntry) -> gtk::Box {
+pub fn source_row(e: &tafs_core::activity::ActivityEntry) -> gtk::Box {
     let v = gtk::Box::new(gtk::Orientation::Vertical, 6);
     let row = gtk::Box::new(gtk::Orientation::Horizontal, 8);
     row.set_margin_top(5);
