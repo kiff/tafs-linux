@@ -15,7 +15,7 @@ order, the sections whose reads are ported:
   when the account is named after it, as a Solo account is.
 - **People & apps** (KIFF): People & groups, Devices, Connect apps.
 - **Plan** (KIFF): Plan & usage, its title alone until the balance is read (`PlanRow`).
-- **Alerts.**
+- **Alerts:** opens Account › Alerts (below).
 - **Theme:** Light, Dark or System, as the system's segmented control (a capsule track in the
   system grey, the chosen segment on it; in dark, #636366). The choice is kept across launches in
   the user's config folder (`tafs/theme`), as the iPad's `tafs.theme`, and the window follows it at
@@ -59,8 +59,7 @@ sample opens the sign-in over it.
 
 ## Not yet
 
-- **The rows' screens:** Alerts opens its title until it's ported. KIFF account, People &
-  groups, Devices, Time zone, Connect apps and Plan & usage open their screens.
+- Nothing on this screen: every row opens its screen.
 
 ## Time zone
 
@@ -165,3 +164,25 @@ pairs a computer (`PairComputerView`), never the computer itself.
 - **Coach's suggestions, the AI-data consent, Export my chats:** with their reads; the iPad draws
   none until they're read either.
 - **The plan's line** (`plan_line`) in Plan, with tafs cloud's balance.
+
+## Alerts
+
+Account › Alerts (`NotificationSettingsView`, `crates/tafs-app/src/alerts.rs`,
+`tafs-core/src/alerts.rs`), with the round back to Account.
+- **What an alert looks like** (`LockScreenAlert`): "Chargebacks needs you" with sound and
+  "Refunds answered maria@…" silent, each with the mascot, on the raised colour.
+- **Signed in with KIFF:**
+  - **Alerts on this computer** turns the held calls' alerts on or off (`main.rs` ›
+    `watch_holds`). Off, nothing new is announced; what's already shown stays.
+  - **Sound** ("For a hold or a halt only") is off and greyed while alerts are off, and its
+    choice is kept for when they're back.
+  - Both are kept across launches in the user's config folder (`tafs/alerts`,
+    `tafs/alert-sound`), on unless turned off. A notification here has no sound of its own, so
+    with Sound on, a read that announces a call plays the desktop's alert sound once.
+  - **Under them:** for a role that can't answer held calls, "Alerts go to the people who may
+    answer held calls. Your role on this account can't."; else "Get an alert when a taf needs
+    you". The iPad's "…this device tells you, even with tafs closed" is a phone's push. This
+    computer reads only while tafs runs, so it isn't said here.
+- **Not on Linux:** What alerts you and the tafs that alert (a phone's push choices, read with
+  its push token, which a computer hasn't; the iPad draws none of it without one), and Haptics.
+- **The sample** shows the two examples alone, as the iPad's.

@@ -182,6 +182,8 @@ button.tafs-filter-bordered.selected { background-color: alpha(@tafs_amber_text,
 .tafs-panel.edge-no { border-color: alpha(@tafs_no, 0.5); }
 .tafs-panel.edge-amber { border-color: alpha(@tafs_amber, 0.5); }
 /* A Record line's receipt: checked, its edge in ok at 40%; the timeline's ring and its line. */
+/* Account › Alerts: an alert as it shows. */
+.tafs-alert-example { background-color: @tafs_raised; border-radius: 18px; padding: 12px; }
 .tafs-panel.edge-ok { border-color: alpha(@tafs_ok, 0.4); }
 .tafs-step-ring { min-width: 10px; min-height: 10px; border-radius: 999px; border: 2px solid @tafs_dim; background-color: @tafs_panel; }
 .tafs-step-rule { min-width: 2px; background-color: @tafs_line; }
