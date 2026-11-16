@@ -1,6 +1,7 @@
 //! tafs for Linux: GTK 4 and libadwaita. The same product, account and words as the iPad app.
 
 mod account;
+mod ai_consent;
 mod alerts;
 mod approval;
 mod calendar;
@@ -122,6 +123,12 @@ struct Options {
     /// With `--home`: a taf's doors as tafs cloud answers `GET /v1/tafs/{id}/doors`; its knocks'
     /// answers send nothing.
     doors: Option<String>,
+    /// With `--home`: Account's reads, `{"suggestions": …, "consent": …}`, each as tafs cloud
+    /// answers it; its changes send nothing.
+    account_reads: Option<String>,
+    /// With `--home`: the KIFF account as `GET /v1/me` answers it, for screens drawn by who may
+    /// do what.
+    me: Option<String>,
     /// With `--home`: a page of a taf's runs as tafs cloud answers `GET /v1/tafs/{id}/work/runs`.
     runs: Option<String>,
     /// With `--home`: the balance as tafs cloud answers `GET /v1/usage/balance`.
@@ -134,7 +141,7 @@ struct Options {
 }
 
 const USAGE: &str = "tafs [--lang en|de|fr|es|it|pt|nl|pl] [--theme light|dark] [--sample] [--signed-in] [--view-only [--paired]]
-     [--home contract.json] [--usage answers.json] [--people answers.json] [--unproven answers.json] [--recipes answers.json] [--gallery answers.json] [--halt answer.json] [--record-search answers.json] [--access answer.json] [--receipts answer.json] [--activity answer.json] [--calls answer.json] [--receipt answer.json] [--work answer.json] [--doors answer.json] [--runs answer.json] [--request answer.json] [--balance answer.json] [--size WxH] [--page welcome|sign-in|pair|recipe:<id>|gallery|halt-all|halt:<id>|record-search:<q>|record-export|receipt:<proposal id>|run:<taf id>|pin-sheet|overview|needs-you|record|calendar|calendar-week|usage|connect-apps|account|kiff-account|time-zone|alerts|devices|people|taf|taf-card] [--screenshot out.png]";
+     [--home contract.json] [--usage answers.json] [--people answers.json] [--unproven answers.json] [--recipes answers.json] [--gallery answers.json] [--halt answer.json] [--record-search answers.json] [--access answer.json] [--receipts answer.json] [--activity answer.json] [--calls answer.json] [--receipt answer.json] [--work answer.json] [--doors answer.json] [--account-reads answers.json] [--me answer.json] [--runs answer.json] [--request answer.json] [--balance answer.json] [--size WxH] [--page welcome|sign-in|pair|recipe:<id>|gallery|halt-all|halt:<id>|record-search:<q>|record-export|receipt:<proposal id>|run:<taf id>|pin-sheet|overview|needs-you|record|calendar|calendar-week|usage|connect-apps|account|kiff-account|time-zone|alerts|devices|people|taf|taf-card|consent] [--screenshot out.png]";
 
 fn options() -> Result<Options, String> {
     let mut o = Options::default();
@@ -161,6 +168,8 @@ fn options() -> Result<Options, String> {
             "--receipt" => o.receipt = Some(value()?),
             "--work" => o.work = Some(value()?),
             "--doors" => o.doors = Some(value()?),
+            "--account-reads" => o.account_reads = Some(value()?),
+            "--me" => o.me = Some(value()?),
             "--runs" => o.runs = Some(value()?),
             "--balance" => o.balance = Some(value()?),
             "--request" => o.request = Some(value()?),
@@ -299,6 +308,7 @@ fn activate(app: &adw::Application, o: &Options) {
         home_file: o.home.as_ref().map(std::path::PathBuf::from),
         work_file: o.work.as_ref().map(std::path::PathBuf::from),
         doors_file: o.doors.as_ref().map(std::path::PathBuf::from),
+        account_reads_file: o.account_reads.as_ref().map(std::path::PathBuf::from),
         runs_file: o.runs.as_ref().map(std::path::PathBuf::from),
         request_file: o.request.as_ref().map(std::path::PathBuf::from),
         open_run: o.page.as_deref().is_some_and(|p| p.starts_with("run:")),
@@ -366,7 +376,17 @@ fn activate(app: &adw::Application, o: &Options) {
         Some(home) => Rc::new(Cloud {
             home,
             held: vec![],
-            account: None,
+            account: o.me.as_deref().map(|path| {
+                std::fs::read(path)
+                    .ok()
+                    .and_then(|body| {
+                        Account::read(&tafs_core::signin::Answer { status: 200, body }).ok()
+                    })
+                    .unwrap_or_else(|| {
+                        eprintln!("{path} isn't KIFF's account as GET /v1/me answers it");
+                        std::process::exit(2);
+                    })
+            }),
             activity: activity_file(o.activity.as_deref()),
             call_refs: calls_file(o.calls.as_deref()),
             unproven: unproven_file(o.unproven.as_deref()),
@@ -387,6 +407,16 @@ fn activate(app: &adw::Application, o: &Options) {
         _ if o.sample => app_state.open_shell(Mode::Sample, false, None),
         _ if from_file.is_some() => {
             app_state.open_shell(Mode::Kiff, o.view_only, from_file.clone());
+            // `--page consent`: the AI-data consent's screen, as after sign-in, from `--account-reads`.
+            if o.page.as_deref() == Some("consent") {
+                if let Some(file) = &app_state.account_reads_file {
+                    ai_consent::ask_after_sign_in(
+                        app_state.words.clone(),
+                        ai_consent::Source::File(file.clone()),
+                        app_state.window.clone().upcast(),
+                    );
+                }
+            }
             // `--page gallery`: the jobs' gallery, browsing, for its screenshot.
             if o.page.as_deref() == Some("gallery") {
                 if let Some(g) = from_file.as_deref().and_then(|c| c.gallery.clone()) {
@@ -507,6 +537,8 @@ struct App {
     work_file: Option<std::path::PathBuf>,
     /// `--doors`: a taf's doors as tafs cloud answers them, for its knocks' screenshot.
     doors_file: Option<std::path::PathBuf>,
+    /// `--account-reads`: Account's reads for its screenshots.
+    account_reads_file: Option<std::path::PathBuf>,
     /// `--runs`'s page: the screenshots' runs, never sent.
     runs_file: Option<std::path::PathBuf>,
     /// `--request`'s page: the screenshots' run, never sent.
@@ -628,6 +660,8 @@ impl App {
     /// Signed in: the shell at once, then the account (`GET /v1/me`), Home and the held calls,
     /// drawn again once read. An answer that can't be read leaves it as it was.
     fn open_account(self: &Rc<Self>, kept: KeptSession) {
+        // A new account's consent is its own: Not now from the last one doesn't carry over.
+        ai_consent::forget();
         let view_only = kept.approval_mode.is_view_only();
         *self.kept.borrow_mut() = Some(kept.clone());
         self.open_shell(Mode::Kiff, view_only, None);
@@ -732,6 +766,17 @@ impl App {
                     };
                     let cloud = Rc::new(*cloud);
                     me.open_shell(Mode::Kiff, view_only, Some(cloud.clone()));
+                    // `loadAIConsent`: not given, its screen, unless Not now was answered.
+                    if let Some(kept) = me.kept.borrow().as_ref() {
+                        ai_consent::ask_after_sign_in(
+                            me.words.clone(),
+                            ai_consent::Source::Cloud {
+                                token: kept.token.clone(),
+                                languages: me.languages.clone(),
+                            },
+                            me.window.clone().upcast(),
+                        );
+                    }
                     me.watch_holds(&cloud);
                 }
                 Read::SignedOut => me.signed_out_by_kiff(),
@@ -1398,6 +1443,23 @@ impl App {
             overview,
             needs_you,
             account: account_lines,
+            // Signed in: Account's reads at tafs cloud as the session; a screenshot's from
+            // `--account-reads`, never sent.
+            account_reads: match (mode, self.kept.borrow().as_ref(), &self.account_reads_file) {
+                (Mode::Kiff, _, Some(file)) => Some(ai_consent::Source::File(file.clone())),
+                (Mode::Kiff, Some(kept), None) => Some(ai_consent::Source::Cloud {
+                    token: kept.token.clone(),
+                    languages: self.languages.clone(),
+                }),
+                _ => None,
+            }
+            .map(|source| {
+                Rc::new(ai_consent::Reads {
+                    source,
+                    may_use_coach: model.may_use_coach,
+                    manages_cards: account.as_ref().is_none_or(|a| a.allows("cards.manage")),
+                })
+            }),
             record,
             usage: match (mode, self.kept.borrow().as_ref()) {
                 (Mode::Sample, _) => usage::UsageSource::Sample,

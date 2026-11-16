@@ -3,12 +3,15 @@
 use std::rc::Rc;
 
 use adw::prelude::*;
-use tafs_core::account::{AccountLines, Action, Row, Screen};
+use tafs_core::account::{AccountLines, Action, Row, Screen, Slot};
 
 use crate::widgets::text;
 
 /// What Account's rows do: the app's own actions, and the screens they open.
 pub struct Actions {
+    /// What Account reads when it opens, signed in.
+    pub reads: Option<Rc<crate::ai_consent::Reads>>,
+    pub words: Rc<tafs_core::words::WordBook>,
     pub act: Rc<dyn Fn(Action)>,
     pub open: Rc<dyn Fn(Screen, String)>,
 }
@@ -24,20 +27,60 @@ pub fn page(a: &AccountLines, actions: &Actions) -> gtk::Widget {
     title.set_margin_bottom(12);
     column.append(&title);
     for section in &a.sections {
-        if let Some(header) = &section.header {
+        let head: gtk::Widget = if let Some(header) = &section.header {
             let h = text(header, 17, 600, &["tafs-dim"]);
             h.set_margin_start(20);
             h.set_margin_top(20);
             h.set_margin_bottom(8);
-            column.append(&h);
+            h.upcast()
         } else {
             let gap = gtk::Box::new(gtk::Orientation::Vertical, 0);
             gap.set_size_request(-1, 28);
-            column.append(&gap);
-        }
+            gap.upcast()
+        };
+        column.append(&head);
         let list = gtk::ListBox::new();
         list.set_selection_mode(gtk::SelectionMode::None);
         list.add_css_class("tafs-group");
+        // A part read when Account opens: hidden, header and all, until it's read; never drawn
+        // when it can't be, or isn't this person's.
+        if let Some(slot) = section.slot {
+            head.set_visible(false);
+            list.set_visible(false);
+            column.append(&list);
+            let Some(reads) = actions.reads.clone() else {
+                continue;
+            };
+            let row = gtk::ListBoxRow::new();
+            row.set_activatable(false);
+            let into = gtk::Box::new(gtk::Orientation::Vertical, 8);
+            row.set_child(Some(&into));
+            list.append(&row);
+            let shown: Rc<dyn Fn()> = {
+                let (head, list) = (head.clone(), list.clone());
+                Rc::new(move || {
+                    head.set_visible(true);
+                    list.set_visible(true);
+                })
+            };
+            match slot {
+                Slot::Suggestions if reads.may_use_coach => crate::ai_consent::suggestions(
+                    actions.words.clone(),
+                    reads.source.clone(),
+                    reads.manages_cards,
+                    into,
+                    shown,
+                ),
+                Slot::Suggestions => {}
+                Slot::Consent => crate::ai_consent::consent_row(
+                    actions.words.clone(),
+                    reads.source.clone(),
+                    into,
+                    shown,
+                ),
+            }
+            continue;
+        }
         let mut opens = Vec::new();
         for row in &section.rows {
             let r = row_widget(row, actions);
@@ -161,7 +204,7 @@ fn row_widget(row: &Row, actions: &Actions) -> gtk::ListBoxRow {
 }
 
 /// A row that is a button: its words from the leading edge, as the iPad's list draws them.
-fn row_button(words: &str) -> gtk::Button {
+pub fn row_button(words: &str) -> gtk::Button {
     let b = gtk::Button::new();
     let l = gtk::Label::new(Some(words));
     l.set_xalign(0.0);
