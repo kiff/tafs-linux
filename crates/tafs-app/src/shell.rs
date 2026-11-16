@@ -176,6 +176,7 @@ pub fn build(
                     | Selection::KiffAccount
                     | Selection::TimeZone
                     | Selection::Alerts
+                    | Selection::Language
             );
             account_icon.set_icon_name(Some(icon_for(if account_open {
                 "person.crop.circle.fill"
@@ -246,6 +247,15 @@ pub fn build(
                             .as_ref()
                             .map(|a| a.time_zone.clone().unwrap_or_else(|| "UTC".into())),
                         Rc::new(move || open(Selection::Account)),
+                    )
+                }
+                Selection::Language => {
+                    let open = open.clone();
+                    crate::language_picker::page(
+                        w.clone(),
+                        crate::store::language().map(str::to_string),
+                        Rc::new(move || open(Selection::Account)),
+                        actions.clone(),
                     )
                 }
                 Selection::People => {
@@ -352,6 +362,7 @@ pub fn build(
                                         Selection::KiffAccount
                                     }
                                     tafs_core::account::Screen::TimeZone => Selection::TimeZone,
+                                    tafs_core::account::Screen::Language => Selection::Language,
                                     tafs_core::account::Screen::ConnectApps => {
                                         Selection::ConnectApps
                                     }
@@ -804,6 +815,7 @@ fn title_of(
         Selection::People => l("people.title"),
         Selection::KiffAccount => l("settings.kiff_account"),
         Selection::TimeZone => l("settings.time_zone_title"),
+        Selection::Language => l("settings.language_title"),
         Selection::Alerts => l("settings.alerts"),
         Selection::Titled(title) => title.clone(),
         Selection::Halt(_) => l("taf.halt.title"),

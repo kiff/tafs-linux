@@ -198,8 +198,14 @@ hours ago; a Mac a day ago) in a screenshot, and none otherwise, as the iPad's s
 Not yet: **signing another device out**, an approval signed by an approval key (Sign out is
 there, dimmed, until this computer can approve). **Add a device** isn't for Linux: a phone
 pairs a computer (`PairComputerView`), never the computer itself.
-- **Change language:** Linux has no setting of the app's own to open: tafs speaks the desktop's
-  language (`LANGUAGE`, `LANG`). The button is there, dimmed.
+- **Change language** opens **Account › Language** (`LanguagePicker`, `language_picker.rs`):
+  "This computer's language" first, then the app's 8 languages in tafs's order, each named in
+  itself ("Français", "Polski"), the one in use checked (`tafs-core/account.rs` ›
+  `language_rows`). The one in use does nothing. Any other applies at once: it's kept in the
+  config folder (`~/.config/tafs/language`), and the window is drawn again in it, on Account,
+  with no relaunch. Every read is made again, asking tafs cloud and KIFF in the new language
+  first. This computer's language removes the pick, and tafs speaks the desktop's again
+  (`LANGUAGE`, `LANG`). `--lang` still wins, and a screenshot never reads the pick.
 - **Coach's suggestions, the AI-data consent, Export my chats:** with their reads; the iPad draws
   none until they're read either.
 - **The plan's line** (`plan_line`) in Plan, with tafs cloud's balance.

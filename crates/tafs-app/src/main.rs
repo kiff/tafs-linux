@@ -13,6 +13,7 @@ mod halt;
 mod kiff;
 mod kiff_account;
 mod knocks;
+mod language_picker;
 mod needs_you;
 mod overview;
 mod pairing;
@@ -234,6 +235,7 @@ fn selection_of(page: Option<&str>) -> Selection {
         Some("kiff-account") | Some("delete-account") => Selection::KiffAccount,
         Some("time-zone") => Selection::TimeZone,
         Some("alerts") => Selection::Alerts,
+        Some("language") => Selection::Language,
         // The sample's Refunds, as the reference set's taf.png opens it.
         Some("taf") | Some("taf-card") => Selection::Taf("refunds".into()),
         // With `--home`, the contract's first taf.
@@ -254,15 +256,29 @@ fn selection_of(page: Option<&str>) -> Selection {
     }
 }
 
+thread_local! {
+    /// A language was just picked in Account › Language: the window drawn again in it opens on
+    /// Account, where the person was, as the iPad's picker goes back to it.
+    static REDRAWN_FOR_LANGUAGE: Cell<bool> = const { Cell::new(false) };
+}
+
 fn activate(app: &adw::Application, o: &Options) {
     let preferred = language::preferred_from_env();
+    let redrawn = REDRAWN_FOR_LANGUAGE.with(|r| r.replace(false));
+    // `--lang`, else the language picked in Account (a screenshot never reads it), else this
+    // computer's.
     let lang: &'static str = match &o.lang {
         Some(l) => SHIPPED
             .iter()
             .find(|s| **s == l.as_str())
             .copied()
             .unwrap_or("en"),
-        None => language::app_language(&preferred),
+        None => o
+            .screenshot
+            .is_none()
+            .then(store::language)
+            .flatten()
+            .unwrap_or_else(|| language::app_language(&preferred)),
     };
     let mut languages = vec![lang];
     languages.extend(
@@ -306,7 +322,11 @@ fn activate(app: &adw::Application, o: &Options) {
         languages,
         signed_in: o.signed_in,
         paired: o.paired,
-        first: RefCell::new(selection_of(o.page.as_deref())),
+        first: RefCell::new(if redrawn {
+            Selection::Account
+        } else {
+            selection_of(o.page.as_deref())
+        }),
         kept: RefCell::new(None),
         sign_out_error: RefCell::new(None),
         cloud: RefCell::new(None),
@@ -1700,13 +1720,32 @@ impl App {
         self.window.set_content(Some(&shell.root));
     }
 
+    /// A language picked in Account › Language (`AppLanguage.choose`): kept for the next launch,
+    /// and applied at once, the window drawn again in it, on Account. Every read is made again,
+    /// asking in the new language first. This window's minute reads stop with it.
+    fn use_language(self: &Rc<Self>, code: Option<&'static str>) {
+        if store::language() == code {
+            return;
+        }
+        store::set_language(code);
+        let Some(app) = self.window.application() else {
+            return;
+        };
+        self.held_watch.set(self.held_watch.get() + 1);
+        REDRAWN_FOR_LANGUAGE.with(|r| r.set(true));
+        app.activate();
+        self.window.close();
+    }
+
     /// Account's actions: sign in from the sample, clear the sample, or sign out of KIFF.
     fn act(self: &Rc<Self>, action: AccountAction, mode: Mode, view_only: bool) {
         match action {
             AccountAction::SignIn => self.present_sign_in(None),
             // The sample is forgotten, and the welcome opens.
             AccountAction::ClearSample => self.show_welcome(),
+            // Account opens its picker itself.
             AccountAction::ChangeLanguage => {}
+            AccountAction::UseLanguage(code) => self.use_language(code),
             AccountAction::SignOut => {
                 let Ok((title, body, confirm)) = tafs_core::account::sign_out_question(&self.words)
                 else {

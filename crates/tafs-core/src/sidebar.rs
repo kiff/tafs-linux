@@ -27,6 +27,8 @@ pub enum Selection {
     TimeZone,
     /// Account › Alerts.
     Alerts,
+    /// Account › Language.
+    Language,
     /// Coach mode, from its button at the foot.
     Coach,
     /// A screen Account opens, by its title, until it's ported.
