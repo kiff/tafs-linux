@@ -93,13 +93,14 @@ pub fn present(
     };
     let device = l("device.linux");
 
-    // The usual way (`kiffHalf`): the drawing, "Sign in with KIFF", Continue; then the code.
+    // The usual way (`kiffHalf`): board 1 (first run), "Sign in with KIFF", Continue; then the
+    // code.
     let half = gtk::Box::new(gtk::Orientation::Vertical, 24);
     half.set_margin_start(32);
     half.set_margin_end(32);
     half.set_margin_top(32);
     half.set_margin_bottom(32);
-    half.append(&crate::connected::kiff_art());
+    half.append(&crate::illustrations::first_run());
     let title = text(&l("sign_in.with_kiff"), 30, 700, &["tafs-ink"]);
     title.set_xalign(0.5);
     title.set_justify(gtk::Justification::Center);

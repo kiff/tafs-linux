@@ -28,6 +28,8 @@ halted with the whole account has no button: it resumes with the account.
 
 Beside the sidebar:
 
+- for Halt all once every part holds it, board 4 (cards at rest under a pause, in shapes:
+  [illustrations](app.md#illustrations));
 - a panel with the taf's name (or "All your tafs") as an eyebrow, dim while running and red
   otherwise; the headline (Running, Halting…, Halted; 26 bold); and what it means (15, soft):
   "Halting stops it/your tafs until you resume…", "Nothing new starts…", or "Since 14:05.
@@ -53,7 +55,7 @@ Beside the sidebar:
 
 `--halt crates/tafs-app/fixtures/halt-halting.json` or `halt-halted.json` (synthetic), with
 `--home` and `--page halt-all` or `--page halt:<id>`, draws the screens from that answer: every
-read is the file's, and **nothing is ever sent**. CI's `halt-all` and `halt-one`.
+read is the file's, and **nothing is ever sent**. CI's `halt-all`, `halt-all-halted` and `halt-one`.
 
 ## Not yet
 

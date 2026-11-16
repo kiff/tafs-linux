@@ -1532,3 +1532,69 @@ fn who_uses_a_taf_at_the_pin() {
         used_by(&book(lang), &shares, std::slice::from_ref(&group), &[]).unwrap();
     }
 }
+
+#[test]
+fn coachs_thread_reads_in_every_language() {
+    use serde_json::{json, Value};
+    use tafs_core::coach::SetupThread;
+    use tafs_core::coach_lines::{lines, Line, Listed};
+    let root = env!("CARGO_MANIFEST_DIR");
+    let read = |path: &str| -> Value {
+        let file: Value =
+            serde_json::from_slice(&std::fs::read(format!("{root}/{path}")).unwrap()).unwrap();
+        file["answer"].clone()
+    };
+    let mut every = read("../../shared/contracts/coach-conversation.json");
+    // Every kind of card, waiting, so each one's words are read.
+    let card = |c: Value| json!({"at": "2026-10-16T12:02:00Z", "session": "sess1", "run": "run3", "component": c});
+    let more = [
+        json!({"type": "steps", "id": "plan", "steps": [{"label": "Connect Stripe", "status": "done"}, {"label": "Draft its Card", "status": "active"}]}),
+        json!({"type": "notice", "id": "n", "title": "Heads up", "text": "Stripe is in test mode.", "tone": "warning"}),
+        json!({"type": "confirm", "id": "c", "text": "Test mode?", "options": [{"value": "y", "label": "Yes"}]}),
+        json!({"type": "sign_in", "id": "s", "service": "Google Sheets", "waits": "owner", "wider": {"words": "wider"}}),
+        json!({"type": "approval", "id": "a", "grant": "grt_9", "title": "Connect Google Sheets", "waits": "owner", "signs": {"card": false, "words": "Its Card: you approve it next"}, "wider": {"words": "wider"}}),
+        json!({"type": "result", "id": "v", "text": "A new version.", "taf": {"agent": "rae", "name": "Rae", "improves": "taf-aaaa0000000000000000", "note": "Faster."}}),
+        json!({"type": "drive", "id": "d", "text": "Open Connect apps"}),
+        json!({"type": "knob", "id": "k", "title": "Rae's dial"}),
+    ];
+    for c in more {
+        every["components"].as_array_mut().unwrap().push(card(c));
+    }
+    every["steering"] = json!({"run": "run3", "status": "RUNNING", "untaken": [{"text": "And chargebacks", "at": "2026-10-16T12:03:00Z"}]});
+    every["coach_lines"]
+        .as_array_mut()
+        .unwrap()
+        .push(json!({"at": "2026-10-16T12:04:00Z", "taf": "Rae", "said": "Done.", "away": true}));
+    let threads = [
+        every,
+        read("../../shared/contracts/coach-wider.json"),
+        json!({"messages": []}),
+    ];
+    let listed = [Listed {
+        agent: "refunds-x".into(),
+        key: "taf-1".into(),
+        name: "Refunds".into(),
+    }];
+    let now = chrono::Utc::now();
+    for lang in SHIPPED {
+        let w = book(lang);
+        for t in &threads {
+            let thread = SetupThread::read(&serde_json::to_vec(t).unwrap()).unwrap();
+            let l = lines(&w, &thread, &listed, tafs_core::sidebar::Mode::Kiff, now)
+                .unwrap_or_else(|e| panic!("{lang}: {e}"));
+            assert!(l.starts.is_some() || !l.lines.is_empty(), "{lang}");
+            // A hole is a brace before a name; the lines' own braces have a space after them.
+            for line in &l.lines {
+                let shown = format!("{line:?}");
+                let hole = shown
+                    .match_indices('{')
+                    .any(|(i, _)| shown[i + 1..].starts_with(|c: char| c.is_ascii_alphabetic()));
+                assert!(!hole, "{lang}: {shown}");
+            }
+            assert!(l
+                .lines
+                .iter()
+                .all(|x| !matches!(x, Line::Gap(g) if g.is_empty())));
+        }
+    }
+}

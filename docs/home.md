@@ -41,6 +41,9 @@ What the mascot opens, and what opens first (`OverviewView` in `ShareViews.swift
 page is `crates/tafs-app/src/overview.rs`.
 
 - **The title** at 30 bold and "Today, across your tafs" at 14, dim.
+- **Board 10**, the overview (a ring, a gentle line and cards in a row, in shapes), at most 340
+  wide, in the middle; with no taf, board 2 (an empty card's outline, a plus in it) in its place
+  ([illustrations](app.md#illustrations)).
 - **NEEDS YOU**, whenever anything waits (`needsYouCount > 0`): the amber eyebrow, then each held
   call on the raised colour with corners of 12: an amber dot, "Deploys · Run migration
   0042_orders_index" (14 semibold, one line) and "answer by 03:02" (12, soft) at its end. A call

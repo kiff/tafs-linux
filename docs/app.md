@@ -10,13 +10,38 @@ another language or a `{hole}`.
 - **Signed in, or in the sample:** one sidebar for the whole app, as on the iPad
   ([the sidebar](home.md)), and the chosen screen beside it: the Overview first, and
   [Needs you](needs-you.md), [the Record](record.md), [a taf's page](taf.md), and
-  [Account](account.md) from the sidebar's foot. Screens not
+  [Coach](coach.md) and [Account](account.md) from the sidebar's foot. Screens not
   ported yet show their title only, in the [port checklist](port-checklist.md)'s order.
 
 The colours are the iPad's `Theme.swift`, light and dark, and follow the desktop's appearance
 (libadwaita's `StyleManager`), or the theme chosen in Account. The type is the desktop's own font; the iPad's rounded titles are
 its bold. The SF Symbols are the app's own symbolic icons, drawn for the nearest look
 (`assets/icons`), and the mascot is the iPad's.
+
+## Illustrations
+
+The iPad's approved first-time and empty-state drawings (`Illustration`, one per board), drawn in
+Cairo shapes (`crates/tafs-app/src/illustrations.rs`), never a letter, a number or a word (rule
+14): the screen's own words say what each means. Each is drawn on its board's grid in the
+palette's colours for the appearance on screen, again when it changes, and scaled down to the
+width it's given, never wider than the iPad shows it and never out of proportion. A screen reader
+skips them. The sign-in's drawings (`connected.rs`) are made of the same pieces.
+
+| Board | What it shows | Where |
+| :- | :- | :- |
+| 1, first run | A card opening, sparkles round it | The welcome, above "tafs", in the mascot's place; it gets smaller in a short window rather than push the buttons off |
+| 2, no tafs yet | An empty card's outline, a plus in it | The Overview with no taf (and no recipes listed), above the grid's "No tafs yet", in board 10's place |
+| 4, every taf halted | Cards at rest under a pause | Halt all, once every part holds it, above its panel |
+| 6, nothing waiting | An empty tray under a calm check | Needs you with nothing waiting, above "Nothing is waiting." |
+| 10, the overview | A ring, a gentle line and cards in a row | The Overview, under its title |
+
+Not drawn yet, as their screens aren't on Linux: 3 (the brief with nothing to decide), 5 (a key's
+receipt, after connecting an app), 7 and 9 (Coach), 8 (beside + New's own-words row in the
+gallery), 11 and 12 (a watch's).
+
+The colours are the palette's by the iPad's own names: `Theme.amber` is `amber`, `amberText`
+`amber_text`, `amberInk` `amber_ink`, `ink`, `panel`, `onFill` `on_fill`, `ok`, `blue`, `pink`;
+`Theme.brand` is the mark's sweep (`theme::BRAND`), and the shadows are black.
 
 ## Language
 
@@ -56,8 +81,9 @@ time), so does Linux, when the account's clock isn't this computer's at that mom
 | `--runs answer.json` | with `--home`: a page of a taf's runs as tafs cloud answers `GET /v1/tafs/{id}/work/runs`; every page reads it, and Run now sends nothing |
 | `--request answer.json` | with `--runs`: a run's own page as tafs cloud answers `GET /v1/tafs/{id}/requests/{run}`; Try the reply now sends nothing |
 | `--receipt answer.json` | with `--home`: a receipt as KIFF answers `GET /v1/receipts/{trace_id}`; nothing is sent |
+| `--coach answer.json` | with `--home`: Coach's conversation as tafs cloud answers `GET /v1/tafs/{id}/conversation/{session}`; nothing is read or sent ([Coach](coach.md)) |
 | `--paired` | with `--view-only`: a computer already added with the phone, whose notice says approvals go to the phone |
-| `--page …` | `welcome`, `sign-in`, `pair` (adding this computer with a phone), `recipe:<id>` (with `--home` and `--recipes`: that recipe's sheet), `gallery` (with `--home` and `--gallery`: the gallery), `halt-all` or `halt:<id>` (a halt's screen), `record-search:<q>` (the Record with that search), `record-export` (the Record with the receipts' days open), `receipt:<proposal id>` (with `--activity` and `--receipt`: that line's receipt), `run:<taf id>` (with `--runs` and `--request`: that taf's first kept run's own page), `delete-account` (with `--people`: the KIFF account's Delete account sheet), `pin-sheet` (the security key's PIN sheet, with canned answers; no key is asked), or a screen beside the sidebar: `needs-you`, `record`, `calendar`, `usage`, `connect-apps`, `account`, `alerts`, `taf` (the sample's Refunds), or `taf:<id>` (a taf by its key) |
+| `--page …` | `welcome`, `sign-in`, `pair` (adding this computer with a phone), `recipe:<id>` (with `--home` and `--recipes`: that recipe's sheet), `gallery` (with `--home` and `--gallery`: the gallery), `halt-all` or `halt:<id>` (a halt's screen), `record-search:<q>` (the Record with that search), `record-export` (the Record with the receipts' days open), `receipt:<proposal id>` (with `--activity` and `--receipt`: that line's receipt), `run:<taf id>` (with `--runs` and `--request`: that taf's first kept run's own page), `delete-account` (with `--people`: the KIFF account's Delete account sheet), `pin-sheet` (the security key's PIN sheet, with canned answers; no key is asked), or a screen beside the sidebar: `needs-you`, `record`, `calendar`, `usage`, `connect-apps`, `account`, `alerts`, `taf` (the sample's Refunds), `taf:<id>` (a taf by its key), or `coach` (with `--coach`: Coach's conversation) |
 | `--screenshot out.png` | save the window (1280×800, at 2×) as a PNG and quit. It never reads or writes the keyring, and its sign-in and pairing show a code without reaching KIFF |
 
 CI builds the app and saves the welcome, the sign-in, the pairing, the Overview beside the sidebar (with the
@@ -65,8 +91,9 @@ account's items), the Overview from the `home.json` contract, Needs you (and wit
 page and its Card tab, Plan & usage and Account over the sample, Plan & usage signed in with
 KIFF from synthetic answers (managing billing, and as a member), Connect apps, Devices, People & groups, the KIFF account and its time zone picker (from synthetic answers), Alerts, the
 calendar's Day and Week (and Day at an upright iPad's size, `--size 1032x1376`), a tafs cloud
-taf's page and its Card tab from the contracts (and with its Card's own lines) (and with its work and runs, and a run's own page), the sidebar over the plain sample (and with an agent not run by tafs, and with the plan's line), and Home with no taf and a recipe's sheet, the strip and the gallery, the halt screens, a Record search, the receipts export open, a Record line's receipt, the Delete account sheet, the security key's PIN sheet, the
-view-only notice (and once paired) in en, fr and pt, light and dark: 270 pictures, as the `screenshots`
+taf's page and its Card tab from the contracts (and with its Card's own lines) (and with its work and runs, and a run's own page), the sidebar over the plain sample (and with an agent not run by tafs, and with the plan's line), and Home with no taf and a recipe's sheet, the strip and the gallery, the halt screens, a Record search, the receipts export open, a Record line's receipt, the Delete account sheet, the security key's PIN sheet,
+Coach's conversation from the contract (and with an approval waiting under tafs cloud's wider line), the
+view-only notice (and once paired), and the boards' empty states (the Overview with no taf, Needs you with nothing waiting, Halt all once halted) in en, fr and pt, light and dark: 372 pictures, as the `screenshots`
 artifact of the run. The job fails if any is missing.
 
 ## The AppImage
@@ -94,3 +121,20 @@ building those two from source on 22.04, or shipping a Flatpak.
 - Run by hand with a version (`v` and three numbers, as `v0.1.0`: anything else is refused before
   a tag is made), one job builds it, checks it starts, and attaches it with its `SHA256SUMS` to a
   **draft** release, its only copy. Publishing it is the owner's yes, never the workflow's.
+
+**Signing.** The draft job signs `SHA256SUMS` with tafs for Linux's OpenPGP key
+(`tools/sign.sh`): an armored detached signature, `SHA256SUMS.asc`, attached beside it. Whoever
+downloads checks the signature with the public key, then the AppImage against `SHA256SUMS`:
+
+```
+gpg --verify SHA256SUMS.asc SHA256SUMS && sha256sum -c SHA256SUMS
+```
+
+- The key is two secrets in the `linux-signing` environment, `TAFS_SIGNING_KEY` (armored) and
+  `TAFS_SIGNING_PASSPHRASE`. Only the signing step reads them. They're imported into a keyring
+  made for the step and removed after it, from stdin, never a file or the command line.
+- **While the environment holds no key, the draft goes out unsigned** and the step says so.
+  Adding the key is a value in the environment, not a change here; its public half then goes in
+  `packaging/` and on the download page.
+- A pull request that changes the packaging runs the same step with a throwaway key made in the
+  job, so the signing is known to work before the real key exists.

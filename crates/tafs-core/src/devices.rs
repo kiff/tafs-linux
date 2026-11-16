@@ -70,6 +70,28 @@ impl Device {
 /// `GET /v1/me/devices` at KIFF.
 pub const PATH: &str = "/v1/me/devices";
 
+/// This computer's id in KIFF (`KIFFClient.thisDeviceID`), from the same answer: the first device
+/// marked `this_device` whose id is a device's (`dev_…`). planque asks KIFF about the device by
+/// it. Read as the iPad's own decoder reads it, its id and mark alone: a device without its id,
+/// or with a mark that isn't true or false, fails the read. None when KIFF lists this session
+/// without a device yet.
+pub fn this_device_id(body: &[u8]) -> Option<String> {
+    let v: Value = serde_json::from_slice(body).ok()?;
+    let mut found = None;
+    for d in v.get("devices")?.as_array()? {
+        let id = d.get("id")?.as_str()?;
+        let this = match d.get("this_device") {
+            None | Some(Value::Null) => false,
+            Some(Value::Bool(b)) => *b,
+            Some(_) => return None,
+        };
+        if found.is_none() && this && id.starts_with("dev_") {
+            found = Some(id.to_string());
+        }
+    }
+    found
+}
+
 /// A row's second line (`DevicesView.lastUsed`): "Last used 3 hours ago", or "Not used yet".
 pub fn last_used(
     w: &WordBook,
@@ -251,6 +273,25 @@ mod tests {
         assert_eq!(relative("pl", ago(5 * 3600)), "5 godzin temu");
         assert_eq!(relative("nl", ago(2 * 7 * 86_400)), "2 weken geleden");
         assert_eq!(relative("it", Duration::seconds(5)), "tra 5 secondi");
+    }
+
+    #[test]
+    fn this_computer_is_the_device_kiff_marks() {
+        let body = br#"{"devices":[{"id":"dev_1","last_used_at":"yesterday"},{"id":"ses_2","this_device":true},{"id":"dev_3","this_device":true},{"id":"dev_4","this_device":true}]}"#;
+        assert_eq!(this_device_id(body).as_deref(), Some("dev_3"));
+        assert_eq!(this_device_id(br#"{"devices":[{"id":"dev_1"}]}"#), None);
+        // Its id and mark are read strictly; nothing else is.
+        assert_eq!(
+            this_device_id(br#"{"devices":[{"id":"dev_1","this_device":"yes"}]}"#),
+            None
+        );
+        assert_eq!(
+            this_device_id(
+                br#"{"devices":[{"this_device":true},{"id":"dev_2","this_device":true}]}"#
+            ),
+            None
+        );
+        assert_eq!(this_device_id(br#"{}"#), None);
     }
 
     #[test]

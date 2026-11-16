@@ -157,6 +157,8 @@ pub enum Screen {
     Usage,
     Alerts,
     TimeZone,
+    /// Account › Language (`LanguagePicker`).
+    Language,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -165,6 +167,35 @@ pub enum Action {
     SignOut,
     ClearSample,
     ChangeLanguage,
+    /// A language picked in Account › Language, or this computer's own with `None`.
+    UseLanguage(Option<&'static str>),
+}
+
+/// One of Account › Language's rows (`LanguagePicker`): the language it picks (`None`, this
+/// computer's own), its name, and whether it's the one in use.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LanguageRow {
+    pub code: Option<&'static str>,
+    pub name: String,
+    pub picked: bool,
+}
+
+/// Account › Language, as the iPad's `LanguagePicker`: this computer's language first, then the
+/// app's languages in the order tafs lists them, each named in itself, the one in use marked.
+/// `chosen` is the language picked in the app; none means this computer's.
+pub fn language_rows(w: &WordBook, chosen: Option<&str>) -> Result<Vec<LanguageRow>, WordsError> {
+    let device = w.line("device.linux")?;
+    let mut rows = vec![LanguageRow {
+        code: None,
+        name: w.get("settings.language_device", &[("device", &device)])?,
+        picked: chosen.is_none(),
+    }];
+    rows.extend(crate::words::SHIPPED.iter().map(|code| LanguageRow {
+        code: Some(*code),
+        name: language_name(code).to_string(),
+        picked: chosen == Some(*code),
+    }));
+    Ok(rows)
 }
 
 /// One section: its header, when it has one, and its rows.
@@ -519,6 +550,36 @@ mod tests {
             }),
             Err(KiffError::Unauthorized)
         );
+    }
+
+    #[test]
+    fn the_language_picker_lists_this_computer_s_then_the_app_s() {
+        let w = WordBook::load(&WordBook::default_root(), "en").unwrap();
+        let rows = language_rows(&w, None).unwrap();
+        assert_eq!(rows.len(), 9);
+        assert_eq!(rows[0].code, None);
+        assert_eq!(rows[0].name, "This computer's language");
+        assert!(rows[0].picked);
+        assert_eq!(
+            rows[1..]
+                .iter()
+                .map(|r| r.code.unwrap())
+                .collect::<Vec<_>>(),
+            crate::words::SHIPPED.to_vec()
+        );
+        assert_eq!(rows[3].name, "Français");
+        let rows = language_rows(&w, Some("pl")).unwrap();
+        assert_eq!(
+            rows.iter()
+                .filter(|r| r.picked)
+                .map(|r| r.code)
+                .collect::<Vec<_>>(),
+            vec![Some("pl")]
+        );
+        for lang in crate::words::SHIPPED {
+            let w = WordBook::load(&WordBook::default_root(), lang).unwrap();
+            assert!(!language_rows(&w, None).unwrap()[0].name.contains('{'));
+        }
     }
 
     #[test]

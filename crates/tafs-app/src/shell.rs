@@ -60,6 +60,9 @@ pub struct Screens {
     /// Where the calendar reads, and the state a screenshot opens it in.
     pub calendar: crate::calendar::CalendarSource,
     pub calendar_first: tafs_core::calendar::State,
+    /// Where Coach's conversation is read, and the account's tafs a result can open.
+    pub coach: crate::coach::CoachSource,
+    pub coach_listed: Rc<Vec<tafs_core::coach_lines::Listed>>,
 }
 
 /// Builds the shell. `view_only` shows the notice that this computer can't approve yet.
@@ -92,6 +95,8 @@ pub fn build(
         gallery,
         halt,
         export,
+        coach,
+        coach_listed,
     } = screens;
     let entries = Rc::new(record.entries.clone());
     let lines = model.lines(&w).unwrap_or_else(|e| panic!("{e}"));
@@ -176,6 +181,7 @@ pub fn build(
                     | Selection::KiffAccount
                     | Selection::TimeZone
                     | Selection::Alerts
+                    | Selection::Language
             );
             account_icon.set_icon_name(Some(icon_for(if account_open {
                 "person.crop.circle.fill"
@@ -248,6 +254,15 @@ pub fn build(
                         Rc::new(move || open(Selection::Account)),
                     )
                 }
+                Selection::Language => {
+                    let open = open.clone();
+                    crate::language_picker::page(
+                        w.clone(),
+                        crate::store::language().map(str::to_string),
+                        Rc::new(move || open(Selection::Account)),
+                        actions.clone(),
+                    )
+                }
                 Selection::People => {
                     let open = open.clone();
                     crate::people::page(
@@ -283,6 +298,10 @@ pub fn build(
                 }
                 Selection::Usage => {
                     crate::usage::page(w.clone(), usage.clone(), cloud_names.clone())
+                }
+                // Coach, read only, signed in with KIFF; the sample has none, so its title alone.
+                Selection::Coach if !matches!(coach, crate::coach::CoachSource::None) => {
+                    crate::coach::page(w.clone(), coach.clone(), coach_listed.clone(), open.clone())
                 }
                 // A halt: every taf's, or one taf's by tafs cloud's id.
                 Selection::HaltAll | Selection::Halt(_) => match &halt {
@@ -352,6 +371,7 @@ pub fn build(
                                         Selection::KiffAccount
                                     }
                                     tafs_core::account::Screen::TimeZone => Selection::TimeZone,
+                                    tafs_core::account::Screen::Language => Selection::Language,
                                     tafs_core::account::Screen::ConnectApps => {
                                         Selection::ConnectApps
                                     }
@@ -401,7 +421,7 @@ pub fn build(
         let select = select.clone();
         account_button.connect_clicked(move |_| select(Selection::Account));
     }
-    // Coach mode comes in its own change: until then Coach opens its title, as the other screens do.
+    // Coach opens its conversation, read only; in the sample, its title.
     if let Some(coach) = coach_button {
         let select = select.clone();
         coach.connect_clicked(move |_| select(Selection::Coach));
@@ -804,6 +824,7 @@ fn title_of(
         Selection::People => l("people.title"),
         Selection::KiffAccount => l("settings.kiff_account"),
         Selection::TimeZone => l("settings.time_zone_title"),
+        Selection::Language => l("settings.language_title"),
         Selection::Alerts => l("settings.alerts"),
         Selection::Titled(title) => title.clone(),
         Selection::Halt(_) => l("taf.halt.title"),

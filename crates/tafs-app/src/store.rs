@@ -121,6 +121,36 @@ fn theme_path() -> std::path::PathBuf {
     gtk::glib::user_config_dir().join("tafs").join("theme")
 }
 
+/// The language picked in Account › Language (the iPad's `tafs.language`): one the app ships, kept
+/// in the user's config folder. None: this computer's language.
+pub fn language() -> Option<&'static str> {
+    let kept = std::fs::read_to_string(language_path()).ok()?;
+    tafs_core::words::SHIPPED
+        .iter()
+        .find(|l| **l == kept.trim())
+        .copied()
+}
+
+/// Picks a language, or this computer's with `None`.
+pub fn set_language(code: Option<&str>) {
+    let path = language_path();
+    match code {
+        Some(code) => {
+            if let Some(dir) = path.parent() {
+                let _ = std::fs::create_dir_all(dir);
+            }
+            let _ = std::fs::write(path, code);
+        }
+        None => {
+            let _ = std::fs::remove_file(path);
+        }
+    }
+}
+
+fn language_path() -> std::path::PathBuf {
+    gtk::glib::user_config_dir().join("tafs").join("language")
+}
+
 /// Alerts on this computer (Account › Alerts): on unless turned off, kept in the user's config
 /// folder.
 pub fn alerts_on() -> bool {

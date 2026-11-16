@@ -38,7 +38,7 @@ const fn same(name: &'static str, hex: u32) -> Tone {
 }
 
 /// `Theme`'s colours, by the name the app's style sheet gives them.
-pub const PALETTE: [Tone; 18] = [
+pub const PALETTE: [Tone; 20] = [
     both("background", 0xFBF7EE, 0x141311),
     both("panel", 0xFFFFFF, 0x1F1E1B),
     both("raised", 0xF3ECDF, 0x2A2824),
@@ -60,6 +60,9 @@ pub const PALETTE: [Tone; 18] = [
     same("pink", 0xFF4F7B),
     both("blue", 0x2A64F5, 0x7FA2FF),
     both("coach", 0x2A64F5, 0x7FA2FF),
+    // Coach mode's wash, and its panel a shade deeper (`coachWash`, `coachPanel`).
+    both("coach_wash", 0xEEF3FF, 0x1A2033),
+    both("coach_panel", 0xE3EBFF, 0x232B42),
     same("sky", 0x3EC2FF),
 ];
 

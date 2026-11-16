@@ -31,10 +31,12 @@ never changes. `openTafsSettings` opens tafs' iOS settings, which don't exist he
 
 ## Approving with a passkey (switched off)
 
-Linux will approve with a USB security key (a FIDO2 key with a PIN), as kiff/tafs
-`docs/computer-passkeys.md` says for a computer with no key store of its own. The first part is
-in `tafs-core/src/passkey.rs`, switched off (`ENABLED` is false), so nothing asks a key for
-anything yet:
+**The first release approves nothing on Linux.** A Linux computer is view-only: it's added with
+the phone, and every approval goes to the phone. Approving here with a USB security key (a FIDO2
+key with a PIN), as kiff/tafs `docs/computer-passkeys.md` describes for a computer with no key
+store of its own, waits on a contract decision. The parts that don't depend on it are in
+`tafs-core/src/passkey.rs`, switched off (`ENABLED` is false), so nothing asks a key for
+anything:
 
 - **The message** a device key would sign. One request is `kiff.request.v1`: the tenant, the
   method, the path with its query, the body's SHA-256 in hex, and `signed_at`. Two requests

@@ -1,10 +1,10 @@
-//! The welcome, before anyone is signed in (`OnboardingView`): what tafs is, Sign in with KIFF,
-//! and the sample.
+//! The welcome, before anyone is signed in (`OnboardingView`): its drawing, what tafs is, Sign in
+//! with KIFF, and the sample.
 
 use adw::prelude::*;
 use tafs_core::words::WordBook;
 
-use crate::widgets::{mascot, outline, primary, text};
+use crate::widgets::{outline, primary, text};
 
 pub struct Welcome {
     pub root: gtk::Box,
@@ -26,9 +26,9 @@ pub fn build(w: &WordBook) -> Welcome {
     root.set_vexpand(true);
     crate::widgets::ground(&root);
 
-    let m = mascot(96);
-    m.set_halign(gtk::Align::Start);
-    root.append(&m);
+    // Board 1, first run (`Illustration.firstRun`): a card opening, above the words. It gets
+    // smaller in a short window rather than push the buttons off it.
+    root.append(&crate::illustrations::first_run().shrinking());
 
     let head = gtk::Box::new(gtk::Orientation::Vertical, 12);
     head.append(&text(&l("sign_in.welcome.title"), 48, 700, &["tafs-ink"]));

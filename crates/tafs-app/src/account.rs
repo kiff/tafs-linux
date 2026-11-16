@@ -161,12 +161,20 @@ fn row_widget(row: &Row, actions: &Actions) -> gtk::ListBoxRow {
             } else {
                 "amber-text"
             });
-            // Linux has no per-app language setting to open: the app speaks the desktop's language.
-            if *action == Action::ChangeLanguage {
-                b.set_sensitive(false);
-            }
-            let (act, action) = (actions.act.clone(), *action);
-            b.connect_clicked(move |_| act(action));
+            // Change language opens Account › Language (`LanguagePicker`).
+            let (act, open, action, title) = (
+                actions.act.clone(),
+                actions.open.clone(),
+                *action,
+                words.clone(),
+            );
+            b.connect_clicked(move |_| {
+                if action == Action::ChangeLanguage {
+                    open(Screen::Language, title.clone());
+                } else {
+                    act(action);
+                }
+            });
             r.set_child(Some(&b));
         }
         Row::Theme {

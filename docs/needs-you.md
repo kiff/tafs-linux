@@ -8,7 +8,8 @@ sidebar. What they say is `tafs-core/src/needs_you.rs` and `held.rs`, tested the
 
 - **"Needs you"** at 34 bold, then each held call's card, 14 apart, the pane's full width with 16
   from each edge.
-- **With nothing waiting:** a panel, "Nothing is waiting." (15 semibold) and "When a taf asks for
+- **With nothing waiting:** board 6 (an empty tray under a calm check, in shapes:
+  [illustrations](app.md#illustrations)), then a panel, "Nothing is waiting." (15 semibold) and "When a taf asks for
   something outside its Card, it shows up here and on your lock screen." (14, soft).
 
 ## A held call's card

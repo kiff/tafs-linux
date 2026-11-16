@@ -1,5 +1,5 @@
-//! The Overview beside the sidebar (`OverviewView`): the title, NEEDS YOU's calls, and one grid
-//! of the tafs, each line opening its taf.
+//! The Overview beside the sidebar (`OverviewView`): the title, its drawing, NEEDS YOU's calls,
+//! and one grid of the tafs, each line opening its taf.
 
 use std::rc::Rc;
 
@@ -25,6 +25,13 @@ pub fn page(o: &OverviewLines, open: Rc<dyn Fn(Selection)>) -> gtk::Widget {
     head.append(&title);
     head.append(&text(&o.subtitle, 14, 400, &["tafs-dim"]));
     column.append(&head);
+    // Board 10, the Overview's header (`Illustration.overview`); with no taf yet, board 2
+    // (`Illustration.noTafs`) in its place, above the grid's "No tafs yet".
+    column.append(&if o.empty.is_some() {
+        crate::illustrations::no_tafs()
+    } else {
+        crate::illustrations::overview()
+    });
 
     if let Some(label) = &o.needs_you_label {
         let section = gtk::Box::new(gtk::Orientation::Vertical, 8);
