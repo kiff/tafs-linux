@@ -427,16 +427,39 @@ pub fn present(
         });
     }
 
-    // Continue: the code is asked for and shown (`begin`).
+    // One way at a time: starting the phone's again stops KIFF's code and puts Continue back.
     {
-        let (content, current, ui, w, begin) = (
+        let (run, current, ui, w, content, continue_button) = (
+            run.clone(),
+            current.clone(),
+            ui.clone(),
+            w.clone(),
+            content.clone(),
+            continue_button.clone(),
+        );
+        phone.connect_restarted(move || {
+            run.borrow().cancelled.store(true, Ordering::SeqCst);
+            *current.borrow_mut() = None;
+            show(&ui, &w, None, None);
+            ui.starting.set_visible(false);
+            content.set_visible(false);
+            continue_button.set_visible(true);
+        });
+    }
+
+    // Continue: the phone's way stops, its claim with it, then the code is asked for and shown
+    // (`begin`).
+    {
+        let (content, current, ui, w, begin, phone) = (
             content.clone(),
             current.clone(),
             ui.clone(),
             w.clone(),
             begin.clone(),
+            phone.clone(),
         );
         continue_button.connect_clicked(move |b| {
+            phone.pause();
             b.set_visible(false);
             content.set_visible(true);
             match &preview {

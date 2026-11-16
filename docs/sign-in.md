@@ -17,6 +17,11 @@ The approved redesign (tafs#1240's `SignInView` for an iPad or a Mac), a dialog 
   [pairing](pairing.md), its QR shown at once, "Sign in with your phone", "Scan with tafs" with
   a viewfinder, where to scan it (`sign_in.pair_how`), the check code in its panel with "It will
   ask whether this computer shows {code}." (`sign_in.pair_check`), and the wait.
+- **One way at a time**, as the Mac and Windows apps: Continue stops the phone's half (its claim
+  ends, and a session KIFF hands over after that is ended at KIFF) and puts **Show the code**
+  (`sign_in.show_code`) where its QR was. Show the code, or a new code or Try again there, stops
+  KIFF's code the same way and puts Continue back. So two sign-ins never land together, for two
+  accounts, with no sign of which one won. `--page sign-in-code` shows the phone's half put aside.
 - **A narrow window** (under 920, both halves' least) stacks them, the phone's under KIFF's, and
   scrolls.
 - **Either way ends on the celebration** (`ConnectedView`, `crates/tafs-app/src/connected.rs`),

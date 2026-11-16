@@ -73,6 +73,9 @@ enum Step {
     Code(Code),
     Expired,
     Failed(String),
+    /// Put aside while the other way runs (the sign-in's Continue): no code, no claim, and "Show
+    /// the code" to start again.
+    Paused,
 }
 
 struct Ui {
@@ -139,12 +142,19 @@ fn show(ui: &Ui, w: &WordBook, step: &Step) {
     ui.starting.set_spinning(matches!(step, Step::Starting));
     ui.note
         .set_visible(matches!(step, Step::Expired | Step::Failed(_)));
-    ui.again
-        .set_visible(matches!(step, Step::Expired | Step::Failed(_)));
+    ui.again.set_visible(matches!(
+        step,
+        Step::Expired | Step::Failed(_) | Step::Paused
+    ));
     ui.note.remove_css_class("tafs-no");
     ui.note.remove_css_class("tafs-dim");
     match step {
         Step::Starting => {}
+        Step::Paused => {
+            *ui.modules.borrow_mut() = None;
+            ui.again
+                .set_label(&w.line("sign_in.show_code").unwrap_or_default());
+        }
         Step::Code(code) => {
             *ui.modules.borrow_mut() = pairing::qr(&code.text);
             ui.qr.queue_draw();
@@ -189,16 +199,35 @@ fn why(e: &KiffError, w: &WordBook) -> String {
     why.trim_end_matches('.').to_string()
 }
 
+/// What runs when the person starts the pairing again, once someone asks.
+type Hook = Rc<RefCell<Option<Rc<dyn Fn()>>>>;
+
 /// A pairing on screen: what it draws, and how to stop it (closing what holds it).
 pub struct Pairing {
     pub root: gtk::Box,
     attempt: Rc<RefCell<Arc<AtomicBool>>>,
+    ui: Rc<Ui>,
+    w: Rc<WordBook>,
+    restarted: Hook,
 }
 
 impl Pairing {
     /// Stops its claims: a session KIFF hands over after this ends at KIFF at once.
     pub fn stop(&self) {
         self.attempt.borrow().store(true, Ordering::SeqCst);
+    }
+
+    /// Stops it and puts it aside, the code gone, with "Show the code" to start again: one way
+    /// to sign in at a time.
+    pub fn pause(&self) {
+        self.stop();
+        show(&self.ui, &self.w, &Step::Paused);
+    }
+
+    /// Runs `f` whenever the person starts it again (a new code, Try again, Show the code), before
+    /// it starts: the sign-in stops the other way there.
+    pub fn connect_restarted(&self, f: impl Fn() + 'static) {
+        *self.restarted.borrow_mut() = Some(Rc::new(f));
     }
 }
 
@@ -457,29 +486,49 @@ pub fn body(
             });
         })
     };
+    // A screenshot's: a code made here, never claimed.
+    let sample = {
+        let (ui, w) = (ui.clone(), w.clone());
+        move || {
+            let key = DeviceKey::generate();
+            let name = signin::device_name(&w).unwrap_or_default();
+            let payload = pairing::Payload::new(&key, &name, &pairing::nonce(), chrono::Utc::now());
+            show(
+                &ui,
+                &w,
+                &Step::Code(Code {
+                    text: payload.text(),
+                    check: pairing::check_code(&key.public_spki_der()),
+                }),
+            );
+        }
+    };
+    let restarted: Hook = Rc::new(RefCell::new(None));
     {
-        let begin = begin.clone();
-        ui.again.connect_clicked(move |_| begin());
+        let (begin, restarted, sample) = (begin.clone(), restarted.clone(), sample.clone());
+        ui.again.connect_clicked(move |_| {
+            let hook = restarted.borrow().clone();
+            if let Some(hook) = hook {
+                hook();
+            }
+            if preview {
+                sample();
+            } else {
+                begin();
+            }
+        });
     }
     if preview {
-        // A screenshot: a code made here, never claimed.
-        let key = DeviceKey::generate();
-        let name = signin::device_name(&w).unwrap_or_default();
-        let payload = pairing::Payload::new(&key, &name, &pairing::nonce(), chrono::Utc::now());
-        show(
-            &ui,
-            &w,
-            &Step::Code(Code {
-                text: payload.text(),
-                check: pairing::check_code(&key.public_spki_der()),
-            }),
-        );
+        sample();
     } else {
         begin();
     }
     Pairing {
         root: content,
         attempt,
+        ui,
+        w,
+        restarted,
     }
 }
 
