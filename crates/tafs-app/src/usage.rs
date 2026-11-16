@@ -39,8 +39,9 @@ pub enum UsageSource {
     None,
 }
 
-/// A tafs cloud taf's name, by its id, for its runs' title.
-pub type Names = Rc<Vec<(String, String)>>;
+/// A tafs cloud taf's name, by its id, for its runs' title, and whether this person manages it
+/// (a run's own page offers Try the reply now to whoever does).
+pub type Names = Rc<Vec<(String, String, bool)>>;
 
 /// What has been read, each read on its own: one that fails keeps what was read and says why.
 #[derive(Default)]
@@ -613,9 +614,24 @@ fn runs_page(
     head.set_start_widget(Some(&back_button));
     let name = names
         .iter()
-        .find(|(id, _)| *id == taf)
-        .map(|(_, n)| n.clone())
+        .find(|(id, _, _)| *id == taf)
+        .map(|(_, n, _)| n.clone())
         .unwrap_or_else(|| l("usage.credits"));
+    // A run's own page (`KnobRequestDetail`), read where its credits were: as the session.
+    let opening = match &source {
+        UsageSource::Cloud {
+            token, languages, ..
+        } => Some(crate::runs_panel::Opening {
+            w: w.clone(),
+            id: taf.clone(),
+            source: crate::runs_panel::RunsSource::Cloud {
+                token: token.clone(),
+                languages: languages.clone(),
+            },
+            manages: names.iter().any(|(id, _, m)| *id == taf && *m),
+        }),
+        _ => None,
+    };
     head.set_center_widget(Some(&one_line(&name, 17, 600, &["tafs-ink"])));
     outer.append(&head);
     let column = gtk::Box::new(gtk::Orientation::Vertical, 16);
@@ -752,7 +768,8 @@ fn runs_page(
                 let p = panel(false);
                 for run in &mine.items {
                     // `CreditsRunRow`: tafs cloud's words, semibold when counted, and when it
-                    // ended, in the account's time zone. A run's request opens with its port.
+                    // ended, in the account's time zone. While tafs cloud says it `opens`, it
+                    // opens the run's own page, with a chevron.
                     let row = gtk::Box::new(gtk::Orientation::Vertical, 2);
                     row.append(&text(
                         &run.words,
@@ -766,7 +783,28 @@ fn runs_page(
                         400,
                         &["tafs-dim"],
                     ));
-                    p.append(&row);
+                    match (&opening, run.opens) {
+                        (Some(opening), true) => {
+                            row.set_hexpand(true);
+                            let h = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+                            h.append(&row);
+                            let chevron = symbol("go-next-symbolic", 13);
+                            chevron.add_css_class("tafs-dim");
+                            chevron.set_valign(gtk::Align::Center);
+                            h.append(&chevron);
+                            let b = gtk::Button::new();
+                            b.add_css_class("flat");
+                            b.add_css_class("tafs-run-row");
+                            b.set_child(Some(&h));
+                            b.update_property(&[gtk::accessible::Property::Label(&run.words)]);
+                            let (opening, id) = (opening.clone(), run.run.clone());
+                            b.connect_clicked(move |b| {
+                                crate::runs_panel::request_sheet(opening.clone(), id.clone(), b)
+                            });
+                            p.append(&b);
+                        }
+                        _ => p.append(&row),
+                    }
                 }
                 if mine.next.is_some() {
                     let more = outline(&l("usage.more_runs"));

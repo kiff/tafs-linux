@@ -49,6 +49,10 @@ It reads each time it opens: until then a panel with a spinner, at the screen's 
   newest first, each tafs cloud's words (semibold when counted, soft when not) and when it ended
   (in the account's time zone); More runs reads the next page (`after`) while there
   is one, none twice. When nothing could be read, why, and Try again.
+- **A run's own page** (`CreditsRunRow`): signed in with KIFF, a run tafs cloud says `opens`
+  is a link, with a chevron, to the run's own page (`KnobRequestDetail`, [the taf's
+  page](taf.md)), read as the session. Try the reply now is there for whoever manages the taf. A
+  run that doesn't open, and the screenshots' file, stay plain lines.
 
 A read that fails keeps what was read before and says why: tafs cloud's own `words` when it
 sends them, else "{what} couldn't be read: {why}". A tafs cloud without a read (404) shows
@@ -68,6 +72,5 @@ it signed in with KIFF from a file of synthetic answers (`balance`, `credits`, `
 - **Asking an admin** (`AskAdminView`) and withdrawing a request.
 - **Buying** packs and Solo, and approving a member's pack (which buys it): the iPad's are the
   App Store's, and Linux has no store yet.
-- **A run's request** (`KnobRequestDetail`): a run's row doesn't open yet.
 - **Refreshing in place**: the iPad pulls to refresh; here the screen reads again when it opens,
   and a taf's runs have Try again.
