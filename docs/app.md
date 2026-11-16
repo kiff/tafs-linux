@@ -62,28 +62,3 @@ calendar's Day and Week (and Day at an upright iPad's size, `--size 1032x1376`),
 taf's page and its Card tab from the contracts, the sidebar over the plain sample, and Home with no taf and a recipe's sheet, the strip and the gallery, the halt screens, a Record search, the receipts export open, the Delete account sheet, the security key's PIN sheet, the
 view-only notice (and once paired) in en, fr and pt, light and dark: 228 pictures, as the `screenshots`
 artifact of the run. The job fails if any is missing.
-
-## The AppImage
-
-`tools/appimage.sh` packages tafs as `tafs-<version>-x86_64.AppImage` (kiff/work#12). It
-contains:
-- the release binary;
-- the words at the pin, in `usr/share/tafs/strings`, where the app looks beside its binary;
-- the desktop entry (`packaging/dev.kiff.tafs.desktop`) and its icon (the mascot, 192×192);
-- Adwaita's symbolic icons, which the screens take from the desktop's theme;
-- GTK 4 and libadwaita, with what they load, bundled by linuxdeploy and its GTK plugin. The
-  script downloads both at pinned versions and refuses them unless their SHA-256 matches.
-
-libfido2 isn't bundled. A security key uses the system's `libfido2.so.1` when it's installed.
-
-**What it runs on:** it's built on Ubuntu 24.04, whose glibc (2.39) is its floor, so it runs on
-Ubuntu 24.04 and newer, and other distributions as new. Ubuntu 22.04 has GTK 4.6 and
-libadwaita 1.1, and the app needs GTK 4.14 and libadwaita 1.5. Reaching 22.04 would mean
-building those two from source on 22.04, or shipping a Flatpak.
-
-**In CI** (`.github/workflows/appimage.yml`):
-- A pull request that changes the packaging builds the AppImage, runs its `--help` (which loads
-  every bundled library and starts nothing), and keeps the file as the run's `appimage`
-  artifact.
-- Run by hand with a version (`v0.1.0`), it also attaches the file to a **draft** release.
-  Publishing it is the owner's yes, never the workflow's.
