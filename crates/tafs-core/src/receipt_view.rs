@@ -136,6 +136,19 @@ pub fn answer_mismatch(entry: &Entry, steps: &[Step]) -> bool {
     }
 }
 
+/// Any of the three: KIFF's chain, but not this line's.
+pub fn mismatch(entry: &Entry, steps: &[Step]) -> bool {
+    on_mismatch(entry, steps) || amount_mismatch(entry, steps) || answer_mismatch(entry, steps)
+}
+
+/// "What happened" is what KIFF signed for this line (`showsWhatHappened`, kiff/tafs#1194): drawn
+/// only once this computer checked KIFF's signature and the receipt matches the line. Not signed
+/// yet, not checking out, or still being read (`None`), its steps aren't drawn as what happened;
+/// the full receipt still shows them, under what didn't check out.
+pub fn shows_what_happened(check: Option<&Check>, mismatch: bool) -> bool {
+    matches!(check, Some(Check::Verified { .. })) && !mismatch
+}
+
 /// A string field at the receipt's top level, read from its own bytes.
 pub fn field(raw: &[u8], key: &str) -> Option<String> {
     let bytes = receipt_check::raw_value(key, raw)?;
@@ -399,6 +412,30 @@ mod tests {
             Some("79917d81aabbccdd")
         );
         assert_eq!(path("01K/TRACE"), "/v1/receipts/01K%2FTRACE");
+    }
+
+    /// As iOS's and Android's (kiff/tafs#1194): only a receipt checked as KIFF's that matches the
+    /// line draws "What happened".
+    #[test]
+    fn what_happened_is_drawn_only_for_a_checked_receipt_that_matches_the_line() {
+        let kiff = Check::Verified {
+            signer: "0x2f297affd7b62ef712a1e3158421ccb4bf2efcbe".into(),
+        };
+        assert!(shows_what_happened(Some(&kiff), false));
+        // KIFF's, but another line's.
+        assert!(!shows_what_happened(Some(&kiff), true));
+        let failed = Check::Failed(crate::receipt_check::Failure::NotKiff);
+        assert!(!shows_what_happened(Some(&failed), false));
+        assert!(!shows_what_happened(Some(&Check::NotSignedYet), false));
+        // Still checking.
+        assert!(!shows_what_happened(None, false));
+        // The chain signs a decision on "foo": another payment's line doesn't draw it.
+        let s = steps(RAW.as_bytes());
+        let mut e = entry(Kind::Done);
+        assert!(!mismatch(&e, &s));
+        e.on_value = Some("pi_OTHER".into());
+        assert!(mismatch(&e, &s));
+        assert!(!shows_what_happened(Some(&kiff), mismatch(&e, &s)));
     }
 
     #[test]

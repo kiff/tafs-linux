@@ -313,11 +313,14 @@ fn receipt_panel(
     }
 }
 
-/// The receipt, read and checked off the main loop (`loadReceipt`): its panel, the steps as
-/// signed, and the bytes both were read from.
-fn read(w: &WordBook, source: &ReceiptSource, e: &Entry) -> (Panel, Vec<Step>, Option<Vec<u8>>) {
+/// What a read found: the receipt panel, the steps as signed, whether they're drawn as what
+/// happened, and the bytes all of it was read from.
+type Read = (Panel, Vec<Step>, bool, Option<Vec<u8>>);
+
+/// The receipt, read and checked off the main loop (`loadReceipt`).
+fn read(w: &WordBook, source: &ReceiptSource, e: &Entry) -> Read {
     let Some(trace) = e.receipt.as_ref().map(|r| r.trace_id.clone()) else {
-        return (Panel::Checking, vec![], None);
+        return (Panel::Checking, vec![], false, None);
     };
     let not_loaded = |why: String| {
         Panel::NotLoaded(
@@ -335,16 +338,24 @@ fn read(w: &WordBook, source: &ReceiptSource, e: &Entry) -> (Panel, Vec<Step>, O
             Ok(a) if a.status == 200 => a.body,
             Ok(a) => {
                 let why = tafs_core::signin::refusal(&a, Some(w)).words(w);
-                return (not_loaded(why.unwrap_or_default()), vec![], None);
+                return (not_loaded(why.unwrap_or_default()), vec![], false, None);
             }
-            Err(e) => return (not_loaded(e.words(w).unwrap_or_default()), vec![], None),
+            Err(e) => {
+                return (
+                    not_loaded(e.words(w).unwrap_or_default()),
+                    vec![],
+                    false,
+                    None,
+                )
+            }
         },
     };
     let check = receipt_check::check(&answer, KIFF_SIGNER);
     let steps = receipt_view::steps(&answer);
     let panel = receipt_view::panel(w, e, &check, &steps, chrono::Utc::now())
         .unwrap_or(Panel::Failed(String::new()));
-    (panel, steps, Some(answer))
+    let shows = receipt_view::shows_what_happened(Some(&check), receipt_view::mismatch(e, &steps));
+    (panel, steps, shows, Some(answer))
 }
 
 /// Reads the receipt, then draws what happened and the receipt panel in their places.
@@ -377,12 +388,13 @@ fn load(
     receipt.append(&receipt_panel(&w, &e, &Panel::Checking, None, &[], &again));
     glib::spawn_future_local(async move {
         let (words, src, entry) = ((*w).clone(), (*source).clone(), e.clone());
-        let (p, steps, raw) = gio::spawn_blocking(move || read(&words, &src, &entry))
+        let (p, steps, shows, raw) = gio::spawn_blocking(move || read(&words, &src, &entry))
             .await
-            .unwrap_or((Panel::Failed(String::new()), vec![], None));
+            .unwrap_or((Panel::Failed(String::new()), vec![], false, None));
         clear(&happened);
         clear(&receipt);
-        if !steps.is_empty() {
+        // Only what KIFF signed for this line: the rest stays in the full receipt, under its panel.
+        if shows && !steps.is_empty() {
             happened.append(&eyebrow(
                 &w.line("receipt.what_happened").unwrap_or_default(),
                 false,

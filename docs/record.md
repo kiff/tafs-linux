@@ -158,6 +158,11 @@ it over the window.
 - **Signed in with KIFF, the receipt is read once** (`GET /v1/receipts/{trace_id}`, off the main
   loop) and checked as above. The steps under "What happened" and "Show the full receipt" are
   drawn from the same bytes that were checked, never from a second decode.
+- **"What happened" is what KIFF signed for this line** (`shows_what_happened`, the rule iOS and
+  Android took in kiff/tafs#1194): it's drawn only once the signature checked out as KIFF's
+  and the receipt matches the line. A receipt not signed yet, one that doesn't check out, or
+  another line's shows its steps only under "Show the full receipt", below the panel that says
+  why.
 - **The receipt panel** says what the check found:
   - checked (green): signed by KIFF and unchanged, with the decision and when it was issued,
     "Show the full receipt", Copy receipt and Share;
