@@ -68,7 +68,8 @@ without its title, its lines, Allow or Not now is no screen, and draws no row
     only from Account.
 - **After sign-in** (`loadAIConsent`), the consent is read with the account; not given, the
   screen comes up over the window, unless Not now was answered this session. A new account's
-  consent is its own.
+  consent is its own, and an account that goes (signed out here or by KIFF) closes the screen if
+  it's open, so its Allow is never answered for the account that left.
 - **Withdraw** is `DELETE /v1/me/ai-consent`. Each is unsigned, at tafs cloud as the session.
 
 A turn tafs cloud refuses for want of the consent (`ai_consent_required`) puts the screen up on

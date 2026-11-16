@@ -594,6 +594,8 @@ impl App {
 
     /// The welcome (`OnboardingView`), with nothing kept.
     fn show_welcome(self: &Rc<Self>) {
+        // Signed out: the consent's screen, if it's open, goes with the account.
+        ai_consent::forget();
         // Signed out: no account, so this computer's zone.
         tafs_core::account_time::use_zone(None);
         // Signed out: the minute's read ends, and the last account's notifications never stay.

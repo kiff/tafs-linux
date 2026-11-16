@@ -39,10 +39,20 @@ thread_local! {
     /// Not now was answered this session (`aiConsentPutOff`): the screen isn't put up again by a
     /// read, only from Account.
     static PUT_OFF: Cell<bool> = const { Cell::new(false) };
+    /// The consent's screen while it's open: it goes with the account it was read for.
+    static OPEN: RefCell<Option<glib::WeakRef<adw::Dialog>>> = const { RefCell::new(None) };
 }
 
-/// A new account's consent is its own: nothing of the last one's stays (`forgetAIConsent`).
+/// A new account's consent is its own, and an account that goes takes its screen with it: nothing
+/// of the last one's stays (`forgetAIConsent`), and an open screen closes, so its Allow can't be
+/// answered for the account that left.
 pub fn forget() {
+    if let Some(open) = OPEN
+        .with(|o| o.borrow_mut().take())
+        .and_then(|w| w.upgrade())
+    {
+        open.close();
+    }
     PUT_OFF.with(|p| p.set(false));
 }
 
@@ -422,6 +432,7 @@ fn present(c: &Rc<Consent>, parent: &gtk::Widget) {
             c.redraw();
         });
     }
+    OPEN.with(|o| *o.borrow_mut() = Some(dialog.downgrade()));
     dialog.present(Some(parent));
 }
 
