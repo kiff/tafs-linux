@@ -44,9 +44,14 @@ pub struct TafPage {
     pub issued_by: String,
     /// Opens on the Card tab (`-screen card`).
     pub opens_on_card: bool,
+    /// Opens on the Setup tab (`--page taf-setup:<id>`).
+    pub opens_on_setup: bool,
     /// tafs cloud's id for it, and where its Activity is read from.
     pub cloud_id: Option<String>,
     pub source: ActivitySource,
+    /// Its job in words (`taf.job`), and where its Setup tab is read.
+    pub job: String,
+    pub setup: crate::setup_pane::SetupSource,
     /// Where its doors are read and its knocks answered (`TafKnocksPanel`), where tafs cloud
     /// offers doors.
     pub doors: crate::knocks::DoorsSource,
@@ -111,8 +116,11 @@ pub fn page(
     }
     outer.append(&head);
 
-    // Chat, Activity, Card, Setup, as the system's segmented control. Activity and Card are the
-    // tabs ported so far: Chat and Setup are there, dimmed, until theirs are.
+    // Chat, Activity, Card, Setup, as the system's segmented control. Chat is there, dimmed, until
+    // it's ported; Setup is a tafs cloud taf's, signed in with KIFF (the sample's isn't ported).
+    let has_setup = !t.sample
+        && t.cloud_id.is_some()
+        && !matches!(t.setup, crate::setup_pane::SetupSource::None);
     let tabs = gtk::Box::new(gtk::Orientation::Horizontal, 0);
     tabs.add_css_class("tafs-segmented");
     tabs.set_homogeneous(true);
@@ -122,7 +130,7 @@ pub fn page(
         ("taf.section.chat", false),
         ("taf.section.activity", true),
         ("taf.section.card", true),
-        ("taf.section.setup", false),
+        ("taf.section.setup", has_setup),
     ] {
         let b = gtk::ToggleButton::with_label(&w.line(key).unwrap_or_default());
         b.add_css_class("segment");
@@ -135,7 +143,8 @@ pub fn page(
         tabs.append(&b);
         buttons.push(b);
     }
-    let (activity_tab, card_tab) = (buttons[1].clone(), buttons[2].clone());
+    let (activity_tab, card_tab, setup_tab) =
+        (buttons[1].clone(), buttons[2].clone(), buttons[3].clone());
     outer.append(&tabs);
 
     // The Card in front, one line above the activity.
@@ -314,6 +323,41 @@ pub fn page(
     let panes = gtk::Stack::new();
     panes.add_named(&scroller, Some("activity"));
     panes.add_named(&card_scroller, Some("card"));
+    // Setup: read when it's first shown.
+    if let (true, Some(id)) = (has_setup, &t.cloud_id) {
+        let setup_scroller = gtk::ScrolledWindow::new();
+        setup_scroller.set_hscrollbar_policy(gtk::PolicyType::Never);
+        setup_scroller.set_vexpand(true);
+        let column = gtk::Box::new(gtk::Orientation::Vertical, 0);
+        column.set_margin_start(16);
+        column.set_margin_end(16);
+        setup_scroller.set_child(Some(&column));
+        panes.add_named(&setup_scroller, Some("setup"));
+        let made = std::cell::Cell::new(false);
+        let (w, taf, source) = (
+            w.clone(),
+            Rc::new(crate::setup_pane::SetupTaf {
+                id: id.clone(),
+                job: t.job.clone(),
+                manages: t.manages,
+                discuss: t.may_use_coach && t.manages,
+            }),
+            t.setup.clone(),
+        );
+        let panes = panes.clone();
+        setup_tab.connect_toggled(move |b| {
+            if b.is_active() {
+                if !made.replace(true) {
+                    column.append(&crate::setup_pane::pane(
+                        w.clone(),
+                        taf.clone(),
+                        source.clone(),
+                    ));
+                }
+                panes.set_visible_child_name("setup");
+            }
+        });
+    }
     outer.append(&panes);
     {
         let panes = panes.clone();
@@ -331,7 +375,9 @@ pub fn page(
             }
         });
     }
-    if t.opens_on_card {
+    if t.opens_on_setup && has_setup {
+        setup_tab.set_active(true);
+    } else if t.opens_on_card {
         card_tab.set_active(true);
     } else {
         activity_tab.set_active(true);

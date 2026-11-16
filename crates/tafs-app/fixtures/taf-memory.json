@@ -1,0 +1,6 @@
+{
+  "notes": [
+    { "id": "note_2", "path": "/customers/acme-corp.md", "content": "Acme pays by card; refunds go back to the same card.", "updated_at": "2026-11-16T09:40:00Z" },
+    { "id": "note_1", "path": "/how-to/refunds.md", "content": "Ask for the order number before looking anything up.", "updated_at": "2026-11-15T16:05:00Z" }
+  ]
+}

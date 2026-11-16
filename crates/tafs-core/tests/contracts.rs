@@ -949,3 +949,25 @@ fn every_ai_consent_answer_reads_as_the_ipad_reads_it() {
         assert_eq!(c.given, c.at.is_some(), "{}", case["name"]);
     }
 }
+
+#[test]
+fn the_setup_tab_reads_as_the_ipad_reads_it() {
+    use tafs_core::setup::read;
+    for name in [
+        "taf-setup.json",
+        "taf-setup-connected.json",
+        "taf-setup-reconnect.json",
+    ] {
+        let s = read(&contract(name)).unwrap_or_else(|| panic!("{name} reads"));
+        assert!(!s.memory.title.is_empty(), "{name}");
+    }
+    let s = read(&contract("taf-setup.json")).unwrap();
+    assert_eq!(s.card_unit_exceptions.as_ref().map(Vec::len), Some(1));
+    assert!(s.connections_error.is_some());
+    // A connection without what the iPad needs fails the read.
+    let mut answer: Value = serde_json::from_slice(&contract("taf-setup-connected.json")).unwrap();
+    if let Some(first) = answer["connections"].get_mut(0) {
+        first.as_object_mut().unwrap().remove("stats");
+        assert!(read(&serde_json::to_vec(&answer).unwrap()).is_none());
+    }
+}

@@ -165,10 +165,39 @@ On the Card tab, as the iPad's `card(_:)`, all from Home as tafs cloud read it f
 - The screenshot (`--home crates/tafs-app/fixtures/home-card-lines.json`, synthetic) is CI's
   `taf-card-lines`.
 
+## Its Setup
+
+A tafs cloud taf's Setup tab, signed in with KIFF (`TafDetailView.setup(_:)`,
+`crates/tafs-app/src/setup_pane.rs`, `tafs-core/src/setup.rs`), read when the tab is first shown
+(`GET /v1/tafs/{id}/setup`, as strictly as the iPad's `SetupView`). Linux reads it without
+planque's grants proof, which this computer can't sign, so tafs cloud sends `connections_error` in
+place of the connections. Until it's read, a spinner; when it can't be, why and Try again. Then, in
+the iPad's order:
+
+- **Its Card unit requests** (`card_unit_exceptions`), as Needs you draws them.
+- **The job:** THE JOB, and its job as tafs cloud says it (`job_summary`), else "Works under {n}
+  Cards". Improve in Coach is Coach's, which isn't on this computer.
+- **What it remembers** (`MemorySummaryPanel`): tafs cloud's line for its notes (15 semibold), its
+  latest (14, soft, two lines), and See all.
+  - **See all** opens every note (`MemoryPanel`, `GET /v1/tafs/{id}/memory?all=true`), newest
+    first: its words (15), its name from its path and time (12, soft), and Forget; then what the
+    notes are for. With none, "Nothing yet…". Why they couldn't be loaded, in red. The Setup is
+    read again once it's closed.
+  - **Forget** asks first ("Forget this note?", the note, that it can't be undone, Forget in red,
+    Cancel). Its yes takes the note away at once and `DELETE`s it at tafs cloud as the session,
+    unsigned; a note already gone (404) counts as forgotten. A refusal puts it back, with
+    "It wasn't forgotten. {why}".
+- **Remove for good**, for whoever manages it: signed, so it's there, dimmed.
+
+`--page taf-setup:<id>` with `--home shared/contracts/home.json` reads the contract's
+`taf-setup.json` beside it, and `--memory crates/tafs-app/fixtures/taf-memory.json` (synthetic)
+for See all; Forget sends nothing. CI's `taf-setup`.
+
 ## Not yet
 
-- **The page opens on Activity**; the iPad opens on Chat. Chat and Setup are there, dimmed, until
-  each is ported.
+- **The page opens on Activity**; the iPad opens on Chat. Chat is there, dimmed, until it's ported.
+- **On the Setup tab:** Starts when, Results go to, the connected apps' ring, its own Connect
+  again (signed), Improve in Coach, and the sample's Setup (there, dimmed).
 - **On the Card tab:** Connect again (Coach), the halt row,
   Versions, Usage; Revoke itself (dimmed).
 - **Above a tafs cloud taf's Activity:** the next step's buttons (Connect it
