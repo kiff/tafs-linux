@@ -140,6 +140,10 @@ receipt (`GET /v1/receipts/{trace_id}`) is checked here as KIFF's own verificati
   (`0x2f297affd7b62ef712a1e3158421ccb4bf2efcbe`).
   - A high S is recovered too, as libsecp256k1 does, so a signature in the upper half of the
     curve order still checks.
+- **A receipt that names a top-level key twice is refused as unreadable.** A decoder keeps the
+  last copy of a key, and the chain's scan the first, so two `causal_chain` or `attestation` keys
+  could show one set of steps while another is checked. Refusing it keeps what's shown and what's
+  checked the same bytes.
 - **The outcome:** no attestation yet is "not signed yet", never a failure. Anything else that
   doesn't check out says why, in the shared `receipt.check.*` words.
 

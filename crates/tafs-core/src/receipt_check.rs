@@ -81,6 +81,11 @@ pub fn check(answer: &[u8], expected: &str) -> Check {
     let Ok(Value::Object(receipt)) = serde_json::from_slice::<Value>(answer) else {
         return Check::Failed(Failure::Unreadable);
     };
+    // A key written twice: the decoder above keeps the last copy, the chain's scan the first.
+    // Refused, so the steps shown are always the steps checked.
+    if repeats_a_top_level_key(answer) {
+        return Check::Failed(Failure::Unreadable);
+    }
     let Some(Value::Object(attestation)) = receipt.get("attestation") else {
         return Check::NotSignedYet;
     };
@@ -199,39 +204,62 @@ fn end_of_value(b: &[u8], start: usize) -> Option<usize> {
     }
 }
 
-/// A top-level value's own bytes in a JSON object, as written (`RawJSON.value`): the receipt's
-/// signed chain is hashed as KIFF wrote it, not as a decoder would write it again.
-pub fn raw_value<'a>(key: &str, data: &'a [u8]) -> Option<&'a [u8]> {
+/// A JSON object's top-level members, each key decoded and its value's own bytes as written; none
+/// when `data` isn't one well-formed object (whatever follows its closing brace aside).
+pub fn raw_members(data: &[u8]) -> Option<Vec<(String, &[u8])>> {
     let b = data;
     let mut i = skip_space(b, 0);
     if b.get(i) != Some(&b'{') {
         return None;
     }
-    i += 1;
+    i = skip_space(b, i + 1);
+    let mut out = vec![];
+    if b.get(i) == Some(&b'}') {
+        return Some(out);
+    }
     loop {
-        i = skip_space(b, i);
-        match b.get(i)? {
-            b'}' => return None,
-            b'"' => {}
-            _ => return None,
+        if b.get(i) != Some(&b'"') {
+            return None;
         }
         let key_end = end_of_string(b, i)?;
-        let name: Option<String> = serde_json::from_slice(&b[i..key_end]).ok();
+        let name: String = serde_json::from_slice(&b[i..key_end]).ok()?;
         i = skip_space(b, key_end);
         if b.get(i) != Some(&b':') {
             return None;
         }
         i = skip_space(b, i + 1);
         let value_end = end_of_value(b, i)?;
-        if name.as_deref() == Some(key) {
-            return Some(&b[i..value_end]);
-        }
+        out.push((name, &b[i..value_end]));
         i = skip_space(b, value_end);
         match b.get(i)? {
-            b',' => i += 1,
+            b',' => i = skip_space(b, i + 1),
+            b'}' => return Some(out),
             _ => return None,
         }
     }
+}
+
+/// A top-level value's own bytes in a JSON object, as written (`RawJSON.value`): the receipt's
+/// signed chain is hashed as KIFF wrote it, not as a decoder would write it again. None when the
+/// key isn't there, and when the top level names any key twice: a decoder keeps the last copy
+/// and this scan the first, so a repeated key could show one chain while another is checked.
+pub fn raw_value<'a>(key: &str, data: &'a [u8]) -> Option<&'a [u8]> {
+    let members = raw_members(data)?;
+    if repeats_a_key(&members) {
+        return None;
+    }
+    members.into_iter().find(|(k, _)| k == key).map(|(_, v)| v)
+}
+
+fn repeats_a_key(members: &[(String, &[u8])]) -> bool {
+    let mut seen = std::collections::BTreeSet::new();
+    members.iter().any(|(k, _)| !seen.insert(k.as_str()))
+}
+
+/// Whether a JSON object's top level names a key twice (or isn't an object it can read): such a
+/// receipt is refused as unreadable, so what's checked and what's shown are the same bytes.
+pub fn repeats_a_top_level_key(data: &[u8]) -> bool {
+    raw_members(data).is_none_or(|m| repeats_a_key(&m))
 }
 
 /// A JSON array's elements, each its own bytes as written (`RawJSON.elements`); none when `data`
@@ -368,6 +396,37 @@ mod tests {
             check(short.as_bytes(), TEST_SIGNER),
             Check::Failed(Failure::MalformedSignature)
         );
+    }
+
+    /// A receipt that names a top-level key twice is refused: a decoder keeps the last copy, the
+    /// chain's scan the first, so the steps shown could differ from the steps checked.
+    #[test]
+    fn a_key_written_twice_is_refused() {
+        let chain =
+            std::str::from_utf8(raw_value("causal_chain", SIGNED.as_bytes()).unwrap()).unwrap();
+        let twice = SIGNED.replacen(
+            r#""attestation":"#,
+            r#""causal_chain":[{"sequence":1,"kind":"decision","message":"other"}],"attestation":"#,
+            1,
+        );
+        assert!(twice.contains(chain));
+        assert_eq!(
+            check(twice.as_bytes(), TEST_SIGNER),
+            Check::Failed(Failure::Unreadable)
+        );
+        assert_eq!(raw_value("causal_chain", twice.as_bytes()), None);
+        assert!(repeats_a_top_level_key(twice.as_bytes()));
+        let i = SIGNED.find(r#""attestation":{"#).unwrap();
+        let j = i + SIGNED[i..].find('}').unwrap() + 1;
+        let two = format!("{},\"attestation\":null{}", &SIGNED[..j], &SIGNED[j..]);
+        assert_eq!(
+            check(two.as_bytes(), TEST_SIGNER),
+            Check::Failed(Failure::Unreadable)
+        );
+        // A key repeated deeper down is the chain's own business, and still checks.
+        assert!(!repeats_a_top_level_key(SIGNED.as_bytes()));
+        assert!(!repeats_a_top_level_key(br#"{"a":{"b":1,"b":2}}"#));
+        assert!(repeats_a_top_level_key(b"[1]"));
     }
 
     /// libsecp256k1 recovers from a high S too: the same signature with S as n − S and the
