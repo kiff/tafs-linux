@@ -111,12 +111,28 @@ After its work, a tafs cloud taf's runs (`crates/tafs-app/src/runs_panel.rs`,
 - The screenshot (`--runs crates/tafs-app/fixtures/taf-runs-page.json`, synthetic) is CI's
   `taf-work`, with the work.
 
+## A Card's own lines
+
+On the Card tab, as the iPad's `card(_:)`, all from Home as tafs cloud read it from KIFF:
+- **At the top,** tafs cloud's words for the zone its times are in (`time_zone_words`, 13, soft).
+  When its schedule runs in another zone, those words follow (`schedule_time_zone_words`, amber).
+- **Under the front Card's limits:**
+  - its totals for each item apart (`each_item`, 14, ink), blank ones dropped;
+  - **How this is counted** (`counted`), a row that opens each tool's title over KIFF's lines,
+    as the owner approved them (`CountedView`). The app adds no words of its own;
+  - what of its totals is from calls the tool refused (`pending_text`, the money total's then
+    the count's, 13, soft). This shows only for a live, active Card (`countsForReal`), since a
+    test Card's totals aren't what the taf may do for real;
+  - why its total has no currency (`unit_words`, 13, soft). Its Connect again opens Coach,
+    which isn't on this computer.
+- The screenshot (`--home crates/tafs-app/fixtures/home-card-lines.json`, synthetic) is CI's
+  `taf-card-lines`.
+
 ## Not yet
 
 - **The page opens on Activity**; the iPad opens on Chat. Chat and Setup are there, dimmed, until
   each is ported.
-- **On the Card tab:** tafs cloud's time zone lines, each item's totals (`eachItem`), How this is
-  counted (`CountedView`), what's pending, the unit words and Connect again, the halt row,
+- **On the Card tab:** Connect again (Coach), the halt row,
   Versions, Usage; Revoke itself (dimmed).
 - **Above a tafs cloud taf's Activity:** its doors' knocks, Card unit requests; and the next step's buttons (Connect it
   again, Ask Coach), shown as their words for now; a call's receipt; "All apps" for a selection.

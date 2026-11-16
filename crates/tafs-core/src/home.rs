@@ -92,6 +92,12 @@ pub struct Total<V> {
     pub base_limit: Option<V>,
     #[serde(default, deserialize_with = "time")]
     pub room_window_end: Option<DateTime<Utc>>,
+    /// What of its use is from calls the tool refused, in KIFF's words.
+    #[serde(default)]
+    pub pending_text: Option<String>,
+    /// Why its amount has no currency, in KIFF's words.
+    #[serde(default)]
+    pub unit_words: Option<String>,
 }
 
 /// One KIFF Card on its own (`CardView`).
@@ -107,6 +113,20 @@ pub struct CardView {
     pub rules: Vec<Rule>,
     pub total: Option<Total<Amount>>,
     pub calls: Option<Total<i64>>,
+    /// How this is counted, each tool's lines as the owner approved them; none from KIFF.
+    #[serde(default)]
+    pub counted: Option<Vec<CountedTool>>,
+    /// Its totals for each item apart, in tafs cloud's words.
+    #[serde(default)]
+    pub each_item: Option<Vec<String>>,
+}
+
+/// One tool of a Card, and how KIFF counts it (`Counted`).
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub struct CountedTool {
+    pub tool: String,
+    pub title: String,
+    pub lines: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
@@ -305,6 +325,12 @@ pub struct HomeTaf {
     pub work: Value,
     #[serde(default)]
     pub next_run_words: Option<String>,
+    /// The zone its times are in, in tafs cloud's words ("Times in UTC"), and, when its schedule
+    /// runs in another, that (`timeZoneWords`, `scheduleTimeZoneWords`).
+    #[serde(default)]
+    pub time_zone_words: Option<String>,
+    #[serde(default)]
+    pub schedule_time_zone_words: Option<String>,
     #[serde(default)]
     pub finish: Value,
     /// Its doors, for its avatar's rim and Needs you's knocks; absent when it has none.
@@ -694,6 +720,33 @@ pub fn full_cards(
                     ..h.card.clone()
                 };
                 Ok(FullCard {
+                    extra: crate::cards::CardExtra {
+                        each_item: c
+                            .each_item
+                            .iter()
+                            .flatten()
+                            .filter(|l| !l.trim().is_empty())
+                            .cloned()
+                            .collect(),
+                        counted: c
+                            .counted
+                            .iter()
+                            .flatten()
+                            .map(|t| crate::cards::Counted {
+                                tool: t.tool.clone(),
+                                title: t.title.clone(),
+                                lines: t.lines.clone(),
+                            })
+                            .collect(),
+                        pending: [
+                            c.total.as_ref().and_then(|t| t.pending_text.clone()),
+                            c.calls.as_ref().and_then(|t| t.pending_text.clone()),
+                        ]
+                        .into_iter()
+                        .flatten()
+                        .collect(),
+                        unit_words: c.total.as_ref().and_then(|t| t.unit_words.clone()),
+                    },
                     id: c.id.clone(),
                     title: c.title.clone(),
                     environment: c.environment.clone(),
@@ -707,6 +760,7 @@ pub fn full_cards(
             .collect();
     }
     Ok(vec![FullCard {
+        extra: Default::default(),
         id: "merged".into(),
         title: h.name.clone(),
         environment: String::new(),

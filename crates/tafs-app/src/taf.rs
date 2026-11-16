@@ -53,6 +53,10 @@ pub struct TafPage {
     /// Where its runs are read and Run now sent, and `RunsPanel`'s line (`runs::next_line`).
     pub runs: crate::runs_panel::RunsSource,
     pub runs_line: Option<(String, bool)>,
+    /// tafs cloud's words for the zone its times are in, and its schedule's when another
+    /// (`timeZoneWords`, `scheduleTimeZoneWords`): signed in with KIFF.
+    pub time_zone_words: Option<String>,
+    pub schedule_time_zone_words: Option<String>,
 }
 
 /// Where a tafs cloud taf's Activity pages come from.
@@ -311,6 +315,13 @@ fn card_pane(w: &Rc<WordBook>, t: &TafPage) -> gtk::Box {
     let pane = gtk::Box::new(gtk::Orientation::Vertical, 16);
     pane.set_margin_top(12);
     pane.set_margin_bottom(12);
+    // The zone its times are in, then its schedule's when it runs in another (amber).
+    if let Some(words) = &t.time_zone_words {
+        pane.append(&text(words, 13, 400, &["tafs-soft"]));
+    }
+    if let Some(words) = &t.schedule_time_zone_words {
+        pane.append(&text(words, 13, 400, &["tafs-amber-text"]));
+    }
     let front: Rc<RefCell<Option<String>>> = Rc::new(RefCell::new(None));
     let stack_box = gtk::Box::new(gtk::Orientation::Vertical, 0);
     stack_box.set_halign(gtk::Align::Center);
@@ -391,6 +402,7 @@ fn card_pane(w: &Rc<WordBook>, t: &TafPage) -> gtk::Box {
                     }
                     lines_box.append(&panel);
                 }
+                card_own_lines(&w, card, &lines_box);
             }
         }
     }));
@@ -407,6 +419,87 @@ fn card_pane(w: &Rc<WordBook>, t: &TafPage) -> gtk::Box {
         pane.append(&revoke);
     }
     pane
+}
+
+/// The front Card's lines in tafs cloud's and KIFF's own words, under its limits (`card(_:)`):
+/// its totals for each item apart; How this is counted, opening each tool's lines; what's
+/// pending, for a Card that counts for real; and why its total has no currency. Connect it again
+/// (Coach) isn't on this computer.
+fn card_own_lines(w: &Rc<WordBook>, card: &tafs_core::cards::FullCard, into: &gtk::Box) {
+    let lines = gtk::Box::new(gtk::Orientation::Vertical, 12);
+    lines.set_margin_top(16);
+    for line in &card.extra.each_item {
+        lines.append(&text(line, 14, 400, &["tafs-ink"]));
+    }
+    if !card.extra.counted.is_empty() {
+        let title = w.line("card.how_counted").unwrap_or_default();
+        let p = crate::widgets::panel(false);
+        let h = gtk::Box::new(gtk::Orientation::Horizontal, 12);
+        let icon = crate::widgets::symbol("view-list-symbolic", 16);
+        icon.add_css_class("tafs-amber-text");
+        h.append(&icon);
+        let label = text(&title, 15, 600, &["tafs-amber-text"]);
+        label.set_hexpand(true);
+        h.append(&label);
+        let chevron = crate::widgets::symbol("go-next-symbolic", 13);
+        chevron.add_css_class("tafs-dim");
+        h.append(&chevron);
+        p.append(&h);
+        let b = gtk::Button::new();
+        b.set_child(Some(&p));
+        b.add_css_class("tafs-plain");
+        b.set_widget_name("card-counted");
+        let counted = card.extra.counted.clone();
+        b.connect_clicked(move |b| counted_sheet(&title, &counted, b));
+        lines.append(&b);
+    }
+    for line in card.pending_shown() {
+        lines.append(&text(line, 13, 400, &["tafs-soft"]));
+    }
+    if let Some(words) = &card.extra.unit_words {
+        lines.append(&text(words, 13, 400, &["tafs-soft"]));
+    }
+    if lines.first_child().is_some() {
+        into.append(&lines);
+    }
+}
+
+/// Card › How this is counted (`CountedView`): each tool's title, then KIFF's lines for how it's
+/// counted, as the owner approved them. The app adds no words of its own.
+fn counted_sheet(
+    title: &str,
+    counted: &[tafs_core::cards::Counted],
+    parent: &impl IsA<gtk::Widget>,
+) {
+    use adw::prelude::*;
+    let column = gtk::Box::new(gtk::Orientation::Vertical, 16);
+    column.set_margin_start(20);
+    column.set_margin_end(20);
+    column.set_margin_top(16);
+    column.set_margin_bottom(20);
+    for tool in counted {
+        column.append(&eyebrow(&tool.title, false));
+        let p = crate::widgets::panel(false);
+        for line in &tool.lines {
+            p.append(&text(line, 15, 400, &["tafs-ink"]));
+        }
+        column.append(&p);
+    }
+    let scroller = gtk::ScrolledWindow::new();
+    scroller.set_hscrollbar_policy(gtk::PolicyType::Never);
+    scroller.set_child(Some(&column));
+    scroller.set_vexpand(true);
+    let header = adw::HeaderBar::new();
+    let toolbar = adw::ToolbarView::new();
+    toolbar.add_top_bar(&header);
+    toolbar.set_content(Some(&scroller));
+    crate::widgets::ground(&toolbar);
+    let dialog = adw::Dialog::new();
+    dialog.set_title(title);
+    dialog.set_child(Some(&toolbar));
+    dialog.set_content_width(520);
+    dialog.set_content_height(520);
+    dialog.present(Some(parent));
 }
 
 /// A Card's face's size: a payment card's shape, at most 300 wide.

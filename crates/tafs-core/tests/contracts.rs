@@ -850,3 +850,42 @@ fn the_record_searched() {
     assert_eq!(record_search::asked("  1042 "), Some("1042".into()));
     assert_eq!(record_search::asked("   "), None);
 }
+
+/// A Card's lines in tafs cloud's and KIFF's own words (`TafCard`): each item's totals (none
+/// blank), how it's counted, what's pending (money then calls; shown only for a live, active
+/// Card) and why its total has no currency. The contract's `home.json` sends none of them, so
+/// they're added to its Card here; its time zone line is the contract's own.
+#[test]
+fn a_card_s_own_lines_come_from_home_as_sent() {
+    let w = en();
+    let mut answer: serde_json::Value = serde_json::from_slice(&contract("home.json")).unwrap();
+    assert_eq!(
+        tafs_core::home::Home::read(&serde_json::to_vec(&answer).unwrap())
+            .unwrap()
+            .tafs[0]
+            .time_zone_words
+            .as_deref(),
+        Some("Times in UTC")
+    );
+    let card = &mut answer["tafs"][0]["card"]["cards"][0];
+    card["each_item"] = serde_json::json!(["1 call in any 7 days for each invoice id", "  "]);
+    card["counted"] = serde_json::json!([{"tool": "stripe.refund", "title": "Create refund", "lines": ["Counted in EUR, by its amount"]}]);
+    card["total"]["pending_text"] = serde_json::json!("€40 refused by Stripe still counts");
+    card["total"]["unit_words"] =
+        serde_json::json!("Its currency comes from Stripe, which isn't connected.");
+    let home = tafs_core::home::Home::read(&serde_json::to_vec(&answer).unwrap()).unwrap();
+    let cards = tafs_core::home::full_cards(&w, &home.tafs[0], "en").unwrap();
+    let c = &cards[0];
+    assert_eq!(
+        c.extra.each_item,
+        ["1 call in any 7 days for each invoice id"]
+    );
+    assert_eq!(c.extra.counted[0].title, "Create refund");
+    assert_eq!(c.extra.counted[0].lines, ["Counted in EUR, by its amount"]);
+    assert_eq!(c.extra.pending, ["€40 refused by Stripe still counts"]);
+    assert_eq!(
+        c.extra.unit_words.as_deref(),
+        Some("Its currency comes from Stripe, which isn't connected.")
+    );
+    assert_eq!(c.pending_shown().len(), usize::from(c.live && c.active));
+}

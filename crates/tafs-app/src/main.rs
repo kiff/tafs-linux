@@ -832,6 +832,8 @@ impl App {
                         health: None,
                         runs: runs_panel::RunsSource::None,
                         runs_line: None,
+                        time_zone_words: None,
+                        schedule_time_zone_words: None,
                     }
                 })
                 .collect(),
@@ -845,7 +847,15 @@ impl App {
                     let cards = tafs_core::home::full_cards(w, h, w.language()).ok()?;
                     let health = tafs_core::home::Health::read(&h.health);
                     let line = tafs_core::runs::next_line(w, h).ok();
-                    Some((tafs_core::home::taf(w, h).ok()?, cards, (health, line)))
+                    let zones = (
+                        h.time_zone_words.clone(),
+                        h.schedule_time_zone_words.clone(),
+                    );
+                    Some((
+                        tafs_core::home::taf(w, h).ok()?,
+                        cards,
+                        (health, line, zones),
+                    ))
                 })
                 .map(|(t, cards, extra)| {
                     (
@@ -855,38 +865,42 @@ impl App {
                         extra,
                     )
                 })
-                .map(|(manages, t, cards, (health, runs_line))| taf::TafPage {
-                    work: work.clone(),
-                    health,
-                    runs: runs.clone(),
-                    runs_line,
-                    held: held_of(&t.key),
-                    initial: tafs_core::sidebar::initial(&t.name),
-                    cloud_id: t.cloud.then(|| t.key.clone()),
-                    key: t.key,
-                    name: t.name,
-                    color: t.color_index,
-                    state: t.state,
-                    attention: t.attention,
-                    card: t.card,
-                    card_title: t.card_title,
-                    card_environment: t.card_environment,
-                    card_live: t.card_live,
-                    card_active: t.card_active,
-                    card_count: t.card_count,
-                    revoked: t.revoked,
-                    sample: false,
-                    manages,
-                    cards,
-                    // `issuer(of:)`: whoever manages the taf sees who issued it; else the account.
-                    issued_by: if manages {
-                        w.line("common.you").unwrap_or_default()
-                    } else {
-                        issuer.clone()
+                .map(
+                    |(manages, t, cards, (health, runs_line, zones))| taf::TafPage {
+                        time_zone_words: zones.0,
+                        schedule_time_zone_words: zones.1,
+                        work: work.clone(),
+                        health,
+                        runs: runs.clone(),
+                        runs_line,
+                        held: held_of(&t.key),
+                        initial: tafs_core::sidebar::initial(&t.name),
+                        cloud_id: t.cloud.then(|| t.key.clone()),
+                        key: t.key,
+                        name: t.name,
+                        color: t.color_index,
+                        state: t.state,
+                        attention: t.attention,
+                        card: t.card,
+                        card_title: t.card_title,
+                        card_environment: t.card_environment,
+                        card_live: t.card_live,
+                        card_active: t.card_active,
+                        card_count: t.card_count,
+                        revoked: t.revoked,
+                        sample: false,
+                        manages,
+                        cards,
+                        // `issuer(of:)`: whoever manages the taf sees who issued it; else the account.
+                        issued_by: if manages {
+                            w.line("common.you").unwrap_or_default()
+                        } else {
+                            issuer.clone()
+                        },
+                        opens_on_card: self.on_card,
+                        source: source.clone(),
                     },
-                    opens_on_card: self.on_card,
-                    source: source.clone(),
-                })
+                )
                 .collect(),
             _ => vec![],
         }
