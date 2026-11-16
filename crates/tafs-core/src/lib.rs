@@ -22,6 +22,7 @@ pub mod money;
 pub mod needs_you;
 pub mod overview;
 pub mod pairing;
+pub mod passkey;
 pub mod people;
 pub mod receipts;
 pub mod recipes;
