@@ -61,6 +61,49 @@ pub fn signed_in_as(account: &Account) -> Option<String> {
     (email.to_lowercase() != account.name().trim().to_lowercase()).then(|| email.to_string())
 }
 
+/// The languages kiff.dev has tafs's Terms and Privacy policy in, besides English, at
+/// `kiff.dev/<lang>/tafs/terms` and `/<lang>/tafs/privacy`. The English pages govern.
+pub const LEGAL_LANGUAGES: [&str; 7] = ["de", "es", "fr", "it", "nl", "pl", "pt"];
+
+/// tafs's own Terms, in the app's language where kiff.dev has it, else in English.
+pub fn terms_url(language: &str) -> &'static str {
+    match language {
+        "de" => "https://kiff.dev/de/tafs/terms",
+        "es" => "https://kiff.dev/es/tafs/terms",
+        "fr" => "https://kiff.dev/fr/tafs/terms",
+        "it" => "https://kiff.dev/it/tafs/terms",
+        "nl" => "https://kiff.dev/nl/tafs/terms",
+        "pl" => "https://kiff.dev/pl/tafs/terms",
+        "pt" => "https://kiff.dev/pt/tafs/terms",
+        _ => "https://kiff.dev/tafs/terms",
+    }
+}
+
+/// tafs's own Privacy policy, in the app's language where kiff.dev has it, else in English.
+pub fn privacy_url(language: &str) -> &'static str {
+    match language {
+        "de" => "https://kiff.dev/de/tafs/privacy",
+        "es" => "https://kiff.dev/es/tafs/privacy",
+        "fr" => "https://kiff.dev/fr/tafs/privacy",
+        "it" => "https://kiff.dev/it/tafs/privacy",
+        "nl" => "https://kiff.dev/nl/tafs/privacy",
+        "pl" => "https://kiff.dev/pl/tafs/privacy",
+        "pt" => "https://kiff.dev/pt/tafs/privacy",
+        _ => "https://kiff.dev/tafs/privacy",
+    }
+}
+
+/// A legal link's label: as it is where kiff.dev has the page in the app's language (or in
+/// English), and saying the page is in English in any other language (`Legal.label`).
+pub fn legal_label(w: &WordBook, key: &str) -> Result<String, WordsError> {
+    let words = w.line(key)?;
+    if w.language() == "en" || LEGAL_LANGUAGES.contains(&w.language()) {
+        Ok(words)
+    } else {
+        w.get("settings.legal_in_english", &[("label", &words)])
+    }
+}
+
 /// The language's own name, capitalised in it (`AppLanguage.name`).
 pub fn language_name(language: &str) -> &'static str {
     match language {
@@ -253,15 +296,8 @@ pub fn lines(
             &[("device", &device)],
         )?)],
     });
-    // tafs's own pages, in English only for now: outside English the rows say so.
-    let legal = |key: &str| -> Result<String, WordsError> {
-        let words = l(key)?;
-        if w.language() == "en" {
-            Ok(words)
-        } else {
-            w.get("settings.legal_in_english", &[("label", &words)])
-        }
-    };
+    // tafs's own pages, in the app's language where kiff.dev has them.
+    let legal = |key: &str| legal_label(w, key);
     sections.push(Section {
         header: Some(l("settings.legal")?),
         rows: vec![

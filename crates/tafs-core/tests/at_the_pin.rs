@@ -712,7 +712,7 @@ fn account_is_the_ipads_in_its_order() {
     assert!(matches!(&last[0], Row::Destructive(t, _) if t == "Sign out"));
     assert_eq!(last[1], Row::Problem("Not signed out".into()));
 
-    // Outside English, the legal rows say the pages are in English.
+    // In a language kiff.dev has the pages in, the legal rows are plain.
     let fr = book("fr");
     let fr_lines = lines(&fr, Mode::Sample, None, None, "t", "p", "0.1.0").unwrap();
     let legal = fr_lines
@@ -720,7 +720,36 @@ fn account_is_the_ipads_in_its_order() {
         .iter()
         .find(|s| s.rows.iter().any(|r| matches!(r, Row::Link(..))))
         .unwrap();
-    assert!(matches!(&legal.rows[0], Row::Link(t, _) if t != &fr.line("settings.terms").unwrap()));
+    assert!(matches!(&legal.rows[0], Row::Link(t, _) if t == &fr.line("settings.terms").unwrap()));
+    assert!(
+        matches!(&legal.rows[1], Row::Link(t, _) if t == &fr.line("settings.privacy_policy").unwrap())
+    );
+}
+
+#[test]
+fn the_legal_pages_open_in_the_apps_language() {
+    use tafs_core::account::{legal_label, privacy_url, terms_url, LEGAL_LANGUAGES};
+    for lang in ["de", "es", "fr", "it", "nl", "pl", "pt"] {
+        assert!(LEGAL_LANGUAGES.contains(&lang));
+        assert_eq!(
+            terms_url(lang),
+            format!("https://kiff.dev/{lang}/tafs/terms")
+        );
+        assert_eq!(
+            privacy_url(lang),
+            format!("https://kiff.dev/{lang}/tafs/privacy")
+        );
+        let w = book(lang);
+        assert_eq!(
+            legal_label(&w, "settings.terms").unwrap(),
+            w.line("settings.terms").unwrap()
+        );
+    }
+    // English, and any language kiff.dev lacks, open the English pages.
+    for lang in ["en", "ja", ""] {
+        assert_eq!(terms_url(lang), "https://kiff.dev/tafs/terms");
+        assert_eq!(privacy_url(lang), "https://kiff.dev/tafs/privacy");
+    }
 }
 
 #[test]

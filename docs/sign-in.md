@@ -44,8 +44,9 @@ with the view-only notice when KIFF's `approval_mode` says `view` (or says nothi
 | Stopped | why, in plain words by status (`PlainError`): offline, busy, down, or "The sign-in code expired. Start again.", and Try again |
 
 Under them, "Sign in with your other phone" (dimmed: it opens the iPad's `PairSignInView`, a phone signing in from another phone, not this computer's [pairing](pairing.md)), and the
-terms line, Terms and Privacy policy linked (`kiff.dev/tafs/terms`, `/tafs/privacy`), saying "(in
-English)" outside English. Cancel closes it and stops the poll.
+terms line, Terms and Privacy policy linked in the app's language (`kiff.dev/<lang>/tafs/terms`,
+`/<lang>/tafs/privacy` for de, es, fr, it, nl, pl and pt), and in English, saying "(in English)",
+for any other language (`kiff.dev/tafs/terms`, `/tafs/privacy`). Account's Legal rows do the same. Cancel closes it and stops the poll.
 
 ## The kept session
 
