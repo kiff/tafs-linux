@@ -216,9 +216,18 @@ fails the read. The sample shows the reference set's three (this computer, used 
 hours ago; a Mac a day ago) in a screenshot, and none otherwise, as the iPad's sample.
 `--page devices` opens it, as `devices.png`.
 
-Not yet: **signing another device out**, an approval signed by an approval key (Sign out is
-there, dimmed, until this computer can approve). **Add a device** isn't for Linux: a phone
-pairs a computer (`PairComputerView`), never the computer itself.
+**Signing another device out** is an approval the iPad signs with its approval key
+(`removeDevice`). Sign out asks first, as the iPad's confirmation does: "Sign tafs on iPhone
+out?" ("Sign this device out?" for one with no name), Sign out in red, and Cancel. Its Sign out
+is the tap that would sign. Above the list, where the iPad says why a device wasn't signed out,
+it says "This device can't approve. Approve on another device signed in to your account." Nothing
+is sent (`docs/approval.md` › A view-only computer). The sample signs nothing, so there it does
+nothing. `--page devices-sign-out` opens the question over the sample's iPhone (CI's
+`devices-sign-out`).
+
+Not on Linux: **Add a device**, since a phone pairs a computer (`PairComputerView`), never the
+computer itself; and **the account's passkeys** (`DevicesView`'s passkeys section), which the
+iPad draws only signed in with KIFF and which aren't ported yet.
 - **Change language** opens **Account › Language** (`LanguagePicker`, `language_picker.rs`):
   "This computer's language" first, then the app's 8 languages in tafs's order, each named in
   itself ("Français", "Polski"), the one in use checked (`tafs-core/account.rs` ›
