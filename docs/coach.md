@@ -143,11 +143,17 @@ iPad does, and tafs cloud marks no card. The token, the key and the signature ar
 - **After the thread:** "While you were away" and how the tasks Coach handed out went, the dots
   while Coach is at work, and what was written to its run that it hasn't read yet.
 
+## The phone's, never this computer's
+
+Approve, Decline, a sign-in's button and Not now, and a drive's buttons. This computer is
+view-only: those cards keep the can't-approve line where their buttons go. Decline and Not now
+are unsigned on the iPad, but they stay with the phone too, so the whole card is answered in one
+place. `coach_send::answer_value` takes only a confirm's choice and a questions card's answers.
+For an approval, a sign-in or a drive it gives none, whatever the text, so nothing here can build
+"approved" or "signed in" by mistake. A test holds it to that.
+
 ## Not yet
 
-- **Approving:** Approve, Decline, a sign-in's button and Not now, and a drive's Approve. This
-  computer can't approve; the phone does (Decline, Not now and a drive's decline are unsigned
-  answers on the iPad, but stay with the phone with the rest of the card here).
 - Setting a chat aside from Needs you; New conversation's choice of a taf to improve
   (`startSwitch`, `improveTaf`).
 - The microphone and attachments; the recipes on an empty chat; Copy and Delete on a message not

@@ -249,9 +249,11 @@ impl AnswerValue {
 }
 
 /// `answerValue`: a card's answer as tafs cloud takes it, from the card's own form of it; none
-/// for one the card doesn't take. Approvals, sign-ins and drives are answered on the phone.
+/// for one the card doesn't take. Only a confirm and a questions card are answered here: this
+/// computer is view-only, so an approval, a sign-in or a drive never gets an answer from it, not
+/// even a decline. They're answered on the phone, and nothing here can build "approved" or
+/// "signed in" by mistake.
 pub fn answer_value(kind: Kind, text: &str) -> Option<AnswerValue> {
-    let failed = text.starts_with("failed:").then(|| text.to_string());
     match kind {
         Kind::Confirm => (!text.is_empty()).then(|| AnswerValue::Text(text.into())),
         Kind::Questions => {
@@ -272,23 +274,8 @@ pub fn answer_value(kind: Kind, text: &str) -> Option<AnswerValue> {
             }
             Some(AnswerValue::Questions(out))
         }
-        Kind::Approval => {
-            if text == "approved" || text.starts_with("approved,") {
-                Some(AnswerValue::Text("approved".into()))
-            } else if text == "declined" || text.starts_with("already approved:") {
-                Some(AnswerValue::Text(text.into()))
-            } else {
-                failed.map(AnswerValue::Text)
-            }
-        }
-        Kind::SignIn => {
-            if text == "signed in" || text == "not now" {
-                Some(AnswerValue::Text(text.into()))
-            } else {
-                failed.map(AnswerValue::Text)
-            }
-        }
-        Kind::Drive => (text == "declined").then(|| AnswerValue::Text("declined".into())),
+        // The phone's: approving, declining, signing in, Not now, a drive.
+        Kind::Approval | Kind::SignIn | Kind::Drive => None,
         _ => None,
     }
 }
@@ -1250,12 +1237,33 @@ mod tests {
             None
         );
         assert_eq!(answer_value(Kind::Questions, "[]"), None);
-        assert_eq!(
-            answer_value(Kind::Approval, "approved, signed in"),
-            Some(AnswerValue::Text("approved".into()))
-        );
-        assert_eq!(answer_value(Kind::Drive, "approved"), None);
         assert_eq!(answer_value(Kind::Notice, "x"), None);
+    }
+
+    #[test]
+    fn this_computer_never_builds_an_approval_a_sign_in_or_a_drive_answer() {
+        // View-only: whatever the text, the phone's cards get no answer from here.
+        for kind in [Kind::Approval, Kind::SignIn, Kind::Drive] {
+            for text in [
+                "approved",
+                "approved, signed in",
+                "declined",
+                "already approved: g_1",
+                "signed in",
+                "not now",
+                "failed: no key",
+            ] {
+                assert_eq!(answer_value(kind, text), None, "{kind:?} {text}");
+            }
+        }
+        // And so no answer to send for one, through the same path the app takes.
+        let mut c = Conversation {
+            setup: Some("coach".into()),
+            ..Default::default()
+        };
+        assert!(c.answer("q1", Kind::Confirm, "live").is_some());
+        assert!(c.answer("a1", Kind::Approval, "approved").is_none());
+        assert!(c.answer("s1", Kind::SignIn, "signed in").is_none());
     }
 
     #[test]
