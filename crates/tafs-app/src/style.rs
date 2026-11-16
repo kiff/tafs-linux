@@ -332,6 +332,45 @@ button.tafs-knock-ignore { background: none; color: @tafs_soft; font-size: 14px;
 .tafs-do-it-field { background-color: @tafs_panel; border: 1px solid @tafs_line; border-radius: 12px; padding: 6px; font-size: 15px; }
 /* The sign-in's phone half: the QR on its white card, 20 round, with a soft shadow. */
 .tafs-qr-card { background-color: white; border-radius: 20px; padding: 16px; box-shadow: 0 10px 18px alpha(black, 0.14); }
+/* Your brief: an urgent decision's edge in red at 50%, its badge white on red; Coach's pick on its
+   wash, corners of 12; why it can't wait on red at 8%, corners of 10; the next move's edge in amber
+   at 35%; a case's 7-point dot in its state's colour. */
+.tafs-panel.edge-move { border-color: alpha(@tafs_amber, 0.35); }
+.tafs-urgent { background-color: @tafs_no; color: @tafs_on_fill; border-radius: 999px; padding: 4px 7px; }
+.tafs-recommends { background-color: @tafs_coach_wash; border-radius: 12px; padding: 12px; }
+.tafs-cant-wait { background-color: alpha(@tafs_no, 0.08); border-radius: 10px; padding: 10px; }
+.tafs-case-dot { border-radius: 999px; min-width: 7px; min-height: 7px; }
+.tafs-case-dot.ok { background-color: @tafs_ok; }
+.tafs-case-dot.amber { background-color: @tafs_amber; }
+.tafs-case-dot.dim { background-color: @tafs_dim; }
+/* OutlineButtonStyle(color:) in the amber as text, and in Coach's colour. */
+button.tafs-outline.amber { color: @tafs_amber_text; border-color: alpha(@tafs_amber_text, 0.5); }
+button.tafs-outline.coach { color: @tafs_coach; border-color: alpha(@tafs_coach, 0.5); }
+/* A label chip (`LabelChip`): its name and count on the panel with a 1-point edge, a capsule 32
+   high; inverted when chosen; an amber dot while one of its tafs waits. */
+button.tafs-label-chip { background-color: @tafs_panel; background-image: none; color: @tafs_ink; border: 1px solid @tafs_line;
+  border-radius: 999px; padding: 0 12px; min-height: 32px; box-shadow: none; }
+button.tafs-label-chip.selected { background-color: @tafs_ink; color: @tafs_on_fill; border-color: @tafs_ink; }
+/* A mission's log (`LogRow`): on the panel with a 1-point edge, corners of 12, a 3-point edge in its
+   kind's colour; the kind in that colour on it at 12%; evidence in Coach's colour on its wash. */
+.tafs-log-row { background-color: @tafs_panel; border: 1px solid @tafs_line; border-radius: 12px; }
+.tafs-log-edge { min-width: 3px; }
+.tafs-log-edge.ok { background-color: @tafs_ok; }
+.tafs-log-edge.blue { background-color: @tafs_blue; }
+.tafs-log-edge.amber { background-color: @tafs_amber; }
+.tafs-log-edge.ink { background-color: @tafs_ink; }
+.tafs-log-edge.dim { background-color: @tafs_dim; }
+.tafs-log-edge.line { background-color: @tafs_line; }
+.tafs-log-kind { border-radius: 999px; padding: 2px 6px; }
+.tafs-log-kind.ok { color: @tafs_ok; background-color: alpha(@tafs_ok, 0.12); }
+.tafs-log-kind.blue { color: @tafs_blue; background-color: alpha(@tafs_blue, 0.12); }
+.tafs-log-kind.amber { color: @tafs_amber; background-color: alpha(@tafs_amber, 0.12); }
+.tafs-log-kind.ink { color: @tafs_ink; background-color: alpha(@tafs_ink, 0.12); }
+.tafs-log-kind.dim { color: @tafs_dim; background-color: alpha(@tafs_dim, 0.12); }
+.tafs-evidence { color: @tafs_coach; background-color: @tafs_coach_wash; border-radius: 999px; padding: 2px 6px; }
+/* A taf's labels on its line (`TafLabels`): 11 medium, soft, on the raised colour. */
+.tafs-taf-label { color: @tafs_soft; background-color: @tafs_raised; border-radius: 999px; padding: 2px 7px; }
+.tafs-chip-dot { background-color: @tafs_amber; border-radius: 999px; min-width: 6px; min-height: 6px; }
 "#;
 
 /// The style sheet for one appearance.

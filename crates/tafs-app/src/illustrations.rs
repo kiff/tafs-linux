@@ -423,6 +423,28 @@ pub fn no_tafs() -> Board {
     })
 }
 
+/// Board 3, a brief with nothing to decide: a calm sun over a clear page. Your brief, where the
+/// decisions go.
+pub fn brief_clear() -> Board {
+    board(320.0, 430.0, 130.0, |cr| {
+        dot(cr, 100.0, 40.0, 120.0, tone("amber"), 0.9);
+        halo(cr, 70.0, 10.0, 180.0);
+        // The page, 300 × 220, its pieces 28 in: a title's bar, then two lines each with a
+        // green dot, 34 across, the bar in the middle of its height.
+        sheet(cr, 10.0, 200.0, 300.0, 220.0, 22.0);
+        let (x, y) = (38.0, 228.0);
+        bar(cr, x, y, 140.0, 0.85);
+        let ok = tone("ok");
+        for (top, width) in [
+            (y + 10.0 + 28.0, 150.0),
+            (y + 10.0 + 28.0 + 34.0 + 18.0, 120.0),
+        ] {
+            dot(cr, x, top, 34.0, ok, 1.0);
+            bar(cr, x + 34.0 + 14.0, top + 12.0, width, 0.15);
+        }
+    })
+}
+
 /// Board 4, every taf halted: cards at rest under a pause. Halt all, once halted.
 pub fn all_halted() -> Board {
     board(330.0, 320.0, 190.0, |cr| {

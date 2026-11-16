@@ -128,6 +128,9 @@ pub struct SidebarModel {
     /// tafs cloud's line for the plan, only when it needs the owner, and its tone (the balance
     /// read's `home_line`, `plan_tone`).
     pub plan: Option<(String, String)>,
+    /// tafs cloud's name for Needs you's row once there's a brief ("Your brief",
+    /// `needsYouTabTitle`); none, Needs you.
+    pub brief_tab: Option<String>,
 }
 
 /// The plan's line at the sidebar's foot (`PlanLine`): tafs cloud's words, in red while it
@@ -211,13 +214,14 @@ impl SidebarModel {
         let needs_you = w.line("needs_you.title")?;
         let mut screens = vec![ScreenItem {
             selection: Selection::NeedsYou,
-            title: needs_you.clone(),
+            title: self.brief_tab.clone().unwrap_or_else(|| needs_you.clone()),
             symbol: "bell",
             badge: (count > 0).then(|| count.to_string()),
-            accessible: if count > 0 {
-                w.get("needs_you.tab_label", &[("n", &count.to_string())])?
-            } else {
-                needs_you
+            accessible: match (&self.brief_tab, count > 0) {
+                (None, true) => w.get("needs_you.tab_label", &[("n", &count.to_string())])?,
+                (None, false) => needs_you,
+                (Some(tab), true) => format!("{tab}, {count}"),
+                (Some(tab), false) => tab.clone(),
             },
             line: None,
         }];
@@ -466,6 +470,7 @@ mod tests {
             others: vec![],
             setting_up: vec![],
             plan: None,
+            brief_tab: None,
         }
     }
 
@@ -493,6 +498,25 @@ mod tests {
         // None shared and no other agents: neither section.
         let l = signed_in(vec![(row("a"), true)]).lines(&w).unwrap();
         assert_eq!((l.shared_label, l.others_label), (None, None));
+    }
+
+    /// Needs you's row says tafs cloud's name for the brief once there is one
+    /// (`needsYouTabTitle`), with its count; Needs you otherwise.
+    #[test]
+    fn needs_you_s_row_is_the_briefs_once_there_is_one() {
+        let w = WordBook::load(&WordBook::default_root(), "en").unwrap();
+        let mut m = signed_in(vec![]);
+        m.cloud_needs_you = Some(2);
+        let first = |m: &SidebarModel| m.lines(&w).unwrap().screens[0].clone();
+        assert_eq!(first(&m).title, w.line("needs_you.title").unwrap());
+        m.brief_tab = Some("Your brief".into());
+        let item = first(&m);
+        assert_eq!(item.selection, Selection::NeedsYou);
+        assert_eq!(item.title, "Your brief");
+        assert_eq!(item.badge.as_deref(), Some("2"));
+        assert_eq!(item.accessible, "Your brief, 2");
+        m.cloud_needs_you = Some(0);
+        assert_eq!(first(&m).accessible, "Your brief");
     }
 
     #[test]

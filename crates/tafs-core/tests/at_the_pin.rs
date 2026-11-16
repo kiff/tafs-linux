@@ -418,7 +418,28 @@ const LINES: &[(&str, &[&str])] = &[
     ("work.asking_kiff_run", &["tool"]),
     ("taf.activity.checking_waits", &[]),
     ("taf.activity.reading_notes", &[]),
+    ("brief.title", &[]),
+    ("brief.decisions", &[]),
+    ("brief.done", &[]),
+    ("brief.next_move", &[]),
+    ("brief.recommends", &[]),
+    ("brief.meanwhile", &[]),
+    ("brief.evidence", &[]),
+    ("brief.urgent", &[]),
+    ("home.labels_all", &[]),
 ];
+
+/// Your brief's count of what Needs you holds beyond it (`NeedsYou.count`), in every language.
+#[test]
+fn the_briefs_needs_you_count_reads_in_every_language() {
+    for lang in SHIPPED {
+        let w = book(lang);
+        for n in [1, 2, 5, 22] {
+            let line = w.count("needs_you.count", n, &[]).unwrap();
+            assert!(line.contains(&n.to_string()), "{lang} {n}: {line}");
+        }
+    }
+}
 
 #[test]
 fn every_line_is_there_in_every_language_with_the_values_english_has() {

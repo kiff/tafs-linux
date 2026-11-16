@@ -130,6 +130,7 @@ pub fn sidebar(
         others: vec![],
         setting_up: vec![],
         plan: None,
+        brief_tab: None,
     })
 }
 
@@ -202,6 +203,8 @@ pub fn overview(w: &WordBook, now: DateTime<Local>) -> Result<Vec<OverviewTaf>, 
             // tafs cloud doesn't run the sample's tafs: no last result ("–").
             cloud: None,
             used_by: String::new(),
+            // The sample's labels are the iPad's screenshots' only.
+            labels: vec![],
         });
     }
     Ok(out)

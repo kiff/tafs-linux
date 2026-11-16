@@ -20,6 +20,8 @@ pub struct OverviewTaf {
     pub cloud: Option<CloudRun>,
     /// "Support · 3 people": who it's shared with, for whoever manages it, once read.
     pub used_by: String,
+    /// Its labels by id, as Home says (`labels(of:)`).
+    pub labels: Vec<String>,
 }
 
 /// What tafs cloud says of a taf's last run.
@@ -46,6 +48,10 @@ pub struct OverviewLines {
     /// "No tafs yet.", with none listed.
     pub empty: Option<String>,
     pub each_line_opens: String,
+    /// The label chips over the grid (`listLabels`): Home's labels in order, none with no
+    /// labelled taf; and the first chip's word (`labelsAllWords`).
+    pub labels: Vec<crate::brief::Label>,
+    pub labels_all: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -70,6 +76,9 @@ pub struct OverviewRow {
     pub last_result: String,
     /// What a screen reader says for the whole line.
     pub accessible: String,
+    /// Its labels by id, to filter by, and as its small grey chips: two, then "+N" (`TafLabels`).
+    pub label_ids: Vec<String>,
+    pub labels: Vec<String>,
 }
 
 /// `OverviewView.showsRest`: Needs you counts more than the held calls listed here.
@@ -155,6 +164,8 @@ pub fn lines(
             card: card.unwrap_or_else(|| "–".into()),
             last_result: last,
             accessible,
+            label_ids: t.labels.clone(),
+            labels: vec![],
         });
     }
     Ok(OverviewLines {
@@ -182,7 +193,26 @@ pub fn lines(
             .transpose()?,
         rows,
         each_line_opens: w.line("home.overview.each_line_opens")?,
+        labels: vec![],
+        labels_all: w.line("home.labels_all")?,
     })
+}
+
+/// The labels' chips over the grid, and each row's (`listLabels`, `labelsAllWords`,
+/// `TafLabels`): Home's labels and its word for All, else the brief's, else the app's.
+pub fn with_labels(
+    w: &WordBook,
+    mut o: OverviewLines,
+    labels: Vec<crate::brief::Label>,
+    home_all: Option<&str>,
+    brief: Option<&crate::brief::Brief>,
+) -> Result<OverviewLines, WordsError> {
+    for row in o.rows.iter_mut() {
+        row.labels = crate::brief::taf_chips(&crate::brief::names_of(&labels, &row.label_ids));
+    }
+    o.labels_all = crate::brief::all_words(w, home_all, brief)?;
+    o.labels = labels;
+    Ok(o)
 }
 
 /// `needsYouWords` when tafs cloud sent none: the count in the app's words.

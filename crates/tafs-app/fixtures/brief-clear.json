@@ -1,0 +1,82 @@
+{
+  "about": "Synthetic: Your brief with nothing to decide (board 3 where the decisions go), the same cases done and the rest, for its screenshot (--brief). Made up, not from any account.",
+  "answer": {
+    "at": "2026-11-16T07:00:00Z",
+    "next_at": "2026-11-16T17:00:00Z",
+    "decisions": [],
+    "done": [
+      {
+        "mission": "Money",
+        "cases": [
+          {
+            "name": "Atelier Dubois, invoice 0142",
+            "words": "reminder sent Tuesday · waiting for payment · next check Friday",
+            "state": "waiting",
+            "next_check": "Friday"
+          },
+          {
+            "name": "Brio Bikes, invoice 0139",
+            "words": "paid Thursday · closed",
+            "state": "closed"
+          },
+          {
+            "name": "Bill pay",
+            "words": "12 bills sorted, 2 didn't match their order: Mercier 0412, Lumio 0415",
+            "state": "open"
+          }
+        ],
+        "value": "€3,400 due back",
+        "log": "m_money"
+      },
+      {
+        "mission": "Support",
+        "cases": [
+          {
+            "name": "Support replies",
+            "words": "9 tickets answered · 1 waits for a refund check · next check 13:00",
+            "state": "open"
+          }
+        ]
+      }
+    ],
+    "rest": {
+      "count": 14,
+      "words": "14 things wait that need nothing from you now"
+    },
+    "credits": {
+      "words": "Today: 38 credits, the lead's runs included."
+    },
+    "labels": [
+      {
+        "id": "l_money",
+        "name": "Money",
+        "color": "money",
+        "count": 3,
+        "waiting": 1
+      },
+      {
+        "id": "l_clients",
+        "name": "Clients",
+        "color": "customers",
+        "count": 3,
+        "waiting": 0
+      },
+      {
+        "id": "l_ops",
+        "name": "Ops",
+        "color": "operations",
+        "count": 2,
+        "waiting": 0
+      }
+    ],
+    "words": {
+      "title": "Your brief",
+      "when": "Morning brief · 08:00 · next at 18:00",
+      "decisions": "Decisions",
+      "done": "Done since last evening",
+      "rest": "The rest",
+      "urgent": "Urgent",
+      "all": "All"
+    }
+  }
+}

@@ -1,0 +1,609 @@
+{
+  "about": "Synthetic: Home for someone who manages four tafs, three of them labelled (docs/labels.md: Money, Clients, Ops, with Home's labels_words), the contract's Rae among them, for Your brief's and the label chips' screenshots (--home). Made up, not from any account.",
+  "answer": {
+    "tafs": [
+      {
+        "id": "taf-aaaa0000000000000000",
+        "name": "Rae",
+        "job": "refunds",
+        "kiff_agent": "rae",
+        "status": "active",
+        "next_run": "2026-10-16T12:30:00.000Z",
+        "next_run_words": "Next run Fri 12:30",
+        "last_run": null,
+        "results": [
+          "door_reply"
+        ],
+        "time_zone": "UTC",
+        "time_zone_words": "Times in UTC",
+        "schedule_time_zone": "UTC",
+        "job_summary": "Ask Coach to describe this taf's job",
+        "last_change": "2026-10-15T09:00:00Z",
+        "color": 0,
+        "state": "working",
+        "waiting": 0,
+        "card": {
+          "ids": [
+            "card_rae"
+          ],
+          "active": true,
+          "expires": "2026-12-31T00:00:00Z",
+          "tools": [
+            "Create refund"
+          ],
+          "rules": [
+            {
+              "action": "stripe_refund",
+              "label": "Create refund",
+              "outside": "hold",
+              "per_action": {
+                "minor": 10000,
+                "unit": "EUR",
+                "scale": 2
+              },
+              "per_window": {
+                "minor": 100000,
+                "unit": "EUR",
+                "scale": 2
+              },
+              "count_per_window": 20,
+              "window": "calendar_day",
+              "window_words": {
+                "each": "a day",
+                "now": "today"
+              }
+            }
+          ],
+          "used": {
+            "stripe_refund": {
+              "minor": 20000,
+              "unit": "EUR",
+              "scale": 2
+            }
+          },
+          "usage_unknown": [],
+          "cards": [
+            {
+              "id": "card_rae",
+              "title": "Create refund",
+              "environment": "",
+              "live": true,
+              "active": true,
+              "expires": "2026-12-31T00:00:00Z",
+              "rules": [
+                {
+                  "action": "stripe_refund",
+                  "label": "Create refund",
+                  "outside": "hold",
+                  "per_action": {
+                    "minor": 10000,
+                    "unit": "EUR",
+                    "scale": 2
+                  },
+                  "per_window": {
+                    "minor": 100000,
+                    "unit": "EUR",
+                    "scale": 2
+                  },
+                  "count_per_window": 20,
+                  "window": "calendar_day",
+                  "window_words": {
+                    "each": "a day",
+                    "now": "today"
+                  }
+                }
+              ],
+              "total": {
+                "limit": {
+                  "minor": 100000,
+                  "unit": "EUR",
+                  "scale": 2
+                },
+                "used": {
+                  "minor": 20000,
+                  "unit": "EUR",
+                  "scale": 2
+                },
+                "window": "calendar_day",
+                "window_words": {
+                  "each": "a day",
+                  "now": "today"
+                }
+              },
+              "calls": {
+                "limit": 20,
+                "used": null,
+                "window": "calendar_day",
+                "window_words": {
+                  "each": "a day",
+                  "now": "today"
+                }
+              }
+            }
+          ]
+        },
+        "work": {
+          "status": "idle",
+          "line": "Its last 2 checks found work too big for one run, so nothing ran",
+          "needs_you": 0,
+          "attention": true
+        },
+        "health": {
+          "level": "failing",
+          "lines": [
+            "Its last 2 checks found work too big for one run, so nothing ran. Have Coach narrow what it reads, so each piece fits one run."
+          ],
+          "fixes": [
+            {
+              "line": 0,
+              "kind": "coach",
+              "words": "Narrow it with Coach",
+              "say": "Its last check found work too big for one run. Narrow what it reads, so each piece fits one run."
+            }
+          ]
+        },
+        "labels": [
+          "l_money",
+          "l_clients",
+          "l_ops"
+        ]
+      },
+      {
+        "id": "taf-bbbb0000000000000000",
+        "name": "Bill pay",
+        "job": "bills",
+        "kiff_agent": "billpay",
+        "status": "active",
+        "next_run": "2026-10-16T12:30:00.000Z",
+        "next_run_words": "Next run Fri 12:30",
+        "last_run": null,
+        "results": [
+          "door_reply"
+        ],
+        "time_zone": "UTC",
+        "time_zone_words": "Times in UTC",
+        "schedule_time_zone": "UTC",
+        "job_summary": "Ask Coach to describe this taf's job",
+        "last_change": "2026-10-15T09:00:00Z",
+        "color": 1,
+        "state": "waiting",
+        "waiting": 1,
+        "card": {
+          "ids": [
+            "card_billpay"
+          ],
+          "active": true,
+          "expires": "2026-12-31T00:00:00Z",
+          "tools": [
+            "Create refund"
+          ],
+          "rules": [
+            {
+              "action": "stripe_refund",
+              "label": "Create refund",
+              "outside": "hold",
+              "per_action": {
+                "minor": 10000,
+                "unit": "EUR",
+                "scale": 2
+              },
+              "per_window": {
+                "minor": 100000,
+                "unit": "EUR",
+                "scale": 2
+              },
+              "count_per_window": 20,
+              "window": "calendar_day",
+              "window_words": {
+                "each": "a day",
+                "now": "today"
+              }
+            }
+          ],
+          "used": {
+            "stripe_refund": {
+              "minor": 20000,
+              "unit": "EUR",
+              "scale": 2
+            }
+          },
+          "usage_unknown": [],
+          "cards": [
+            {
+              "id": "card_billpay",
+              "title": "Create refund",
+              "environment": "",
+              "live": true,
+              "active": true,
+              "expires": "2026-12-31T00:00:00Z",
+              "rules": [
+                {
+                  "action": "stripe_refund",
+                  "label": "Create refund",
+                  "outside": "hold",
+                  "per_action": {
+                    "minor": 10000,
+                    "unit": "EUR",
+                    "scale": 2
+                  },
+                  "per_window": {
+                    "minor": 100000,
+                    "unit": "EUR",
+                    "scale": 2
+                  },
+                  "count_per_window": 20,
+                  "window": "calendar_day",
+                  "window_words": {
+                    "each": "a day",
+                    "now": "today"
+                  }
+                }
+              ],
+              "total": {
+                "limit": {
+                  "minor": 100000,
+                  "unit": "EUR",
+                  "scale": 2
+                },
+                "used": {
+                  "minor": 20000,
+                  "unit": "EUR",
+                  "scale": 2
+                },
+                "window": "calendar_day",
+                "window_words": {
+                  "each": "a day",
+                  "now": "today"
+                }
+              },
+              "calls": {
+                "limit": 20,
+                "used": null,
+                "window": "calendar_day",
+                "window_words": {
+                  "each": "a day",
+                  "now": "today"
+                }
+              }
+            }
+          ]
+        },
+        "work": {
+          "status": "working",
+          "line": "Sorting 12 bills",
+          "needs_you": 0,
+          "attention": false
+        },
+        "health": {
+          "level": "healthy",
+          "lines": [],
+          "fixes": []
+        },
+        "labels": [
+          "l_money"
+        ]
+      },
+      {
+        "id": "taf-cccc0000000000000000",
+        "name": "Chargebacks",
+        "job": "disputes",
+        "kiff_agent": "chargebacks",
+        "status": "active",
+        "next_run": "2026-10-16T12:30:00.000Z",
+        "next_run_words": "Next run Fri 12:30",
+        "last_run": null,
+        "results": [
+          "door_reply"
+        ],
+        "time_zone": "UTC",
+        "time_zone_words": "Times in UTC",
+        "schedule_time_zone": "UTC",
+        "job_summary": "Ask Coach to describe this taf's job",
+        "last_change": "2026-10-15T09:00:00Z",
+        "color": 2,
+        "state": "working",
+        "waiting": 0,
+        "card": {
+          "ids": [
+            "card_chargebacks"
+          ],
+          "active": true,
+          "expires": "2026-12-31T00:00:00Z",
+          "tools": [
+            "Create refund"
+          ],
+          "rules": [
+            {
+              "action": "stripe_refund",
+              "label": "Create refund",
+              "outside": "hold",
+              "per_action": {
+                "minor": 10000,
+                "unit": "EUR",
+                "scale": 2
+              },
+              "per_window": {
+                "minor": 100000,
+                "unit": "EUR",
+                "scale": 2
+              },
+              "count_per_window": 20,
+              "window": "calendar_day",
+              "window_words": {
+                "each": "a day",
+                "now": "today"
+              }
+            }
+          ],
+          "used": {
+            "stripe_refund": {
+              "minor": 20000,
+              "unit": "EUR",
+              "scale": 2
+            }
+          },
+          "usage_unknown": [],
+          "cards": [
+            {
+              "id": "card_chargebacks",
+              "title": "Create refund",
+              "environment": "",
+              "live": true,
+              "active": true,
+              "expires": "2026-12-31T00:00:00Z",
+              "rules": [
+                {
+                  "action": "stripe_refund",
+                  "label": "Create refund",
+                  "outside": "hold",
+                  "per_action": {
+                    "minor": 10000,
+                    "unit": "EUR",
+                    "scale": 2
+                  },
+                  "per_window": {
+                    "minor": 100000,
+                    "unit": "EUR",
+                    "scale": 2
+                  },
+                  "count_per_window": 20,
+                  "window": "calendar_day",
+                  "window_words": {
+                    "each": "a day",
+                    "now": "today"
+                  }
+                }
+              ],
+              "total": {
+                "limit": {
+                  "minor": 100000,
+                  "unit": "EUR",
+                  "scale": 2
+                },
+                "used": {
+                  "minor": 20000,
+                  "unit": "EUR",
+                  "scale": 2
+                },
+                "window": "calendar_day",
+                "window_words": {
+                  "each": "a day",
+                  "now": "today"
+                }
+              },
+              "calls": {
+                "limit": 20,
+                "used": null,
+                "window": "calendar_day",
+                "window_words": {
+                  "each": "a day",
+                  "now": "today"
+                }
+              }
+            }
+          ]
+        },
+        "work": {
+          "status": "working",
+          "line": "Answering 2 disputes",
+          "needs_you": 0,
+          "attention": false
+        },
+        "health": {
+          "level": "healthy",
+          "lines": [],
+          "fixes": []
+        },
+        "labels": [
+          "l_money",
+          "l_clients"
+        ]
+      },
+      {
+        "id": "taf-dddd0000000000000000",
+        "name": "Support desk",
+        "job": "support",
+        "kiff_agent": "support",
+        "status": "active",
+        "next_run": "2026-10-16T12:30:00.000Z",
+        "next_run_words": "Next run Fri 12:30",
+        "last_run": null,
+        "results": [
+          "door_reply"
+        ],
+        "time_zone": "UTC",
+        "time_zone_words": "Times in UTC",
+        "schedule_time_zone": "UTC",
+        "job_summary": "Ask Coach to describe this taf's job",
+        "last_change": "2026-10-15T09:00:00Z",
+        "color": 3,
+        "state": "working",
+        "waiting": 0,
+        "card": {
+          "ids": [
+            "card_support"
+          ],
+          "active": true,
+          "expires": "2026-12-31T00:00:00Z",
+          "tools": [
+            "Create refund"
+          ],
+          "rules": [
+            {
+              "action": "stripe_refund",
+              "label": "Create refund",
+              "outside": "hold",
+              "per_action": {
+                "minor": 10000,
+                "unit": "EUR",
+                "scale": 2
+              },
+              "per_window": {
+                "minor": 100000,
+                "unit": "EUR",
+                "scale": 2
+              },
+              "count_per_window": 20,
+              "window": "calendar_day",
+              "window_words": {
+                "each": "a day",
+                "now": "today"
+              }
+            }
+          ],
+          "used": {
+            "stripe_refund": {
+              "minor": 20000,
+              "unit": "EUR",
+              "scale": 2
+            }
+          },
+          "usage_unknown": [],
+          "cards": [
+            {
+              "id": "card_support",
+              "title": "Create refund",
+              "environment": "",
+              "live": true,
+              "active": true,
+              "expires": "2026-12-31T00:00:00Z",
+              "rules": [
+                {
+                  "action": "stripe_refund",
+                  "label": "Create refund",
+                  "outside": "hold",
+                  "per_action": {
+                    "minor": 10000,
+                    "unit": "EUR",
+                    "scale": 2
+                  },
+                  "per_window": {
+                    "minor": 100000,
+                    "unit": "EUR",
+                    "scale": 2
+                  },
+                  "count_per_window": 20,
+                  "window": "calendar_day",
+                  "window_words": {
+                    "each": "a day",
+                    "now": "today"
+                  }
+                }
+              ],
+              "total": {
+                "limit": {
+                  "minor": 100000,
+                  "unit": "EUR",
+                  "scale": 2
+                },
+                "used": {
+                  "minor": 20000,
+                  "unit": "EUR",
+                  "scale": 2
+                },
+                "window": "calendar_day",
+                "window_words": {
+                  "each": "a day",
+                  "now": "today"
+                }
+              },
+              "calls": {
+                "limit": 20,
+                "used": null,
+                "window": "calendar_day",
+                "window_words": {
+                  "each": "a day",
+                  "now": "today"
+                }
+              }
+            }
+          ]
+        },
+        "work": {
+          "status": "working",
+          "line": "9 tickets answered today",
+          "needs_you": 0,
+          "attention": false
+        },
+        "health": {
+          "level": "healthy",
+          "lines": [],
+          "fixes": []
+        },
+        "labels": [
+          "l_clients",
+          "l_ops"
+        ]
+      }
+    ],
+    "headline": {
+      "words": "3 tafs working."
+    },
+    "setting_up": [],
+    "others": [],
+    "removing": [],
+    "limits": {
+      "text": 2000,
+      "trial_idle_days": 7
+    },
+    "needs_you": {
+      "count": 2,
+      "words": "2 need you."
+    },
+    "labels": [
+      {
+        "id": "l_money",
+        "name": "Money",
+        "color": "money",
+        "count": 3,
+        "waiting": 1,
+        "headline": {
+          "words": "2 tafs working · Money"
+        }
+      },
+      {
+        "id": "l_clients",
+        "name": "Clients",
+        "color": "customers",
+        "count": 3,
+        "waiting": 0,
+        "headline": {
+          "words": "3 tafs working · Clients"
+        }
+      },
+      {
+        "id": "l_ops",
+        "name": "Ops",
+        "color": "operations",
+        "count": 2,
+        "waiting": 0,
+        "headline": {
+          "words": "1 taf working · Ops"
+        }
+      }
+    ],
+    "labels_words": {
+      "all": "All"
+    }
+  }
+}

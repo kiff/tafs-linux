@@ -971,3 +971,68 @@ fn the_setup_tab_reads_as_the_ipad_reads_it() {
         assert!(read(&serde_json::to_vec(&answer).unwrap()).is_none());
     }
 }
+
+/// Home's labels as tafs cloud sends them (docs/labels.md), read from the screenshots' Home: in
+/// order, each taf's by id, Home's word for All; the chips over the Overview's grid and on each
+/// line, two then "+N". The contract's Home sends none: no chips, and the list as before. A
+/// label or a field of another shape is left out, never Home.
+#[test]
+fn homes_labels_on_the_overview() {
+    let w = en();
+    let none = Home::read(&contract("home.json")).unwrap();
+    assert!(none.labels().is_empty());
+    assert_eq!(none.labels_all(), None);
+    let rae = home::taf(&w, &none.tafs[0]).unwrap();
+    assert!(rae.labels.is_empty(), "missing is none");
+    let o = overview::lines(&w, &[home::overview_taf(&rae)], &[], 0, "").unwrap();
+    let o = overview::with_labels(&w, o, none.labels(), None, None).unwrap();
+    assert!(o.labels.is_empty() && o.rows[0].labels.is_empty());
+    assert_eq!(o.labels_all, w.line("home.labels_all").unwrap());
+
+    let path =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../tafs-app/fixtures/home-missions.json");
+    let file: Value = serde_json::from_slice(&std::fs::read(path).unwrap()).unwrap();
+    let h = Home::read(&serde_json::to_vec(&file["answer"]).unwrap()).expect("reads");
+    let ids: Vec<_> = h.labels().iter().map(|l| l.id.clone()).collect();
+    assert_eq!(ids, ["l_money", "l_clients", "l_ops"]);
+    assert_eq!(h.labels()[0].waiting, 1);
+    assert_eq!(
+        h.labels()[0].headline.as_deref(),
+        Some("2 tafs working · Money")
+    );
+    assert_eq!(h.labels_all().as_deref(), Some("All"));
+    let tafs: Vec<_> = h
+        .tafs
+        .iter()
+        .map(|t| home::overview_taf(&home::taf(&w, t).unwrap()))
+        .collect();
+    let o = overview::lines(&w, &tafs, &[], 0, "").unwrap();
+    let o = overview::with_labels(&w, o, h.labels(), h.labels_all().as_deref(), None).unwrap();
+    let chips: Vec<_> = o.rows.iter().map(|r| r.labels.join(" ")).collect();
+    assert_eq!(
+        chips,
+        ["Money Clients +1", "Money", "Money Clients", "Clients Ops"]
+    );
+    let under = |label: &str| {
+        o.rows
+            .iter()
+            .filter(|r| tafs_core::brief::listed(&o.labels, Some(label), &r.label_ids))
+            .map(|r| r.name.as_str())
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(
+        under("l_ops"),
+        ["Rae", "Support desk"],
+        "in the list's order"
+    );
+
+    // Another shape: none, and Home still reads.
+    let mut odd: Value = serde_json::from_slice(&contract("home.json")).unwrap();
+    odd["labels"] = serde_json::json!({"id": "l1"});
+    odd["labels_words"] = serde_json::json!("All");
+    odd["tafs"][0]["labels"] = serde_json::json!("l1");
+    let odd = Home::read(&serde_json::to_vec(&odd).unwrap()).expect("Home still reads");
+    assert!(odd.labels().is_empty());
+    assert_eq!(odd.labels_all(), None);
+    assert!(home::taf(&w, &odd.tafs[0]).unwrap().labels.is_empty());
+}

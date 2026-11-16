@@ -9,6 +9,7 @@ pub mod activity;
 pub mod ai_consent;
 pub mod alerts;
 pub mod approval;
+pub mod brief;
 pub mod calendar;
 pub mod card;
 pub mod cards;

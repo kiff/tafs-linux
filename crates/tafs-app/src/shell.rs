@@ -63,6 +63,8 @@ pub struct Screens {
     /// Where Coach's conversation is read, and the account's tafs a result can open.
     pub coach: crate::coach::CoachSource,
     pub coach_listed: Rc<Vec<tafs_core::coach_lines::Listed>>,
+    /// "Your brief", in Needs you's place once tafs cloud sends one.
+    pub brief: Option<Rc<crate::brief::BriefPane>>,
 }
 
 /// Builds the shell. `view_only` shows the notice that this computer can't approve yet.
@@ -97,6 +99,7 @@ pub fn build(
         export,
         coach,
         coach_listed,
+        brief,
     } = screens;
     let entries = Rc::new(record.entries.clone());
     let lines = model.lines(&w).unwrap_or_else(|e| panic!("{e}"));
@@ -199,7 +202,19 @@ pub fn build(
                     Some(pane) => crate::recipes::page(pane.clone()),
                     None => crate::overview::page(&overview, open.clone()),
                 },
-                Selection::NeedsYou => crate::needs_you::page(w.clone(), &needs_you, open.clone()),
+                // "Your brief" in its place once there is one; Needs you, as today, otherwise.
+                Selection::NeedsYou => {
+                    let list: Rc<dyn Fn() -> gtk::Widget> = {
+                        let (w, needs_you, open) = (w.clone(), needs_you.clone(), open.clone());
+                        Rc::new(move || crate::needs_you::page(w.clone(), &needs_you, open.clone()))
+                    };
+                    match &brief {
+                        Some(pane) => {
+                            crate::brief::page(w.clone(), pane.clone(), open.clone(), list)
+                        }
+                        None => list(),
+                    }
+                }
                 Selection::Record => {
                     let open = open.clone();
                     crate::record::page(

@@ -15,6 +15,8 @@ From the top:
   - **Needs you's count** at its row's end is a plain grey number, none at zero (`.badge`):
     tafs cloud's count when it sends one, else the held calls (`needsYouCount`). A screen reader
     hears "Needs you, 2".
+  - **Once tafs cloud sends a brief**, Needs you's row says its name ("Your brief",
+    `needsYouTabTitle`), with the same count, and opens [Your brief](brief.md).
 - **NEEDS YOU**, when calls are held: the eyebrow in the amber, then each call: an 8-point amber
   dot, "Deploys: Run migration 0042_orders_index" (14 semibold) and "Schema migrations: always
   asks you · answer by 03:02" (12, soft), each on one line, cut short. Times are 24-hour, this
@@ -49,10 +51,18 @@ page is `crates/tafs-app/src/overview.rs`.
   0042_orders_index" (14 semibold, one line) and "answer by 03:02" (12, soft) at its end. A call
   opens its taf. When Needs you counts more than the calls listed (`showsRest`), one more row says
   so in tafs cloud's words (or "3 need you."), with a chevron, and opens Needs you.
+- **The label chips** (`LabelChips`, Missions; docs/labels.md in tafs cloud), when Home sends
+  `labels`: All (Home's `labels_words.all`, else the brief's, else "All", `home.labels_all`), two
+  labels, then "+N", which shows them all; each with its count and an amber dot while one of its
+  tafs waits (`waiting`), the chosen one inverted, tapped again All. A chip keeps only the tafs
+  carrying it, in the same order; a label that's gone lists them all. The list opens on All every
+  time. With no labelled taf, Home sends none and no chips are drawn. A label read from Home is
+  read leniently: one with no id or name, or of another shape, is left out, never Home.
 - **One grid**, four equal columns, so each heading sits over its column: TAF, NOW, CARD, LAST
   RESULT (11 bold, dim), a line between rows, 16 apart across and 12 down.
   - **TAF:** the avatar (30) and the name (15 semibold), with who uses it under it for whoever
-    manages it, once read.
+    manages it, once read, then its labels as small grey chips (11 medium, soft, on the raised
+    colour), two, then "+1" (`TafLabels`), in the account's order.
   - **NOW:** what it's doing (13, ink).
   - **CARD:** the Card in front's figure and words (`cardLine`, `TafCard.hero`): "9 calls left
     today of 10", "€23,760 left this week of €25,000"; a use KIFF couldn't read shows the limit

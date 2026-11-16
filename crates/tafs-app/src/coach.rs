@@ -56,6 +56,12 @@ thread_local! {
     static DRAFT: RefCell<String> = const { RefCell::new(String::new()) };
 }
 
+/// Words put in Coach's box before it opens (`setupDraft = …; coachOpen = true`): the brief's
+/// next move, or a mission's name from its log.
+pub fn set_draft(words: &str) {
+    DRAFT.with(|d| *d.borrow_mut() = words.to_string());
+}
+
 /// Signed out: nothing written for the last account stays.
 pub fn forget() {
     DRAFT.with(|d| d.borrow_mut().clear());
