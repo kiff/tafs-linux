@@ -90,8 +90,10 @@ It asks the one key plugged in through libfido2, with exactly those asks:
   authenticator data). macOS 12 builds the library from pinned source instead. This way the app
   builds and runs without it, and a computer without it says so (`Missing::Library`,
   `Missing::TooOld`).
-- **It starts libfido2 once**, with `FIDO_DEBUG` cleared (it would print the frames sent to the
-  key) and no U2F fallback.
+- **It starts libfido2 once**, with no U2F fallback. Its log goes to a handler that says
+  nothing, set after `fido_init` (which sets its own when `FIDO_DEBUG` is set), so the frames
+  sent to the key are never printed. The environment is left as it is, since changing it while
+  other threads read it isn't safe.
 - **It opens one key only**, with a PIN set. No key, several keys, a U2F-only key or a key
   without a PIN is refused before anything is asked of it. The key waits two minutes for its
   touch.
@@ -99,7 +101,9 @@ It asks the one key plugged in through libfido2, with exactly those asks:
   reads the retry count after a wrong PIN and for the PIN sheet. It never resets the key, and
   never sets or changes its PIN.
 - **The PIN goes to the key once**, and is cleared whether or not the key was reached.
-- **A request can be cancelled at the key** (`fido_dev_cancel`) from another thread.
+- **A request can be cancelled at the key** (`fido_dev_cancel`) from another thread. An
+  `OpenKey` is one request, as macOS 12's `run` makes a new one each time. Once cancelled, it
+  stays cancelled.
 - **The answer is raw:** the authenticator data, the signature and the credential used, or the
   attestation object built from libfido2's three parts. `passkey::refusal` checks it whatever
   libfido2 says.

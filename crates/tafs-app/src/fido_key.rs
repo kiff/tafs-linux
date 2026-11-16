@@ -33,6 +33,7 @@ const MOST: usize = 8;
 struct Fido {
     _lib: libloading::Library,
     init: unsafe extern "C" fn(c_int),
+    set_log_handler: unsafe extern "C" fn(Option<unsafe extern "C" fn(*const c_char)>),
     info_new: unsafe extern "C" fn(usize) -> Info,
     info_free: unsafe extern "C" fn(*mut Info, usize),
     info_manifest: unsafe extern "C" fn(Info, usize, *mut usize) -> c_int,
@@ -108,6 +109,7 @@ impl Fido {
             }
             let fido = Fido {
                 init: f!("fido_init"),
+                set_log_handler: f!("fido_set_log_handler"),
                 info_new: f!("fido_dev_info_new"),
                 info_free: f!("fido_dev_info_free"),
                 info_manifest: f!("fido_dev_info_manifest"),
@@ -153,13 +155,18 @@ impl Fido {
                 cred_fmt: f!("fido_cred_fmt"),
                 _lib: lib,
             };
-            // Its debug output off even if `FIDO_DEBUG` is set (it would print the frames sent to
-            // the key), and no U2F fallback.
-            std::env::remove_var("FIDO_DEBUG");
+            // No U2F fallback; and whatever `FIDO_DEBUG` says, its debug output goes nowhere (it
+            // would print the frames sent to the key, the PIN protocol's included). The
+            // environment is left as it is: changing it while other threads read it isn't safe.
+            // After `fido_init`, which sets its own handler when `FIDO_DEBUG` is set.
             (fido.init)(DISABLE_U2F_FALLBACK);
+            (fido.set_log_handler)(Some(Self::quiet));
             Ok(fido)
         }
     }
+
+    /// libfido2's log handler: says nothing.
+    unsafe extern "C" fn quiet(_: *const c_char) {}
 
     /// libfido2, loaded and started once.
     fn get() -> Result<&'static Fido, Missing> {
@@ -249,7 +256,10 @@ pub fn plugged() -> Result<usize, Missing> {
     }
 }
 
-/// The key while one request runs, so a cancel reaches it from another thread.
+/// One request to the key, so a cancel reaches it from another thread. As macOS 12's `run`
+/// makes a new `OpenKey` for each request, the PIN sheet makes a new one for each ask: once
+/// cancelled it stays cancelled, so a cancel that arrives before the key is opened still stops
+/// that request.
 #[derive(Default)]
 pub struct OpenKey {
     state: Mutex<(usize, bool)>,
@@ -499,7 +509,10 @@ fn open_only_key(f: &Fido) -> Result<Dev, KeyError> {
                 close(f, device);
                 return Err(r.into());
             }
-            (f.dev_set_timeout)(device, WAIT_MS);
+            if (f.dev_set_timeout)(device, WAIT_MS) != fido_code::OK {
+                // A fixed line, nothing from the key: it then waits libfido2's own time.
+                eprintln!("the security key refused its timeout");
+            }
             Ok(device)
         })();
         (f.info_free)(&mut list, MOST);
@@ -552,6 +565,15 @@ mod tests {
             !pin.is_held(),
             "the PIN is cleared even when no key was asked"
         );
+    }
+
+    /// One request each: a cancelled one stays cancelled, and the next ask is a new one.
+    #[test]
+    fn a_cancel_stops_its_own_request_only() {
+        let first = OpenKey::default();
+        first.cancel();
+        assert!(first.state.lock().unwrap().1);
+        assert!(!OpenKey::default().state.lock().unwrap().1);
     }
 
     #[test]
