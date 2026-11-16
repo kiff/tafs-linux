@@ -359,6 +359,121 @@ impl Home {
     }
 }
 
+/// tafs cloud's words for Discard (`SettingUp.Discard`), each trimmed; one the app can draw has a
+/// button and its yes (`usable`).
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct DiscardWords {
+    pub button: String,
+    pub title: String,
+    pub text: String,
+    pub yes: String,
+    pub no: String,
+}
+
+/// A taf whose setup stopped partway (`TafsCloud.Home.SettingUp`), read as the iPad's own
+/// `init(from:)` reads it: whatever is missing or of the wrong kind reads as empty, so an item never
+/// fails Home, and one without a name is skipped.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct SettingUp {
+    pub name: String,
+    pub kiff_agent: String,
+    pub color: i64,
+    /// Finish setting up's words (`finish.words`), when tafs cloud sends a chat to open it in
+    /// (`Finish.usable`: its taf, session and words).
+    pub finish: Option<String>,
+    /// Discard, for the person whose setup it was.
+    pub discard: Option<DiscardWords>,
+}
+
+impl SettingUp {
+    fn read(v: &Value) -> SettingUp {
+        let text = |o: &Value, k: &str| -> String {
+            o.get(k)
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .trim()
+                .to_string()
+        };
+        let finish = v.get("finish").filter(|f| f.is_object()).and_then(|f| {
+            let (taf, session, words) = (text(f, "taf"), text(f, "session"), text(f, "words"));
+            (!taf.is_empty() && !session.is_empty() && !words.is_empty()).then_some(words)
+        });
+        let discard = v
+            .get("discard")
+            .and_then(|d| d.get("words"))
+            .filter(|w| w.is_object())
+            .map(|w| DiscardWords {
+                button: text(w, "button"),
+                title: text(w, "title"),
+                text: text(w, "text"),
+                yes: text(w, "yes"),
+                no: text(w, "no"),
+            })
+            .filter(|d| !d.button.is_empty() && !d.yes.is_empty());
+        SettingUp {
+            // The name and agent untrimmed, as the iPad keeps them.
+            name: v
+                .get("name")
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_string(),
+            kiff_agent: v
+                .get("kiff_agent")
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_string(),
+            color: v.get("color").and_then(Value::as_i64).unwrap_or(0),
+            finish,
+            discard,
+        }
+    }
+
+    /// Its key in the app, by its KIFF agent, else its name (`holderID`).
+    pub fn key(&self) -> String {
+        if self.kiff_agent.is_empty() {
+            format!("setting-up:{}", self.name)
+        } else {
+            format!("agent:{}", self.kiff_agent)
+        }
+    }
+
+    /// Its row among the tafs (`tafRow`): its name and colour, no state, and Finish setting up's
+    /// words in the amber when tafs cloud sends them.
+    pub fn row(&self) -> TafRow {
+        TafRow {
+            key: self.key(),
+            name: self.name.clone(),
+            initial: initial(&self.name),
+            color_index: self.color,
+            now: self.finish.clone().unwrap_or_default(),
+            badge: None,
+            tone: Tone::Amber,
+        }
+    }
+}
+
+impl Home {
+    /// The tafs being set up (`settingUp`), those with a name; none when Home sends none.
+    pub fn setting_up(&self) -> Vec<SettingUp> {
+        self.setting_up
+            .iter()
+            .flatten()
+            .map(SettingUp::read)
+            .filter(|s| !s.name.is_empty())
+            .collect()
+    }
+
+    /// `otherAgents`: with `setting_up` sent, `others` only repeats the tafs being set up for older
+    /// apps and isn't drawn; without it, every one of them.
+    pub fn other_agents(&self) -> &[HomeTaf] {
+        if self.setting_up.is_some() {
+            &[]
+        } else {
+            &self.others
+        }
+    }
+}
+
 /// One of a taf's doors (`DoorLight`): lit while open, amber while a knock waits, grey while it
 /// rests. What's missing or the wrong kind reads as nothing to show, so a door never stops Home;
 /// a door that isn't an object does, as the iPad's keyed decoder does.

@@ -37,10 +37,11 @@ ports a file updates its line here.
 | HomeRecipes.swift | 242 | Home with no taf: the recipes | `HomeRecipes` whole: tafs cloud's line, the category chips in their colours narrowing the list, each category's recipes (`RecipeRow`: headline, line, apps with their logos from tafs cloud, the colour's edge); `OwnWordsRow`; `RecipeSheet` whole; `TafsCloud.Recipes` read as its decoders (`recipes.rs`, `tafs-core/recipes.rs`) | Coach, which "Say it in your own words" and "Hand it to Coach" open (both there, dimmed) |
 | RecipeGallery.swift | 135 | The jobs' gallery | `RecipeGallerySheet` browsing (title, "All jobs", every job, each sheet read only with "Try it with Coach"), `ExploreRow`, `RecipeStrip` with See all jobs (`recipes.rs`, `shell.rs`, `tafs-core/recipes.rs`) | `.create` from + New, with its own-words row: with Coach |
 | HaltScreen.swift | 176 | A halt of one taf or every taf | `HaltScreen` whole: halting (one tap, unsigned), Halting… with its parts and Halt again, read every 2 s; `HaltRow` framed on a taf's Card; Halt all in the sidebar (`halt.rs`, `tafs-core/halt.rs`) | Resuming (signed by the device: there, dimmed, with why); Siri's tip (not for Linux) |
-| HomeSplitView.swift | 584 | The sidebar for the whole app and what it opens | The brand, the screens with Needs you's count, NEEDS YOU's held calls, Your tafs relevant now, Shared with you and Other agents with Cards, the plan's line (`PlanLine`), Coach and Account at the foot, the chosen row's fill (`shell.rs`, `tafs-core/sidebar.rs`); Home read from tafs cloud; the recipes strip and Explore with its gallery (`recipes.rs`); the halt-all row (`halt.rs`) | What each row opens (title only until each screen is ported); tafs being set up and Discard; + New with Coach; the Unreachable line at the foot |
+| HomeSplitView.swift | 584 | The sidebar for the whole app and what it opens | The brand, the screens with Needs you's count, NEEDS YOU's held calls, Your tafs relevant now, Shared with you and Other agents with Cards, the plan's line (`PlanLine`), Coach and Account at the foot, the chosen row's fill (`shell.rs`, `tafs-core/sidebar.rs`); Home read from tafs cloud; the recipes strip and Explore with its gallery (`recipes.rs`); the halt-all row (`halt.rs`); tafs being set up among Your tafs with Finish's line, Discard there dimmed, and Other agents only when Home sends no `setting_up` (`tafs-core/home.rs` › `SettingUp`) | What each row opens (title only until each screen is ported); Finish setting up and + New, both with Coach; Discard itself (signed); the Unreachable line at the foot |
 | NotificationSettingsView.swift | 138 | Account › Alerts | The two example alerts (`LockScreenAlert`); signed in, Alerts on this computer and Sound, kept across launches and followed by the held calls' watch; the line under them (`alerts.rs`, `tafs-core/alerts.rs`, `store.rs`) | What alerts you and `AlertingTafsView` (a phone's push choices, read with its push token, which a computer hasn't: the iPad draws none of it there either); Haptics (a phone's) |
 | TafDialPanel.swift | 228 | The dial's requests and confirmation, and a run's own page | `KnobRequestDetail`: where it came from, its line, its steps with their marks, Try the reply now for whoever manages the taf (`runs_panel.rs`, `tafs-core/runs.rs`) | The dial's requests and their confirmation; Ask Coach (Coach isn't on this computer) |
 | DoorsView.swift | 923 | A taf's Doors tab | `KnockCard` for a message and `DoItSheet`, on a taf's Activity (`knocks.rs`, `tafs-core/doors.rs`) | The Doors tab itself: its doors, the dial, adding and closing one, pairing and keys; the day's line (`rest`) and its OK |
+| DiscardSettingUp.swift | 35 | Discard a taf being set up | `DiscardSettingUpButton`'s button in tafs cloud's words, beside the taf, for the person whose setup it was (`shell.rs`) | Its confirmation and the discard: signed, so the button is there, dimmed |
 
 ## Not started
 
@@ -52,7 +53,6 @@ ports a file updates its line here.
 | AttachViews.swift | 267 | Attaching photos and files in a chat | |
 | CoachMode.swift | 131 | Coach mode over the app | |
 | CoachToolsStep.swift | 255 | Coach's tools still to give | |
-| DiscardSettingUp.swift | 35 | Discard a taf being set up | |
 | DriveViews.swift | 73 | Coach asks to drive the app | |
 | MicButton.swift | 122 | The mic in a chat's message bar | |
 | PlanViews.swift | 268 | Buying credits (held for the owner's money question) | |
@@ -109,4 +109,4 @@ ports a file updates its line here.
 
 ## Coverage
 
-Ported 6, partial 21, not started 19, not for Linux 4: the 50 view files at the pin.
+Ported 6, partial 22, not started 18, not for Linux 4: the 50 view files at the pin.

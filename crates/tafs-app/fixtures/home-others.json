@@ -1,5 +1,5 @@
 {
-  "about": "Synthetic: home.json at the pin with one agent made through KIFF's API, not run by tafs, in `others`. For the sidebar's Other agents with Cards screenshot.",
+  "about": "Synthetic: home.json at the pin with one agent made through KIFF's API, not run by tafs, in `others`. For the sidebar's Other agents with Cards screenshot. No `setting_up`: with it, `others` only repeats the tafs being set up and isn't drawn.",
   "answer": {
     "tafs": [
       {
@@ -147,7 +147,6 @@
     "headline": {
       "words": "0 tafs working."
     },
-    "setting_up": [],
     "others": [
       {
         "id": null,

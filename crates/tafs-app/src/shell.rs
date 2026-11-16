@@ -556,6 +556,47 @@ fn sidebar(
         for taf in &lines.your_tafs {
             add(taf_row(taf), Some(Selection::Taf(taf.key.clone())));
         }
+        // A taf being set up, among the tafs, by its name, with no state. Its line is Finish setting
+        // up's words, from tafs cloud; finishing it opens Coach, which isn't on this computer, so
+        // the row opens nothing. Discard, for the person whose setup it was, is signed, so it's
+        // there, dimmed.
+        for (taf, discard) in &lines.setting_up {
+            let b = gtk::Box::new(gtk::Orientation::Horizontal, 12);
+            b.append(&avatar(&taf.initial, taf.color_index, 34));
+            let v = gtk::Box::new(gtk::Orientation::Vertical, 2);
+            v.set_hexpand(true);
+            v.set_valign(gtk::Align::Center);
+            v.append(&one_line(&taf.name, 15, 600, &["row-title"]));
+            if !taf.now.is_empty() {
+                v.append(&one_line(
+                    &taf.now,
+                    13,
+                    400,
+                    &["taf-now", tone_class(taf.tone)],
+                ));
+            }
+            b.append(&v);
+            b.set_margin_top(2);
+            b.set_margin_bottom(2);
+            let row = sidebar_row(&b, 60);
+            row.set_widget_name("home.setting-up");
+            row.update_property(&[gtk::accessible::Property::Label(&if taf.now.is_empty() {
+                taf.name.clone()
+            } else {
+                format!("{}, {}", taf.name, taf.now)
+            })]);
+            add(row, None);
+            if let Some(words) = discard {
+                let d = gtk::Button::with_label(words);
+                d.add_css_class("tafs-outline");
+                d.add_css_class("tafs-soft");
+                d.set_halign(gtk::Align::End);
+                d.set_hexpand(false);
+                d.set_sensitive(false);
+                d.set_widget_name("home.discard-setup");
+                add(sidebar_row(&d, 0), None);
+            }
+        }
         if let Some(none) = &lines.no_tafs {
             let l = text(none, 13, 400, &["tafs-dim"]);
             let row = sidebar_row(&l, 0);

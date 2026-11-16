@@ -120,6 +120,9 @@ pub struct SidebarModel {
     pub shared: std::collections::BTreeSet<String>,
     /// Agents made through KIFF's API, not run by tafs (`otherAgents`): their Cards, apart.
     pub others: Vec<TafRow>,
+    /// The tafs being set up (`settingUp`), among Your tafs: each row, and Discard's button words
+    /// for the person whose setup it was.
+    pub setting_up: Vec<(TafRow, Option<String>)>,
     /// tafs cloud's line for the plan, only when it needs the owner, and its tone (the balance
     /// read's `home_line`, `plan_tone`).
     pub plan: Option<(String, String)>,
@@ -147,6 +150,8 @@ pub struct SidebarLines {
     /// YOUR TAFS, with its rows, when the section shows.
     pub your_tafs_label: Option<String>,
     pub your_tafs: Vec<TafRow>,
+    /// The tafs being set up, after them: no page to open, and Discard's words when it's offered.
+    pub setting_up: Vec<(TafRow, Option<String>)>,
     /// The line under Your tafs with no taf at all.
     pub no_tafs: Option<String>,
     /// SHARED WITH YOU, with the tafs shared with this person that are relevant now.
@@ -291,7 +296,7 @@ impl SidebarModel {
                 .collect()
         };
         let (relevant, shared) = (relevant(false), relevant(true));
-        let shows = !relevant.is_empty() || self.tafs.is_empty();
+        let shows = !relevant.is_empty() || !self.setting_up.is_empty() || self.tafs.is_empty();
         let no_tafs = if self.mode == Mode::Kiff && self.list_loaded && self.tafs.is_empty() {
             Some(match &self.home_words {
                 Some(words) => words.clone(),
@@ -319,6 +324,11 @@ impl SidebarModel {
                 .then(|| w.line("home.your_tafs").map(|s| upper(&s)))
                 .transpose()?,
             your_tafs: if shows { relevant } else { vec![] },
+            setting_up: if shows {
+                self.setting_up.clone()
+            } else {
+                vec![]
+            },
             no_tafs: if shows { no_tafs } else { None },
             shared_label: (!shared.is_empty())
                 .then(|| w.line("home.shared_you").map(|s| upper(&s)))
@@ -452,6 +462,7 @@ mod tests {
             account_halt: None,
             shared: Default::default(),
             others: vec![],
+            setting_up: vec![],
             plan: None,
         }
     }
@@ -480,6 +491,22 @@ mod tests {
         // None shared and no other agents: neither section.
         let l = signed_in(vec![(row("a"), true)]).lines(&w).unwrap();
         assert_eq!((l.shared_label, l.others_label), (None, None));
+    }
+
+    #[test]
+    fn tafs_being_set_up_show_your_tafs_after_its_rows() {
+        let w = WordBook::load(&WordBook::default_root(), "en").unwrap();
+        // None relevant now, but one being set up: Your tafs shows, with it.
+        let mut m = signed_in(vec![(row("a"), false)]);
+        m.setting_up = vec![(row("s"), Some("Discard".into()))];
+        let l = m.lines(&w).unwrap();
+        assert_eq!(l.your_tafs_label.as_deref(), Some("YOUR TAFS"));
+        assert!(l.your_tafs.is_empty());
+        assert_eq!(l.setting_up.len(), 1);
+        // Only shared tafs and none being set up: no Your tafs, and none drawn.
+        let mut only = signed_in(vec![(row("b"), true)]);
+        only.shared = ["b".to_string()].into();
+        assert!(only.lines(&w).unwrap().setting_up.is_empty());
     }
 
     #[test]

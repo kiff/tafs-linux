@@ -143,10 +143,23 @@ As the iPad's sidebar (`HomeSplitView`, `tafSections`, `otherAgents`):
   (`sharedWithMe`, from `GET /v1/me/access`), relevant now. A taf whose answer isn't in yet counts
   as theirs, so nothing moves into "Shared with you" and back. Someone with only shared tafs sees
   just those, with no Your tafs.
+- **Tafs being set up** (Home's `setting_up`) come after Your tafs' rows, and Your tafs shows
+  for them even when no other taf is relevant now. Each is its name and colour, with no state.
+  - Its line is tafs cloud's Finish setting up words, in the amber, when it sends a chat to
+    finish in (`finish`: its taf, session and words). Finishing opens Coach, which isn't on this
+    computer, so the row opens nothing.
+  - Discard, for the person whose setup it was, is tafs cloud's button word, under the row on the
+    right. It's signed, so it's there, dimmed.
+  - Read as the iPad's own decoder reads it: whatever is missing or the wrong kind reads as
+    empty, an item without a name is skipped, and none of it fails Home.
 - **Other agents with Cards** comes last, after the recipes strip: every agent made through KIFF's
-  API that tafs doesn't run (Home's `others`), apart. Each opens its page.
-- The screenshot (`--home crates/tafs-app/fixtures/home-others.json`, synthetic) is CI's
-  `sidebar-others`.
+  API that tafs doesn't run (Home's `others`), apart. Each opens its page. When Home sends
+  `setting_up`, `others` only repeats the tafs being set up for older apps, and it isn't drawn
+  (`otherAgents`).
+- The screenshots (synthetic) are CI's `sidebar-others` (`--home
+  crates/tafs-app/fixtures/home-others.json`, which sends no `setting_up`) and
+  `sidebar-setting-up` (`home-setting-up.json`: one with Finish and Discard, one plain, and two
+  items skipped).
 
 ## The plan's line
 
@@ -169,7 +182,7 @@ crates/tafs-app/fixtures/balance-home-line.json`, synthetic) is CI's `sidebar-pl
 - **The account's name** under Account, and its zone for times: from KIFF's account read.
 - **A room's end on a later day** shows its date as 2026-11-16 00:00, not in the language's words
   yet.
-- **Tafs being set up** (and Discard) and **+ New** with Coach.
+- **Finish setting up** and **+ New**, both with Coach; **Discard** itself, which is signed.
 - **The Unreachable line** at the foot: Linux reads the account once and doesn't try again by
   itself yet.
 - **Coach mode:** its button opens its title for now.
