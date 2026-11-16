@@ -52,6 +52,7 @@ time), so does Linux, when the account's clock isn't this computer's at that mom
 | `--receipts answer.json` | with `--home`: a receipts export as tafs cloud answers it; nothing is sent or saved |
 | `--activity answer.json` | with `--home`: KIFF's activity (`{"calls": […]}`) for the Record |
 | `--work answer.json` | with `--home`: a taf's work as tafs cloud answers `GET /v1/tafs/{id}/work`; nothing is sent |
+| `--runs answer.json` | with `--home`: a page of a taf's runs as tafs cloud answers `GET /v1/tafs/{id}/work/runs`; every page reads it, and Run now sends nothing |
 | `--receipt answer.json` | with `--home`: a receipt as KIFF answers `GET /v1/receipts/{trace_id}`; nothing is sent |
 | `--paired` | with `--view-only`: a computer already added with the phone, whose notice says approvals go to the phone |
 | `--page …` | `welcome`, `sign-in`, `pair` (adding this computer with a phone), `recipe:<id>` (with `--home` and `--recipes`: that recipe's sheet), `gallery` (with `--home` and `--gallery`: the gallery), `halt-all` or `halt:<id>` (a halt's screen), `record-search:<q>` (the Record with that search), `record-export` (the Record with the receipts' days open), `receipt:<proposal id>` (with `--activity` and `--receipt`: that line's receipt), `delete-account` (with `--people`: the KIFF account's Delete account sheet), `pin-sheet` (the security key's PIN sheet, with canned answers; no key is asked), or a screen beside the sidebar: `needs-you`, `record`, `calendar`, `usage`, `connect-apps`, `account`, `alerts`, `taf` (the sample's Refunds), or `taf:<id>` (a taf by its key) |
@@ -62,7 +63,7 @@ account's items), the Overview from the `home.json` contract, Needs you (and wit
 page and its Card tab, Plan & usage and Account over the sample, Plan & usage signed in with
 KIFF from synthetic answers (managing billing, and as a member), Connect apps, Devices, People & groups, the KIFF account and its time zone picker (from synthetic answers), Alerts, the
 calendar's Day and Week (and Day at an upright iPad's size, `--size 1032x1376`), a tafs cloud
-taf's page and its Card tab from the contracts (and with its work), the sidebar over the plain sample, and Home with no taf and a recipe's sheet, the strip and the gallery, the halt screens, a Record search, the receipts export open, a Record line's receipt, the Delete account sheet, the security key's PIN sheet, the
+taf's page and its Card tab from the contracts (and with its work and runs), the sidebar over the plain sample, and Home with no taf and a recipe's sheet, the strip and the gallery, the halt screens, a Record search, the receipts export open, a Record line's receipt, the Delete account sheet, the security key's PIN sheet, the
 view-only notice (and once paired) in en, fr and pt, light and dark: 246 pictures, as the `screenshots`
 artifact of the run. The job fails if any is missing.
 

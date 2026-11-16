@@ -131,6 +131,28 @@ pub fn halt(
     })
 }
 
+/// Run now (`TafsCloud.runNow`): `POST /v1/tafs/{id}/run` at tafs cloud as the session, with an
+/// empty body. It fires the taf's schedule; no signature, as the iPad's.
+pub fn run_now(token: &str, languages: &[&str], taf: &str) -> Result<Answer, KiffError> {
+    let url = format!(
+        "{}{}",
+        tafs_core::home::TAFS_CLOUD,
+        tafs_core::runs::run_path(taf)
+    );
+    if !may_send_to(&url) {
+        return Err(KiffError::Unreadable);
+    }
+    Kiff::read(
+        agent()
+            .post(&url)
+            .set("Accept", "application/json")
+            .set("Accept-Language", &accept_language(languages))
+            .set("Authorization", &format!("Bearer {token}"))
+            .set("Content-Type", "application/json")
+            .send_bytes(b"{}"),
+    )
+}
+
 /// `GET /v1/recipes/gallery` at tafs cloud as the session (`TafsCloud.gallery`): every
 /// ready-made job, at any time.
 pub fn gallery(token: &str, languages: &[&str]) -> Result<Answer, KiffError> {

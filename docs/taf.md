@@ -79,6 +79,28 @@ one item it can't read reads as empty. The screenshot (`--work
 crates/tafs-app/fixtures/taf-work.json`, synthetic: no contract for it at the pin) is CI's
 `taf-work`.
 
+## Its runs
+
+After its work, a tafs cloud taf's runs (`crates/tafs-app/src/runs_panel.rs`,
+`tafs-core/src/runs.rs`):
+- **Runs** (`RunsPanel`): it works from its chat (no schedule, no Run now); else Paused, or tafs
+  cloud's words for its next run ("Next run Fri 12:30"), or "Next run at 12:30", or On its
+  schedule.
+  - **Run now** (`POST /v1/tafs/{id}/run` as the session, no signature) turns to "Starting a
+    run…" on the tap, so a second tap can't send one. A run it started shows among the runs
+    it kept, read again. If its check started no run, tafs cloud's words say why. If it
+    didn't start, "The run didn't start." and why, in red.
+- **The runs tafs cloud kept** (`RetainedRuns`): its heading, the first page's 3 runs (`GET
+  /v1/tafs/{id}/work/runs?limit=3`) with the firings that started no run in their places, each
+  in tafs cloud's words.
+  - Under them, its "more" line (`more_title`) opens every run in a sheet, 20 a page. The next
+    page is read as the list reaches its end, then tafs cloud's end words.
+  - What went wrong reading is shown with Try again.
+- **Read as strictly as the iPad's `RunsPage`:** a page without its title, or with a run it
+  can't read, isn't one.
+- The screenshot (`--runs crates/tafs-app/fixtures/taf-runs-page.json`, synthetic) is CI's
+  `taf-work`, with the work.
+
 ## Not yet
 
 - **The page opens on Activity**; the iPad opens on Chat. Chat and Setup are there, dimmed, until
@@ -86,7 +108,7 @@ crates/tafs-app/fixtures/taf-work.json`, synthetic: no contract for it at the pi
 - **On the Card tab:** tafs cloud's time zone lines, each item's totals (`eachItem`), How this is
   counted (`CountedView`), what's pending, the unit words and Connect again, the halt row,
   Versions, Usage; Revoke itself (dimmed).
-- **Above a tafs cloud taf's Activity:** its doors' knocks, Card unit requests, its runs (`RunsPanel`, `RetainedRuns`); and the next step's buttons (Connect it
+- **Above a tafs cloud taf's Activity:** its doors' knocks, Card unit requests; a run's own page (`KnobRequestDetail`); and the next step's buttons (Connect it
   again, Ask Coach), shown as their words for now; a call's receipt; "All apps" for a selection.
 - **The line under the head:** its version and who it's shared with (`headerLine`, `ShareLine`).
 - **In its work:** Answer within (`PromiseRow`, whoever manages the taf), Send again, and a step

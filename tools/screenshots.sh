@@ -39,7 +39,7 @@ for screen in welcome sign-in pair overview overview-home needs-you needs-you-wa
     record) opts=(--sample --signed-in --page record) ;;
     taf) opts=(--sample --signed-in --page taf) ;;
     taf-home) opts=(--home shared/contracts/home.json --page taf:taf-aaaa0000000000000000) ;;
-    taf-work) opts=(--home shared/contracts/home.json --work crates/tafs-app/fixtures/taf-work.json --page taf:taf-aaaa0000000000000000) ;;
+    taf-work) opts=(--home shared/contracts/home.json --work crates/tafs-app/fixtures/taf-work.json --runs crates/tafs-app/fixtures/taf-runs-page.json --page taf:taf-aaaa0000000000000000) ;;
     taf-card) opts=(--sample --signed-in --page taf-card) ;;
     taf-home-card) opts=(--home shared/contracts/home.json --page taf-card:taf-aaaa0000000000000000) ;;
     sidebar-sample) opts=(--sample) ;;
