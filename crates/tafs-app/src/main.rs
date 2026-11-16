@@ -858,6 +858,8 @@ impl App {
                         source: taf::ActivitySource::None,
                         work: work_panel::WorkSource::None,
                         doors: knocks::DoorsSource::None,
+                        card_units: vec![],
+                        may_use_coach: false,
                         health: None,
                         runs: runs_panel::RunsSource::None,
                         runs_line: None,
@@ -908,6 +910,16 @@ impl App {
                         } else {
                             knocks::DoorsSource::None
                         },
+                        // `model.cardUnitExceptions.filter { $0.taf == cloud id }`.
+                        card_units: c
+                            .home
+                            .card_unit_exceptions
+                            .iter()
+                            .flatten()
+                            .filter(|a| t.cloud && a.taf == t.key)
+                            .cloned()
+                            .collect(),
+                        may_use_coach: model.may_use_coach,
                         health,
                         runs: runs.clone(),
                         runs_line,

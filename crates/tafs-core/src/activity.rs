@@ -66,6 +66,9 @@ pub struct ActivityPage {
     pub next_cursor: Option<String>,
     #[serde(default)]
     pub end_words: Option<String>,
+    /// The taf's Card unit requests, newest as tafs cloud sends them; absent, Home's are drawn.
+    #[serde(default)]
+    pub card_unit_exceptions: Option<Vec<crate::waits::CardUnitException>>,
     #[serde(default)]
     pub card_unit_exceptions_notice: Option<String>,
 }
@@ -124,6 +127,30 @@ pub fn foot(pages: &[ActivityPage], error: Option<&str>) -> Foot {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_page_carries_its_card_unit_requests_or_none() {
+        let page = |extra: &str| {
+            ActivityPage::read(
+                format!(
+                    r#"{{"entries":[],"groups":[],"filters":[],"filter":"all","revision":"r","next_cursor":null{extra}}}"#
+                )
+                .as_bytes(),
+            )
+        };
+        assert_eq!(page("").unwrap().card_unit_exceptions, None);
+        assert_eq!(
+            page(r#","card_unit_exceptions":[]"#)
+                .unwrap()
+                .card_unit_exceptions,
+            Some(vec![])
+        );
+        let ask = r#"{"id":"e","kind":"card_unit","taf":"t","name":"Rae","title":"T","words":"W","history":"H","action_title":"A","coach_text":"C","dismiss_title":"D","can_approve_once":false}"#;
+        let read = page(&format!(r#","card_unit_exceptions":[{ask}]"#)).unwrap();
+        assert_eq!(read.card_unit_exceptions.unwrap()[0].title, "T");
+        // One without what the iPad needs: the page isn't read, as its decoder does.
+        assert!(page(r#","card_unit_exceptions":[{"id":"e"}]"#).is_none());
+    }
 
     #[test]
     fn paths_are_escaped() {

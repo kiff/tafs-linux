@@ -82,6 +82,18 @@ pub struct CardUnitLines {
     pub dismiss: String,
 }
 
+/// `CardUnitExceptionPanel`'s lines; `discuss` when this person may use Coach and manages the taf.
+pub fn card_unit_lines(ask: &crate::waits::CardUnitException, discuss: bool) -> CardUnitLines {
+    CardUnitLines {
+        id: ask.id.clone(),
+        title: ask.title.clone(),
+        words: ask.words.clone(),
+        history: ask.history.clone(),
+        discuss: discuss.then(|| ask.action_title.clone()),
+        dismiss: ask.dismiss_title.clone(),
+    }
+}
+
 /// A taf with knocks at its doors (`NeedsYouView`'s knocked row): its avatar and name, how many
 /// knocks, and that it opens where they're answered (its Activity).
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -298,14 +310,7 @@ pub fn with_waits(
         .card_unit_exceptions
         .iter()
         .flatten()
-        .map(|ask| CardUnitLines {
-            id: ask.id.clone(),
-            title: ask.title.clone(),
-            words: ask.words.clone(),
-            history: ask.history.clone(),
-            discuss: (may_use_coach && manages(&ask.taf)).then(|| ask.action_title.clone()),
-            dismiss: ask.dismiss_title.clone(),
-        })
+        .map(|ask| card_unit_lines(ask, may_use_coach && manages(&ask.taf)))
         .collect();
     if !lines.steps.is_empty() || !lines.coach.is_empty() || !lines.card_units.is_empty() {
         lines.empty = None;

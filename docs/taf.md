@@ -46,6 +46,11 @@ A taf tafs cloud runs draws its own Activity (`TafActivityList`), a page at a ti
 in tafs cloud's words (`tafs-core/src/activity.rs`):
 
 - its held calls first, as Needs you's cards;
+- its Card unit requests (`.cardUnits`), each as Needs you draws it (`CardUnitExceptionPanel`,
+  its Coach button and Dismiss dimmed): the last page's own (`card_unit_exceptions`) once read,
+  else Home's for the taf; then tafs cloud's notice (`card_unit_exceptions_notice`), 13, dim. A
+  page that sends them reads as strictly as Home: one without what the iPad needs, and the page
+  isn't read;
 - tafs cloud's filters, from its first page, as bordered buttons (the chosen one in the amber as
   text); choosing one reads its first page again;
 - each day group's title (12 semibold, dim), then each call (`SourceActivityRow`): its title (15
@@ -57,7 +62,9 @@ in tafs cloud's words (`tafs-core/src/activity.rs`):
 Read as strictly as the iPad's decoder, with one exception: a call's `held`, which the iPad's
 `ActivityCall` requires and tafs cloud's `taf-activity.json` doesn't send, reads as not held when
 it's absent. `--home shared/contracts/home.json --page taf:<id>` reads `taf-activity.json` beside it
-(CI's `taf-home`).
+(CI's `taf-home`). With `--home crates/tafs-app/fixtures/home-waits.json`, its own
+`taf-activity.json` (the contract's, with Home's request as the page's own, synthetic) draws one
+(CI's `taf-units`).
 
 ## Its knocks
 
@@ -164,7 +171,7 @@ On the Card tab, as the iPad's `card(_:)`, all from Home as tafs cloud read it f
   each is ported.
 - **On the Card tab:** Connect again (Coach), the halt row,
   Versions, Usage; Revoke itself (dimmed).
-- **Above a tafs cloud taf's Activity:** Card unit requests; and the next step's buttons (Connect it
+- **Above a tafs cloud taf's Activity:** the next step's buttons (Connect it
   again, Ask Coach), shown as their words for now; a call's receipt; "All apps" for a selection.
 - **The line under the head:** its version and who it's shared with (`headerLine`, `ShareLine`).
 - **In its work:** Answer within (`PromiseRow`, whoever manages the taf), Send again, and a step
