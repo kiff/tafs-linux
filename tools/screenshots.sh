@@ -13,7 +13,7 @@ export XDG_CONFIG_HOME=$(mktemp -d)
 mkdir -p "$XDG_CONFIG_HOME/gtk-4.0"
 printf '[Settings]\ngtk-font-name=Inter 11\ngtk-hint-font-metrics=1\n' > "$XDG_CONFIG_HOME/gtk-4.0/settings.ini"
 missing=0
-for screen in welcome sign-in pair overview overview-home needs-you needs-you-waits needs-you-happened record taf taf-card taf-home taf-home-card usage usage-kiff usage-kiff-member connect-apps devices people kiff-account time-zone calendar calendar-week calendar-compact account sidebar-sample view-only view-only-paired recipes recipe-sheet; do
+for screen in welcome sign-in pair overview overview-home needs-you needs-you-waits needs-you-happened record taf taf-card taf-home taf-home-card usage usage-kiff usage-kiff-member connect-apps devices people kiff-account time-zone calendar calendar-week calendar-compact account sidebar-sample view-only view-only-paired recipes recipe-sheet gallery-strip gallery; do
   case $screen in
     welcome) opts=(--page welcome) ;;
     sign-in) opts=(--page sign-in) ;;
@@ -45,6 +45,8 @@ for screen in welcome sign-in pair overview overview-home needs-you needs-you-wa
     view-only) opts=(--view-only) ;;
     view-only-paired) opts=(--view-only --paired) ;;
     recipes) opts=(--home crates/tafs-app/fixtures/home-empty.json --recipes crates/tafs-app/fixtures/recipes.json) ;;
+    gallery-strip) opts=(--home shared/contracts/home.json --gallery crates/tafs-app/fixtures/gallery.json) ;;
+    gallery) opts=(--home shared/contracts/home.json --gallery crates/tafs-app/fixtures/gallery.json --recipes crates/tafs-app/fixtures/recipes.json --page gallery) ;;
     recipe-sheet) opts=(--home crates/tafs-app/fixtures/home-empty.json --recipes crates/tafs-app/fixtures/recipes.json --page recipe:refunds) ;;
   esac
   for lang in en fr pt; do

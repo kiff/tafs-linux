@@ -228,6 +228,7 @@ button.tafs-row-button { background: none; border: none; box-shadow: none; paddi
 button.tafs-row-button.tafs-amber-text { color: @tafs_amber_text; }
 button.tafs-row-button.tafs-no { color: @tafs_no; }
 button.tafs-link.tafs-no { color: @tafs_no; }
+.tafs-strip-bar { background-color: @tafs_line; border-radius: 999px; }
 
 .tafs-code { font-family: monospace; font-size: 34px; font-weight: 600; color: @tafs_ink; }
 .tafs-mono { font-family: monospace; }
@@ -267,9 +268,35 @@ pub fn avatar_class(index: i64) -> String {
     format!("c{i}")
 }
 
+thread_local! {
+    static TINTED: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+}
+
+/// A name for a widget a tint's rule selects: the app's own, never an id tafs cloud sent (one with
+/// a space or a brace would break the rule, or add another to the app's style sheet).
+pub fn tint_name(prefix: &'static str) -> String {
+    let n = TINTED.with(|c| {
+        c.set(c.get() + 1);
+        c.get()
+    });
+    format!("tint-{prefix}-{n}")
+}
+
+/// Whether a widget's name may go in a selector as it is: letters, digits, `-` and `_` only.
+fn plain_name(name: &str) -> bool {
+    !name.is_empty()
+        && name
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+}
+
 /// A rule for one named widget, at the app's priority: the colour tafs cloud sends for a thing
-/// (a recipe's category) has no class of its own. `color` is `#RRGGBB`, read and checked.
+/// (a recipe's category) has no class of its own. `color` is `#RRGGBB`, read and checked, and the
+/// name is `tint_name`'s; any other name gets no rule.
 fn name_rule(widget: &impl IsA<gtk::Widget>, rule: &str) {
+    if !plain_name(&widget.widget_name()) {
+        return;
+    }
     let provider = gtk::CssProvider::new();
     provider.load_from_string(rule);
     gtk::style_context_add_provider_for_display(
@@ -301,6 +328,12 @@ pub fn tint_edge(card: &gtk::Box, color: &str) {
     );
 }
 
+/// A strip job's 4-wide bar in its category's colour.
+pub fn tint_bar(bar: &gtk::Box, color: &str) {
+    let name = bar.widget_name();
+    name_rule(bar, &format!("#{name} {{ background-color: {color}; }}"));
+}
+
 /// Loads the style sheet, and loads it again when the appearance changes.
 pub fn install(display: &gtk::gdk::Display) {
     let provider = gtk::CssProvider::new();
@@ -313,4 +346,21 @@ pub fn install(display: &gtk::gdk::Display) {
     );
     manager.connect_dark_notify(move |m| provider.load_from_string(&css(m.is_dark())));
     gtk::IconTheme::for_display(display).add_resource_path("/dev/kiff/tafs/icons");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_tints_rule_names_only_the_apps_own_widgets() {
+        let a = tint_name("chip");
+        let b = tint_name("chip");
+        assert_ne!(a, b);
+        assert!(plain_name(&a));
+        // An id as tafs cloud might send one never makes a selector.
+        for id in ["money } * { color: red", "a b", "x{", "", "é"] {
+            assert!(!plain_name(id), "{id}");
+        }
+    }
 }

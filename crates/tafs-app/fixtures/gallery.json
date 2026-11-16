@@ -1,0 +1,122 @@
+{
+  "about": "Synthetic: a gallery of the four made-up recipes in recipes.json, with a strip of two, for the Explore row, the strip and the gallery's screenshots (--gallery). Made up, not from any account.",
+  "answer": {
+    "categories": [
+      {
+        "id": "money",
+        "title": "Money",
+        "color": {
+          "light": "#B45309",
+          "dark": "#F59E0B"
+        }
+      },
+      {
+        "id": "support",
+        "title": "Support",
+        "color": {
+          "light": "#1D4ED8",
+          "dark": "#60A5FA"
+        }
+      },
+      {
+        "id": "ops",
+        "title": "Operations"
+      }
+    ],
+    "recipes": [
+      {
+        "id": "refunds",
+        "title": "Refunds",
+        "category": "money",
+        "headline": "Refund requests sit for days",
+        "line": "A taf refunds what your Card allows and asks you about the rest.",
+        "say": "Set up a taf that handles refund requests.",
+        "today": "Today: about 3 hours a week of copy and paste.",
+        "card": {
+          "allows": [
+            "Refund up to €50 an order"
+          ],
+          "holds": [
+            "Refunds over €50"
+          ],
+          "never": [
+            "Change a price"
+          ]
+        },
+        "apps": [
+          {
+            "name": "Stripe",
+            "logo": "/v1/logos/stripe"
+          },
+          {
+            "name": "Gmail"
+          }
+        ],
+        "proved": "Proved on a test shop."
+      },
+      {
+        "id": "chargebacks",
+        "title": "Chargebacks",
+        "category": "money",
+        "headline": "Chargebacks lapse before anyone answers",
+        "line": "Gathers the evidence and drafts the answer for you to send.",
+        "say": "Set up a taf for chargebacks.",
+        "apps": [
+          {
+            "name": "Stripe"
+          }
+        ]
+      },
+      {
+        "id": "inbox",
+        "title": "Inbox",
+        "category": "support",
+        "headline": "Customers wait for answers you already know",
+        "line": "Answers the questions your help pages cover.",
+        "say": "Set up a taf for the support inbox.",
+        "apps": [
+          {
+            "name": "Zendesk"
+          }
+        ]
+      },
+      {
+        "id": "deploys",
+        "title": "Deploys",
+        "category": "ops",
+        "headline": "Releases wait for someone to press go",
+        "line": "Ships what passed its checks, and asks before a migration.",
+        "say": "Set up a taf for deploys.",
+        "apps": [
+          {
+            "name": "GitHub"
+          }
+        ]
+      }
+    ],
+    "strip": {
+      "shown": true,
+      "title": "Jobs to try",
+      "ids": [
+        "chargebacks",
+        "inbox"
+      ]
+    },
+    "words": {
+      "title": "New taf",
+      "all": "All jobs",
+      "own_words": "Say it in your own words",
+      "own_words_line": "Coach builds the taf with you.",
+      "explore": "Explore jobs",
+      "see_all": "See all jobs",
+      "try": "Try it with Coach",
+      "sample": "What it reported after its test run"
+    },
+    "labels": {
+      "allows": "Does on its own",
+      "holds": "Asks you first",
+      "never": "Never does",
+      "hand": "Hand it to Coach"
+    }
+  }
+}

@@ -62,7 +62,35 @@ use Coach: there, dimmed, until Coach is ported.
 (both synthetic) draws the pane, CI's `recipes`; with `--page recipe:refunds`, the sheet, as
 someone who may use Coach, CI's `recipe-sheet`.
 
+## The jobs' gallery
+
+Every ready-made job at any time (`RecipeGallerySheet`, `TafsCloud.Gallery`,
+`GET /v1/recipes/gallery`, read with Home). Its decoder forgives everything: a category or a job
+that can't be read is left out on its own, and words or a strip that can't be read are empty.
+
+In the sidebar, after Your tafs:
+
+- **Explore jobs** (`ExploreRow`; tafs cloud's `words.explore`), with or without tafs and for
+  everyone, since browsing creates nothing. With no such words, or no job, there's no row.
+- **The strip** (`RecipeStrip`), with tafs, where tafs cloud shows it (`strip.shown`): its title as
+  an eyebrow, then its jobs in tafs cloud's order (an id it doesn't list is skipped), each a 4-wide
+  bar in its category's colour and its lead (14, two lines); a job opens its sheet. **See all
+  jobs** (`words.see_all`, else `words.all`) follows when the strip shows fewer than all of them.
+
+Both open the gallery browsing: its title ("Explore jobs"), "All jobs" over the list, then Home's
+list of every job (chips and categories, as above). A job's sheet there is read only: its one
+button is "Try it with Coach" (`words.try`), for someone who may use Coach, there, dimmed; the
+label over its sample is the gallery's (`words.sample`). The sheet's words are the gallery's
+`labels`, else `/v1/recipes`'s.
+
+**+ New** opens the gallery to start a taf with Coach (its own-words row, "Hand it to Coach"):
+with Coach.
+
+`--home shared/contracts/home.json --gallery crates/tafs-app/fixtures/gallery.json` (synthetic)
+draws the Explore row and the strip, CI's `gallery-strip`; with `--page gallery` (and
+`--recipes`), the gallery, CI's `gallery`.
+
 ## Not yet
 
 - **Coach:** "Say it in your own words" and "Hand it to Coach" open it.
-- **The gallery** behind + New (`RecipeGallery`).
+- **+ New**, which opens the gallery to start a taf with Coach.
