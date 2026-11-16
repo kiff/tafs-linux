@@ -58,7 +58,7 @@ the scripts' first two rounds, newest first: what each Card allowed ("€40, wit
 ## Not yet
 
 - **What a line acted on** (`naming`, the runs' call refs): KIFF's hash alone names nothing.
-- **"Signed on this computer"** and the receipt's signed mark under a line.
+- **"Signed on this computer"** under a line: this computer signs no answer.
 - **Which vendor refused** a call, by its connection (`vendors`).
 
 ## Search (signed in)
@@ -168,6 +168,8 @@ it over the window.
   - not read: why, and Try again; while reading, "Checking KIFF's receipt on this computer…".
 - **Share** saves the receipt as KIFF wrote it, byte for byte, where the person picks (a
   computer has no share sheet); closing the dialog saves nothing.
+- **Under a line, "KIFF receipt"** (green) once KIFF says its receipt is signed; the sheet's own
+  check is what checks it.
 - **Open in the taf's chat** opens the taf's page and closes the sheet; **Done** closes it.
 - **Not on Linux:** the "signed on this device" panel. This computer signs no answer, so a line
   has no signature of its own.

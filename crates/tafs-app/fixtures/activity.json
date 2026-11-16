@@ -41,7 +41,7 @@
       },
       "receipt": {
         "trace_id": "01KTRACE0FIXTURE2",
-        "status": "pending"
+        "status": "signed"
       }
     }
   ]

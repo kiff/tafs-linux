@@ -354,6 +354,21 @@ fn row(w: &WordBook, data: &RecordData, e: &Entry) -> (gtk::Box, String) {
         .row_detail(w, (data.waiting)(e))
         .unwrap_or_else(|_| e.detail.clone());
     v.append(&text(&detail, 13, 400, &["tafs-soft"]));
+    // KIFF says its receipt is signed; the sheet's own check is what checks it.
+    if e.receipt.as_ref().is_some_and(|r| r.status == "signed") {
+        let mark = gtk::Box::new(gtk::Orientation::Horizontal, 4);
+        let icon = gtk::Image::from_icon_name(crate::widgets::icon_for("doc.text"));
+        icon.set_pixel_size(12);
+        icon.add_css_class("tafs-ok");
+        mark.append(&icon);
+        mark.append(&text(
+            &w.line("receipt.kiff_receipt").unwrap_or_default(),
+            12,
+            400,
+            &["tafs-ok"],
+        ));
+        v.append(&mark);
+    }
     r.append(&v);
     let label = format!("{named}, {detail}");
     r.update_property(&[gtk::accessible::Property::Label(&label)]);
