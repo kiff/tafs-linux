@@ -163,5 +163,8 @@ mod tests {
         assert!(switch_enabled(None));
         assert!(!switch_enabled(Some(&["usage.read".to_string()])));
         assert!(switch_enabled(Some(&["cards.manage".to_string()])));
+        // KIFF listing nothing this person may do isn't the same as listing none at all: the
+        // iPad's `managesCards` is `capabilities.map { contains } ?? true`.
+        assert!(!switch_enabled(Some(&[])));
     }
 }

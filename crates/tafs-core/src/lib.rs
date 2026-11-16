@@ -38,6 +38,7 @@ pub mod runs;
 pub mod sample;
 pub mod security_key;
 pub mod session;
+pub mod setup;
 pub mod sidebar;
 pub mod signin;
 pub mod taf_page;
