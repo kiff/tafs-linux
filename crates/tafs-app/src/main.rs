@@ -5,6 +5,7 @@ mod approval;
 mod calendar;
 mod connect;
 mod devices;
+mod fido_key;
 mod halt;
 mod kiff;
 mod kiff_account;
