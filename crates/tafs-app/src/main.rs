@@ -10,6 +10,7 @@ mod connected;
 mod devices;
 mod fido_key;
 mod halt;
+mod illustrations;
 mod kiff;
 mod kiff_account;
 mod knocks;

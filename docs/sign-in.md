@@ -37,7 +37,7 @@ made-up code; `--size 700x900` narrow; `--page connected` the celebration (CI's 
 
 ## The welcome
 
-The mascot (96), "tafs" (48 bold), the lead (16, soft), and its three points: Inside the Card,
+Board 1, first run (a card opening, in shapes: [illustrations](app.md#illustrations)), "tafs" (48 bold), the lead (16, soft), and its three points: Inside the Card,
 Outside it, Revoked, each with a dot in green, amber and red. At the foot, Sign in with KIFF (the
 brand's button) and Try it with sample data (the outlined one), which opens the
 [sidebar](home.md) over the sample. Under them, tafs-macos's line: "Already use tafs on your

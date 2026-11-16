@@ -158,6 +158,10 @@ pub fn page(w: Rc<WordBook>, source: Rc<HaltSource>, whose: Whose) -> gtk::Widge
             let Ok(l) = halt::lines(&w, &h, whose.name.as_deref()) else {
                 return;
             };
+            // Board 4, every taf halted (`Illustration.allHalted`): Halt all, once it holds.
+            if whose.id.is_none() && h.state == State::Halted {
+                body.append(&crate::illustrations::all_halted());
+            }
             let head = panel(false);
             let name = eyebrow(&l.name, false);
             name.add_css_class(if l.stopped { "tafs-no" } else { "tafs-dim" });

@@ -18,6 +18,31 @@ The colours are the iPad's `Theme.swift`, light and dark, and follow the desktop
 its bold. The SF Symbols are the app's own symbolic icons, drawn for the nearest look
 (`assets/icons`), and the mascot is the iPad's.
 
+## Illustrations
+
+The iPad's approved first-time and empty-state drawings (`Illustration`, one per board), drawn in
+Cairo shapes (`crates/tafs-app/src/illustrations.rs`), never a letter, a number or a word (rule
+14): the screen's own words say what each means. Each is drawn on its board's grid in the
+palette's colours for the appearance on screen, again when it changes, and scaled down to the
+width it's given, never wider than the iPad shows it and never out of proportion. A screen reader
+skips them. The sign-in's drawings (`connected.rs`) are made of the same pieces.
+
+| Board | What it shows | Where |
+| :- | :- | :- |
+| 1, first run | A card opening, sparkles round it | The welcome, above "tafs", in the mascot's place; it gets smaller in a short window rather than push the buttons off |
+| 2, no tafs yet | An empty card's outline, a plus in it | The Overview with no taf (and no recipes listed), above the grid's "No tafs yet", in board 10's place |
+| 4, every taf halted | Cards at rest under a pause | Halt all, once every part holds it, above its panel |
+| 6, nothing waiting | An empty tray under a calm check | Needs you with nothing waiting, above "Nothing is waiting." |
+| 10, the overview | A ring, a gentle line and cards in a row | The Overview, under its title |
+
+Not drawn yet, as their screens aren't on Linux: 3 (the brief with nothing to decide), 5 (a key's
+receipt, after connecting an app), 7 and 9 (Coach), 8 (beside + New's own-words row in the
+gallery), 11 and 12 (a watch's).
+
+The colours are the palette's by the iPad's own names: `Theme.amber` is `amber`, `amberText`
+`amber_text`, `amberInk` `amber_ink`, `ink`, `panel`, `onFill` `on_fill`, `ok`, `blue`, `pink`;
+`Theme.brand` is the mark's sweep (`theme::BRAND`), and the shadows are black.
+
 ## Language
 
 The app speaks the first of the person's languages that tafs ships (`LANGUAGE`, then `LC_ALL`,
@@ -66,7 +91,7 @@ page and its Card tab, Plan & usage and Account over the sample, Plan & usage si
 KIFF from synthetic answers (managing billing, and as a member), Connect apps, Devices, People & groups, the KIFF account and its time zone picker (from synthetic answers), Alerts, the
 calendar's Day and Week (and Day at an upright iPad's size, `--size 1032x1376`), a tafs cloud
 taf's page and its Card tab from the contracts (and with its Card's own lines) (and with its work and runs, and a run's own page), the sidebar over the plain sample (and with an agent not run by tafs, and with the plan's line), and Home with no taf and a recipe's sheet, the strip and the gallery, the halt screens, a Record search, the receipts export open, a Record line's receipt, the Delete account sheet, the security key's PIN sheet, the
-view-only notice (and once paired) in en, fr and pt, light and dark: 270 pictures, as the `screenshots`
+view-only notice (and once paired), and the boards' empty states (the Overview with no taf, Needs you with nothing waiting, Halt all once halted) in en, fr and pt, light and dark: 354 pictures, as the `screenshots`
 artifact of the run. The job fails if any is missing.
 
 ## The AppImage

@@ -13,7 +13,7 @@ export XDG_CONFIG_HOME=$(mktemp -d)
 mkdir -p "$XDG_CONFIG_HOME/gtk-4.0"
 printf '[Settings]\ngtk-font-name=Inter 11\ngtk-hint-font-metrics=1\n' > "$XDG_CONFIG_HOME/gtk-4.0/settings.ini"
 missing=0
-for screen in welcome sign-in sign-in-code sign-in-narrow pair connected overview overview-home needs-you needs-you-waits needs-you-happened record taf taf-card taf-home taf-home-card taf-card-lines taf-work taf-run taf-knocks taf-setup taf-units usage usage-kiff usage-kiff-member connect-apps connect-apps-narrow devices people kiff-account account-kiff consent time-zone language alerts calendar calendar-week calendar-compact account sidebar-sample sidebar-others sidebar-setting-up sidebar-plan view-only view-only-paired recipes recipe-sheet gallery-strip gallery halt-all halt-one record-search record-export record-receipt record-on delete-account pin-sheet; do
+for screen in welcome sign-in sign-in-code sign-in-narrow pair connected overview overview-home overview-empty needs-you needs-you-empty needs-you-waits needs-you-happened record taf taf-card taf-home taf-home-card taf-card-lines taf-work taf-run taf-knocks taf-setup taf-units usage usage-kiff usage-kiff-member connect-apps connect-apps-narrow devices people kiff-account account-kiff consent time-zone language alerts calendar calendar-week calendar-compact account sidebar-sample sidebar-others sidebar-setting-up sidebar-plan view-only view-only-paired recipes recipe-sheet gallery-strip gallery halt-all halt-all-halted halt-one record-search record-export record-receipt record-on delete-account pin-sheet; do
   case $screen in
     welcome) opts=(--page welcome) ;;
     sign-in) opts=(--page sign-in) ;;
@@ -23,7 +23,11 @@ for screen in welcome sign-in sign-in-code sign-in-narrow pair connected overvie
     pair) opts=(--page pair) ;;
     overview) opts=(--sample --signed-in) ;;
     overview-home) opts=(--home shared/contracts/home.json) ;;
+    # No taf and no recipes listed: the Overview's "No tafs yet", under board 2.
+    overview-empty) opts=(--home crates/tafs-app/fixtures/home-empty.json) ;;
     needs-you) opts=(--sample --signed-in --page needs-you) ;;
+    # Nothing waiting: board 6 over its words.
+    needs-you-empty) opts=(--home shared/contracts/home.json --page needs-you) ;;
     needs-you-waits) opts=(--home crates/tafs-app/fixtures/home-waits.json --page needs-you) ;;
     needs-you-happened) opts=(--home shared/contracts/home.json --unproven crates/tafs-app/fixtures/unproven.json --page needs-you) ;;
     account) opts=(--sample --signed-in --page account) ;;
@@ -69,6 +73,8 @@ for screen in welcome sign-in sign-in-code sign-in-narrow pair connected overvie
     record-on) opts=(--home shared/contracts/home.json --activity crates/tafs-app/fixtures/activity.json --calls crates/tafs-app/fixtures/calls.json --page record) ;;
     record-search) opts=(--home shared/contracts/home.json --record-search crates/tafs-app/fixtures/record-search.json --page record-search:1042) ;;
     halt-all) opts=(--home shared/contracts/home.json --halt crates/tafs-app/fixtures/halt-halting.json --page halt-all) ;;
+    # Halt all once every part holds it: board 4 over the screen.
+    halt-all-halted) opts=(--home shared/contracts/home.json --halt crates/tafs-app/fixtures/halt-halted.json --page halt-all) ;;
     halt-one) opts=(--home shared/contracts/home.json --halt crates/tafs-app/fixtures/halt-halted.json --page halt:taf-aaaa0000000000000000) ;;
     gallery-strip) opts=(--home shared/contracts/home.json --gallery crates/tafs-app/fixtures/gallery.json) ;;
     gallery) opts=(--home shared/contracts/home.json --gallery crates/tafs-app/fixtures/gallery.json --recipes crates/tafs-app/fixtures/recipes.json --page gallery) ;;

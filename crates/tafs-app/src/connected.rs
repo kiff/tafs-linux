@@ -9,86 +9,8 @@ use adw::prelude::*;
 use gtk::cairo;
 use tafs_core::words::WordBook;
 
+use crate::illustrations::{area, capsule, mark, rgb, rounded, shadow, tone};
 use crate::widgets::{primary, text};
-
-fn rgb(cr: &cairo::Context, hex: u32, alpha: f64) {
-    let (r, g, b) = (
-        ((hex >> 16) & 0xFF) as f64 / 255.0,
-        ((hex >> 8) & 0xFF) as f64 / 255.0,
-        (hex & 0xFF) as f64 / 255.0,
-    );
-    cr.set_source_rgba(r, g, b, alpha);
-}
-
-/// A palette colour in the appearance on screen.
-fn tone(name: &str) -> u32 {
-    let t = tafs_core::theme::tone(name).expect("the palette has it");
-    if adw::StyleManager::default().is_dark() {
-        t.dark.0
-    } else {
-        t.light.0
-    }
-}
-
-fn rounded(cr: &cairo::Context, x: f64, y: f64, w: f64, h: f64, r: f64) {
-    let r = r.min(w / 2.0).min(h / 2.0);
-    cr.new_sub_path();
-    cr.arc(x + w - r, y + r, r, -PI / 2.0, 0.0);
-    cr.arc(x + w - r, y + h - r, r, 0.0, PI / 2.0);
-    cr.arc(x + r, y + h - r, r, PI / 2.0, PI);
-    cr.arc(x + r, y + r, r, PI, 3.0 * PI / 2.0);
-    cr.close_path();
-}
-
-/// The app's mark as a gradient square: #B35C00, #E8003A, #2A64F5 from the top leading corner.
-fn mark(cr: &cairo::Context, x: f64, y: f64, side: f64, r: f64) {
-    let g = cairo::LinearGradient::new(x, y, x + side, y + side);
-    g.add_color_stop_rgb(0.0, 0xB3 as f64 / 255.0, 0x5C as f64 / 255.0, 0.0);
-    g.add_color_stop_rgb(0.5, 0xE8 as f64 / 255.0, 0.0, 0x3A as f64 / 255.0);
-    g.add_color_stop_rgb(
-        1.0,
-        0x2A as f64 / 255.0,
-        0x64 as f64 / 255.0,
-        0xF5 as f64 / 255.0,
-    );
-    rounded(cr, x, y, side, side, r);
-    let _ = cr.set_source(&g);
-    let _ = cr.fill();
-}
-
-fn capsule(cr: &cairo::Context, x: f64, y: f64, w: f64, h: f64, hex: u32, alpha: f64) {
-    rounded(cr, x, y, w, h, h / 2.0);
-    rgb(cr, hex, alpha);
-    let _ = cr.fill();
-}
-
-/// A soft shadow under a rounded shape: a few widening outlines at low opacity.
-fn shadow(cr: &cairo::Context, x: f64, y: f64, w: f64, h: f64, r: f64, lift: f64) {
-    for i in 1..=6 {
-        let s = i as f64 * 2.0;
-        rounded(
-            cr,
-            x - s / 2.0,
-            y + lift - s / 2.0,
-            w + s,
-            h + s,
-            r + s / 2.0,
-        );
-        cr.set_source_rgba(0.0, 0.0, 0.0, 0.025);
-        let _ = cr.fill();
-    }
-}
-
-fn area(width: i32, height: i32, draw: impl Fn(&cairo::Context) + 'static) -> gtk::DrawingArea {
-    let a = gtk::DrawingArea::new();
-    a.set_content_width(width);
-    a.set_content_height(height);
-    a.set_halign(gtk::Align::Center);
-    // A drawing, not words: nothing for a screen reader to read.
-    a.update_state(&[gtk::accessible::State::Hidden(true)]);
-    a.set_draw_func(move |_, cr, _, _| draw(cr));
-    a
-}
 
 /// `SignInArt.kiff`: KIFF's sign-in, a card with the app's mark, two lines and its button, under a
 /// lock, on a soft amber circle.

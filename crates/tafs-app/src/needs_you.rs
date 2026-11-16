@@ -47,6 +47,8 @@ pub fn page(
         column.append(&card_unit_panel(ask));
     }
     if let Some((nothing, hint)) = &n.empty {
+        // Board 6, nothing waiting (`Illustration.nothingWaiting`), above its words.
+        column.append(&crate::illustrations::nothing_waiting());
         let p = panel(false);
         p.append(&text(nothing, 15, 600, &["tafs-ink"]));
         p.append(&text(hint, 14, 400, &["tafs-soft"]));
