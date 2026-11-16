@@ -388,6 +388,51 @@ fn every_line_is_there_in_every_language_with_the_values_english_has() {
 }
 
 #[test]
+fn every_line_at_the_pin_fills_with_no_hole_left() {
+    // Every line in every language, each value given: a form this app doesn't know
+    // (`{device|that}`) fails here, never on screen.
+    for lang in SHIPPED {
+        let w = book(lang);
+        let keys: Vec<String> = w.keys().map(str::to_string).collect();
+        for key in &keys {
+            let texts: Vec<String> = match w.raw(key) {
+                Some(serde_json::Value::Object(forms)) => forms
+                    .values()
+                    .filter_map(|v| v.as_str().map(str::to_string))
+                    .collect(),
+                Some(v) => vec![v.as_str().unwrap_or_default().to_string()],
+                None => vec![],
+            };
+            let mut names: Vec<String> = texts.iter().flat_map(|t| placeholders(t)).collect();
+            names.sort();
+            names.dedup();
+            let given: Vec<(&str, &str)> = names
+                .iter()
+                .filter(|n| n.as_str() != "count")
+                .map(|n| (n.as_str(), "Mac"))
+                .collect();
+            let filled: Vec<String> = if w.raw(key).is_some_and(|v| v.is_object()) {
+                (0..=25)
+                    .filter_map(|n| match w.count(key, n, &given) {
+                        Ok(text) => Some(text),
+                        // A language needn't carry every form for every number.
+                        Err(tafs_core::words::WordsError::MissingForm { .. }) => None,
+                        Err(e) => panic!("{lang} {key} ({n}): {e:?}"),
+                    })
+                    .collect()
+            } else {
+                vec![w
+                    .get(key, &given)
+                    .unwrap_or_else(|e| panic!("{lang} {key}: {e:?}"))]
+            };
+            for text in filled {
+                assert!(!text.contains('{'), "{lang} {key} left a hole: {text}");
+            }
+        }
+    }
+}
+
+#[test]
 fn the_device_is_named_in_each_language() {
     assert_eq!(device_name(&book("en")).unwrap(), "tafs on this computer");
     for lang in SHIPPED {
