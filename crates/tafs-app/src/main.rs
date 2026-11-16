@@ -12,6 +12,7 @@ mod needs_you;
 mod overview;
 mod pairing;
 mod people;
+mod receipts;
 mod recipes;
 mod record;
 mod record_search;
@@ -92,13 +93,18 @@ struct Options {
     halt: Option<String>,
     /// With `--home`: a Record search page (and a case) as tafs cloud answers them.
     record_search: Option<String>,
+    /// With `--home`: what this person may do with each taf, as tafs cloud answers
+    /// `GET /v1/me/access`.
+    access: Option<String>,
+    /// With `--home`: a receipts export as tafs cloud answers it, never saved.
+    receipts: Option<String>,
     /// `--size WxH`: the window's size, for a screenshot of a narrower layout.
     size: Option<(i32, i32)>,
     screenshot: Option<String>,
 }
 
 const USAGE: &str = "tafs [--lang en|de|fr|es|it|pt|nl|pl] [--theme light|dark] [--sample] [--signed-in] [--view-only [--paired]]
-     [--home contract.json] [--usage answers.json] [--people answers.json] [--unproven answers.json] [--recipes answers.json] [--gallery answers.json] [--halt answer.json] [--record-search answers.json] [--size WxH] [--page welcome|sign-in|pair|recipe:<id>|gallery|halt-all|halt:<id>|record-search:<q>|overview|needs-you|record|calendar|calendar-week|usage|connect-apps|account|kiff-account|time-zone|devices|people|taf|taf-card] [--screenshot out.png]";
+     [--home contract.json] [--usage answers.json] [--people answers.json] [--unproven answers.json] [--recipes answers.json] [--gallery answers.json] [--halt answer.json] [--record-search answers.json] [--access answer.json] [--receipts answer.json] [--size WxH] [--page welcome|sign-in|pair|recipe:<id>|gallery|halt-all|halt:<id>|record-search:<q>|record-export|overview|needs-you|record|calendar|calendar-week|usage|connect-apps|account|kiff-account|time-zone|devices|people|taf|taf-card] [--screenshot out.png]";
 
 fn options() -> Result<Options, String> {
     let mut o = Options::default();
@@ -118,6 +124,8 @@ fn options() -> Result<Options, String> {
             "--gallery" => o.gallery = Some(value()?),
             "--halt" => o.halt = Some(value()?),
             "--record-search" => o.record_search = Some(value()?),
+            "--access" => o.access = Some(value()?),
+            "--receipts" => o.receipts = Some(value()?),
             "--size" => {
                 let v = value()?;
                 let (w, h) = v.split_once('x').ok_or("--size takes WxH")?;
@@ -179,6 +187,7 @@ fn selection_of(page: Option<&str>) -> Selection {
         Some(other) if other.starts_with("taf:") => Selection::Taf(other["taf:".len()..].into()),
         Some("halt-all") => Selection::HaltAll,
         Some(other) if other.starts_with("record-search:") => Selection::Record,
+        Some("record-export") => Selection::Record,
         Some(other) if other.starts_with("halt:") => Selection::Halt(other["halt:".len()..].into()),
         Some(other) if other.starts_with("taf-card:") => {
             Selection::Taf(other["taf-card:".len()..].into())
@@ -249,6 +258,14 @@ fn activate(app: &adw::Application, o: &Options) {
         people_file: o.people.as_ref().map(std::path::PathBuf::from),
         halt_file: halt_file(o.halt.as_deref()),
         record_search_file: record_search_file(o.record_search.as_deref()),
+        receipts_file: o.receipts.as_deref().map(|p| match std::fs::read(p) {
+            Ok(b) => b,
+            Err(_) => {
+                eprintln!("{p} can't be read");
+                std::process::exit(2);
+            }
+        }),
+        receipts_open: o.page.as_deref() == Some("record-export"),
         record_query: o
             .page
             .as_deref()
@@ -280,7 +297,7 @@ fn activate(app: &adw::Application, o: &Options) {
             recipes: recipes_file(o.recipes.as_deref()),
             gallery: gallery_file(o.gallery.as_deref()),
             account_halt: o.halt.as_deref().map(|p| halt_file(Some(p)).unwrap()),
-            access: Default::default(),
+            access: access_file(o.access.as_deref()),
             used_by: Default::default(),
             reports: Default::default(),
         }),
@@ -388,6 +405,10 @@ struct App {
         tafs_core::record_search::SearchPage,
         Option<tafs_core::record_search::RecordCase>,
     )>,
+    /// `--receipts`'s answer: the screenshots' export, never sent or saved.
+    receipts_file: Option<Vec<u8>>,
+    /// `--page record-export`: the export's days open, for a screenshot.
+    receipts_open: bool,
     /// `--people`'s file of synthetic answers.
     people_file: Option<std::path::PathBuf>,
     /// A screenshot: the sample's Refunds has the reference set's three Cards.
@@ -788,11 +809,36 @@ impl App {
             })),
             _ => None,
         };
+        // Signed in, for whoever sees every taf's Record (`seesEveryTaf`): the receipts
+        // export; a screenshot's from `--receipts`, never sent or saved.
+        let sees_every =
+            cloud.is_some_and(|c| tafs_core::receipts::sees_every_taf(&c.home.tafs, &c.access));
+        let receipts = match (
+            mode,
+            sees_every,
+            self.kept.borrow().as_ref(),
+            &self.receipts_file,
+        ) {
+            (Mode::Kiff, true, _, Some(canned)) => Some(Rc::new(receipts::ReceiptsSource {
+                token: String::new(),
+                languages: vec![],
+                canned: Some(canned.clone()),
+                open: self.receipts_open,
+            })),
+            (Mode::Kiff, true, Some(kept), None) => Some(Rc::new(receipts::ReceiptsSource {
+                token: kept.token.clone(),
+                languages: self.languages.clone(),
+                canned: None,
+                open: false,
+            })),
+            _ => None,
+        };
         record::RecordData {
             entries,
             tafs,
             waiting: Rc::new(move |e| !kiff || still_held.contains(&e.id)),
             search,
+            receipts,
         }
     }
 
@@ -1457,6 +1503,28 @@ fn gallery_file(path: Option<&str>) -> Option<tafs_core::recipes::Gallery> {
         Some(g) => Some(g),
         None => {
             eprintln!("{path} isn't the gallery as tafs cloud answers it");
+            std::process::exit(2);
+        }
+    }
+}
+
+/// `--access`'s file, as tafs cloud answers `GET /v1/me/access` (a contract file's `answer`, or
+/// the answer itself). None given, none read; a file that can't be read stops the app.
+fn access_file(
+    path: Option<&str>,
+) -> std::collections::BTreeMap<String, tafs_core::access::Access> {
+    let Some(path) = path else {
+        return Default::default();
+    };
+    let read = std::fs::read(path).ok().and_then(|b| {
+        let v: serde_json::Value = serde_json::from_slice(&b).ok()?;
+        let a = v.get("answer").cloned().unwrap_or(v);
+        tafs_core::access::read_access(&serde_json::to_vec(&a).ok()?)
+    });
+    match read {
+        Some(a) => a,
+        None => {
+            eprintln!("{path} isn't access as tafs cloud answers it");
             std::process::exit(2);
         }
     }

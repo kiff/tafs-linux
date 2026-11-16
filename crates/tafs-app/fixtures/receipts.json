@@ -1,0 +1,1 @@
+{"from": "2026-11-05", "to": "2026-11-11", "time_zone": "Europe/Paris", "receipts": [{"trace_id": "t1", "sig": "0xab", "amount": 150.50}], "csv": "day,taf\n2026-11-05,Rae\n", "missing": 2}

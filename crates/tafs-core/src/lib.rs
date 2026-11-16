@@ -22,6 +22,7 @@ pub mod needs_you;
 pub mod overview;
 pub mod pairing;
 pub mod people;
+pub mod receipts;
 pub mod recipes;
 pub mod record;
 pub mod record_search;

@@ -235,6 +235,39 @@ pub fn taf_activity(token: &str, languages: &[&str], path: &str) -> Result<Answe
 }
 
 /// A read on tafs cloud as the session, by its path (Plan & usage's balance and credits).
+/// `GET /v1/record/receipts` at tafs cloud as the session (`exportReceipts`): files to save,
+/// so up to 32 MB is read, and an answer longer than that is refused whole rather than saved
+/// cut short.
+pub fn receipts(token: &str, languages: &[&str], path: &str) -> Result<Answer, KiffError> {
+    const MOST: u64 = 32 << 20;
+    let url = format!("{}{path}", tafs_core::home::TAFS_CLOUD);
+    if !may_send_to(&url) {
+        return Err(KiffError::Unreadable);
+    }
+    let response = match agent()
+        .get(&url)
+        .set("Accept", "application/json")
+        .set("Accept-Language", &accept_language(languages))
+        .set("Authorization", &format!("Bearer {token}"))
+        .call()
+    {
+        Ok(r) => r,
+        Err(ureq::Error::Status(_, r)) => r,
+        Err(ureq::Error::Transport(_)) => return Err(KiffError::Offline),
+    };
+    let status = response.status();
+    let mut body = Vec::new();
+    response
+        .into_reader()
+        .take(MOST + 1)
+        .read_to_end(&mut body)
+        .map_err(|_| KiffError::Offline)?;
+    if body.len() as u64 > MOST {
+        return Err(KiffError::Unreadable);
+    }
+    Ok(Answer { status, body })
+}
+
 pub fn cloud(token: &str, languages: &[&str], path: &str) -> Result<Answer, KiffError> {
     get(
         &format!("{}{path}", tafs_core::home::TAFS_CLOUD),

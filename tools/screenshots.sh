@@ -13,7 +13,7 @@ export XDG_CONFIG_HOME=$(mktemp -d)
 mkdir -p "$XDG_CONFIG_HOME/gtk-4.0"
 printf '[Settings]\ngtk-font-name=Inter 11\ngtk-hint-font-metrics=1\n' > "$XDG_CONFIG_HOME/gtk-4.0/settings.ini"
 missing=0
-for screen in welcome sign-in pair overview overview-home needs-you needs-you-waits needs-you-happened record taf taf-card taf-home taf-home-card usage usage-kiff usage-kiff-member connect-apps devices people kiff-account time-zone calendar calendar-week calendar-compact account sidebar-sample view-only view-only-paired recipes recipe-sheet gallery-strip gallery halt-all halt-one record-search; do
+for screen in welcome sign-in pair overview overview-home needs-you needs-you-waits needs-you-happened record taf taf-card taf-home taf-home-card usage usage-kiff usage-kiff-member connect-apps devices people kiff-account time-zone calendar calendar-week calendar-compact account sidebar-sample view-only view-only-paired recipes recipe-sheet gallery-strip gallery halt-all halt-one record-search record-export; do
   case $screen in
     welcome) opts=(--page welcome) ;;
     sign-in) opts=(--page sign-in) ;;
@@ -45,6 +45,7 @@ for screen in welcome sign-in pair overview overview-home needs-you needs-you-wa
     view-only) opts=(--view-only) ;;
     view-only-paired) opts=(--view-only --paired) ;;
     recipes) opts=(--home crates/tafs-app/fixtures/home-empty.json --recipes crates/tafs-app/fixtures/recipes.json) ;;
+    record-export) opts=(--home shared/contracts/home.json --access crates/tafs-app/fixtures/access.json --record-search crates/tafs-app/fixtures/record-search.json --receipts crates/tafs-app/fixtures/receipts.json --page record-export) ;;
     record-search) opts=(--home shared/contracts/home.json --record-search crates/tafs-app/fixtures/record-search.json --page record-search:1042) ;;
     halt-all) opts=(--home shared/contracts/home.json --halt crates/tafs-app/fixtures/halt-halting.json --page halt-all) ;;
     halt-one) opts=(--home shared/contracts/home.json --halt crates/tafs-app/fixtures/halt-halted.json --page halt:taf-aaaa0000000000000000) ;;
