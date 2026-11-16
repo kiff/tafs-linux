@@ -38,7 +38,6 @@ ports a file updates its line here.
 | RecipeGallery.swift | 135 | The jobs' gallery | `RecipeGallerySheet` browsing (title, "All jobs", every job, each sheet read only with "Try it with Coach"), `ExploreRow`, `RecipeStrip` with See all jobs (`recipes.rs`, `shell.rs`, `tafs-core/recipes.rs`) | `.create` from + New, with its own-words row: with Coach |
 | HaltScreen.swift | 176 | A halt of one taf or every taf | `HaltScreen` whole: halting (one tap, unsigned), Halting… with its parts and Halt again, read every 2 s; `HaltRow` framed on a taf's Card; Halt all in the sidebar (`halt.rs`, `tafs-core/halt.rs`) | Resuming (signed by the device: there, dimmed, with why); Siri's tip (not for Linux) |
 | HomeSplitView.swift | 584 | The sidebar for the whole app and what it opens | The brand, the screens with Needs you's count, NEEDS YOU's held calls, Your tafs relevant now, Coach and Account at the foot, the chosen row's fill (`shell.rs`, `tafs-core/sidebar.rs`); Home read from tafs cloud; the recipes strip and Explore with its gallery (`recipes.rs`); the halt-all row (`halt.rs`) | What each row opens (title only until each screen is ported); Shared with you; Other agents; tafs being set up and Discard; + New with Coach; Unreachable and Plan lines at the foot |
-| NotificationSettingsView.swift | 138 | Account › Alerts | The two example alerts (`LockScreenAlert`); signed in, Alerts on this computer and Sound, kept across launches and followed by the held calls' watch; the line under them (`alerts.rs`, `tafs-core/alerts.rs`, `store.rs`) | What alerts you and `AlertingTafsView` (a phone's push choices, read with its push token, which a computer hasn't: the iPad draws none of it there either); Haptics (a phone's) |
 
 ## Not started
 
@@ -54,6 +53,7 @@ ports a file updates its line here.
 | DoorsView.swift | 923 | A taf's Doors tab | |
 | DriveViews.swift | 73 | Coach asks to drive the app | |
 | MicButton.swift | 122 | The mic in a chat's message bar | |
+| NotificationSettingsView.swift | 138 | Account › Alerts | |
 | PlanViews.swift | 268 | Buying credits (held for the owner's money question) | |
 | QuestionsCard.swift | 121 | Several questions at once | QuestionAnswers |
 | ReportAnswerSheet.swift | 124 | Report an answer | |
@@ -109,4 +109,4 @@ ports a file updates its line here.
 
 ## Coverage
 
-Ported 6, partial 19, not started 21, not for Linux 4: the 50 view files at the pin.
+Ported 6, partial 14, not started 26, not for Linux 4: the 50 view files at the pin.

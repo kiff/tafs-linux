@@ -120,38 +120,3 @@ pub fn set_theme(choice: &str) {
 fn theme_path() -> std::path::PathBuf {
     gtk::glib::user_config_dir().join("tafs").join("theme")
 }
-
-/// Alerts on this computer (Account › Alerts): on unless turned off, kept in the user's config
-/// folder.
-pub fn alerts_on() -> bool {
-    flag("alerts", true)
-}
-
-pub fn set_alerts_on(on: bool) {
-    set_flag("alerts", on);
-}
-
-/// Their sound (`alertSound`): on unless turned off.
-pub fn alert_sound() -> bool {
-    flag("alert-sound", true)
-}
-
-pub fn set_alert_sound(on: bool) {
-    set_flag("alert-sound", on);
-}
-
-fn flag(name: &str, default: bool) -> bool {
-    match std::fs::read_to_string(gtk::glib::user_config_dir().join("tafs").join(name)) {
-        Ok(s) if s.trim() == "off" => false,
-        Ok(s) if s.trim() == "on" => true,
-        _ => default,
-    }
-}
-
-fn set_flag(name: &str, on: bool) {
-    let path = gtk::glib::user_config_dir().join("tafs").join(name);
-    if let Some(dir) = path.parent() {
-        let _ = std::fs::create_dir_all(dir);
-    }
-    let _ = std::fs::write(path, if on { "on" } else { "off" });
-}

@@ -1,7 +1,6 @@
 //! tafs for Linux: GTK 4 and libadwaita. The same product, account and words as the iPad app.
 
 mod account;
-mod alerts;
 mod approval;
 mod calendar;
 mod connect;
@@ -112,7 +111,7 @@ struct Options {
 }
 
 const USAGE: &str = "tafs [--lang en|de|fr|es|it|pt|nl|pl] [--theme light|dark] [--sample] [--signed-in] [--view-only [--paired]]
-     [--home contract.json] [--usage answers.json] [--people answers.json] [--unproven answers.json] [--recipes answers.json] [--gallery answers.json] [--halt answer.json] [--record-search answers.json] [--access answer.json] [--receipts answer.json] [--activity answer.json] [--receipt answer.json] [--size WxH] [--page welcome|sign-in|pair|recipe:<id>|gallery|halt-all|halt:<id>|record-search:<q>|record-export|receipt:<proposal id>|pin-sheet|overview|needs-you|record|calendar|calendar-week|usage|connect-apps|account|kiff-account|time-zone|alerts|devices|people|taf|taf-card] [--screenshot out.png]";
+     [--home contract.json] [--usage answers.json] [--people answers.json] [--unproven answers.json] [--recipes answers.json] [--gallery answers.json] [--halt answer.json] [--record-search answers.json] [--access answer.json] [--receipts answer.json] [--activity answer.json] [--receipt answer.json] [--size WxH] [--page welcome|sign-in|pair|recipe:<id>|gallery|halt-all|halt:<id>|record-search:<q>|record-export|receipt:<proposal id>|pin-sheet|overview|needs-you|record|calendar|calendar-week|usage|connect-apps|account|kiff-account|time-zone|devices|people|taf|taf-card] [--screenshot out.png]";
 
 fn options() -> Result<Options, String> {
     let mut o = Options::default();
@@ -191,7 +190,6 @@ fn selection_of(page: Option<&str>) -> Selection {
         Some("people") => Selection::People,
         Some("kiff-account") | Some("delete-account") => Selection::KiffAccount,
         Some("time-zone") => Selection::TimeZone,
-        Some("alerts") => Selection::Alerts,
         // The sample's Refunds, as the reference set's taf.png opens it.
         Some("taf") | Some("taf-card") => Selection::Taf("refunds".into()),
         // With `--home`, the contract's first taf.
@@ -1005,11 +1003,7 @@ impl App {
                 for hold in hold_alert::gone(seen.as_ref(), &holds) {
                     app.withdraw_notification(&hold_alert::tag(&hold));
                 }
-                // Account › Alerts: off, nothing new is announced; on, with its sound or not.
-                let announce =
-                    tafs_core::alerts::announce(store::alerts_on(), store::alert_sound());
-                if let (true, Some(sound)) = (notifies, announce) {
-                    let mut rang = false;
+                if notifies {
                     for hold in hold_alert::fresh(seen.as_ref(), &holds) {
                         let named = hold_alert::named(
                             &me.words,
@@ -1028,14 +1022,6 @@ impl App {
                             Some(&lines.hold.to_variant()),
                         );
                         app.send_notification(Some(&hold_alert::tag(&lines.hold)), &n);
-                        // A notification here has no sound of its own: the desktop's alert
-                        // sound, once a read.
-                        if sound && !rang {
-                            if let Some(d) = gtk::gdk::Display::default() {
-                                d.beep();
-                            }
-                            rang = true;
-                        }
                     }
                 }
                 *me.held_seen.borrow_mut() = Some(holds.iter().map(|h| h.id.clone()).collect());
@@ -1349,14 +1335,6 @@ impl App {
                     tafs_core::calendar::Mode::Week
                 },
                 selected: tafs_core::calendar::today(),
-            },
-            alerts: alerts::AlertsSource {
-                kiff: (mode == Mode::Kiff).then(|| {
-                    cloud
-                        .as_deref()
-                        .and_then(|c| c.account.as_ref())
-                        .map(|a| tafs_core::hold_alert::notifies(a.capabilities.as_deref()))
-                }),
             },
             devices: match (mode, self.kept.borrow().as_ref()) {
                 (Mode::Sample, _) => devices::DevicesSource::Sample {
