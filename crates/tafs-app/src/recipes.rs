@@ -87,7 +87,7 @@ pub fn page(pane: Rc<RecipesPane>) -> gtk::Widget {
             let chip = gtk::ToggleButton::with_label(&category.title);
             chip.add_css_class("tafs-chip-button");
             if let Some(color) = tint(&pane.recipes, &category.id) {
-                chip.set_widget_name(&format!("chip-{}", category.id));
+                chip.set_widget_name(&crate::style::tint_name("chip"));
                 crate::style::tint_chip(&chip, &color);
             }
             let (id, picked, draw_list, buttons2) = (
@@ -223,7 +223,7 @@ fn row(pane: &Rc<RecipesPane>, recipe: &Recipe) -> gtk::Button {
         p.append(&app_marks(recipe));
     }
     if let Some(color) = tint(&pane.recipes, &recipe.category) {
-        p.set_widget_name(&format!("recipe-{}", recipe.id));
+        p.set_widget_name(&crate::style::tint_name("recipe"));
         crate::style::tint_edge(&p, &color);
     }
     let b = gtk::Button::new();

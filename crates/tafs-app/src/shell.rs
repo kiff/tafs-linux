@@ -493,7 +493,7 @@ fn sidebar(
                 bar.set_valign(gtk::Align::Center);
                 bar.add_css_class("tafs-strip-bar");
                 if let Some(color) = crate::recipes::strip_tint(pane, recipe) {
-                    bar.set_widget_name(&format!("strip-{}", recipe.id));
+                    bar.set_widget_name(&crate::style::tint_name("strip"));
                     crate::style::tint_bar(&bar, &color);
                 }
                 h.append(&bar);
