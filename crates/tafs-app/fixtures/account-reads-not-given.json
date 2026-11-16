@@ -1,0 +1,28 @@
+{
+  "suggestions": {
+    "suggestions": {
+      "show": false,
+      "words": "Off: a new Coach conversation starts empty."
+    }
+  },
+  "consent": {
+    "consent": {
+      "given": false,
+      "version": "1",
+      "words": {
+        "title": "Your data and the AI",
+        "lines": [
+          "tafs uses Anthropic's Claude AI for Coach and your tafs.",
+          "What's sent to it: what you write to Coach and your tafs, the files you attach, what your connected apps return to a taf while it works, and what's on your screen while Coach helps you in the app.",
+          "What's never sent: the passwords and keys your connected apps use, or your fingerprint.",
+          "Anthropic uses it to answer and keeps it up to 30 days.",
+          "Nothing is sent until you allow it. You can withdraw in Account."
+        ],
+        "allow": "Allow",
+        "not_now": "Not now",
+        "withdraw": "Withdraw",
+        "given": "AI use: allowed"
+      }
+    }
+  }
+}

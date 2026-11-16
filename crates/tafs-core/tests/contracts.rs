@@ -932,3 +932,20 @@ fn a_card_s_own_lines_come_from_home_as_sent() {
     );
     assert_eq!(c.pending_shown().len(), usize::from(c.live && c.active));
 }
+
+#[test]
+fn every_ai_consent_answer_reads_as_the_ipad_reads_it() {
+    use tafs_core::ai_consent::read_consent;
+    let path =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../shared/contracts/ai-consent.json");
+    let file: Value = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+    let cases = file["cases"].as_array().unwrap();
+    assert!(!cases.is_empty());
+    for case in cases {
+        let body = serde_json::to_vec(&case["body"]).unwrap();
+        let c = read_consent(&body).unwrap_or_else(|| panic!("{} reads", case["name"]));
+        assert!(c.drawable(), "{}", case["name"]);
+        // Given only where tafs cloud says so, with the moment it was given.
+        assert_eq!(c.given, c.at.is_some(), "{}", case["name"]);
+    }
+}

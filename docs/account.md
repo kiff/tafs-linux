@@ -8,19 +8,28 @@ Account at its foot. What it says is `tafs-core/src/account.rs`, tested there; t
 
 "Account" at 34 bold, then the iPad's grouped list: each section's header (17 semibold, dim), and
 its rows on the panel colour with corners of 26, 17 in the ink, a line between them. In the iPad's
-order, the sections whose reads are ported:
+order:
 
 - **Your account:** Mode (Signed in with KIFF, Sample data, Signed out); for a KIFF account,
   KIFF account with its name, and Signed in as with the email, said once (`AccountLines`): none
   when the account is named after it, as a Solo account is.
 - **People & apps** (KIFF): People & groups, Devices, Connect apps.
 - **Plan** (KIFF): Plan & usage, its title alone until the balance is read (`PlanRow`).
+- **Coach** (KIFF, for someone who may use Coach, once read): Show suggestions, a switch, with
+  tafs cloud's words for what it does now under it (13, soft), read when Account opens
+  (`GET /v1/me/suggestions`). It works for someone who manages Cards (`cards.manage`, none listed
+  counting as allowed), else it's dimmed. A change is `PUT /v1/me/suggestions` with `show`,
+  unsigned, as the session; the switch stays dimmed while it's on its way, and a refusal says
+  "It didn't change. {why}" in red, in tafs cloud's words. A setting that can't be read draws no
+  section. The recipes aren't read again at once, as the iPad's `loadRecipes` does: Home's are
+  read with the next refresh.
 - **Alerts:** opens Account › Alerts (below).
 - **Theme:** Light, Dark or System, as the system's segmented control (a capsule track in the
   system grey, the chosen segment on it; in dark, #636366). The choice is kept across launches in
   the user's config folder (`tafs/theme`), as the iPad's `tafs.theme`, and the window follows it at
   once.
 - **Language:** the app's language by its own name ("English", "Français"), and Change language.
+- **The AI-data consent** (KIFF, once read, `GET /v1/me/ai-consent`; see below).
 - **Time zone** (KIFF): the account's, from KIFF, else UTC.
 - **How it works:** "Every action a taf takes goes through KIFF, … Your answers are signed on this
   computer."
@@ -40,6 +49,35 @@ Signed in, the app reads `GET /v1/me` at KIFF as the session (`me`), with Home a
 - **Its capabilities:** `holds.answer` decides whether held calls say someone else answers them
   (none said: allowed, as the iPad's `allows`); Coach shows for `members.manage` until Coach's own
   access is read (`mayUseCoach`, which is off with nothing read).
+
+## The AI-data consent
+
+Every word is tafs cloud's (`AIConsent.words`), read as strictly as the iPad's decoder; one
+without its title, its lines, Allow or Not now is no screen, and draws no row
+(`crates/tafs-app/src/ai_consent.rs`, `tafs-core/src/ai_consent.rs`, tested against the pinned
+`ai-consent.json`).
+
+- **Account's row** (`AIConsentRow`): once given, tafs cloud's words for it ("AI use: allowed")
+  and Withdraw in red, when it sends Withdraw's words; not given, its title in the amber, which
+  opens the screen. Why an answer didn't go, in red, under it.
+- **The screen** (`AIConsentView`), over the window: tafs cloud's sparkles mark, its title (24
+  bold), its lines (16), why Allow didn't go, Allow and Not now.
+  - **Allow** is `POST /v1/me/ai-consent` with the version of the words on the screen. tafs cloud
+    refuses an older screen's yes (409) with the new words, which show in its place with why.
+  - **Not now** (or closing it) puts it off for this session: it isn't put up again by a read,
+    only from Account.
+- **After sign-in** (`loadAIConsent`), the consent is read with the account; not given, the
+  screen comes up over the window, unless Not now was answered this session. A new account's
+  consent is its own.
+- **Withdraw** is `DELETE /v1/me/ai-consent`. Each is unsigned, at tafs cloud as the session.
+
+A turn tafs cloud refuses for want of the consent (`ai_consent_required`) puts the screen up on
+the iPad; Linux sends no model turns yet (no chat or Coach), so nothing here asks for it.
+
+The screenshots read `--account-reads` (`{"suggestions": …, "consent": …}`, each as tafs cloud
+answers it; nothing is sent): `account-kiff` with `--me crates/tafs-app/fixtures/me-manager.json`
+(an account that may use Coach and manages Cards) and `account-reads.json` (consent given), and
+`consent` (`--page consent`, the screen as after sign-in, `account-reads-not-given.json`).
 
 ## Signing out
 

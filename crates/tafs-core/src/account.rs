@@ -172,6 +172,18 @@ pub enum Action {
 pub struct Section {
     pub header: Option<String>,
     pub rows: Vec<Row>,
+    /// A part read from tafs cloud when Account opens: drawn under the header once read, and the
+    /// whole section left out when it can't be, as the iPad draws none.
+    pub slot: Option<Slot>,
+}
+
+/// The parts of Account read when it opens.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Slot {
+    /// Coach's "Show suggestions" (`setSuggestions`), for someone who may use Coach.
+    Suggestions,
+    /// The AI-data consent's row (`AIConsentRow`): given, with Withdraw; else its screen.
+    Consent,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -180,9 +192,8 @@ pub struct AccountLines {
     pub sections: Vec<Section>,
 }
 
-/// `SettingsView`, in the iPad's order, the sections whose reads are ported: what isn't read
-/// yet (Coach's suggestions, the AI-data consent, Export my chats) isn't drawn, as the iPad
-/// draws none until it's read.
+/// `SettingsView`, in the iPad's order. Coach's suggestions and the AI-data consent are read when
+/// Account opens (`Slot`), and drawn only once read, as the iPad draws none until then.
 pub fn lines(
     w: &WordBook,
     mode: Mode,
@@ -213,12 +224,14 @@ pub fn lines(
         }
     }
     sections.push(Section {
+        slot: None,
         header: Some(l("settings.your_account")?),
         rows: yours,
     });
 
     if kiff {
         sections.push(Section {
+            slot: None,
             header: Some(l("settings.people_apps")?),
             rows: vec![
                 Row::Opens {
@@ -240,6 +253,7 @@ pub fn lines(
         });
         // `PlanRow`: just the title until the balance is read.
         sections.push(Section {
+            slot: None,
             header: Some(l("settings.plan")?),
             rows: vec![Row::Opens {
                 title: l("usage.title")?,
@@ -247,8 +261,16 @@ pub fn lines(
                 screen: Screen::Usage,
             }],
         });
+        // What a new Coach conversation offers, as tafs cloud keeps it: once read, for someone
+        // who may use Coach.
+        sections.push(Section {
+            slot: Some(Slot::Suggestions),
+            header: Some(l("coach.title")?),
+            rows: vec![],
+        });
     }
     sections.push(Section {
+        slot: None,
         header: None,
         rows: vec![Row::Opens {
             title: l("settings.alerts")?,
@@ -257,6 +279,7 @@ pub fn lines(
         }],
     });
     sections.push(Section {
+        slot: None,
         header: Some(l("settings.theme_title")?),
         rows: vec![Row::Theme {
             light: l("settings.theme.light")?,
@@ -265,6 +288,7 @@ pub fn lines(
         }],
     });
     sections.push(Section {
+        slot: None,
         header: Some(l("settings.language_title")?),
         rows: vec![
             Row::Value(
@@ -274,8 +298,17 @@ pub fn lines(
             Row::Action(l("settings.change_language")?, Action::ChangeLanguage),
         ],
     });
+    // The AI-data consent: given, with Withdraw; not given, its screen. tafs cloud's words.
     if kiff {
         sections.push(Section {
+            slot: Some(Slot::Consent),
+            header: None,
+            rows: vec![],
+        });
+    }
+    if kiff {
+        sections.push(Section {
+            slot: None,
             header: None,
             rows: vec![Row::Opens {
                 title: l("settings.time_zone_title")?,
@@ -290,6 +323,7 @@ pub fn lines(
     }
     let device = l("device.linux")?;
     sections.push(Section {
+        slot: None,
         header: Some(l("sign_in.how_works")?),
         rows: vec![Row::Text(w.get(
             "sign_in.every_action_taf_takes_goes",
@@ -299,6 +333,7 @@ pub fn lines(
     // tafs's own pages, in the app's language where kiff.dev has them.
     let legal = |key: &str| legal_label(w, key);
     sections.push(Section {
+        slot: None,
         header: Some(l("settings.legal")?),
         rows: vec![
             Row::Link(legal("settings.terms")?, terms),
@@ -306,6 +341,7 @@ pub fn lines(
         ],
     });
     sections.push(Section {
+        slot: None,
         header: Some(l("settings.about")?),
         rows: vec![
             Row::Value(l("settings.version")?, version.to_string()),
@@ -325,6 +361,7 @@ pub fn lines(
         actions.push(Row::Problem(why.to_string()));
     }
     sections.push(Section {
+        slot: None,
         header: Some(l("settings.account_actions")?),
         rows: actions,
     });

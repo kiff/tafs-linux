@@ -682,15 +682,23 @@ fn account_is_the_ipads_in_its_order() {
     )
     .unwrap();
     let headers: Vec<Option<&str>> = kiff.sections.iter().map(|s| s.header.as_deref()).collect();
+    // Coach's suggestions and the consent are read when Account opens: placed, not yet drawn.
+    let slots: Vec<Option<tafs_core::account::Slot>> =
+        kiff.sections.iter().map(|s| s.slot).collect();
+    assert_eq!(slots[3], Some(tafs_core::account::Slot::Suggestions));
+    assert_eq!(slots[7], Some(tafs_core::account::Slot::Consent));
+    assert_eq!(slots.iter().flatten().count(), 2);
     assert_eq!(
         headers,
         [
             Some("Your account"),
             Some("People & apps"),
             Some("Plan"),
+            Some("Coach"),
             None,
             Some("Theme"),
             Some("Language"),
+            None,
             None,
             Some("How it works"),
             Some("Legal"),
@@ -706,7 +714,7 @@ fn account_is_the_ipads_in_its_order() {
         Row::Value("Signed in as".into(), "rae@acme.test".into())
     );
     assert!(
-        matches!(&kiff.sections[6].rows[0], Row::Opens { value: Some(v), .. } if v == "Europe/Paris")
+        matches!(&kiff.sections[8].rows[0], Row::Opens { value: Some(v), .. } if v == "Europe/Paris")
     );
     let last = &kiff.sections.last().unwrap().rows;
     assert!(matches!(&last[0], Row::Destructive(t, _) if t == "Sign out"));

@@ -171,6 +171,32 @@ pub fn send_again(token: &str, languages: &[&str], path: &str) -> Result<Answer,
     )
 }
 
+/// A change at tafs cloud as the session, by its method and path, with a JSON body or none: the
+/// AI-data consent (`POST`, `DELETE`) and Coach's suggestions (`PUT`). It signs nothing.
+pub fn cloud_send(
+    token: &str,
+    languages: &[&str],
+    method: &str,
+    path: &str,
+    body: Option<&[u8]>,
+) -> Result<Answer, KiffError> {
+    let url = format!("{}{path}", tafs_core::home::TAFS_CLOUD);
+    if !may_send_to(&url) || !matches!(method, "POST" | "PUT" | "DELETE") {
+        return Err(KiffError::Unreadable);
+    }
+    let request = agent()
+        .request(method, &url)
+        .set("Accept", "application/json")
+        .set("Accept-Language", &accept_language(languages))
+        .set("Authorization", &format!("Bearer {token}"));
+    Kiff::read(match body {
+        Some(b) => request
+            .set("Content-Type", "application/json")
+            .send_bytes(b),
+        None => request.call(),
+    })
+}
+
 /// A knock answered (`TafsCloud.answerKnock`): "do", "pair" or "ignore", at tafs cloud as the
 /// session. It signs nothing.
 pub fn answer_knock(

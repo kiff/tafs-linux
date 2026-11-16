@@ -6,6 +6,7 @@ pub mod access;
 pub mod account;
 pub mod account_time;
 pub mod activity;
+pub mod ai_consent;
 pub mod alerts;
 pub mod approval;
 pub mod calendar;

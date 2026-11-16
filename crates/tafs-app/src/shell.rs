@@ -28,6 +28,8 @@ pub struct Screens {
     pub overview: OverviewLines,
     pub needs_you: NeedsYouLines,
     pub account: AccountLines,
+    /// What Account reads when it opens (Coach's suggestions, the AI-data consent), signed in.
+    pub account_reads: Option<Rc<crate::ai_consent::Reads>>,
     pub record: Rc<crate::record::RecordData>,
     /// Each taf's page, by its key.
     pub tafs: Rc<Vec<crate::taf::TafPage>>,
@@ -72,6 +74,7 @@ pub fn build(
         overview,
         needs_you,
         account,
+        account_reads,
         record,
         tafs,
         actions,
@@ -338,6 +341,8 @@ pub fn build(
                     crate::account::page(
                         &account,
                         &crate::account::Actions {
+                            reads: account_reads.clone(),
+                            words: w.clone(),
                             act: actions.clone(),
                             open: Rc::new(move |screen, _title| {
                                 open(match screen {
