@@ -29,6 +29,7 @@ pub mod recipes;
 pub mod record;
 pub mod record_search;
 pub mod sample;
+pub mod security_key;
 pub mod session;
 pub mod sidebar;
 pub mod signin;

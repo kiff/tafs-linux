@@ -55,5 +55,33 @@ anything yet:
 The tests sign as a key would (`authenticatorData ‖ sha256(clientData)`, P-256) and verify each
 header as KIFF does.
 
-Next come the key itself over CTAP2 (HID) with its PIN sheet, then registering it through
+The key's side without the key is in `tafs-core/src/security_key.rs`, ported from macOS 12's
+`SecurityKey.swift`. The app will ask the key through libfido2 with exactly these, as macOS 12
+does:
+
+- **What's asked of the key** (`AssertionAsk`, `CredentialAsk`): a 32-byte client data hash and
+  a credential id of 1 to 1023 bytes, refused before the key is asked. A new credential is
+  kiff.dev ("KIFF"), ES256 only, not discoverable, with a user id of 1 to 64 bytes. Presence is
+  asked, and `uv` is left out because the PIN verifies the person (some CTAP2.0 keys refuse
+  both). The UV flag is still required in the answer. The key waits two minutes for its touch.
+- **Why the key gave no answer** (`Failure::of`, libfido2's codes from `fido/err.h` 1.17.0):
+  - a wrong PIN, with the tries left;
+  - blocked (including a wrong PIN with no tries left), or paused after three in a row;
+  - no PIN set;
+  - another key;
+  - not touched in time;
+  - denied;
+  - unplugged;
+  - anything else, by its code.
+
+  The app adds no key, several keys, a U2F-only key, and a PIN missing, too short, too long or
+  already used.
+- **The PIN** (`Pin`): taken from the bytes typed, which are cleared whether it's taken or
+  refused. It needs at least 4 characters and at most 63 bytes, with no NUL. It's handed to the
+  key once as a C string, then cleared, even if the call panics. It's also cleared when dropped,
+  and it never prints.
+- **A new credential's attestation object**: `fmt`, `attStmt` and `authData`, in CTAP2's
+  canonical order.
+
+Next come the key itself through libfido2 with its PIN sheet, then registering it through
 pairing, with S1's `credential_proof`.
