@@ -435,16 +435,29 @@ fn activate(app: &adw::Application, o: &Options) {
         );
     }
     if let Some(path) = o.screenshot.clone() {
+        // Saved 1.5 s after the window shows, once it's drawn. On a busy machine the first frame
+        // can come later, with no renderer or nothing drawn yet: tried again every half second,
+        // for up to 10 s more, before it gives up.
         let (window, app) = (window.clone(), app.clone());
-        glib::timeout_add_local_once(std::time::Duration::from_millis(1500), move || {
+        let tries = std::cell::Cell::new(0);
+        glib::timeout_add_local(std::time::Duration::from_millis(500), move || {
+            tries.set(tries.get() + 1);
+            if tries.get() < 3 {
+                return glib::ControlFlow::Continue;
+            }
             match save_screenshot(window.upcast_ref(), &path) {
                 Ok(()) => println!("saved {path}"),
+                Err(e) if tries.get() < 23 => {
+                    eprintln!("screenshot: {e}; trying again");
+                    return glib::ControlFlow::Continue;
+                }
                 Err(e) => {
                     eprintln!("screenshot: {e}");
                     std::process::exit(1);
                 }
             }
             app.quit();
+            glib::ControlFlow::Break
         });
     }
 }
