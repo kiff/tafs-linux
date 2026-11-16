@@ -43,4 +43,5 @@ pub mod unproven;
 pub mod usage;
 pub mod waits;
 pub mod words;
+pub mod work;
 pub mod zones;

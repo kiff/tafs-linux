@@ -1,0 +1,16 @@
+{
+  "summary": {"status": "working", "line": "Working on 2 requests", "needs_you": 1, "attention": false},
+  "health": {"level": "attention", "lines": ["Its Stripe sign-in ends in 2 days."], "fixes": []},
+  "oldest_waiting": {"since": "2026-11-16T03:10:00Z", "words": "Oldest case waiting 2 h", "late": false},
+  "promise": {"hours": 4},
+  "requests": [
+    {"id": "run_3", "at": "2026-11-16T05:02:00Z", "state": "needs_you", "line": "Waiting for you: refund order 1042 · €150",
+     "credits": {"credits": 12, "counted": true, "words": "12 credits"}},
+    {"id": "run_2", "at": "2026-11-16T04:31:00Z", "state": "done", "line": "Done: answered maria@… by email",
+     "credits": {"credits": 34, "counted": true, "words": "34 credits"},
+     "deliveries": [{"place": "door_reply", "state": "sent", "line": "Reply sent by email", "send_again": false}]},
+    {"id": "run_1", "at": "2026-11-16T02:15:00Z", "state": "failed", "line": "Stopped: Stripe didn't answer",
+     "deliveries": [{"place": "door_reply", "state": "given_up", "line": "The reply wasn't sent after 3 tries", "send_again": true}]}
+  ],
+  "skipped": [{"due": "2026-11-16T03:00:00Z", "why": "busy", "words": "Skipped the 04:00 run: the last one was still working"}]
+}

@@ -28,6 +28,7 @@ mod taf;
 mod usage;
 mod welcome;
 mod widgets;
+mod work_panel;
 mod zones;
 
 use std::cell::{Cell, RefCell};
@@ -106,13 +107,15 @@ struct Options {
     activity: Option<String>,
     /// With `--home`: a receipt as KIFF answers `GET /v1/receipts/{trace_id}`, never sent.
     receipt: Option<String>,
+    /// With `--home`: a taf's work as tafs cloud answers `GET /v1/tafs/{id}/work`, never sent.
+    work: Option<String>,
     /// `--size WxH`: the window's size, for a screenshot of a narrower layout.
     size: Option<(i32, i32)>,
     screenshot: Option<String>,
 }
 
 const USAGE: &str = "tafs [--lang en|de|fr|es|it|pt|nl|pl] [--theme light|dark] [--sample] [--signed-in] [--view-only [--paired]]
-     [--home contract.json] [--usage answers.json] [--people answers.json] [--unproven answers.json] [--recipes answers.json] [--gallery answers.json] [--halt answer.json] [--record-search answers.json] [--access answer.json] [--receipts answer.json] [--activity answer.json] [--receipt answer.json] [--size WxH] [--page welcome|sign-in|pair|recipe:<id>|gallery|halt-all|halt:<id>|record-search:<q>|record-export|receipt:<proposal id>|pin-sheet|overview|needs-you|record|calendar|calendar-week|usage|connect-apps|account|kiff-account|time-zone|alerts|devices|people|taf|taf-card] [--screenshot out.png]";
+     [--home contract.json] [--usage answers.json] [--people answers.json] [--unproven answers.json] [--recipes answers.json] [--gallery answers.json] [--halt answer.json] [--record-search answers.json] [--access answer.json] [--receipts answer.json] [--activity answer.json] [--receipt answer.json] [--work answer.json] [--size WxH] [--page welcome|sign-in|pair|recipe:<id>|gallery|halt-all|halt:<id>|record-search:<q>|record-export|receipt:<proposal id>|pin-sheet|overview|needs-you|record|calendar|calendar-week|usage|connect-apps|account|kiff-account|time-zone|alerts|devices|people|taf|taf-card] [--screenshot out.png]";
 
 fn options() -> Result<Options, String> {
     let mut o = Options::default();
@@ -136,6 +139,7 @@ fn options() -> Result<Options, String> {
             "--receipts" => o.receipts = Some(value()?),
             "--activity" => o.activity = Some(value()?),
             "--receipt" => o.receipt = Some(value()?),
+            "--work" => o.work = Some(value()?),
             "--size" => {
                 let v = value()?;
                 let (w, h) = v.split_once('x').ok_or("--size takes WxH")?;
@@ -268,6 +272,7 @@ fn activate(app: &adw::Application, o: &Options) {
         held_watch: Cell::new(0),
         problem: RefCell::new(None),
         home_file: o.home.as_ref().map(std::path::PathBuf::from),
+        work_file: o.work.as_ref().map(std::path::PathBuf::from),
         usage_file: o.usage.as_ref().map(std::path::PathBuf::from),
         people_file: o.people.as_ref().map(std::path::PathBuf::from),
         halt_file: halt_file(o.halt.as_deref()),
@@ -454,6 +459,8 @@ struct App {
     problem: RefCell<Option<gtk::Label>>,
     /// `--home`'s contract file, for the screenshots' tafs cloud reads.
     home_file: Option<std::path::PathBuf>,
+    /// `--work`'s answer: the screenshots' work, never sent.
+    work_file: Option<std::path::PathBuf>,
     /// `--usage`'s file of synthetic answers.
     usage_file: Option<std::path::PathBuf>,
     /// `--halt`'s answer: the screenshots' halt, never sent to tafs cloud.
@@ -717,6 +724,16 @@ impl App {
             }
             _ => taf::ActivitySource::None,
         };
+        // Where a tafs cloud taf's work is read: tafs cloud as the session; a screenshot's from
+        // `--work`, never sent.
+        let work = match (self.kept.borrow().as_ref(), &self.work_file) {
+            (_, Some(file)) => work_panel::WorkSource::File(file.clone()),
+            (Some(kept), None) => work_panel::WorkSource::Cloud {
+                token: kept.token.clone(),
+                languages: self.languages.clone(),
+            },
+            _ => work_panel::WorkSource::None,
+        };
         // `issuer(of:)`: who manages a taf isn't read yet, so a KIFF taf's Cards are the account's.
         let issuer = cloud
             .and_then(|c| c.account.as_ref())
@@ -755,6 +772,8 @@ impl App {
                         opens_on_card: self.on_card,
                         cloud_id: None,
                         source: taf::ActivitySource::None,
+                        work: work_panel::WorkSource::None,
+                        health: None,
                     }
                 })
                 .collect(),
@@ -764,10 +783,20 @@ impl App {
                 .iter()
                 .filter_map(|h| {
                     let cards = tafs_core::home::full_cards(w, h, w.language()).ok()?;
-                    Some((tafs_core::home::taf(w, h).ok()?, cards))
+                    let health = tafs_core::home::Health::read(&h.health);
+                    Some((tafs_core::home::taf(w, h).ok()?, cards, health))
                 })
-                .map(|(t, cards)| (tafs_core::access::manages(c.access.get(&t.agent)), t, cards))
-                .map(|(manages, t, cards)| taf::TafPage {
+                .map(|(t, cards, health)| {
+                    (
+                        tafs_core::access::manages(c.access.get(&t.agent)),
+                        t,
+                        cards,
+                        health,
+                    )
+                })
+                .map(|(manages, t, cards, health)| taf::TafPage {
+                    work: work.clone(),
+                    health,
                     held: held_of(&t.key),
                     initial: tafs_core::sidebar::initial(&t.name),
                     cloud_id: t.cloud.then(|| t.key.clone()),
