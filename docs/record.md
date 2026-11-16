@@ -91,8 +91,9 @@ words are forgiven; a blank `about` opens no case. `--home shared/contracts/home
 --record-search crates/tafs-app/fixtures/record-search.json --page record-search:1042` (synthetic)
 draws a search, CI's `record-search`; nothing is sent.
 
-Not yet: a call from a taf not on Home drawn as the iPad's plain panel without its next step (it's
-drawn as the others here).
+A call from a taf that isn't on Home (tafs cloud's id isn't one of Home's tafs) is drawn as the
+iPad's plain panel: its title (15 semibold), detail (13, soft), amount (14) and time (12, dim), with no
+next step to take from here. In the screenshot, Sam's "Send a reply" is one.
 
 ## Exporting receipts (signed in)
 
@@ -126,3 +127,24 @@ To draw the row open (CI's `record-export`; nothing is sent or saved), run with:
 - `--page record-export`.
 
 All of these fixtures are synthetic.
+
+## Checking a receipt on this computer
+
+`tafs-core/src/receipt_check.rs` is the iPad's `KIFF/ReceiptCheck.swift` (kiff/tafs#167): a KIFF
+receipt (`GET /v1/receipts/{trace_id}`) is checked here as KIFF's own verification does.
+- **The signed digest** is keccak256 of the ASCII hex of the SHA-256 of `causal_chain`. The chain
+  is taken from the answer byte for byte as KIFF wrote it (`raw_value`), never decoded and
+  written again: Go escapes `<`, `>` and `&` and writes `1e+21`, which a re-encoding would change.
+- **The signer** is recovered from the 65-byte signature (secp256k1, `k256`) as an Ethereum
+  address. It must be the one the receipt declares and KIFF's signer
+  (`0x2f297affd7b62ef712a1e3158421ccb4bf2efcbe`).
+  - A high S is recovered too, as libsecp256k1 does, so a signature in the upper half of the
+    curve order still checks.
+- **A receipt that names a top-level key twice is refused as unreadable.** A decoder keeps the
+  last copy of a key, and the chain's scan the first, so two `causal_chain` or `attestation` keys
+  could show one set of steps while another is checked. Refusing it keeps what's shown and what's
+  checked the same bytes.
+- **The outcome:** no attestation yet is "not signed yet", never a failure. Anything else that
+  doesn't check out says why, in the shared `receipt.check.*` words.
+
+Nothing draws it yet. `ReceiptView`, a Record line's receipt, comes next and uses it.

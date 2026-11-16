@@ -845,18 +845,23 @@ impl App {
         let kiff = mode == Mode::Kiff;
         // Signed in: the search across the person's tafs, at tafs cloud as the session; a
         // screenshot's answers from `--record-search`, never sent.
+        let on_home: Vec<String> = cloud
+            .map(|c| c.home.tafs.iter().filter_map(|t| t.id.clone()).collect())
+            .unwrap_or_default();
         let search = match (mode, self.kept.borrow().as_ref(), &self.record_search_file) {
             (Mode::Kiff, _, Some(canned)) => Some(Rc::new(record_search::SearchSource {
                 token: String::new(),
                 languages: vec![],
                 canned: Some(canned.clone()),
                 initial: self.record_query.clone(),
+                on_home: on_home.clone(),
             })),
             (Mode::Kiff, Some(kept), None) => Some(Rc::new(record_search::SearchSource {
                 token: kept.token.clone(),
                 languages: self.languages.clone(),
                 canned: None,
                 initial: None,
+                on_home,
             })),
             _ => None,
         };
