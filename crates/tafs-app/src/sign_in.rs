@@ -69,12 +69,14 @@ impl Clock for Waiting {
 }
 
 /// The sign-in. `done` gets the kept session once KIFF hands it over and the keyring holds it.
+/// `pair` opens the pairing (`PairSignInView`): signing in from the person's other phone.
 pub fn present(
     parent: &impl IsA<gtk::Widget>,
     window: &gtk::Window,
     w: Rc<WordBook>,
     languages: Vec<&'static str>,
     done: Rc<dyn Fn(KeptSession)>,
+    pair: Rc<dyn Fn()>,
     preview: Option<DeviceStart>,
 ) {
     let l = {
@@ -153,11 +155,11 @@ pub fn present(
     let try_again = outline(&l("common.try_again"));
     content.append(&try_again);
 
-    // The iPad's "Sign in with your other phone" opens `PairSignInView`, a phone signing in from
-    // another phone: not ported, so it's there, dimmed. This computer pairs from the welcome.
-    let pair = outline(&l("sign_in.pair_start"));
-    pair.set_sensitive(false);
-    content.append(&pair);
+    // "Sign in with your other phone" (`PairSignInView`): this sign-in stops, and the pairing
+    // opens: the QR and its check code, for the other phone to scan and approve.
+    let pair_button = outline(&l("sign_in.pair_start"));
+    pair_button.set_widget_name("signIn.pair");
+    content.append(&pair_button);
 
     let spacer = gtk::Box::new(gtk::Orientation::Vertical, 0);
     spacer.set_vexpand(true);
@@ -338,6 +340,14 @@ pub fn present(
         let dialog = dialog.clone();
         cancel.connect_clicked(move |_| {
             dialog.close();
+        });
+    }
+    {
+        // Closing stops this sign-in's polling (below), as the iPad's `task?.cancel()`.
+        let dialog = dialog.clone();
+        pair_button.connect_clicked(move |_| {
+            dialog.close();
+            pair();
         });
     }
     {
