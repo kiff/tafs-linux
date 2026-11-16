@@ -920,8 +920,8 @@ impl App {
             mode,
             account.as_ref(),
             self.sign_out_error.borrow().as_deref(),
-            sign_in::TERMS,
-            sign_in::PRIVACY,
+            tafs_core::account::terms_url(words.language()),
+            tafs_core::account::privacy_url(words.language()),
             env!("CARGO_PKG_VERSION"),
         )
         .unwrap_or_else(|e| fail(e));
