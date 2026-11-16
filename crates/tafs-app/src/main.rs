@@ -54,6 +54,9 @@ struct Cloud {
     account: Option<Account>,
     /// KIFF's activity, for the Record.
     activity: Vec<tafs_core::record::ActivityCall>,
+    /// What the Record's lines acted on (`nameRecordLines`): the call refs of each taf with a
+    /// line KIFF hashed a resource for, by KIFF's key for the call.
+    call_refs: std::collections::BTreeMap<String, String>,
     /// "Did this happen?": the money calls KIFF can't prove (`unproven`).
     unproven: Vec<tafs_core::unproven::Unproven>,
     /// The recipes Home lists with no taf (`recipes`); none read, none listed.
@@ -108,6 +111,9 @@ struct Options {
     receipts: Option<String>,
     /// With `--home`: KIFF's activity, `{"calls": […]}`, for the Record.
     activity: Option<String>,
+    /// With `--activity`: one taf's call refs as tafs cloud answers `GET /v1/tafs/{id}/calls`,
+    /// for every taf's lines.
+    calls: Option<String>,
     /// With `--home`: a receipt as KIFF answers `GET /v1/receipts/{trace_id}`, never sent.
     receipt: Option<String>,
     /// With `--home`: a taf's work as tafs cloud answers `GET /v1/tafs/{id}/work`, never sent.
@@ -124,7 +130,7 @@ struct Options {
 }
 
 const USAGE: &str = "tafs [--lang en|de|fr|es|it|pt|nl|pl] [--theme light|dark] [--sample] [--signed-in] [--view-only [--paired]]
-     [--home contract.json] [--usage answers.json] [--people answers.json] [--unproven answers.json] [--recipes answers.json] [--gallery answers.json] [--halt answer.json] [--record-search answers.json] [--access answer.json] [--receipts answer.json] [--activity answer.json] [--receipt answer.json] [--work answer.json] [--runs answer.json] [--request answer.json] [--balance answer.json] [--size WxH] [--page welcome|sign-in|pair|recipe:<id>|gallery|halt-all|halt:<id>|record-search:<q>|record-export|receipt:<proposal id>|run:<taf id>|pin-sheet|overview|needs-you|record|calendar|calendar-week|usage|connect-apps|account|kiff-account|time-zone|alerts|devices|people|taf|taf-card] [--screenshot out.png]";
+     [--home contract.json] [--usage answers.json] [--people answers.json] [--unproven answers.json] [--recipes answers.json] [--gallery answers.json] [--halt answer.json] [--record-search answers.json] [--access answer.json] [--receipts answer.json] [--activity answer.json] [--calls answer.json] [--receipt answer.json] [--work answer.json] [--runs answer.json] [--request answer.json] [--balance answer.json] [--size WxH] [--page welcome|sign-in|pair|recipe:<id>|gallery|halt-all|halt:<id>|record-search:<q>|record-export|receipt:<proposal id>|run:<taf id>|pin-sheet|overview|needs-you|record|calendar|calendar-week|usage|connect-apps|account|kiff-account|time-zone|alerts|devices|people|taf|taf-card] [--screenshot out.png]";
 
 fn options() -> Result<Options, String> {
     let mut o = Options::default();
@@ -147,6 +153,7 @@ fn options() -> Result<Options, String> {
             "--access" => o.access = Some(value()?),
             "--receipts" => o.receipts = Some(value()?),
             "--activity" => o.activity = Some(value()?),
+            "--calls" => o.calls = Some(value()?),
             "--receipt" => o.receipt = Some(value()?),
             "--work" => o.work = Some(value()?),
             "--runs" => o.runs = Some(value()?),
@@ -355,6 +362,7 @@ fn activate(app: &adw::Application, o: &Options) {
             held: vec![],
             account: None,
             activity: activity_file(o.activity.as_deref()),
+            call_refs: calls_file(o.calls.as_deref()),
             unproven: unproven_file(o.unproven.as_deref()),
             recipes: recipes_file(o.recipes.as_deref()),
             gallery: gallery_file(o.gallery.as_deref()),
@@ -663,6 +671,7 @@ impl App {
                     .filter(|a| a.status == 200)
                     .and_then(|a| tafs_core::record::read_activity(&a.body))
                     .unwrap_or_default();
+                let call_refs = call_refs(&token, &languages, &home, &activity);
                 let (access, used_by, reports) = taf_reads(&words, &token, &languages, &home);
                 // `loadRecipes`: read with the rest; one that can't be read lists none.
                 let recipes = kiff::recipes(&token, &languages)
@@ -690,6 +699,7 @@ impl App {
                     held,
                     account,
                     activity,
+                    call_refs,
                     unproven,
                     recipes,
                     gallery,
@@ -963,7 +973,11 @@ impl App {
                         .find(|(a, _)| a == actor)
                         .map(|(_, k)| k.clone())
                 };
-                tafs_core::record::record(&self.words, &c.activity, &taf_of).unwrap_or_default()
+                tafs_core::record::naming(
+                    tafs_core::record::record(&self.words, &c.activity, &taf_of)
+                        .unwrap_or_default(),
+                    &c.call_refs,
+                )
             }
             _ => vec![],
         };
@@ -1889,6 +1903,49 @@ fn balance_file(path: Option<&str>) -> Option<tafs_core::usage::Balance> {
         Some(b) => Some(b),
         None => {
             eprintln!("{path} isn't a balance as tafs cloud answers it");
+            std::process::exit(2);
+        }
+    }
+}
+
+/// `nameRecordLines`: the call refs of each tafs cloud taf with a Record line KIFF hashed a
+/// resource for, read as the session. Best effort: a taf whose calls can't be read keeps its
+/// lines without what they acted on.
+fn call_refs(
+    token: &str,
+    languages: &[&str],
+    home: &Home,
+    activity: &[tafs_core::record::ActivityCall],
+) -> std::collections::BTreeMap<String, String> {
+    let agents = tafs_core::record::agents_to_name(activity);
+    let mut refs = std::collections::BTreeMap::new();
+    for t in &home.tafs {
+        let Some(id) = t.id.as_deref().filter(|_| agents.contains(&t.kiff_agent)) else {
+            continue;
+        };
+        let read = kiff::cloud(token, languages, &tafs_core::record::calls_path(id))
+            .ok()
+            .filter(|a| a.status == 200)
+            .and_then(|a| tafs_core::record::read_calls(&a.body));
+        for r in read.unwrap_or_default() {
+            refs.insert(r.invocation, r.value);
+        }
+    }
+    refs
+}
+
+/// `--calls`' answer: one taf's call refs, for the screenshots' Record.
+fn calls_file(path: Option<&str>) -> std::collections::BTreeMap<String, String> {
+    let Some(path) = path else {
+        return Default::default();
+    };
+    match std::fs::read(path)
+        .ok()
+        .and_then(|b| tafs_core::record::read_calls(&b))
+    {
+        Some(calls) => calls.into_iter().map(|r| (r.invocation, r.value)).collect(),
+        None => {
+            eprintln!("{path} isn't a taf's calls as tafs cloud answers it");
             std::process::exit(2);
         }
     }

@@ -1,0 +1,12 @@
+{
+  "calls": [
+    {
+      "invocation": "inv_fixture_2",
+      "value": "pi_3PqFixture0QbstR"
+    },
+    {
+      "invocation": "inv_other",
+      "value": "pi_NOT_KIFFS"
+    }
+  ]
+}

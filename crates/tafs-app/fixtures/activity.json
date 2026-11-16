@@ -42,7 +42,10 @@
       "receipt": {
         "trace_id": "01KTRACE0FIXTURE2",
         "status": "signed"
-      }
+      },
+      "entity_id": "inv_fixture_2",
+      "on_hash": "sha256:ec4b10881aaa401b8ee39a0f2a46a36448131d49ba7c12103f2c3f5834236a84",
+      "on_arg": "payment_intent"
     }
   ]
 }

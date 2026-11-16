@@ -107,6 +107,59 @@ pub struct ActivityCall {
     pub detail: Option<String>,
 }
 
+/// `TafsCloud.CallRef`: what one of a taf's calls through KIFF acted on (kiff/tafs#167),
+/// KIFF's key for the call and the value of the argument its Card scopes on.
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+pub struct CallRef {
+    pub invocation: String,
+    pub value: String,
+}
+
+/// `TafsCloud.calls`: tafs cloud's `GET /v1/tafs/{id}/calls`, decoded as the iPad does (every
+/// ref whole, or none).
+pub fn read_calls(body: &[u8]) -> Option<Vec<CallRef>> {
+    #[derive(Deserialize)]
+    struct Response {
+        calls: Vec<CallRef>,
+    }
+    serde_json::from_slice::<Response>(body)
+        .ok()
+        .map(|r| r.calls)
+}
+
+/// `calls`' path for a taf, by its tafs cloud id.
+pub fn calls_path(id: &str) -> String {
+    format!("/v1/tafs/{}/calls", crate::work::segment(id))
+}
+
+/// `nameRecordLines`: the tafs, by KIFF agent, with a call KIFF hashed a resource for: only
+/// theirs are read.
+pub fn agents_to_name(calls: &[ActivityCall]) -> std::collections::BTreeSet<String> {
+    calls
+        .iter()
+        .filter(|c| c.on_hash.is_some())
+        .filter_map(|c| c.actor_id.clone())
+        .collect()
+}
+
+/// `KIFFMapping.naming`: the Record's lines with what each acted on, from the tafs' call refs
+/// by KIFF's key; only a value whose hash is KIFF's, so a line never names a payment KIFF didn't.
+pub fn naming(
+    mut record: Vec<Entry>,
+    refs: &std::collections::BTreeMap<String, String>,
+) -> Vec<Entry> {
+    for e in &mut record {
+        if let (Some(key), Some(hash)) = (&e.entity_id, &e.on_hash) {
+            if let Some(value) = refs.get(key) {
+                if crate::receipt_view::is_on(value, hash) {
+                    e.on_value = Some(value.clone());
+                }
+            }
+        }
+    }
+    record
+}
+
 /// `activity`: KIFF's answer, `{"calls": […]}`. None when it can't be read.
 pub fn read_activity(body: &[u8]) -> Option<Vec<ActivityCall>> {
     #[derive(Deserialize)]
@@ -167,6 +220,10 @@ pub struct Entry {
     pub owner_approved: bool,
     pub amount: Option<Amount>,
     pub read_only: bool,
+    /// KIFF's key for the call (`entityID`), which tafs cloud's call refs are kept by.
+    pub entity_id: Option<String>,
+    /// What KIFF hashed the call acted on (`onHash`).
+    pub on_hash: Option<String>,
     pub on_arg: Option<String>,
     /// What it acted on, shown only when its hash is KIFF's (`naming`): none from KIFF alone.
     pub on_value: Option<String>,
@@ -330,6 +387,8 @@ pub fn record(
             owner_approved: c.outcome == "allowed" && c.held,
             amount: c.amount.clone(),
             read_only: c.read_only == Some(true),
+            entity_id: c.entity_id.clone(),
+            on_hash: c.on_hash.clone(),
             on_arg: c.on_arg.clone(),
             on_value: None,
             answer: c.answer.clone(),
@@ -758,6 +817,81 @@ pub fn weekday(language: &str, day: chrono::NaiveDate) -> &'static str {
 
 #[cfg(test)]
 mod tests {
+    fn named(entity: Option<&str>, hash: Option<&str>) -> Entry {
+        let mut e = crate::sample::record(
+            &WordBook::load(&WordBook::default_root(), "en").unwrap(),
+            chrono::Local::now(),
+        )
+        .unwrap()
+        .remove(0);
+        e.entity_id = entity.map(String::from);
+        e.on_hash = hash.map(String::from);
+        e.on_arg = Some("payment_intent".into());
+        e.on_value = None;
+        e
+    }
+
+    #[test]
+    fn a_line_names_only_the_value_kiff_hashed() {
+        let hash = format!(
+            "sha256:{}",
+            Sha256::digest(b"pi_3PqFixture0QbstR")
+                .iter()
+                .map(|b| format!("{b:02x}"))
+                .collect::<String>()
+        );
+        let refs: std::collections::BTreeMap<String, String> = [
+            ("inv_1".to_string(), "pi_3PqFixture0QbstR".to_string()),
+            ("inv_2".to_string(), "pi_NOT_KIFFS".to_string()),
+        ]
+        .into();
+        let out = naming(
+            vec![
+                named(Some("inv_1"), Some(&hash)),
+                named(Some("inv_2"), Some(&hash)),
+                named(Some("inv_3"), Some(&hash)),
+                named(Some("inv_1"), None),
+            ],
+            &refs,
+        );
+        assert_eq!(out[0].on_value.as_deref(), Some("pi_3PqFixture0QbstR"));
+        let w = WordBook::load(&WordBook::default_root(), "en").unwrap();
+        assert_eq!(
+            out[0].on_text(&w).unwrap().as_deref(),
+            Some("payment intent …QbstR")
+        );
+        assert!(out[1..].iter().all(|e| e.on_value.is_none()));
+    }
+
+    #[test]
+    fn a_taf_s_calls_read_whole_or_not_at_all() {
+        let refs = read_calls(br#"{"calls":[{"invocation":"inv_1","value":"pi_1"}]}"#).unwrap();
+        assert_eq!(
+            refs,
+            vec![CallRef {
+                invocation: "inv_1".into(),
+                value: "pi_1".into()
+            }]
+        );
+        assert!(read_calls(br#"{"calls":[{"invocation":"inv_1"}]}"#).is_none());
+        assert!(read_calls(br#"{}"#).is_none());
+        assert_eq!(calls_path("taf a/b"), "/v1/tafs/taf%20a%2Fb/calls");
+    }
+
+    #[test]
+    fn only_tafs_with_a_hashed_call_are_read() {
+        let calls = read_activity(
+            br#"{"calls":[
+            {"proposal_id":"p1","action_name":"a","actor_id":"rae","outcome":"allowed","created_at":"2026-11-16T03:41:03Z","on_hash":"sha256:00"},
+            {"proposal_id":"p2","action_name":"a","actor_id":"bo","outcome":"allowed","created_at":"2026-11-16T03:41:03Z"}]}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            agents_to_name(&calls).into_iter().collect::<Vec<_>>(),
+            vec!["rae"]
+        );
+    }
+
     use super::*;
 
     #[test]
