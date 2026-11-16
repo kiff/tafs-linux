@@ -1,8 +1,8 @@
 //! The words, read from the shared repository at the pin (`shared/app/strings/<lang>/*.json`).
 //!
 //! The same files the iPad's `Words.swift` is generated from (`app/strings/generate.py`):
-//! a key's line, its `{name}` values, its `{name|possessive}` by the language's rule, and a
-//! count's plural forms on `{count}`. A key that isn't there, or a value a line asks for and
+//! a key's line, its `{name}` values, its `{name|possessive}` and `{name|this}` (`{name|This}`
+//! to open a sentence) by the language's rule, and a count's plural forms on `{count}`. A key that isn't there, or a value a line asks for and
 //! isn't given, is an error: there is no English fallback and no `{hole}` on screen.
 
 use std::collections::BTreeMap;
@@ -209,7 +209,50 @@ pub fn possessive(language: &str, name: &str) -> String {
     }
 }
 
-/// Fills `{name}` and `{name|possessive}`.
+/// "This name" by the language's rule (`THIS` in `generate.py`): "ce Mac", "cet appareil";
+/// `capital` opens a sentence ("Cet appareil"). The name as it is in a language with none: its
+/// lines write their own word. The rule is right for the device kinds the apps name: it takes
+/// every h as mute and y as a vowel.
+pub fn demonstrative(language: &str, name: &str, capital: bool) -> String {
+    let rule: Option<(&str, &str, &str)> = match language {
+        "fr" => Some(("aeiouyhàâäéèêëîïôöùûüœæ", "cet ", "ce ")),
+        _ => None,
+    };
+    let Some((starts, before, other)) = rule else {
+        return name.to_string();
+    };
+    let Some(first) = name.chars().next() else {
+        return String::new();
+    };
+    let lower: String = first.to_lowercase().collect();
+    let word = if starts.contains(lower.as_str()) {
+        before
+    } else {
+        other
+    };
+    if capital {
+        let mut chars = word.chars();
+        let head: String = chars
+            .next()
+            .map(|c| c.to_uppercase().collect())
+            .unwrap_or_default();
+        format!("{head}{}{name}", chars.as_str())
+    } else {
+        format!("{word}{name}")
+    }
+}
+
+/// How a placeholder asks for its value: as it is, its possessive, or "this" before it.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Form {
+    Plain,
+    Possessive,
+    This,
+    ThisCapital,
+}
+
+/// Fills `{name}`, `{name|possessive}`, `{name|this}` and `{name|This}`. A form it doesn't know
+/// is a missing value, so a line never reaches the screen with a `{hole}` in it.
 fn fill(
     key: &str,
     line: &str,
@@ -227,9 +270,11 @@ fn fill(
             break;
         };
         let hole = &after[..close];
-        let (name, possessive_of) = match hole.split_once('|') {
-            Some((n, "possessive")) => (n, true),
-            _ => (hole, false),
+        let (name, form) = match hole.split_once('|') {
+            Some((n, "possessive")) => (n, Form::Possessive),
+            Some((n, "this")) => (n, Form::This),
+            Some((n, "This")) => (n, Form::ThisCapital),
+            _ => (hole, Form::Plain),
         };
         let value = values
             .iter()
@@ -239,10 +284,11 @@ fn fill(
                 key: key.to_string(),
                 value: name.to_string(),
             })?;
-        if possessive_of {
-            out.push_str(&possessive(language, value));
-        } else {
-            out.push_str(value);
+        match form {
+            Form::Plain => out.push_str(value),
+            Form::Possessive => out.push_str(&possessive(language, value)),
+            Form::This => out.push_str(&demonstrative(language, value, false)),
+            Form::ThisCapital => out.push_str(&demonstrative(language, value, true)),
         }
         rest = &after[close + 1..];
     }
@@ -250,7 +296,7 @@ fn fill(
     Ok(out)
 }
 
-/// The placeholders a line names, `{name}` or `{name|possessive}`, in order.
+/// The placeholders a line names, `{name}`, `{name|possessive}` or `{name|this}`, in order.
 pub fn placeholders(line: &str) -> Vec<String> {
     let mut out = Vec::new();
     let mut rest = line;
@@ -306,6 +352,66 @@ mod tests {
         assert_eq!(possessive("de", "Klaus"), "Klaus'");
         assert_eq!(possessive("de", "Rae"), "Raes");
         assert_eq!(possessive("fr", "Rae"), "Rae");
+    }
+
+    #[test]
+    fn this_follows_the_language_both_ways() {
+        let fr: Vec<String> = [
+            "Mac",
+            "PC",
+            "PC Windows",
+            "appareil",
+            "iPad",
+            "écran",
+            "hôte",
+        ]
+        .iter()
+        .map(|n| demonstrative("fr", n, false))
+        .collect();
+        assert_eq!(
+            fr,
+            [
+                "ce Mac",
+                "ce PC",
+                "ce PC Windows",
+                "cet appareil",
+                "cet iPad",
+                "cet écran",
+                "cet hôte"
+            ]
+        );
+        assert_eq!(demonstrative("fr", "Mac", true), "Ce Mac");
+        assert_eq!(demonstrative("fr", "appareil", true), "Cet appareil");
+        assert_eq!(demonstrative("en", "computer", false), "computer");
+        assert_eq!(demonstrative("fr", "", true), "");
+    }
+
+    #[test]
+    fn fill_gives_this_and_refuses_a_form_it_doesnt_know() {
+        let pc = [("device", "PC")];
+        assert_eq!(
+            fill("k", "Alertes sur {device|this}", &pc, "fr").unwrap(),
+            "Alertes sur ce PC"
+        );
+        assert_eq!(
+            fill("k", "{device|This} est ajouté.", &pc, "fr").unwrap(),
+            "Ce PC est ajouté."
+        );
+        assert_eq!(
+            fill(
+                "k",
+                "{device|This} est prêt.",
+                &[("device", "appareil")],
+                "fr"
+            )
+            .unwrap(),
+            "Cet appareil est prêt."
+        );
+        assert!(fill("k", "{device|that}", &pc, "fr").is_err());
+        assert_eq!(
+            placeholders("sur {device|this} et {device|This}"),
+            ["device"]
+        );
     }
 
     #[test]
