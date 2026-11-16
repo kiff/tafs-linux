@@ -1,11 +1,13 @@
 # Coach
 
-The iPad's Coach conversation (`SetupChatView` at a regular width), beside the sidebar, **read
-only**. Its Coach button opens it, signed in with KIFF by someone who may use Coach; the sample has
-no Coach, so there it still opens its title alone. What it reads and how it's decoded is
-`tafs-core/src/coach.rs`; the device's proof is `tafs-core/src/planque.rs`; what it draws is
+The iPad's Coach conversation (`SetupChatView` at a regular width), beside the sidebar, with its
+message box. Its Coach button opens it, signed in with KIFF by someone who may use Coach; the sample
+has no Coach, so there it still opens its title alone. What it reads and how it's decoded is
+`tafs-core/src/coach.rs`; the device's proof is `tafs-core/src/planque.rs`; what's sent, and how the
+conversation holds it while it goes, is `tafs-core/src/coach_send.rs`; what it draws is
 `tafs-core/src/coach_lines.rs`, tested there and in every language at the pin
-(`tests/at_the_pin.rs`); the page is `crates/tafs-app/src/coach.rs`.
+(`tests/at_the_pin.rs`); the page is `crates/tafs-app/src/coach.rs`. Nothing it sends is signed:
+each goes to tafs cloud as the session (`kiff::cloud_send`, which reaches tafs cloud only).
 
 ## What's read
 
@@ -31,6 +33,45 @@ can't read on a message leaves the message plain; an answer it can't read leaves
 unanswered. A card's own fields are as strict as the iPad's synthesized decoder, with two marks
 read leniently: `signs` (each field) and `wider` (another shape is no mark; blank words are none).
 Cards fold by tafs cloud's key, else their conversation and id (`SetupThread.fold`).
+
+## What's sent
+
+All at tafs cloud, as the session, unsigned. A 401 on any of them, or on a read, signs this computer
+out, as every other read does.
+
+- **A message** (`deliverSetup`): `POST /v1/tafs/{id}/messages` with `{"text", "session"?,
+  "new_chat"?, "new_chat_after_handover": true}` (`ChatTarget`: the chat shown, a new one, or the
+  live one; Coach always follows a new chat tafs cloud starts after a hand-over,
+  `followNewSetupChat`). Trimmed, at most 2,000 characters, one at a time. It shows at once, stamped
+  no earlier than the thread's latest (`SentMessages.stamp`), and stays until tafs cloud's copy takes
+  its place, found by the id the send answered (`Sent.message.id`), else by its words, for two
+  minutes at most (`SentMessages.merge`). Then Coach is awaited (the dots) until it's at work or
+  answers, two minutes at most (`settleSetupAwaiting`), and the thread is read again.
+- **While Coach works**, Send writes to its run (`steer`): `POST /v1/tafs/{id}/steer` with
+  `{"run", "text", "hold": true}`; taken, it shows under the thread as unread; kept, tafs cloud's
+  held message shows with "Waits until it's done…" (`QueuedBubble`). `held_full` and the credits'
+  refusals leave the words in the box with tafs cloud's words.
+- **Stop** (Send's place while Coach works and the box is empty; Ctrl+. as the iPad's ⌘.):
+  `POST /v1/tafs/{id}/stop` with `{"session"}` (the chat at work, else the thread's), then
+  "Stopped" under the thread, or "It didn't stop: …".
+- **A card's answer** (`answer`): `POST /v1/tafs/{id}/components/{component}/answer` with
+  `{"answer", "session"?}`: a confirm's option value, or a questions card's answers
+  (`{"<question>": {"value"} | {"values"} | {"own"}}`, `QuestionAnswers`). The card goes quiet at
+  once; a 409 (it doesn't wait any more) reads the thread again; any other failure says "Your answer
+  didn't reach Setup" under the card (`CardNote`).
+- **Refused:** `ai_consent_required` puts the AI-data consent's screen up (`ai_consent::required`,
+  from the consent in the refusal) and the words go back in the box, or the card stays as chosen;
+  a credits code (409 `credits_used_up`, `limit_reached`, `no_plan`) says tafs cloud's words above
+  the box and the words go back; anything else keeps the message in the thread as **Not sent** with
+  why, Edit (back to the box) and Retry (`UnsentBubble`); a send refused because the account is
+  halted offers Resume, which opens Halt all. tafs cloud's `steering.not_sent` shows the same way,
+  once.
+- **Reading again** (`followSetup`): while the page is open, every second while Coach works, else
+  every three, for 100 reads after the owner last wrote; one read at a time, and none once the page
+  is closed. Linux has no stream: there's no live work, no reveal and no pin of a sent message.
+- **The box** keeps what's typed while the app runs (`setupDraft`); signing out clears it. Ctrl+Enter
+  sends (the iPad's ⌘↩). A screenshot's conversation (`--coach`) sends nothing: Send, Stop and the
+  cards' answers do nothing there.
 
 ## The proof
 
@@ -71,9 +112,10 @@ iPad does, and tafs cloud marks no card. The token, the key and the signature ar
   card in their own words ("Approve", "€50") and none at all when the card shows it, and
   "Answered the card above" under words that answered a card. Coach's words full width, its
   Markdown as formatting, under "Worked for 1 min 1 s ›", which opens its steps in Coach's words.
-- **Each card by its kind:** a notice in its tone; a confirm's question and choices; a questions
-  card's questions and choices, "0 of 1 answered", Something else…, Send answers and Chat about
-  this; an approval; a sign-in; a result (set up, setting up, wasn't set up, a plan needed with
+- **Each card by its kind:** a notice in its tone; a confirm's question and choices, answered here; a
+  questions card's questions and choices, picked here with "1 of 2 answered", Something else… and
+  its own-answer field, Send answers once each has an answer, and Chat about this, which puts the
+  card away ("Show them again"); an approval; a sign-in; a result (set up, setting up, wasn't set up, a plan needed with
   Choose a plan, or the button that opens the taf once it's on the list; an improvement's new
   version); a drive's ask; a dial card's title. An answered card folds to one line
   (`OutcomeLine`); an approval's opens again on a click, and Fold puts it back.
@@ -87,22 +129,25 @@ iPad does, and tafs cloud marks no card. The token, the key and the signature ar
 
 ## Not yet
 
-- **Sending anything:** the message box, the recipes on an empty chat, and every answer. A
-  confirm's choices, a questions card's choices, Send answers and Chat about this are there,
-  dimmed.
 - **Approving:** Approve, Decline, a sign-in's button and Not now, and a drive's Approve. This
-  computer can't approve; the phone does.
+  computer can't approve; the phone does (Decline, Not now and a drive's decline are unsigned
+  answers on the iPad, but stay with the phone with the rest of the card here).
+- The microphone and attachments; the recipes on an empty chat; Copy and Delete on a message not
+  sent (the iPad's context menu); an improvement's first message (`improve`).
 - What the iPad reads beside the thread: planque's grant (its words, terms and profile) and KIFF's
   draft of a Card on an approval.
-- The live stream (`LiveWork`, revealing, pinning a sent message), the Needs you bar and ↓, New
+- The live stream (`LiveWork`, revealing, pinning a sent message, a run that failed part-way with
+  Retry), the Needs you bar and ↓, landing on the waiting card (it lands at the latest), New
   conversation, Previous conversations and archiving, Coach's tools row, "Taking shape"
-  (`SetupShapePanel`), a dial card (`KnobDraftCard`), a drive's steps and why it ended, a result's
-  See version, and reading again while Coach works.
+  (`SetupShapePanel`), a dial card (`KnobDraftCard`), a drive's steps and why it ended, and a result's
+  See version.
 - A refused connection's lines are decoded but not drawn: the iPad's Coach doesn't draw them.
 
 ## Screenshots
 
 `--page coach --coach <answer.json>` (with `--home`) draws a conversation from a file: nothing is
-read or sent. `tools/screenshots.sh` saves `coach` (the contract's conversation) and `coach-wider`
-(tafs's own contract, `contracts/coach-wider.json`: an approval waiting under its wider line). The
-tests read the same contract, so a change in tafs cloud's shape fails them here.
+read or sent. `tools/screenshots.sh` saves `coach` (the contract's conversation, Coach at work: the box with
+Stop), `coach-wider` (tafs's own contract, `contracts/coach-wider.json`: an approval waiting under
+its wider line; the tests read the same contract, so a change in tafs cloud's shape fails them
+here) and `coach-asks` (`crates/tafs-app/fixtures/coach-asks.json`: Coach at rest with a confirm
+and a questions card waiting, a message its run never read as Not sent, and one tafs cloud holds).

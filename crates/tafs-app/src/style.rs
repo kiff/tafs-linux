@@ -132,6 +132,28 @@ button.tafs-work { background: none; border: none; box-shadow: none; padding: 0;
 .tafs-plan-mark.active { border: 2.5px solid @tafs_amber; min-width: 13px; min-height: 13px; }
 .tafs-plan-mark.pending { border: 1.5px solid alpha(@tafs_ink, 0.25); min-width: 15px; min-height: 15px; }
 .tafs-typing { background-color: @tafs_dim; border-radius: 999px; min-width: 7px; min-height: 7px; }
+/* A choice picked: the coach colour, the words on it semibold (`QuestionsCard.choice`). */
+button.tafs-choice.on { background-color: @tafs_coach; border-color: @tafs_coach; color: @tafs_on_fill; }
+button.tafs-choice .detail { opacity: 0.8; }
+button.tafs-coach-link.small { font-size: 13px; }
+button.tafs-coach-link:hover { opacity: 0.8; }
+entry.tafs-own-answer { background-color: @tafs_panel; border: 1px solid @tafs_coach; border-radius: 12px;
+  padding: 6px 14px; min-height: 32px; font-size: 15px; color: @tafs_ink; box-shadow: none; outline: none; }
+/* A message not sent, or held to go later: its bubble at 60%. */
+.tafs-unsent .tafs-owner-bubble { opacity: 0.6; }
+button.tafs-unsent-act { background: none; border: none; box-shadow: none; padding: 0; min-height: 0; font-size: 14px; color: @tafs_soft; }
+button.tafs-unsent-act.strong { color: @tafs_ink; font-weight: 600; }
+/* The composer: the bar on the background with a soft shadow above it (`barBackground`), the field on the panel with a 1-point edge, corners of 20;
+   Send the coach colour, Stop the ink, each a 40-point circle. */
+.tafs-composer-bar { background-color: @tafs_background; box-shadow: 0 -2px 6px alpha(@tafs_ink, 0.06); }
+.tafs-composer { background-color: @tafs_panel; border: 1px solid @tafs_line; border-radius: 20px; }
+textview.tafs-composer-text, textview.tafs-composer-text text { background: none; color: @tafs_ink; font-size: 16px; }
+.tafs-composer scrolledwindow { background: none; }
+button.tafs-send, button.tafs-stop { border-radius: 999px; min-width: 40px; min-height: 40px; padding: 0; border: none; box-shadow: none;
+  background-image: none; color: @tafs_on_fill; }
+button.tafs-send { background-color: @tafs_coach; }
+button.tafs-send:disabled { background-color: alpha(@tafs_coach, 0.4); color: @tafs_on_fill; }
+button.tafs-stop { background-color: @tafs_ink; }
 
 /* TafAvatar: the initial in white on the taf's colour, corners of 30% of its size. */
 .tafs-avatar { color: white; font-weight: 700; }

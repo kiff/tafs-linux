@@ -10,11 +10,11 @@ use serde_json::{Map, Value};
 
 use crate::work::segment;
 
-type Read<T> = Result<T, ()>;
+pub(crate) type Read<T> = Result<T, ()>;
 
 // MARK: Reading JSON as Swift's `Decodable` does.
 
-fn field<'a>(v: &'a Map<String, Value>, key: &str) -> Option<&'a Value> {
+pub(crate) fn field<'a>(v: &'a Map<String, Value>, key: &str) -> Option<&'a Value> {
     match v.get(key) {
         None | Some(Value::Null) => None,
         Some(x) => Some(x),
@@ -22,7 +22,7 @@ fn field<'a>(v: &'a Map<String, Value>, key: &str) -> Option<&'a Value> {
 }
 
 /// `decode(String.self)`: there, and a string.
-fn text(v: &Map<String, Value>, key: &str) -> Read<String> {
+pub(crate) fn text(v: &Map<String, Value>, key: &str) -> Read<String> {
     field(v, key)
         .and_then(Value::as_str)
         .map(str::to_string)
@@ -30,7 +30,7 @@ fn text(v: &Map<String, Value>, key: &str) -> Read<String> {
 }
 
 /// `decodeIfPresent(String.self)`: absent or null is none, another shape fails.
-fn text_if(v: &Map<String, Value>, key: &str) -> Read<Option<String>> {
+pub(crate) fn text_if(v: &Map<String, Value>, key: &str) -> Read<Option<String>> {
     match field(v, key) {
         None => Ok(None),
         Some(Value::String(s)) => Ok(Some(s.clone())),
@@ -39,11 +39,11 @@ fn text_if(v: &Map<String, Value>, key: &str) -> Read<Option<String>> {
 }
 
 /// `try? decodeIfPresent(String.self)`: anything but a string is none.
-fn text_lenient(v: &Map<String, Value>, key: &str) -> Option<String> {
+pub(crate) fn text_lenient(v: &Map<String, Value>, key: &str) -> Option<String> {
     text_if(v, key).ok().flatten()
 }
 
-fn bool_if(v: &Map<String, Value>, key: &str) -> Read<Option<bool>> {
+pub(crate) fn bool_if(v: &Map<String, Value>, key: &str) -> Read<Option<bool>> {
     match field(v, key) {
         None => Ok(None),
         Some(Value::Bool(b)) => Ok(Some(*b)),
@@ -51,33 +51,33 @@ fn bool_if(v: &Map<String, Value>, key: &str) -> Read<Option<bool>> {
     }
 }
 
-fn int(v: &Value) -> Read<i64> {
+pub(crate) fn int(v: &Value) -> Read<i64> {
     v.as_i64().ok_or(())
 }
 
-fn int_if(v: &Map<String, Value>, key: &str) -> Read<Option<i64>> {
+pub(crate) fn int_if(v: &Map<String, Value>, key: &str) -> Read<Option<i64>> {
     field(v, key).map(int).transpose()
 }
 
 /// `KIFFClient.decoder`'s dates: RFC 3339, with or without fractional seconds.
-fn date_of(v: &Value) -> Read<DateTime<Utc>> {
+pub(crate) fn date_of(v: &Value) -> Read<DateTime<Utc>> {
     let s = v.as_str().ok_or(())?;
     DateTime::parse_from_rfc3339(s)
         .map(|d| d.with_timezone(&Utc))
         .map_err(|_| ())
 }
 
-fn date(v: &Map<String, Value>, key: &str) -> Read<DateTime<Utc>> {
+pub(crate) fn date(v: &Map<String, Value>, key: &str) -> Read<DateTime<Utc>> {
     date_of(field(v, key).ok_or(())?)
 }
 
-fn object(v: &Value) -> Read<&Map<String, Value>> {
+pub(crate) fn object(v: &Value) -> Read<&Map<String, Value>> {
     v.as_object().ok_or(())
 }
 
 /// `decodeIfPresent([T].self)`: absent or null is none; not an array, or one element that fails,
 /// fails.
-fn array_if<T>(
+pub(crate) fn array_if<T>(
     v: &Map<String, Value>,
     key: &str,
     each: impl Fn(&Value) -> Read<T>,
@@ -89,11 +89,15 @@ fn array_if<T>(
     }
 }
 
-fn array<T>(v: &Map<String, Value>, key: &str, each: impl Fn(&Value) -> Read<T>) -> Read<Vec<T>> {
+pub(crate) fn array<T>(
+    v: &Map<String, Value>,
+    key: &str,
+    each: impl Fn(&Value) -> Read<T>,
+) -> Read<Vec<T>> {
     array_if(v, key, each)?.ok_or(())
 }
 
-fn strings(v: &Value) -> Read<String> {
+pub(crate) fn strings(v: &Value) -> Read<String> {
     v.as_str().map(str::to_string).ok_or(())
 }
 
@@ -211,6 +215,9 @@ pub fn conversation_path(taf: &str, session: Option<&str>, proof: bool, can: &[&
     }
     path
 }
+
+/// The session of a message on its way, until tafs cloud's copy takes its place.
+pub const PENDING: &str = "pending";
 
 /// Who wrote a message.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1064,6 +1071,37 @@ impl SetupThread {
             }
         }
         out
+    }
+
+    /// The chat the thread is in (`session`): its latest message's or card's, whichever is later.
+    /// A message on its way to tafs cloud has no session yet.
+    pub fn session(&self) -> Option<String> {
+        let message = self
+            .messages
+            .iter()
+            .rev()
+            .find(|m| m.session != PENDING)
+            .map(|m| (m.at, m.session.clone()));
+        // `max(by:)`: the last of equals.
+        let shown = self
+            .components
+            .iter()
+            .fold(None, |best: Option<&ShownComponent>, c| match best {
+                Some(b) if c.first_at < b.first_at => Some(b),
+                _ => Some(c),
+            })
+            .map(|c| (c.first_at, c.session.clone()));
+        [message, shown]
+            .into_iter()
+            .flatten()
+            .fold(
+                None,
+                |best: Option<(DateTime<Utc>, String)>, x| match best {
+                    Some(b) if x.0 < b.0 => Some(b),
+                    _ => Some(x),
+                },
+            )
+            .map(|x| x.1)
     }
 
     /// The plan, pinned above the thread.

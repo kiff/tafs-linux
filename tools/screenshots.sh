@@ -13,7 +13,7 @@ export XDG_CONFIG_HOME=$(mktemp -d)
 mkdir -p "$XDG_CONFIG_HOME/gtk-4.0"
 printf '[Settings]\ngtk-font-name=Inter 11\ngtk-hint-font-metrics=1\n' > "$XDG_CONFIG_HOME/gtk-4.0/settings.ini"
 missing=0
-for screen in welcome sign-in sign-in-code sign-in-narrow pair connected overview overview-home overview-empty needs-you needs-you-empty needs-you-waits needs-you-happened record taf taf-card taf-home taf-home-card taf-card-lines taf-work taf-run taf-knocks taf-setup taf-units usage usage-kiff usage-kiff-member connect-apps connect-apps-narrow devices people kiff-account account-kiff consent time-zone language alerts calendar calendar-week calendar-compact account sidebar-sample sidebar-others sidebar-setting-up sidebar-plan view-only view-only-paired recipes recipe-sheet gallery-strip gallery halt-all halt-all-halted halt-one record-search record-export record-receipt record-on delete-account pin-sheet coach coach-wider; do
+for screen in welcome sign-in sign-in-code sign-in-narrow pair connected overview overview-home overview-empty needs-you needs-you-empty needs-you-waits needs-you-happened record taf taf-card taf-home taf-home-card taf-card-lines taf-work taf-run taf-knocks taf-setup taf-units usage usage-kiff usage-kiff-member connect-apps connect-apps-narrow devices people kiff-account account-kiff consent time-zone language alerts calendar calendar-week calendar-compact account sidebar-sample sidebar-others sidebar-setting-up sidebar-plan view-only view-only-paired recipes recipe-sheet gallery-strip gallery halt-all halt-all-halted halt-one record-search record-export record-receipt record-on delete-account pin-sheet coach coach-wider coach-asks; do
   case $screen in
     welcome) opts=(--page welcome) ;;
     sign-in) opts=(--page sign-in) ;;
@@ -81,6 +81,7 @@ for screen in welcome sign-in sign-in-code sign-in-narrow pair connected overvie
     # Coach's conversation from tafs cloud's contract, and one with an approval waiting under its wider line.
     coach) opts=(--home shared/contracts/home.json --me crates/tafs-app/fixtures/me-manager.json --coach shared/contracts/coach-conversation.json --page coach) ;;
     coach-wider) opts=(--home shared/contracts/home.json --me crates/tafs-app/fixtures/me-manager.json --coach shared/contracts/coach-wider.json --page coach) ;;
+    coach-asks) opts=(--home shared/contracts/home.json --me crates/tafs-app/fixtures/me-manager.json --coach crates/tafs-app/fixtures/coach-asks.json --page coach) ;;
     recipe-sheet) opts=(--home crates/tafs-app/fixtures/home-empty.json --recipes crates/tafs-app/fixtures/recipes.json --page recipe:refunds) ;;
   esac
   for lang in en fr pt; do

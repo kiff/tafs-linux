@@ -80,6 +80,8 @@ pub struct WorkLines {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct QuestionLines {
     pub title: String,
+    /// Its own-answer field's label for a screen reader (`ownAnswerTo`).
+    pub own_answer_to: String,
     /// Each choice's label and its line under it.
     pub options: Vec<(String, Option<String>)>,
     pub note: Option<String>,
@@ -171,18 +173,27 @@ pub enum Card {
         tone: Tone,
     },
     Outcome(Outcome),
+    /// A confirm's question and its choices, each its label and the value sent.
     Confirm {
+        id: String,
         text: String,
-        options: Vec<String>,
+        options: Vec<(String, String)>,
     },
+    /// A questions card as it waits (`QuestionsCard`): what the owner picks is the app's to
+    /// keep, so the card carries its questions as Coach sent them.
     Questions {
+        id: String,
         text: Option<String>,
         eyebrow: String,
         count: String,
         questions: Vec<QuestionLines>,
+        asked: Vec<crate::coach::Question>,
         something_else: String,
+        own_answer: String,
         send: String,
         chat_about: String,
+        talking: String,
+        show_again: String,
     },
     Approval(ApprovalLines),
     SignIn(SignInLines),
@@ -241,6 +252,91 @@ pub struct CoachLines {
     pub thinking: Option<String>,
     /// Written to Coach's run while it goes, not read yet, and when it will be.
     pub steering: Vec<(String, String)>,
+    /// What tafs cloud holds for this chat, to go once Coach is done (`QueuedBubble`), and that it
+    /// waits.
+    pub queued: Option<(String, String)>,
+}
+
+/// The message box (`composer`): what it says while empty, and its button's words.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ComposerLines {
+    pub placeholder: String,
+    /// Send, for a screen reader: while Coach works, that it goes when the answer is done.
+    pub send: String,
+    /// Stop, which takes Send's place while Coach works and nothing is written.
+    pub stop: String,
+}
+
+/// `composer`'s words.
+pub fn composer(w: &WordBook, thinking: bool) -> Result<ComposerLines, WordsError> {
+    Ok(ComposerLines {
+        placeholder: w.line(if thinking {
+            "chat.write_next"
+        } else {
+            "coach.ask_anything"
+        })?,
+        send: w.line(if thinking {
+            "coach.send_when_answer_done"
+        } else {
+            "common.send"
+        })?,
+        stop: w.line("setup.stop")?,
+    })
+}
+
+/// A message that didn't go through (`UnsentBubble`): the owner's words, dimmed, "Not sent · why",
+/// then Edit and Retry, or Resume and Retry for a send refused because the account is halted.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UnsentLines {
+    pub id: u64,
+    pub words: String,
+    pub note: String,
+    pub edit: Option<String>,
+    pub retry: String,
+    /// Opens the account's halt, where it's resumed.
+    pub resume: Option<String>,
+}
+
+/// Coach's messages that didn't go through, in order.
+pub fn unsent(
+    w: &WordBook,
+    thread: &SetupThread,
+    unsent: &[crate::coach_send::Unsent],
+) -> Result<Vec<UnsentLines>, WordsError> {
+    unsent
+        .iter()
+        .map(|u| {
+            // Coach's chat is no taf's: only an account's halt offers Resume.
+            let account = u.halted.as_deref() == Some("account");
+            Ok(UnsentLines {
+                id: u.id,
+                words: owner_words(w, thread, &u.text)?,
+                note: format!("{} · {}", w.line("setup.not_sent")?, u.why),
+                edit: if account {
+                    None
+                } else {
+                    Some(w.line("setup.edit")?)
+                },
+                retry: w.line("chat.retry")?,
+                resume: if account {
+                    Some(w.line("taf.resume")?)
+                } else {
+                    None
+                },
+            })
+        })
+        .collect()
+}
+
+/// How the last run ended (`ended`): stopped by the owner.
+pub fn ended(
+    w: &WordBook,
+    ended: Option<crate::coach_send::Ended>,
+) -> Result<Option<String>, WordsError> {
+    match ended {
+        Some(crate::coach_send::Ended::Stopped) => w.line("taf.state.stopped").map(Some),
+        None => Ok(None),
+    }
 }
 
 /// A taf on the account's list, by its KIFF agent, with its key and name.
@@ -333,6 +429,17 @@ pub fn question_words(
         }
     }
     Ok((!parts.is_empty()).then(|| parts.join(" · ")))
+}
+
+/// "1 of 3 answered", on a questions card.
+pub fn answered_of(w: &WordBook, answered: usize, total: usize) -> Result<String, WordsError> {
+    w.get(
+        "coach.questions.answered_of",
+        &[
+            ("answered", &answered.to_string()),
+            ("total", &total.to_string()),
+        ],
+    )
 }
 
 /// `ownerWords`: an answer to a card reads as what the owner chose, never as contract 1's form.
@@ -892,12 +999,13 @@ fn card(
                 })
             }
             None => Card::Confirm {
+                id: c.id.clone(),
                 text: c.text.clone().unwrap_or_default(),
                 options: c
                     .options
                     .iter()
                     .flatten()
-                    .map(|o| o.label.clone())
+                    .map(|o| (o.label.clone(), o.value.clone()))
                     .collect(),
             },
         },
@@ -918,36 +1026,42 @@ fn card(
                     })
                 }
                 None => Card::Questions {
+                    id: c.id.clone(),
                     text: c.text.clone().filter(|t| !t.is_empty()),
                     eyebrow: match &c.title {
                         Some(t) => t.clone(),
                         None => w.line("coach.setup_needs")?,
                     },
-                    count: w.get(
-                        "coach.questions.answered_of",
-                        &[("answered", "0"), ("total", &questions.len().to_string())],
-                    )?,
+                    count: answered_of(w, 0, questions.len())?,
                     questions: questions
                         .iter()
                         .enumerate()
-                        .map(|(i, q)| QuestionLines {
-                            title: format!("{}. {}", i + 1, q.text),
-                            options: q
-                                .options
-                                .iter()
-                                .map(|o| {
-                                    (
-                                        o.label.clone(),
-                                        o.description.clone().filter(|d| !d.is_empty()),
-                                    )
-                                })
-                                .collect(),
-                            note: q.note.clone().filter(|n| !n.is_empty()),
+                        .map(|(i, q)| {
+                            Ok(QuestionLines {
+                                title: format!("{}. {}", i + 1, q.text),
+                                own_answer_to: w
+                                    .get("coach.questions.own_answer_to", &[("text", &q.text)])?,
+                                options: q
+                                    .options
+                                    .iter()
+                                    .map(|o| {
+                                        (
+                                            o.label.clone(),
+                                            o.description.clone().filter(|d| !d.is_empty()),
+                                        )
+                                    })
+                                    .collect(),
+                                note: q.note.clone().filter(|n| !n.is_empty()),
+                            })
                         })
-                        .collect(),
+                        .collect::<Result<_, WordsError>>()?,
+                    asked: questions.clone(),
                     something_else: w.line("coach.questions.something_else")?,
+                    own_answer: w.line("coach.own_answer")?,
                     send: w.line("coach.questions.send")?,
                     chat_about: w.line("coach.questions.chat_about")?,
+                    talking: w.line("coach.questions.talking")?,
+                    show_again: w.line("coach.questions.show_again")?,
                 },
             }
         }
@@ -1009,6 +1123,46 @@ pub fn lines(
     mode: Mode,
     now: DateTime<Utc>,
 ) -> Result<CoachLines, WordsError> {
+    lines_while(
+        w,
+        thread,
+        listed,
+        mode,
+        now,
+        thread.working.is_some(),
+        false,
+    )
+}
+
+/// Coach's screen as the conversation holds it here: at work while tafs cloud says so or the
+/// owner just wrote (`setupThinking`), and with no empty chat's words over a message not sent.
+pub fn conversation_lines(
+    w: &WordBook,
+    c: &crate::coach_send::Conversation,
+    listed: &[Listed],
+    mode: Mode,
+    now: DateTime<Utc>,
+) -> Result<CoachLines, WordsError> {
+    lines_while(
+        w,
+        &c.thread,
+        listed,
+        mode,
+        now,
+        c.thinking(),
+        !c.unsent.is_empty(),
+    )
+}
+
+fn lines_while(
+    w: &WordBook,
+    thread: &SetupThread,
+    listed: &[Listed],
+    mode: Mode,
+    now: DateTime<Utc>,
+    thinking: bool,
+    unsent: bool,
+) -> Result<CoachLines, WordsError> {
     // An answer to a card the thread shows reads once, as the card's outcome: no bubble repeats
     // it. One that didn't go through keeps its bubble, which says so.
     let items: Vec<Item> = thread
@@ -1021,7 +1175,6 @@ pub fn lines(
             _ => true,
         })
         .collect();
-    let thinking = thread.working.is_some();
     let mut out = Vec::new();
     for (i, item) in items.iter().enumerate() {
         let at = item.at();
@@ -1068,7 +1221,7 @@ pub fn lines(
     Ok(CoachLines {
         title: w.line("coach.title")?,
         plan: thread.plan().map(|p| plan_lines(w, p)).transpose()?,
-        starts: if items.is_empty() && !thinking {
+        starts: if items.is_empty() && !thinking && !unsent {
             Some((
                 w.line("coach.ask_anything")?,
                 w.line("coach.ask_anything_line")?,
@@ -1094,6 +1247,10 @@ pub fn lines(
             None
         },
         steering,
+        queued: match thread.steering.as_ref().and_then(|s| s.held.as_ref()) {
+            Some(m) => Some((m.text.clone(), w.line("chat.held")?)),
+            None => None,
+        },
     })
 }
 

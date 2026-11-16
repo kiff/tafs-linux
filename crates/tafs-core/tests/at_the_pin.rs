@@ -1560,7 +1560,7 @@ fn coachs_thread_reads_in_every_language() {
     for c in more {
         every["components"].as_array_mut().unwrap().push(card(c));
     }
-    every["steering"] = json!({"run": "run3", "status": "RUNNING", "untaken": [{"text": "And chargebacks", "at": "2026-10-16T12:03:00Z"}]});
+    every["steering"] = json!({"run": "run3", "status": "RUNNING", "untaken": [{"text": "And chargebacks", "at": "2026-10-16T12:03:00Z"}], "held": {"text": "Then Shippo", "at": "2026-10-16T12:03:30Z"}});
     every["coach_lines"]
         .as_array_mut()
         .unwrap()
@@ -1595,6 +1595,49 @@ fn coachs_thread_reads_in_every_language() {
                 .lines
                 .iter()
                 .all(|x| !matches!(x, Line::Gap(g) if g.is_empty())));
+        }
+    }
+}
+
+#[test]
+fn what_is_sent_to_coach_reads_in_every_language() {
+    use chrono::{DateTime, Utc};
+    use tafs_core::coach::SetupThread;
+    use tafs_core::coach_lines::{answered_of, composer, ended, unsent};
+    use tafs_core::coach_send::{Conversation, Ended, Refusal, Submit};
+    let at = DateTime::parse_from_rfc3339("2026-10-16T12:00:00Z")
+        .unwrap()
+        .with_timezone(&Utc);
+    let mut c = Conversation::default();
+    c.setup = Some("taf-c".into());
+    c.chat = Some("sess1".into());
+    c.took(SetupThread::default(), at);
+    let Submit::Send(d) = c.submit("Hi", at) else {
+        panic!("not sent")
+    };
+    c.not_sent(&d, "offline", Some("account".into()), at);
+    let Submit::Send(d) = c.submit("[questions limits] {}", at) else {
+        panic!("not sent")
+    };
+    c.not_sent(&d, "offline", None, at);
+    for lang in SHIPPED {
+        let w = book(lang);
+        for thinking in [false, true] {
+            let l = composer(&w, thinking).unwrap_or_else(|e| panic!("{lang}: {e}"));
+            assert!(!l.placeholder.is_empty() && !l.send.is_empty() && !l.stop.is_empty());
+        }
+        let u = unsent(&w, &c.thread, &c.unsent).unwrap_or_else(|e| panic!("{lang}: {e}"));
+        assert!(u[0].resume.is_some() && u[0].edit.is_none(), "{lang}");
+        assert!(u[1].edit.is_some() && u[1].resume.is_none(), "{lang}");
+        assert!(ended(&w, Some(Ended::Stopped)).unwrap().is_some());
+        assert!(!answered_of(&w, 1, 2).unwrap().contains('{'), "{lang}");
+        Refusal::read(409, b"{}").words(&w).unwrap();
+        for key in [
+            "coach.answer_did_not_reach_setup",
+            "coach.conversation_not_loaded",
+            "work.did_not_stop",
+        ] {
+            assert!(w.get(key, &[("why", "x")]).is_ok(), "{lang}: {key}");
         }
     }
 }

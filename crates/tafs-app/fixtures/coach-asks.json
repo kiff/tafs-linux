@@ -1,0 +1,121 @@
+{
+  "about": "The app's own fixture: a Coach chat at rest with a confirm and a questions card waiting for the owner, a message the run never read (tafs cloud's `steering.not_sent`) and one it holds to send next (`steering.held`), for Coach's screenshot of what's answered and sent here. Not a contract.",
+  "answer": {
+    "messages": [
+      {
+        "id": "run2.in",
+        "at": "2026-10-16T12:00:00.000Z",
+        "from": "owner",
+        "kind": "message",
+        "text": "Set up refunds for my shop",
+        "session": "sess1"
+      },
+      {
+        "id": "run2.3",
+        "at": "2026-10-16T12:00:10.000Z",
+        "from": "taf",
+        "kind": "message",
+        "text": "I'll connect Stripe for the refunds. Two things first:",
+        "session": "sess1",
+        "work": {
+          "ms": 12000,
+          "steps": [
+            {
+              "tool": "tafs_state"
+            },
+            {
+              "tool": "planque"
+            }
+          ]
+        }
+      }
+    ],
+    "components": [
+      {
+        "at": "2026-10-16T12:00:11.000Z",
+        "session": "sess1",
+        "run": "run2",
+        "seq": 3,
+        "component": {
+          "type": "confirm",
+          "id": "mode",
+          "text": "Start in test mode, or refund real orders?",
+          "options": [
+            {
+              "value": "test",
+              "label": "Test mode"
+            },
+            {
+              "value": "live",
+              "label": "Real orders"
+            }
+          ],
+          "waits": "owner"
+        },
+        "key": "sess1#mode"
+      },
+      {
+        "at": "2026-10-16T12:00:12.000Z",
+        "session": "sess1",
+        "run": "run2",
+        "seq": 4,
+        "component": {
+          "type": "questions",
+          "id": "limits",
+          "title": "Refunds' limits",
+          "questions": [
+            {
+              "id": "per_refund",
+              "text": "Most for one refund?",
+              "options": [
+                {
+                  "value": "20",
+                  "label": "€20"
+                },
+                {
+                  "value": "50",
+                  "label": "€50",
+                  "description": "Most orders"
+                }
+              ]
+            },
+            {
+              "id": "days",
+              "text": "Which days?",
+              "multi": true,
+              "options": [
+                {
+                  "value": "week",
+                  "label": "Weekdays"
+                },
+                {
+                  "value": "weekend",
+                  "label": "Weekends"
+                }
+              ],
+              "note": "Refunds wait for the next of these days."
+            }
+          ],
+          "waits": "owner"
+        },
+        "key": "sess1#limits"
+      }
+    ],
+    "steering": {
+      "run": "run2",
+      "status": "COMPLETED",
+      "untaken": [],
+      "not_sent": [
+        {
+          "text": "And Shippo too",
+          "at": "2026-10-16T12:00:30.000Z",
+          "why": "Coach's run ended before it read this"
+        }
+      ],
+      "held": {
+        "text": "Use my Stripe test key",
+        "at": "2026-10-16T12:00:40.000Z"
+      }
+    }
+  }
+}

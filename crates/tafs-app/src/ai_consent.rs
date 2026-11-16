@@ -351,6 +351,33 @@ pub fn ask_after_sign_in(w: Rc<WordBook>, source: Source, window: gtk::Widget) {
     });
 }
 
+/// A turn refused for want of the consent (`consentRequired`, tafs cloud's `ai_consent_required`
+/// with the consent in its refusal): its screen, now, whatever was put off before. A refusal whose
+/// consent can't be drawn puts nothing up.
+pub fn required(w: Rc<WordBook>, source: Source, refusal: &[u8], window: gtk::Widget) {
+    let Some(read) = ai_consent::read_consent(refusal).filter(AIConsent::drawable) else {
+        return;
+    };
+    // Already up: the one screen stays.
+    if OPEN.with(|o| {
+        o.borrow()
+            .as_ref()
+            .and_then(|w| w.upgrade())
+            .is_some_and(|d| d.parent().is_some())
+    }) {
+        return;
+    }
+    let c = Rc::new(Consent {
+        w,
+        source,
+        now: RefCell::new(read),
+        busy: Cell::new(false),
+        error: RefCell::new(None),
+        redraw: RefCell::new(None),
+    });
+    present(&c, &window);
+}
+
 /// `AIConsentView`: tafs cloud's words, as sent, then Allow and Not now. Nothing the person writes
 /// reaches the model before Allow; Not now closes it for this session.
 fn present(c: &Rc<Consent>, parent: &gtk::Widget) {

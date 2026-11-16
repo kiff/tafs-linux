@@ -652,6 +652,8 @@ impl App {
     fn show_welcome(self: &Rc<Self>) {
         // Signed out: the consent's screen, if it's open, goes with the account.
         ai_consent::forget();
+        // Signed out: nothing written to Coach for the last account stays.
+        coach::forget();
         // Signed out: no account, so this computer's zone.
         tafs_core::account_time::use_zone(None);
         // Signed out: the minute's read ends, and the last account's notifications never stay.
@@ -1708,6 +1710,15 @@ impl App {
                 (Mode::Kiff, Some(kept), None) => coach::CoachSource::Cloud {
                     kept: Box::new(kept.clone()),
                     languages: self.languages.clone(),
+                    // tafs cloud ended the session: signed out, as every read does.
+                    signed_out: {
+                        let me = Rc::downgrade(self);
+                        Rc::new(move || {
+                            if let Some(me) = me.upgrade() {
+                                me.signed_out_by_kiff();
+                            }
+                        })
+                    },
                 },
                 _ => coach::CoachSource::None,
             },
