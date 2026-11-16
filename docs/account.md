@@ -101,6 +101,9 @@ with a spinner.
     Check your connection and try again.";
   - files that couldn't be saved: "…this computer couldn't save the files."
 - **The answer can be up to 32 MB**, as for receipts.
+- **The files are the person's alone:** they're written with mode 0600, whatever the umask, so
+  other accounts on a shared computer can't read them. Their names are fixed, so an export
+  saved in the same folder replaces the last one there.
 - **A screenshot's account sends nothing**, so its row stays dimmed.
 
 Delete account opens its sheet (`DeleteAccountView`), with Cancel at the top:

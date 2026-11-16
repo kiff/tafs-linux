@@ -43,8 +43,8 @@ fn export(w: &WordBook, source: &ReceiptsSource, from: &str, to: &str) -> Result
 /// Both files into `dir`, the JSON as tafs cloud sent it.
 fn save(dir: &std::path::Path, e: &Export) -> std::io::Result<()> {
     let (json, csv) = e.file_names();
-    std::fs::write(dir.join(json), &e.json)?;
-    std::fs::write(dir.join(csv), e.csv.as_bytes())
+    crate::widgets::write_private(&dir.join(json), &e.json)?;
+    crate::widgets::write_private(&dir.join(csv), e.csv.as_bytes())
 }
 
 /// The row: the button (15 semibold, amber; dim with a spinner while preparing), the days

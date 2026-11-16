@@ -78,8 +78,8 @@ fn export(w: &WordBook, source: &ExportSource) -> Result<tafs_core::export_chats
 /// Both files into `dir`.
 fn save(dir: &std::path::Path, f: &tafs_core::export_chats::Files) -> std::io::Result<()> {
     use tafs_core::export_chats::{JSON_FILE, TEXT_FILE};
-    std::fs::write(dir.join(JSON_FILE), &f.json)?;
-    std::fs::write(dir.join(TEXT_FILE), f.text.as_bytes())
+    crate::widgets::write_private(&dir.join(JSON_FILE), &f.json)?;
+    crate::widgets::write_private(&dir.join(TEXT_FILE), f.text.as_bytes())
 }
 
 /// Asks where to save the files, and saves them there; closing the dialog saves nothing, as
