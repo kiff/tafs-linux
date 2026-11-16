@@ -1494,7 +1494,7 @@ impl App {
             },
             cloud_names: Rc::new(
                 tafs.iter()
-                    .filter_map(|t| Some((t.cloud_id.clone()?, t.name.clone())))
+                    .filter_map(|t| Some((t.cloud_id.clone()?, t.name.clone(), t.manages)))
                     .collect(),
             ),
             tafs,
