@@ -945,7 +945,12 @@ fn message(w: &WordBook, m: &ChatMessage) -> Result<Line, WordsError> {
             pending: m.session == PENDING,
         },
         From::Taf => Line::Taf {
-            work: None,
+            // What it did before writing it, folded.
+            work: m
+                .work
+                .as_ref()
+                .map(|work| crate::coach_lines::taf_work_lines(w, work))
+                .transpose()?,
             delivered: m.delivered.clone(),
             text: m.text.clone(),
             counted: m.counted.clone(),

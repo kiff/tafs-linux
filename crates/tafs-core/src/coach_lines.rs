@@ -553,12 +553,41 @@ pub fn duration(w: &WordBook, ms: i64) -> Result<String, WordsError> {
     }
 }
 
-/// `WorkSummary(coach: true)`: Coach's steps in its words, tries of one step after a failed or
-/// unmade one as one row, and the failed ones left out once something worked.
+/// `WorkSummary(coach: true)`: Coach's steps in its words, without what it only showed.
 pub fn work_lines(w: &WordBook, work: &Work) -> Result<WorkLines, WordsError> {
+    work_lines_in(w, work, |tool| activity_words(w, tool))
+}
+
+/// `AppModel.tafActivityWords`: what a taf is doing, in the owner's words, from the tool it calls.
+/// Every tool that reaches the company's systems goes through KIFF, by its name in words past any
+/// prefix (`KIFFMapping.toolWords`): this computer reads no connection's title for it.
+pub fn taf_activity_words(w: &WordBook, tool: &str) -> Result<String, WordsError> {
+    match tool {
+        "memory" => w.line("taf.activity.reading_notes"),
+        "kiff_pending" => w.line("taf.activity.checking_waits"),
+        _ => w.get(
+            "work.asking_kiff_run",
+            &[("tool", &crate::held::tool_words(tool))],
+        ),
+    }
+}
+
+/// `WorkSummary` in a taf's chat: every step in the taf's words.
+pub fn taf_work_lines(w: &WordBook, work: &Work) -> Result<WorkLines, WordsError> {
+    work_lines_in(w, work, |tool| taf_activity_words(w, tool).map(Some))
+}
+
+/// `WorkSummary` with `WorkLog.rows(running: false)`: each step in `words`' words (one with none
+/// is left out), tries of one step after a failed or unmade one as one row, and the failed ones
+/// left out once something worked.
+fn work_lines_in(
+    w: &WordBook,
+    work: &Work,
+    words: impl Fn(&str) -> Result<Option<String>, WordsError>,
+) -> Result<WorkLines, WordsError> {
     let mut steps: Vec<(String, StepStatus)> = Vec::new();
     for s in &work.steps {
-        let Some(words) = activity_words(w, &s.tool)? else {
+        let Some(words) = words(&s.tool)? else {
             continue;
         };
         let status = if s.not_made {

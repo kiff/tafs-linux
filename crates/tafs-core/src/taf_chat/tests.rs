@@ -873,3 +873,60 @@ fn every_cap_has_its_words_and_door_stamps_say_how_it_went() {
             && !halted_words("Not halting")
     );
 }
+
+#[test]
+fn a_taf_s_answer_carries_its_work_folded_in_its_words() {
+    let w = en();
+    let c = chat_of(std::str::from_utf8(&fixture("taf-chat.json")).unwrap());
+    let l = lines(
+        &w,
+        &c,
+        &Whose {
+            name: Some("Rae"),
+            ask_coach: false,
+        },
+        &[],
+        at("2026-11-16T10:00:00Z"),
+    )
+    .unwrap();
+    let works: Vec<&WorkLines> = l
+        .lines
+        .iter()
+        .filter_map(|x| match x {
+            Line::Taf {
+                work: Some(work), ..
+            } => Some(work),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(works.len(), 2);
+    let report = works[0];
+    assert_eq!(report.summary, "Worked for 12 s");
+    let rows: Vec<(&str, Option<&str>)> = report
+        .steps
+        .iter()
+        .map(|r| (r.words.as_str(), r.note.as_deref()))
+        .collect();
+    // Tries of one step after a failed one are one row; the failure is left out once it worked.
+    assert_eq!(
+        rows,
+        vec![
+            ("Reading its notes", None),
+            // A connected tool's title is planque's, which this computer doesn't read: its name
+            // in KIFF in words, as `KIFFMapping.toolWords` gives it.
+            ("Asking KIFF to run list payments k3f9", None),
+            ("Asking KIFF to run create refund k3f9", Some("2 tries")),
+            ("Checking what waits for you", None),
+        ]
+    );
+    assert!(report
+        .steps
+        .iter()
+        .all(|r| r.status == crate::coach_lines::StepStatus::Done));
+    assert_eq!(report.accessible, "Worked for 12 s, 4 steps");
+    // The owner's messages and a message without work have none.
+    assert!(l
+        .lines
+        .iter()
+        .any(|x| matches!(x, Line::Taf { work: None, .. })));
+}

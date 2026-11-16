@@ -400,6 +400,9 @@ const LINES: &[(&str, &[&str])] = &[
     ("door.stamp.goes_back", &["app"]),
     ("door.stamp.not_sent_back", &[]),
     ("work.did_not_stop", &["why"]),
+    ("work.asking_kiff_run", &["tool"]),
+    ("taf.activity.checking_waits", &[]),
+    ("taf.activity.reading_notes", &[]),
 ];
 
 #[test]

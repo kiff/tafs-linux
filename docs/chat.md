@@ -77,6 +77,12 @@ In the iPad's order, in a column at most 720 wide:
   - the owner's words on the right, on the brand sweep, with "Answered the card above" under words
     that answered a card; a message by a door with its stamp above it ("BY EMAIL · ana@…"), and no
     menu;
+  - what the taf did before writing its words, folded under them as "Worked for 12 s ›"
+    (`WorkSummary`, `WorkLog`), which opens its steps (`StepList`): each in the taf's words ("Reading
+    its notes", "Checking what waits for you", "Asking KIFF to run …", the tool's name in KIFF in
+    words, since this computer reads no connection's title for it from planque), tries of one step
+    after a failed one as one row ("2 tries"), a failed step left out once something worked, a step
+    not made "not made · read first";
   - the taf's words full width, its Markdown as formatting, with tafs cloud's lines around them:
     where the run's result went above (`delivered`), what it counted under (`counted`), each 13 soft
     as written; a door's answer with how it went back under it ("↩ SENT BACK BY EMAIL · SAME
