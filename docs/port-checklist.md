@@ -13,12 +13,13 @@ ports a file updates its line here.
 | ApprovalSetupView.swift | 102 | Why this device can't approve, in an approval's place: `ApprovalGate`, `ApprovalNotice`, `ApprovalNotReady` | `ApprovalReadiness` (Biometry.swift): every state's words, `approvalBlocked` | `approval.rs`, `tafs-core/approval.rs`: this computer is `Unsupported` (no Face ID or Touch ID), so its line alone; `ReadinessReader` reads a value that never changes here, and `openTafsSettings` opens iOS settings |
 | DeleteAccountView.swift | 60 | Deleting the account: the warning, What goes, Delete account, Cancel | `deleteAccount` (signed: not on Linux) | `kiff_account.rs` › `delete_sheet`, `tafs-core/account.rs` › `delete_lines`; Delete account is `ApprovalGate`'s line, since this computer can't confirm, and the footer naming Face ID goes with it |
 | ExportChatsView.swift | 82 | Export my chats: preparing, the files, Ready… Share again, Try again | `exportChats`, `splitExport` | `kiff_account.rs` › `export_section`, `tafs-core/export_chats.rs`; saved in a folder the person picks, as Linux has no share sheet |
+| PairSignInView.swift | 104 | Signing in from another phone: the QR, the check code, the wait, the claim | KIFF/Pairing (§5.8) | The sign-in's "Sign in with your other phone" opens this computer's pairing (`pairing.rs`, `tafs-core/pairing.rs`, from tafs-macos): the same QR, check code, wait and claim, with a computer's key (`passkey` kind, software key store) in a phone's place |
 
 ## Partial
 
 | iPad file | Lines | What | Linux has | Missing |
 | :- | -: | :- | :- | :- |
-| SignInView.swift | 333 | `SignInView`: Sign in with KIFF. Also `SettingsView`, `PlanRow`, `AccountView`, `AccountLines` (Account) | `SignInView` whole: the code, Open KIFF, the link and Copy, the wait, the problem and Try again, the terms line (`sign_in.rs`, `tafs-core/signin.rs`). `SettingsView`'s sections in order, the theme, sign out with its question, Clear the sample, `AccountLines`, `PlanRow`'s title; `AccountView`'s lines (`kiff_account.rs`) (`account.rs`, `tafs-core/account.rs`) | "Sign in with your other phone" is there, dimmed: it opens `PairSignInView`. `AccountView`'s using this computer's zone (dimmed; Export my chats and Delete account are their own files, ported); Coach's suggestions, the AI-data consent; Change language, dimmed |
+| SignInView.swift | 333 | `SignInView`: Sign in with KIFF. Also `SettingsView`, `PlanRow`, `AccountView`, `AccountLines` (Account) | `SignInView` whole: the code, Open KIFF, the link and Copy, the wait, the problem and Try again, the terms line (`sign_in.rs`, `tafs-core/signin.rs`). `SettingsView`'s sections in order, the theme, sign out with its question, Clear the sample, `AccountLines`, `PlanRow`'s title; `AccountView`'s lines (`kiff_account.rs`) (`account.rs`, `tafs-core/account.rs`) | `AccountView`'s using this computer's zone (dimmed; Export my chats and Delete account are their own files, ported); Coach's suggestions, the AI-data consent; Change language, dimmed |
 | ShareViews.swift | 405 | Sharing a taf (`ShareSheet`, `SharedWithLine` and the rest), and the Overview (`OverviewView`) | `OverviewView` whole: the title, NEEDS YOU and what else waits, the grid with `cardLine`, `lastResult` from each taf's last run (`loadReport`) and `usedBy` from its shares (`overview.rs`, `tafs-core/overview.rs`, `card.rs`, `tafs-core/access.rs`) | The Overview's order (`listedTafs`). Sharing itself (`ShareSheet`, `SharedWithLine`) |
 | NeedsYouView.swift | 603 | Needs you: held calls, "Did this happen?", steps, Coach's waits, knocks, alerts | `NeedsYouView`'s held calls and its empty state; `HeldCallCard`'s face, countdown, taf's words, details, expired and someone-answers states, and Answer in KIFF; `CoachWaitingCard`'s line and `SetAllAsideButton`, their acts dimmed; `DidThisHappenCard` whole for a computer that can't approve: KIFF's words or title and amount, why, and `ApprovalGate`'s can't-approve line in place of No and Yes; `CardUnitExceptionPanel`'s words, its Coach button for whoever may use Coach and manages the taf, and Dismiss, both dimmed; knocks, each opening its taf's Activity (`needs_you.rs`, `tafs-core/needs_you.rs`, `held.rs`, `unproven.rs`) | Answering here (approve, extra room, next steps, refuse, Allow from now on, install); `AlertsCard` (only for a session with an approval key: never Linux's yet); setting Coach's chats aside; discussing or dismissing a Card unit request; scrolling to a call |
 | AccountPreferencesView.swift | 37 | Account's theme and time zone pickers | `ThemePicker` with `ThemePreference`, kept across launches (`account.rs`, `store.rs`); `TimeZonePicker`'s search and list with the account's zone checked (`zones.rs`, `tafs-core/zones.rs`) | Choosing a zone and using this computer's (signed: dimmed) |
@@ -53,7 +54,6 @@ ports a file updates its line here.
 | DriveViews.swift | 73 | Coach asks to drive the app | |
 | MicButton.swift | 122 | The mic in a chat's message bar | |
 | NotificationSettingsView.swift | 138 | Account › Alerts | |
-| PairSignInView.swift | 104 | Signing in from another phone | KIFF/Pairing |
 | PlanViews.swift | 268 | Buying credits (held for the owner's money question) | |
 | QuestionsCard.swift | 121 | Several questions at once | QuestionAnswers |
 | ReportAnswerSheet.swift | 124 | Report an answer | |
@@ -109,4 +109,4 @@ ports a file updates its line here.
 
 ## Coverage
 
-Ported 4, partial 15, not started 27, not for Linux 4: the 50 view files at the pin.
+Ported 5, partial 15, not started 26, not for Linux 4: the 50 view files at the pin.

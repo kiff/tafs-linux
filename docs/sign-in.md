@@ -43,7 +43,9 @@ with the view-only notice when KIFF's `approval_mode` says `view` (or says nothi
 | Waiting | YOUR CODE in its amber-edged panel, Open KIFF to approve, the link with Copy, "Waiting for your approval…" |
 | Stopped | why, in plain words by status (`PlainError`): offline, busy, down, or "The sign-in code expired. Start again.", and Try again |
 
-Under them, "Sign in with your other phone" (dimmed: it opens the iPad's `PairSignInView`, a phone signing in from another phone, not this computer's [pairing](pairing.md)), and the
+Under them, "Sign in with your other phone" (`PairSignInView`): this sign-in stops (its wait for the
+browser ends, as the iPad's `task?.cancel()`), and this computer's [pairing](pairing.md) opens: the
+QR and its check code, for the person's phone to scan and approve. Then the
 terms line, Terms and Privacy policy linked in the app's language (`kiff.dev/<lang>/tafs/terms`,
 `/<lang>/tafs/privacy` for de, es, fr, it, nl, pl and pt), and in English, saying "(in English)",
 for any other language (`kiff.dev/tafs/terms`, `/tafs/privacy`). Account's Legal rows do the same. Cancel closes it and stops the poll.
@@ -77,6 +79,5 @@ slow-down, expiry and refusals, the modes, a relaunch, the exact hosts. Nothing 
 
 ## Not yet
 
-- **Pairing** (`PairSignInView`, and the desktop's Add this computer): its own change.
 - **A passkey** that approves for this computer (contract §2.6): its own change, with KIFF's
   Linux origin.

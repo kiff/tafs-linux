@@ -526,12 +526,16 @@ impl App {
     fn present_sign_in(self: &Rc<Self>, preview: Option<tafs_core::signin::DeviceStart>) {
         let me = self.clone();
         let done: Rc<dyn Fn(KeptSession)> = Rc::new(move |kept| me.open_account(kept));
+        // A screenshot's sign-in pairs as a preview too: a code made here, never claimed.
+        let (me, previewing) = (self.clone(), preview.is_some());
+        let pair: Rc<dyn Fn()> = Rc::new(move || me.present_pairing(previewing));
         sign_in::present(
             &self.window,
             self.window.upcast_ref(),
             self.words.clone(),
             self.languages.clone(),
             done,
+            pair,
             preview,
         );
     }
