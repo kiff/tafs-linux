@@ -11,6 +11,7 @@ ports a file updates its line here.
 | :- | -: | :- | :- | :- |
 | OnboardingView.swift | 63 | The welcome: what tafs is, Sign in with KIFF, Try it with sample data | AppModel.startSample | `welcome.rs` |
 | ApprovalSetupView.swift | 102 | Why this device can't approve, in an approval's place: `ApprovalGate`, `ApprovalNotice`, `ApprovalNotReady` | `ApprovalReadiness` (Biometry.swift): every state's words, `approvalBlocked` | `approval.rs`, `tafs-core/approval.rs`: this computer is `Unsupported` (no Face ID or Touch ID), so its line alone; `ReadinessReader` reads a value that never changes here, and `openTafsSettings` opens iOS settings |
+| DeleteAccountView.swift | 60 | Deleting the account: the warning, What goes, Delete account, Cancel | `deleteAccount` (signed: not on Linux) | `kiff_account.rs` › `delete_sheet`, `tafs-core/account.rs` › `delete_lines`; Delete account is `ApprovalGate`'s line, since this computer can't confirm, and the footer naming Face ID goes with it |
 
 ## Partial
 
@@ -46,7 +47,6 @@ ports a file updates its line here.
 | AttachViews.swift | 267 | Attaching photos and files in a chat | |
 | CoachMode.swift | 131 | Coach mode over the app | |
 | CoachToolsStep.swift | 255 | Coach's tools still to give | |
-| DeleteAccountView.swift | 60 | Deleting the account | |
 | DiscardSettingUp.swift | 35 | Discard a taf being set up | |
 | DoorsView.swift | 923 | A taf's Doors tab | |
 | DriveViews.swift | 73 | Coach asks to drive the app | |
@@ -109,4 +109,4 @@ ports a file updates its line here.
 
 ## Coverage
 
-Ported 2, partial 15, not started 29, not for Linux 4: the 50 view files at the pin.
+Ported 3, partial 15, not started 28, not for Linux 4: the 50 view files at the pin.

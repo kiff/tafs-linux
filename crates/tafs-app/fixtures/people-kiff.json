@@ -7,7 +7,8 @@
     "email": "owner@example.test",
     "capabilities": [
       "members.manage",
-      "holds.answer"
+      "holds.answer",
+      "account.delete"
     ],
     "time_zone": "Europe/Paris"
   },

@@ -179,7 +179,7 @@ fn selection_of(page: Option<&str>) -> Selection {
         Some("account") => Selection::Account,
         Some("devices") => Selection::Devices,
         Some("people") => Selection::People,
-        Some("kiff-account") => Selection::KiffAccount,
+        Some("kiff-account") | Some("delete-account") => Selection::KiffAccount,
         Some("time-zone") => Selection::TimeZone,
         // The sample's Refunds, as the reference set's taf.png opens it.
         Some("taf") | Some("taf-card") => Selection::Taf("refunds".into()),
@@ -280,6 +280,9 @@ fn activate(app: &adw::Application, o: &Options) {
             .as_deref()
             .is_some_and(|p| p == "taf-card" || p.starts_with("taf-card:")),
     });
+    if o.page.as_deref() == Some("delete-account") {
+        kiff_account::OPEN_DELETE.with(|d| d.set(true));
+    }
     // A hold's notification, clicked (`app.open-hold`): Needs you, read again. A screenshot
     // sends none.
     if !screenshot {

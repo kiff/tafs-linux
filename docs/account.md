@@ -85,7 +85,18 @@ when this computer is in another zone, "Use this computer's: {identifier}" (this
 by `TZ`, else `/etc/localtime`), and "Holds' deadlines, Activity, the Record and what your tafs
 write use this time zone."; Export my chats with what it exports; and Delete account with what it
 deletes, for whoever may (`account.delete`). The time zone row opens its picker; using
-this computer's zone (a signed setup call), exporting and deleting are there, dimmed.
+this computer's zone (a signed setup call) and exporting are there, dimmed.
+
+Delete account opens its sheet (`DeleteAccountView`), with Cancel at the top:
+- the warning ("This deletes your KIFF account. It can't be undone.", 15 semibold);
+- What goes, each line with its symbol: tafs, runs, chats and notes; app sign-ins; Cards and
+  keys; KIFF records, after 30 days.
+
+Deleting is confirmed by the device, which this computer can't do. So where Delete account would
+be, the sheet says "This device can't approve. Approve on another device signed in to your
+account." (`ApprovalGate`, `docs/approval.md`). The iPad's footer ("You confirm with Face ID…")
+goes with the button, so it's left out. `--page delete-account` opens the sheet, CI's
+`delete-account`.
 
 ## People & groups
 
