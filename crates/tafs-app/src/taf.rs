@@ -50,6 +50,9 @@ pub struct TafPage {
     /// Where its work is read (`WorkPanel`), and its health as Home read it.
     pub work: crate::work_panel::WorkSource,
     pub health: Option<tafs_core::home::Health>,
+    /// Where its runs are read and Run now sent, and `RunsPanel`'s line (`runs::next_line`).
+    pub runs: crate::runs_panel::RunsSource,
+    pub runs_line: Option<(String, bool)>,
 }
 
 /// Where a tafs cloud taf's Activity pages come from.
@@ -168,6 +171,22 @@ pub fn page(
                 t.health.clone(),
                 Rc::new(crate::work_panel::Opens { usage: open_usage }),
             ));
+            // Its runs: when it runs next and Run now, then the runs tafs cloud kept, read again
+            // once Run now started one.
+            let (kept, reload) =
+                crate::runs_panel::retained_runs(w.clone(), id.clone(), t.runs.clone());
+            if let Some(line) = &t.runs_line {
+                if !matches!(t.runs, crate::runs_panel::RunsSource::None) {
+                    body.append(&crate::runs_panel::runs_panel(
+                        w.clone(),
+                        id.clone(),
+                        t.runs.clone(),
+                        line.clone(),
+                        reload,
+                    ));
+                }
+            }
+            body.append(&kept);
             body.append(&cloud_activity(w.clone(), id.clone(), t.source.clone()));
         }
     }

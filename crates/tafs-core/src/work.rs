@@ -9,6 +9,11 @@ use crate::home::Health;
 
 /// The path, with the taf's id escaped as one segment.
 pub fn path(taf: &str) -> String {
+    format!("/v1/tafs/{}/work", segment(taf))
+}
+
+/// One path segment, escaped: anything but an unreserved character as %XX.
+pub fn segment(taf: &str) -> String {
     let id: String = taf
         .bytes()
         .map(|b| match b {
@@ -18,7 +23,7 @@ pub fn path(taf: &str) -> String {
             _ => format!("%{b:02X}"),
         })
         .collect();
-    format!("/v1/tafs/{id}/work")
+    id
 }
 
 fn time(v: Option<&Value>) -> Option<DateTime<Utc>> {
@@ -52,7 +57,7 @@ pub struct Request {
 
 impl Request {
     /// Its id and time are required, as the iPad's; the rest reads as nothing when it isn't one.
-    fn read(v: &Value) -> Option<Request> {
+    pub fn read(v: &Value) -> Option<Request> {
         let o = v.as_object()?;
         let deliveries = match o.get("deliveries").and_then(Value::as_array) {
             Some(a) => a
@@ -96,7 +101,7 @@ pub struct Skipped {
 }
 
 impl Skipped {
-    fn read(v: &Value) -> Option<Skipped> {
+    pub fn read(v: &Value) -> Option<Skipped> {
         let o = v.as_object()?;
         Some(Skipped {
             due: time(o.get("due"))?,
@@ -113,7 +118,7 @@ pub enum Row {
 }
 
 impl Row {
-    fn at(&self) -> DateTime<Utc> {
+    pub fn at(&self) -> DateTime<Utc> {
         match self {
             Row::Request(r) => r.at,
             Row::Skipped(s) => s.due,
