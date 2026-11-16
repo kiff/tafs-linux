@@ -39,6 +39,8 @@ pub struct Screens {
     pub connect: crate::connect::ConnectSource,
     /// Where Account › Devices reads.
     pub devices: crate::devices::DevicesSource,
+    /// Account › Alerts: signed in with KIFF, whether this person may answer held calls.
+    pub alerts: crate::alerts::AlertsSource,
     /// Where People & groups reads, and what it knows besides.
     pub people: crate::people::PeopleSource,
     pub people_known: Rc<crate::people::Known>,
@@ -77,6 +79,7 @@ pub fn build(
         cloud_names,
         connect,
         devices,
+        alerts,
         calendar,
         calendar_first,
         people,
@@ -169,6 +172,7 @@ pub fn build(
                     | Selection::People
                     | Selection::KiffAccount
                     | Selection::TimeZone
+                    | Selection::Alerts
             );
             account_icon.set_icon_name(Some(icon_for(if account_open {
                 "person.crop.circle.fill"
@@ -250,6 +254,14 @@ pub fn build(
                         Rc::new(move || open(Selection::Account)),
                     )
                 }
+                Selection::Alerts => {
+                    let open = open.clone();
+                    crate::alerts::page(
+                        w.clone(),
+                        alerts.clone(),
+                        Rc::new(move || open(Selection::Account)),
+                    )
+                }
                 Selection::Devices => {
                     let open = open.clone();
                     crate::devices::page(
@@ -320,7 +332,7 @@ pub fn build(
                         &account,
                         &crate::account::Actions {
                             act: actions.clone(),
-                            open: Rc::new(move |screen, title| {
+                            open: Rc::new(move |screen, _title| {
                                 open(match screen {
                                     tafs_core::account::Screen::Devices => Selection::Devices,
                                     tafs_core::account::Screen::People => Selection::People,
@@ -332,7 +344,7 @@ pub fn build(
                                         Selection::ConnectApps
                                     }
                                     tafs_core::account::Screen::Usage => Selection::Usage,
-                                    _ => Selection::Titled(title),
+                                    tafs_core::account::Screen::Alerts => Selection::Alerts,
                                 })
                             }),
                         },
@@ -686,6 +698,7 @@ fn title_of(
         Selection::People => l("people.title"),
         Selection::KiffAccount => l("settings.kiff_account"),
         Selection::TimeZone => l("settings.time_zone_title"),
+        Selection::Alerts => l("settings.alerts"),
         Selection::Titled(title) => title.clone(),
         Selection::Halt(_) => l("taf.halt.title"),
         Selection::Taf(key) | Selection::Held { taf: key, .. } => tafs
