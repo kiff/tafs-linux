@@ -78,11 +78,6 @@ pub(crate) fn capsule(cr: &cairo::Context, x: f64, y: f64, w: f64, h: f64, hex: 
     let _ = cr.fill();
 }
 
-/// A soft shadow under a rounded shape: a few widening outlines at low opacity.
-pub(crate) fn shadow(cr: &cairo::Context, x: f64, y: f64, w: f64, h: f64, r: f64, lift: f64) {
-    glow(cr, (x, y, w, h, r), lift, 0x000000, 0.15);
-}
-
 /// A shadow in a colour, `alpha` at its darkest: six widening outlines, `lift` below the shape.
 fn glow(
     cr: &cairo::Context,

@@ -9,8 +9,8 @@ there; the screen is `crates/tafs-app/src/sign_in.rs`.
 
 The approved redesign (tafs#1240's `SignInView` for an iPad or a Mac), a dialog 1000 wide:
 
-- **On the left, the usual way** (`kiffHalf`): a drawing of KIFF's sign-in (a card with the app's
-  mark, two lines and its button, under a lock, on a soft amber circle), "Sign in with KIFF" (30
+- **On the left, the usual way** (`kiffHalf`): board 1 (first run: a card opening, sparkles round
+  it, `illustrations.rs`), as on every app's sign-in, "Sign in with KIFF" (30
   bold), and **Continue** (the brand's button, 320 wide). Continue starts the flow below, and its
   code and its steps show in its place, at most 420 wide. The terms line is under it.
 - **On the right, the other way** (`phoneHalf`), on the raised colour: this computer's

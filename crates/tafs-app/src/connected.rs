@@ -1,6 +1,6 @@
-//! The sign-in's drawings (`SignInArt`), in shapes only, never a letter, a number or a word
-//! (rule 14), and the celebration after signing in either way (`ConnectedView`): the computer and
-//! the phone, joined; `sign_in.connected` and `sign_in.connected_line`; Let's go.
+//! The celebration after signing in either way (`ConnectedView`): its drawing
+//! (`SignInArt.connected`) in shapes only, never a letter, a number or a word (rule 14), the
+//! computer and the phone joined; `sign_in.connected` and `sign_in.connected_line`; Let's go.
 
 use std::f64::consts::PI;
 use std::rc::Rc;
@@ -9,55 +9,8 @@ use adw::prelude::*;
 use gtk::cairo;
 use tafs_core::words::WordBook;
 
-use crate::illustrations::{area, capsule, mark, rgb, rounded, shadow, tone};
+use crate::illustrations::{area, capsule, mark, rgb, rounded, tone};
 use crate::widgets::{primary, text};
-
-/// `SignInArt.kiff`: KIFF's sign-in, a card with the app's mark, two lines and its button, under a
-/// lock, on a soft amber circle.
-pub fn kiff_art() -> gtk::DrawingArea {
-    area(200, 200, |cr| {
-        let (ink, amber) = (tone("ink"), tone("amber"));
-        // The circle, 190 across.
-        cr.arc(100.0, 100.0, 95.0, 0.0, 2.0 * PI);
-        rgb(cr, amber, 0.16);
-        let _ = cr.fill();
-        // The card, 122 × 156, from the top trailing corner moved 34 in and 20 down.
-        let (x, y, w, h) = (200.0 - 122.0 - 34.0, 20.0, 122.0, 156.0);
-        shadow(cr, x, y, w, h, 22.0, 10.0);
-        rounded(cr, x, y, w, h, 22.0);
-        cr.set_source_rgb(1.0, 1.0, 1.0);
-        let _ = cr.fill();
-        mark(cr, x + 16.0, y + 16.0, 34.0, 10.0);
-        capsule(cr, x + 16.0, y + 60.0, 78.0, 8.0, 0x1B1726, 0.85);
-        capsule(cr, x + 16.0, y + 78.0, 58.0, 8.0, 0x1B1726, 0.18);
-        capsule(
-            cr,
-            x + 16.0,
-            y + h - 16.0 - 26.0,
-            w - 32.0,
-            26.0,
-            amber,
-            1.0,
-        );
-        // The lock, on a white circle at the top trailing corner.
-        let (cx, cy) = (175.0, 25.0);
-        shadow(cr, cx - 25.0, cy - 25.0, 50.0, 50.0, 25.0, 6.0);
-        cr.arc(cx, cy, 25.0, 0.0, 2.0 * PI);
-        cr.set_source_rgb(1.0, 1.0, 1.0);
-        let _ = cr.fill();
-        let _ = ink;
-        rgb(cr, 0x1B1726, 1.0);
-        cr.set_line_width(2.0);
-        rounded(cr, cx - 8.0, cy - 2.0, 16.0, 12.0, 2.5);
-        let _ = cr.stroke();
-        cr.new_sub_path();
-        cr.arc(cx, cy - 4.0, 4.5, PI, 0.0);
-        cr.line_to(cx + 4.5, cy - 2.0);
-        cr.move_to(cx - 4.5, cy - 2.0);
-        cr.line_to(cx - 4.5, cy - 4.0);
-        let _ = cr.stroke();
-    })
-}
 
 /// `SignInArt.connected`: the computer and the phone, a check between them.
 pub fn connected_art() -> gtk::DrawingArea {
