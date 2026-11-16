@@ -38,6 +38,13 @@ pub fn path(q: &str) -> String {
     out
 }
 
+/// Choosing `zone` for the account, from the list or as this computer's
+/// (`setAccountTimeZone`): the owner's act, which the iPad signs (`tafs.time-zone.v1`) and then
+/// sends as a signed setup call. This computer draws it up to the signature.
+pub fn choose(zone: &str) -> crate::signed::Act {
+    crate::signed::Act::SetTimeZone { zone: zone.into() }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -49,5 +56,12 @@ mod tests {
         assert!(read(br#"{"zones":[{"id":"x"}]}"#).is_none());
         assert_eq!(path("new york/é"), "/v1/time-zones?q=new%20york%2F%C3%A9");
         assert_eq!(path(""), "/v1/time-zones?q=");
+    }
+
+    #[test]
+    fn choosing_a_zone_is_signed() {
+        let (method, path) = choose("Europe/Paris").route();
+        assert_eq!((method, path.as_str()), ("PUT", "/v1/me/time-zone"));
+        assert!(crate::signed::Unsigned::new(method, path, vec![]).is_none());
     }
 }

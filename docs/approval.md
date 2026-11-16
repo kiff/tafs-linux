@@ -45,8 +45,8 @@ A call this computer makes as the session is a `signed::Unsigned`, which can't b
 them. Each signed act (`signed::Act`) names the call the iPad would make, and the tests check
 that none of them can be made.
 
-The acts drawn this way: People & groups' changes, and signing another device out
-(`docs/account.md`).
+The acts drawn this way: People & groups' changes, signing another device out, and the
+account's time zone (`docs/account.md`).
 
 Not on Linux: `ReadinessReader` reads again when the app comes back, but this computer's state
 never changes. `openTafsSettings` opens tafs' iOS settings, which don't exist here, and

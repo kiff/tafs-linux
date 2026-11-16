@@ -1,14 +1,16 @@
 //! Account › Time zone (`TimeZonePicker`): this computer's zone to use, then tafs cloud's zones for
 //! what the person types, a moment after the last key, the account's own checked. Choosing one is
-//! the owner's act, signed: the rows are there, and Use this computer's dimmed, until this computer
-//! can sign it. The lines are `tafs-core/src/zones.rs`.
+//! the owner's act, signed: Use this computer's and each zone are there, and their tap says this
+//! computer can't approve, under the first row where the iPad says why the zone didn't change,
+//! and sends nothing. The lines are `tafs-core/src/zones.rs`.
 
 use std::cell::RefCell;
 use std::rc::Rc;
 
 use gtk::prelude::*;
+use tafs_core::sidebar::Mode;
 use tafs_core::words::WordBook;
-use tafs_core::zones::{path, read, Zone};
+use tafs_core::zones::{choose, path, read, Zone};
 
 use crate::widgets::{one_line, symbol, text};
 
@@ -23,6 +25,12 @@ pub enum ZonesSource {
     File(std::path::PathBuf),
     /// The sample and signed out: no zones.
     None,
+}
+
+thread_local! {
+    /// `--page time-zone-use`: Use this computer's is tapped once the page shows, for its
+    /// screenshot.
+    pub static TAP_USE_HERE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
 }
 
 #[derive(Default)]
@@ -114,12 +122,28 @@ pub fn page(
     if let Some(c) = use_here.child() {
         c.set_halign(gtk::Align::Start);
     }
-    use_here.set_sensitive(false);
+    use_here.set_widget_name("zones.use-here");
     first.append(&use_here);
     let error = text("", 13, 400, &["tafs-no"]);
     error.set_visible(false);
     error.set_margin_bottom(10);
     first.append(&error);
+    // The iPad's `timeZoneError` spot: once a tap would have signed, this computer's words.
+    let mode = match source {
+        ZonesSource::None => Mode::SignedOut,
+        _ => Mode::Kiff,
+    };
+    let refused = crate::approval::refusal_slot();
+    refused.set_margin_bottom(10);
+    first.append(&refused);
+    {
+        let (w, refused, here) = (w.clone(), refused.clone(), here.clone());
+        use_here
+            .connect_clicked(move |_| crate::approval::refuse(&w, mode, &choose(&here), &refused));
+    }
+    if TAP_USE_HERE.with(|t| t.replace(false)) {
+        use_here.connect_map(|b| b.emit_clicked());
+    }
     column.append(&first);
     let list = gtk::Box::new(gtk::Orientation::Vertical, 0);
     list.add_css_class("tafs-group");
@@ -131,7 +155,13 @@ pub fn page(
 
     let state = Rc::new(RefCell::new(State::default()));
     let draw: Rc<dyn Fn()> = {
-        let (list, state, error) = (list.clone(), state.clone(), error.clone());
+        let (w, list, state, error, refused) = (
+            w.clone(),
+            list.clone(),
+            state.clone(),
+            error.clone(),
+            refused.clone(),
+        );
         Rc::new(move || {
             while let Some(c) = list.first_child() {
                 list.remove(&c);
@@ -157,7 +187,16 @@ pub fn page(
                     check.add_css_class("tafs-amber-text");
                     row.append(&check);
                 }
-                list.append(&row);
+                // A zone is a button: choosing it would sign.
+                let b = gtk::Button::new();
+                b.set_child(Some(&row));
+                b.add_css_class("tafs-plain");
+                b.set_widget_name(&format!("zones.{}", z.id));
+                let (w, refused, id) = (w.clone(), refused.clone(), z.id.clone());
+                b.connect_clicked(move |_| {
+                    crate::approval::refuse(&w, mode, &choose(&id), &refused)
+                });
+                list.append(&b);
             }
         })
     };

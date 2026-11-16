@@ -1,7 +1,7 @@
 //! Account › KIFF account (`AccountView`): the account's name, its id when it isn't its name, who
 //! is signed in; its time zone, with this computer's to use when it's elsewhere; Export my chats;
-//! and Delete account for whoever may. Setting the zone, exporting and deleting are acts this
-//! computer can't take yet: there, dimmed. The lines are `tafs-core/src/account.rs`.
+//! and Delete account for whoever may. Setting the zone and deleting are signed: drawn up to the
+//! signature, they say this computer can't approve. The lines are `tafs-core/src/account.rs`.
 
 use std::rc::Rc;
 
@@ -359,7 +359,24 @@ pub fn page(
             g.append(&zone_button);
             if let Some(use_this) = &lines.use_this_zone {
                 g.append(&line());
-                g.append(&row_button(use_this, "tafs-amber-text"));
+                // Using this computer's zone is signed: its tap says this computer can't
+                // approve, where the iPad says why the zone didn't change, and sends nothing.
+                let b = row_button(use_this, "tafs-amber-text");
+                b.set_sensitive(true);
+                b.set_widget_name("kiff-account.use-here");
+                g.append(&b);
+                let refused = crate::approval::refusal_slot();
+                refused.set_margin_bottom(10);
+                g.append(&refused);
+                let w = w.clone();
+                b.connect_clicked(move |_| {
+                    crate::approval::refuse(
+                        &w,
+                        tafs_core::sidebar::Mode::Kiff,
+                        &tafs_core::zones::choose(&here),
+                        &refused,
+                    )
+                });
             }
             column.append(&g);
             column.append(&footer(&l("settings.time_zone.uses_this")));

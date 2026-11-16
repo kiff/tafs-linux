@@ -110,9 +110,13 @@ only the newest search's answer kept; the account's zone checked. Why the zones 
 in red, under the first row. Read as strictly as the iPad's decoder: a zone without its `id` or
 `title` fails the read.
 
-Not yet: **choosing a zone** and **using this computer's** are the owner's act, signed
-(`tafs.time-zone.v1`) and then a signed setup call to KIFF: Use this computer's is there, dimmed,
-and the rows don't choose, until this computer can sign it.
+**Choosing a zone** and **using this computer's** are the owner's act, which the iPad signs
+(`setAccountTimeZone`: `tafs.time-zone.v1` behind Face ID, then `PUT /v1/me/time-zone` as a
+signed setup call). The rows are buttons, as the iPad's are, and so is Use this computer's.
+Their tap is the tap that would sign. Under the first row, where the iPad says why the zone
+didn't change, it says "This device can't approve. Approve on another device signed in to your
+account." Nothing is sent (`docs/approval.md` › A view-only computer). `--page time-zone-use`
+taps Use this computer's (CI's `time-zone-use`).
 
 ## KIFF account
 
@@ -122,8 +126,9 @@ button, then the account's name, its id when it isn't its name, and who is signe
 when this computer is in another zone, "Use this computer's: {identifier}" (this computer's zone
 by `TZ`, else `/etc/localtime`), and "Holds' deadlines, Activity, the Record and what your tafs
 write use this time zone."; Export my chats with what it exports; and Delete account with what it
-deletes, for whoever may (`account.delete`). The time zone row opens its picker; using
-this computer's zone (a signed setup call) is there, dimmed.
+deletes, for whoever may (`account.delete`). The time zone row opens its picker. Using
+this computer's zone is signed: its tap says this computer can't approve, under it, and sends
+nothing.
 
 Export my chats (`ExportChatsView.swift`, kiff/tafs#424) reads `GET /v1/me/chats/export` as the
 session, signed in with KIFF from a kept session. While it reads, "Preparing your chats…" shows

@@ -172,7 +172,7 @@ struct Options {
 }
 
 const USAGE: &str = "tafs [--lang en|de|fr|es|it|pt|nl|pl] [--theme light|dark] [--sample] [--signed-in] [--view-only [--paired]]
-     [--home contract.json] [--usage answers.json] [--people answers.json] [--unproven answers.json] [--recipes answers.json] [--gallery answers.json] [--halt answer.json] [--record-search answers.json] [--access answer.json] [--receipts answer.json] [--activity answer.json] [--calls answer.json] [--receipt answer.json] [--work answer.json] [--doors answer.json] [--account-reads answers.json] [--me answer.json] [--memory answer.json] [--runs answer.json] [--request answer.json] [--balance answer.json] [--coach answer.json] [--coach-chats answer.json] [--chat answer.json [--report]] [--brief answer.json] [--mission-log answer.json] [--size WxH] [--page welcome|sign-in|pair|recipe:<id>|gallery|halt-all|halt:<id>|record-search:<q>|record-export|receipt:<proposal id>|run:<taf id>|pin-sheet|coach|overview|overview-label:<id>|needs-you|brief-answer:<decision id>|mission-log:<mission id>|record|calendar|calendar-week|usage|connect-apps|account|kiff-account|time-zone|alerts|devices|devices-sign-out|people|people-rename|people-add|taf|taf-card|taf-setup|consent|connected|sign-in-code] [--screenshot out.png]";|     [--home contract.json] [--usage answers.json] [--people answers.json] [--unproven answers.json] [--recipes answers.json] [--gallery answers.json] [--halt answer.json] [--record-search answers.json] [--access answer.json] [--receipts answer.json] [--activity answer.json] [--calls answer.json] [--receipt answer.json] [--work answer.json] [--doors answer.json] [--account-reads answers.json] [--me answer.json] [--memory answer.json] [--runs answer.json] [--request answer.json] [--balance answer.json] [--coach answer.json] [--coach-chats answer.json] [--chat answer.json [--report]] [--size WxH] [--page welcome
+     [--home contract.json] [--usage answers.json] [--people answers.json] [--unproven answers.json] [--recipes answers.json] [--gallery answers.json] [--halt answer.json] [--record-search answers.json] [--access answer.json] [--receipts answer.json] [--activity answer.json] [--calls answer.json] [--receipt answer.json] [--work answer.json] [--doors answer.json] [--account-reads answers.json] [--me answer.json] [--memory answer.json] [--runs answer.json] [--request answer.json] [--balance answer.json] [--coach answer.json] [--coach-chats answer.json] [--chat answer.json [--report]] [--brief answer.json] [--mission-log answer.json] [--size WxH] [--page welcome|sign-in|pair|recipe:<id>|gallery|halt-all|halt:<id>|record-search:<q>|record-export|receipt:<proposal id>|run:<taf id>|pin-sheet|coach|overview|overview-label:<id>|needs-you|brief-answer:<decision id>|mission-log:<mission id>|record|calendar|calendar-week|usage|connect-apps|account|kiff-account|time-zone|time-zone-use|alerts|devices|devices-sign-out|people|people-rename|people-add|taf|taf-card|taf-setup|consent|connected|sign-in-code] [--screenshot out.png]";|     [--home contract.json] [--usage answers.json] [--people answers.json] [--unproven answers.json] [--recipes answers.json] [--gallery answers.json] [--halt answer.json] [--record-search answers.json] [--access answer.json] [--receipts answer.json] [--activity answer.json] [--calls answer.json] [--receipt answer.json] [--work answer.json] [--doors answer.json] [--account-reads answers.json] [--me answer.json] [--memory answer.json] [--runs answer.json] [--request answer.json] [--balance answer.json] [--coach answer.json] [--coach-chats answer.json] [--chat answer.json [--report]] [--size WxH] [--page welcome
 
 fn options() -> Result<Options, String> {
     let mut o = Options::default();
@@ -267,7 +267,7 @@ fn selection_of(page: Option<&str>) -> Selection {
         Some("devices") | Some("devices-sign-out") => Selection::Devices,
         Some("people") | Some("people-rename") | Some("people-add") => Selection::People,
         Some("kiff-account") | Some("delete-account") => Selection::KiffAccount,
-        Some("time-zone") => Selection::TimeZone,
+        Some("time-zone") | Some("time-zone-use") => Selection::TimeZone,
         Some("alerts") => Selection::Alerts,
         Some("language") => Selection::Language,
         Some("coach") => Selection::Coach,
@@ -450,6 +450,7 @@ fn activate(app: &adw::Application, o: &Options) {
         Some("people-rename") => people::OPEN.with(|p| p.set(Some("rename"))),
         Some("people-add") => people::OPEN.with(|p| p.set(Some("add"))),
         Some("devices-sign-out") => devices::OPEN_SIGN_OUT.with(|d| d.set(true)),
+        Some("time-zone-use") => zones::TAP_USE_HERE.with(|t| t.set(true)),
         _ => {}
     }
     // A hold's notification, clicked (`app.open-hold`): Needs you, read again. A screenshot

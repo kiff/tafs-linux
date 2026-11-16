@@ -13,7 +13,7 @@ export XDG_CONFIG_HOME=$(mktemp -d)
 mkdir -p "$XDG_CONFIG_HOME/gtk-4.0"
 printf '[Settings]\ngtk-font-name=Inter 11\ngtk-hint-font-metrics=1\n' > "$XDG_CONFIG_HOME/gtk-4.0/settings.ini"
 missing=0
-for screen in welcome sign-in sign-in-code sign-in-narrow pair connected overview overview-home overview-empty needs-you needs-you-empty needs-you-waits needs-you-happened record taf taf-card taf-home taf-home-card taf-card-lines taf-work taf-run taf-knocks taf-setup taf-units usage usage-kiff usage-kiff-member connect-apps connect-apps-narrow devices devices-sign-out people people-rename people-add kiff-account account-kiff consent time-zone language alerts calendar calendar-week calendar-compact account sidebar-sample sidebar-others sidebar-setting-up sidebar-plan view-only view-only-paired recipes recipe-sheet gallery-strip gallery halt-all halt-all-halted halt-one record-search record-export record-receipt record-on delete-account pin-sheet coach coach-wider coach-asks coach-chats coach-empty coach-start taf-chat taf-chat-working taf-report brief brief-answer brief-clear overview-labels overview-label mission-log; do
+for screen in welcome sign-in sign-in-code sign-in-narrow pair connected overview overview-home overview-empty needs-you needs-you-empty needs-you-waits needs-you-happened record taf taf-card taf-home taf-home-card taf-card-lines taf-work taf-run taf-knocks taf-setup taf-units usage usage-kiff usage-kiff-member connect-apps connect-apps-narrow devices devices-sign-out people people-rename people-add kiff-account account-kiff consent time-zone time-zone-use language alerts calendar calendar-week calendar-compact account sidebar-sample sidebar-others sidebar-setting-up sidebar-plan view-only view-only-paired recipes recipe-sheet gallery-strip gallery halt-all halt-all-halted halt-one record-search record-export record-receipt record-on delete-account pin-sheet coach coach-wider coach-asks coach-chats coach-empty coach-start taf-chat taf-chat-working taf-report brief brief-answer brief-clear overview-labels overview-label mission-log; do
   case $screen in
     welcome) opts=(--page welcome) ;;
     sign-in) opts=(--page sign-in) ;;
@@ -41,6 +41,7 @@ for screen in welcome sign-in sign-in-code sign-in-narrow pair connected overvie
     consent) opts=(--home shared/contracts/home.json --account-reads crates/tafs-app/fixtures/account-reads-not-given.json --page consent) ;;
     kiff-account) opts=(--home shared/contracts/home.json --people crates/tafs-app/fixtures/people-kiff.json --page kiff-account) ;;
     time-zone) opts=(--home shared/contracts/home.json --people crates/tafs-app/fixtures/people-kiff.json --page time-zone) ;;
+    time-zone-use) opts=(--home shared/contracts/home.json --people crates/tafs-app/fixtures/people-kiff.json --page time-zone-use) ;;
     people) opts=(--home shared/contracts/home.json --people crates/tafs-app/fixtures/people-kiff.json --page people) ;;
     # Renaming a group with Save tapped: this computer can't approve, and sends nothing.
     people-rename) opts=(--home shared/contracts/home.json --people crates/tafs-app/fixtures/people-kiff.json --page people-rename) ;;
