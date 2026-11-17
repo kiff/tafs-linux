@@ -13,7 +13,7 @@ export XDG_CONFIG_HOME=$(mktemp -d)
 mkdir -p "$XDG_CONFIG_HOME/gtk-4.0"
 printf '[Settings]\ngtk-font-name=Inter 11\ngtk-hint-font-metrics=1\n' > "$XDG_CONFIG_HOME/gtk-4.0/settings.ini"
 missing=0
-for screen in welcome sign-in sign-in-code sign-in-narrow pair connected overview overview-home overview-empty needs-you needs-you-empty needs-you-waits needs-you-happened record taf taf-card taf-home taf-home-card taf-card-lines taf-work taf-run taf-knocks taf-setup taf-units usage usage-kiff usage-kiff-member usage-ask usage-decline connect-apps connect-apps-narrow devices devices-sign-out people people-rename people-add kiff-account account-kiff consent time-zone time-zone-use language alerts calendar calendar-week calendar-compact account sidebar-sample sidebar-others sidebar-setting-up sidebar-plan view-only view-only-paired recipes recipe-sheet gallery-strip gallery halt-all halt-all-halted halt-one record-search record-export record-receipt record-on delete-account pin-sheet coach coach-wider coach-asks coach-chats coach-empty coach-start taf-chat taf-chat-working taf-report brief brief-answer brief-clear overview-labels overview-label mission-log; do
+for screen in welcome sign-in sign-in-code sign-in-narrow pair connected overview overview-home overview-empty needs-you needs-you-empty needs-you-waits needs-you-happened record taf taf-card taf-home taf-home-card taf-card-lines taf-work taf-run taf-knocks taf-setup taf-units usage usage-kiff usage-kiff-member usage-ask usage-decline connect-apps connect-apps-narrow connect-app connect-connection connect-remove connect-kiff connect-which-taf connect-approve devices devices-sign-out people people-rename people-add kiff-account account-kiff consent time-zone time-zone-use language alerts calendar calendar-week calendar-compact account sidebar-sample sidebar-others sidebar-setting-up sidebar-plan view-only view-only-paired recipes recipe-sheet gallery-strip gallery halt-all halt-all-halted halt-one record-search record-export record-receipt record-on delete-account pin-sheet coach coach-wider coach-asks coach-chats coach-empty coach-start taf-chat taf-chat-working taf-report brief brief-answer brief-clear overview-labels overview-label mission-log; do
   case $screen in
     welcome) opts=(--page welcome) ;;
     sign-in) opts=(--page sign-in) ;;
@@ -48,6 +48,14 @@ for screen in welcome sign-in sign-in-code sign-in-narrow pair connected overvie
     people-add) opts=(--home shared/contracts/home.json --people crates/tafs-app/fixtures/people-kiff.json --page people-add) ;;
     connect-apps-narrow) opts=(--sample --signed-in --size 900x800 --page connect-apps) ;;
     connect-apps) opts=(--sample --signed-in --page connect-apps) ;;
+    # The reference set's connections: Stripe's, one connection's detail, and its Remove access.
+    connect-app) opts=(--sample --signed-in --page connect-app) ;;
+    connect-connection) opts=(--sample --signed-in --page connect-connection) ;;
+    connect-remove) opts=(--sample --signed-in --page connect-remove) ;;
+    # Signed in with KIFF: Connect, "Which taf?" and the approval once started, read from a fixture.
+    connect-kiff) opts=(--home shared/contracts/home.json --access crates/tafs-app/fixtures/access-manage.json --connect crates/tafs-app/fixtures/connect-kiff.json --page connect-apps) ;;
+    connect-which-taf) opts=(--home shared/contracts/home.json --access crates/tafs-app/fixtures/access-manage.json --connect crates/tafs-app/fixtures/connect-kiff.json --page connect-which-taf) ;;
+    connect-approve) opts=(--home shared/contracts/home.json --access crates/tafs-app/fixtures/access-manage.json --connect crates/tafs-app/fixtures/connect-kiff.json --page connect-approve) ;;
     usage) opts=(--sample --signed-in --page usage) ;;
     usage-kiff) opts=(--home shared/contracts/home.json --usage crates/tafs-app/fixtures/usage-kiff.json --page usage) ;;
     usage-kiff-member) opts=(--home shared/contracts/home.json --usage crates/tafs-app/fixtures/usage-kiff-member.json --page usage) ;;

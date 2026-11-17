@@ -10,6 +10,7 @@ mod chat;
 mod coach;
 mod connect;
 mod connected;
+mod connections;
 mod devices;
 mod fido_key;
 mod halt;
@@ -109,6 +110,7 @@ struct Options {
     usage: Option<String>,
     /// Synthetic answers for People & groups signed in with KIFF, for its screenshot.
     people: Option<String>,
+    connect: Option<String>,
     /// With `--home`: KIFF's "Did this happen?" answer from a file, for its screenshot.
     unproven: Option<String>,
     /// With `--home`: tafs cloud's recipes answer from a file, for Home with no taf.
@@ -172,7 +174,7 @@ struct Options {
 }
 
 const USAGE: &str = "tafs [--lang en|de|fr|es|it|pt|nl|pl] [--theme light|dark] [--sample] [--signed-in] [--view-only [--paired]]
-     [--home contract.json] [--usage answers.json] [--people answers.json] [--unproven answers.json] [--recipes answers.json] [--gallery answers.json] [--halt answer.json] [--record-search answers.json] [--access answer.json] [--receipts answer.json] [--activity answer.json] [--calls answer.json] [--receipt answer.json] [--work answer.json] [--doors answer.json] [--account-reads answers.json] [--me answer.json] [--memory answer.json] [--runs answer.json] [--request answer.json] [--balance answer.json] [--coach answer.json] [--coach-chats answer.json] [--chat answer.json [--report]] [--brief answer.json] [--mission-log answer.json] [--size WxH] [--page welcome|sign-in|pair|recipe:<id>|gallery|halt-all|halt:<id>|record-search:<q>|record-export|receipt:<proposal id>|run:<taf id>|pin-sheet|coach|overview|overview-label:<id>|needs-you|brief-answer:<decision id>|mission-log:<mission id>|record|calendar|calendar-week|usage|usage-ask|usage-decline|connect-apps|account|kiff-account|time-zone|time-zone-use|alerts|devices|devices-sign-out|people|people-rename|people-add|taf|taf-card|taf-setup|consent|connected|sign-in-code] [--screenshot out.png]";
+     [--home contract.json] [--usage answers.json] [--people answers.json] [--connect answers.json] [--unproven answers.json] [--recipes answers.json] [--gallery answers.json] [--halt answer.json] [--record-search answers.json] [--access answer.json] [--receipts answer.json] [--activity answer.json] [--calls answer.json] [--receipt answer.json] [--work answer.json] [--doors answer.json] [--account-reads answers.json] [--me answer.json] [--memory answer.json] [--runs answer.json] [--request answer.json] [--balance answer.json] [--coach answer.json] [--coach-chats answer.json] [--chat answer.json [--report]] [--brief answer.json] [--mission-log answer.json] [--size WxH] [--page welcome|sign-in|pair|recipe:<id>|gallery|halt-all|halt:<id>|record-search:<q>|record-export|receipt:<proposal id>|run:<taf id>|pin-sheet|coach|overview|overview-label:<id>|needs-you|brief-answer:<decision id>|mission-log:<mission id>|record|calendar|calendar-week|usage|usage-ask|usage-decline|connect-apps|connect-app|connect-connection|connect-remove|connect-which-taf|connect-approve|account|kiff-account|time-zone|time-zone-use|alerts|devices|devices-sign-out|people|people-rename|people-add|taf|taf-card|taf-setup|consent|connected|sign-in-code] [--screenshot out.png]";
 
 fn options() -> Result<Options, String> {
     let mut o = Options::default();
@@ -187,6 +189,7 @@ fn options() -> Result<Options, String> {
             "--home" => o.home = Some(value()?),
             "--usage" => o.usage = Some(value()?),
             "--people" => o.people = Some(value()?),
+            "--connect" => o.connect = Some(value()?),
             "--unproven" => o.unproven = Some(value()?),
             "--recipes" => o.recipes = Some(value()?),
             "--gallery" => o.gallery = Some(value()?),
@@ -262,7 +265,12 @@ fn selection_of(page: Option<&str>) -> Selection {
         Some("record") => Selection::Record,
         Some("calendar") | Some("calendar-week") => Selection::Calendar,
         Some("usage") | Some("usage-ask") | Some("usage-decline") => Selection::Usage,
-        Some("connect-apps") => Selection::ConnectApps,
+        Some("connect-apps")
+        | Some("connect-app")
+        | Some("connect-connection")
+        | Some("connect-remove")
+        | Some("connect-which-taf")
+        | Some("connect-approve") => Selection::ConnectApps,
         Some("account") => Selection::Account,
         Some("devices") | Some("devices-sign-out") => Selection::Devices,
         Some("people") | Some("people-rename") | Some("people-add") => Selection::People,
@@ -384,6 +392,7 @@ fn activate(app: &adw::Application, o: &Options) {
         open_run: o.page.as_deref().is_some_and(|p| p.starts_with("run:")),
         usage_file: o.usage.as_ref().map(std::path::PathBuf::from),
         people_file: o.people.as_ref().map(std::path::PathBuf::from),
+        connect_file: o.connect.as_ref().map(std::path::PathBuf::from),
         halt_file: halt_file(o.halt.as_deref()),
         record_search_file: record_search_file(o.record_search.as_deref()),
         receipts_file: o.receipts.as_deref().map(|p| match std::fs::read(p) {
@@ -448,6 +457,19 @@ fn activate(app: &adw::Application, o: &Options) {
     }
     match o.page.as_deref() {
         Some("people-rename") => people::OPEN.with(|p| p.set(Some("rename"))),
+        Some(
+            open @ ("connect-app" | "connect-connection" | "connect-remove" | "connect-which-taf"
+            | "connect-approve"),
+        ) => {
+            let open: &'static str = match open {
+                "connect-app" => "connect-app",
+                "connect-connection" => "connect-connection",
+                "connect-remove" => "connect-remove",
+                "connect-which-taf" => "connect-which-taf",
+                _ => "connect-approve",
+            };
+            connect::OPEN.with(|c| c.set(Some(open)));
+        }
         Some("people-add") => people::OPEN.with(|p| p.set(Some("add"))),
         Some("devices-sign-out") => devices::OPEN_SIGN_OUT.with(|d| d.set(true)),
         Some("time-zone-use") => zones::TAP_USE_HERE.with(|t| t.set(true)),
@@ -702,6 +724,8 @@ struct App {
     receipt_open: Option<String>,
     /// `--people`'s file of synthetic answers.
     people_file: Option<std::path::PathBuf>,
+    /// `--connect`'s file of synthetic answers: Connect apps' first page, and a start.
+    connect_file: Option<std::path::PathBuf>,
     /// A screenshot: the sample's Refunds has the reference set's three Cards.
     screenshot: bool,
     /// `--page taf-card`: the taf opens on its Card tab.
@@ -1891,20 +1915,43 @@ impl App {
                 },
                 _ => devices::DevicesSource::None,
             },
-            connect: match (mode, self.kept.borrow().as_ref()) {
-                (Mode::Sample, _) => connect::ConnectSource::Sample {
-                    screenshot: self.screenshot,
-                },
-                (Mode::Kiff, Some(kept)) => connect::ConnectSource::Cloud {
-                    token: kept.token.clone(),
-                    languages: self.languages.clone(),
-                    connectable: tafs
-                        .iter()
-                        .filter(|t| t.manages)
-                        .filter_map(|t| t.cloud_id.clone())
-                        .collect(),
-                },
-                _ => connect::ConnectSource::None,
+            connect: {
+                // `connectableTafs`: on tafs cloud and managed by this person, by tafs cloud's id.
+                let connectable: Vec<tafs_core::connect::Connectable> = tafs
+                    .iter()
+                    .filter(|t| t.manages)
+                    .filter_map(|t| {
+                        Some(tafs_core::connect::Connectable {
+                            id: t.cloud_id.clone()?,
+                            name: t.name.clone(),
+                        })
+                    })
+                    .collect();
+                // `canManageCards`.
+                let manages = account.as_ref().is_none_or(|a| a.allows("cards.manage"));
+                match (mode, self.kept.borrow().as_ref(), &self.connect_file) {
+                    (Mode::Sample, _, _) => connect::ConnectSource::Sample {
+                        screenshot: self.screenshot,
+                        // The sample's tafs, which its connections are made for.
+                        tafs: tafs
+                            .iter()
+                            .filter(|t| !t.revoked)
+                            .map(|t| (t.key.clone(), t.name.clone()))
+                            .collect(),
+                    },
+                    (Mode::Kiff, _, Some(f)) => connect::ConnectSource::File {
+                        path: f.clone(),
+                        connectable,
+                        manages,
+                    },
+                    (Mode::Kiff, Some(kept), None) => connect::ConnectSource::Cloud {
+                        kept: Box::new(kept.clone()),
+                        languages: self.languages.clone(),
+                        connectable,
+                        manages,
+                    },
+                    _ => connect::ConnectSource::None,
+                }
             },
             // Coach, signed in with KIFF: its conversation read as the session with this device's
             // proof, or a screenshot's from `--coach`, never sent. The sample has no Coach.

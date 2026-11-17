@@ -152,6 +152,14 @@ pub enum Act {
     RaiseLimit,
     /// `declineRequest`: a member's request declined, with a note.
     DeclineRequest { request: String },
+    /// `disconnect(grantID:)`: a connection's access removed, or its waiting request or sign-in
+    /// cancelled, after its question (Connect apps). planque's call, behind Face ID.
+    Disconnect { grant: String },
+    /// `clearRemovedConnections`: a removed taf's connections cleared, one Face ID for all,
+    /// then the device key signs each disconnect.
+    ClearRemoved { grants: Vec<String> },
+    /// `reconnect`: a connection signed in again, approved behind Face ID first.
+    SignInAgain { grant: String },
 }
 
 impl Act {
@@ -178,7 +186,26 @@ impl Act {
                 "POST",
                 format!("/v1/me/pack-requests/{}/decline", escaped(request)),
             ),
+            // planque's, under the account's path (`PlanqueClient.raw`): each removed one is
+            // its own DELETE, the first named here.
+            Act::Disconnect { grant } => ("DELETE", format!("grants/{}", escaped(grant))),
+            Act::ClearRemoved { grants } => (
+                "DELETE",
+                format!(
+                    "grants/{}",
+                    escaped(grants.first().map(String::as_str).unwrap_or_default())
+                ),
+            ),
+            Act::SignInAgain { grant } => ("POST", format!("grants/{}/approve", escaped(grant))),
         }
+    }
+
+    /// The call goes to planque, which this computer never reaches (`session::may_send_to`).
+    pub fn at_planque(&self) -> bool {
+        matches!(
+            self,
+            Act::Disconnect { .. } | Act::ClearRemoved { .. } | Act::SignInAgain { .. }
+        )
     }
 }
 
@@ -254,6 +281,15 @@ mod tests {
             Act::DeclineRequest {
                 request: "req_1".into(),
             },
+            Act::Disconnect {
+                grant: "g_1".into(),
+            },
+            Act::ClearRemoved {
+                grants: vec!["g_1".into(), "g_2".into()],
+            },
+            Act::SignInAgain {
+                grant: "g_1".into(),
+            },
         ]
     }
 
@@ -261,6 +297,12 @@ mod tests {
     fn no_signed_act_makes_a_request() {
         for act in acts() {
             let (method, path) = act.route();
+            if act.at_planque() {
+                // planque's: this computer sends nothing there, signed or not.
+                let url = format!("{}/v1/accounts/t1/{path}", crate::planque::PLANQUE);
+                assert!(!crate::session::may_send_to(&url), "{act:?}");
+                continue;
+            }
             assert!(
                 signed(method, &path),
                 "{act:?} is signed at {method} {path}"

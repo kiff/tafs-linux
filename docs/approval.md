@@ -46,11 +46,13 @@ can be made unsigned. Each signed act (`signed::Act`) names the call the iPad wo
 that none of them can be made.
 
 The acts drawn this way: People & groups' changes, signing another device out, and the
-account's time zone (`docs/account.md`); declining a request (`docs/usage.md`).
+account's time zone (`docs/account.md`); declining a request (`docs/usage.md`); removing an app's
+access, cancelling its request or sign-in, clearing a removed taf's connections and signing in
+again, which are planque's (`docs/connect-apps.md`).
 
 A button the iPad itself wraps in `ApprovalGate` is the exception: there, as on the iPad, the
 gate's line is drawn in the button's place (`approval::gate`), not the button. Raise the limit is
-one (`docs/usage.md`).
+one (`docs/usage.md`); so is a connection's approval (`docs/connect-apps.md`).
 
 Not on Linux: `ReadinessReader` reads again when the app comes back, but this computer's state
 never changes. `openTafsSettings` opens tafs' iOS settings, which don't exist here, and

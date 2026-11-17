@@ -29,6 +29,107 @@ pub struct App {
     pub whose: Option<String>,
     /// tafs cloud's names of the tafs that use it; none when it sends none.
     pub used_by: Option<Vec<String>>,
+    /// The tafs that need it (`needed_by`), by tafs cloud's id and name: "Which taf?" lists only
+    /// these, and none means Ask Coach. None from a tafs cloud before it, or a list it can't read.
+    pub needed_by: Option<Vec<UsedBy>>,
+    /// Its live connections made under a taf that doesn't need it (`misplaced`).
+    pub misplaced: Vec<Misplaced>,
+}
+
+/// A taf by tafs cloud's id and name (`ConnectApps.UsedBy`): each field a string where it's there,
+/// else empty.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct UsedBy {
+    pub taf: String,
+    pub name: String,
+}
+
+impl UsedBy {
+    fn read(v: &Value) -> Result<UsedBy, ()> {
+        if !v.is_object() {
+            return Err(());
+        }
+        Ok(UsedBy {
+            taf: strict_text(v, "taf")?.unwrap_or_default(),
+            name: strict_text(v, "name")?.unwrap_or_default(),
+        })
+    }
+}
+
+/// A live connection of an app made under a taf that doesn't need it (`ConnectApps.Misplaced`):
+/// its grant, and that taf.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct Misplaced {
+    pub grant: String,
+    pub taf: String,
+    pub name: String,
+}
+
+impl Misplaced {
+    fn read(v: &Value) -> Result<Misplaced, ()> {
+        Ok(Misplaced {
+            grant: v
+                .get("grant")
+                .and_then(Value::as_str)
+                .ok_or(())?
+                .to_string(),
+            taf: strict_text(v, "taf")?.unwrap_or_default(),
+            name: strict_text(v, "name")?.unwrap_or_default(),
+        })
+    }
+}
+
+/// A removed taf's live connection, with the live tafs whose Cards still use it
+/// (`ConnectApps.RemovedGrant`): Clear keeps those.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct RemovedGrant {
+    pub grant: String,
+    pub used_by: Vec<UsedBy>,
+}
+
+/// A taf removed since, as tafs cloud names it from KIFF's archived agents
+/// (`ConnectApps.RemovedTaf`). Its live connections come only with this device's signed grants
+/// read: none means no Clear.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct RemovedTaf {
+    pub agent: String,
+    pub removed_at: Option<String>,
+    pub grants: Option<Vec<RemovedGrant>>,
+}
+
+impl RemovedTaf {
+    fn read(t: &Value) -> Result<RemovedTaf, ()> {
+        fn list<T>(
+            v: &Value,
+            key: &str,
+            each: fn(&Value) -> Result<T, ()>,
+        ) -> Result<Option<Vec<T>>, ()> {
+            match v.get(key) {
+                None | Some(Value::Null) => Ok(None),
+                Some(Value::Array(a)) => a.iter().map(each).collect::<Result<_, _>>().map(Some),
+                Some(_) => Err(()),
+            }
+        }
+        fn grant(g: &Value) -> Result<RemovedGrant, ()> {
+            Ok(RemovedGrant {
+                grant: g
+                    .get("grant")
+                    .and_then(Value::as_str)
+                    .ok_or(())?
+                    .to_string(),
+                used_by: list(g, "used_by", UsedBy::read)?.unwrap_or_default(),
+            })
+        }
+        Ok(RemovedTaf {
+            agent: t
+                .get("agent")
+                .and_then(Value::as_str)
+                .ok_or(())?
+                .to_string(),
+            removed_at: strict_text(t, "removed_at")?,
+            grants: list(t, "grants", grant)?,
+        })
+    }
 }
 
 /// A string where it's there; a value of another kind fails the read (`decodeIfPresent`).
@@ -86,6 +187,28 @@ impl App {
                     .collect();
                 named.map(|n| n.into_iter().flatten().filter(|s| !s.is_empty()).collect())
             }),
+            // A list it can't read is none sent: every taf you manage, never a guess from half a
+            // list. One without its taf's id is left out.
+            needed_by: v
+                .get("needed_by")
+                .and_then(Value::as_array)
+                .and_then(|a| {
+                    a.iter()
+                        .map(UsedBy::read)
+                        .collect::<Result<Vec<_>, _>>()
+                        .ok()
+                })
+                .map(|n| n.into_iter().filter(|u| !u.taf.is_empty()).collect()),
+            misplaced: v
+                .get("misplaced")
+                .and_then(Value::as_array)
+                .and_then(|a| {
+                    a.iter()
+                        .map(Misplaced::read)
+                        .collect::<Result<Vec<_>, _>>()
+                        .ok()
+                })
+                .unwrap_or_default(),
         })
     }
 
@@ -113,34 +236,13 @@ impl App {
     }
 }
 
-/// A list that's absent, null, or each of whose elements reads; anything else fails.
-fn list_of(v: &Value, key: &str, reads: fn(&Value) -> bool) -> bool {
-    match v.get(key) {
-        None | Some(Value::Null) => true,
-        Some(Value::Array(a)) => a.iter().all(reads),
-        Some(_) => false,
-    }
-}
-
-/// `RemovedTaf`: its `agent`, `removed_at` a string when there, `grants` each with its `grant`
-/// and its `used_by` each with `taf` and `name` strings when there.
-fn removed_taf_reads(t: &Value) -> bool {
-    fn used_by_reads(u: &Value) -> bool {
-        u.is_object() && strict_text(u, "taf").is_ok() && strict_text(u, "name").is_ok()
-    }
-    fn grant_reads(g: &Value) -> bool {
-        g.get("grant").and_then(Value::as_str).is_some() && list_of(g, "used_by", used_by_reads)
-    }
-    t.get("agent").and_then(Value::as_str).is_some()
-        && strict_text(t, "removed_at").is_ok()
-        && list_of(t, "grants", grant_reads)
-}
-
-/// A page of Connect apps (`TafsCloud.ConnectApps`). Removed tafs' connections need this
-/// computer's signed grants read, which Linux doesn't send yet: they're read and not drawn.
+/// A page of Connect apps (`TafsCloud.ConnectApps`).
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct ConnectApps {
     pub apps: Vec<App>,
+    /// The tafs removed since, newest first: a connection whose `request.agent` is one is a
+    /// removed taf's.
+    pub removed_tafs: Vec<RemovedTaf>,
     /// Coach can draft a vendor that isn't listed.
     pub by_key: bool,
     pub provider: Option<String>,
@@ -162,11 +264,18 @@ impl ConnectApps {
             Some(_) => return None,
         };
         // `removed_tafs` must read too, as on the iPad (`RemovedTaf`, `RemovedGrant`, `UsedBy`).
-        if !list_of(&v, "removed_tafs", removed_taf_reads) {
-            return None;
-        }
+        let removed_tafs = match v.get("removed_tafs") {
+            None | Some(Value::Null) => Vec::new(),
+            Some(Value::Array(a)) => a
+                .iter()
+                .map(RemovedTaf::read)
+                .collect::<Result<_, _>>()
+                .ok()?,
+            Some(_) => return None,
+        };
         Some(ConnectApps {
             apps,
+            removed_tafs,
             by_key,
             provider: strict_text(&v, "provider").ok()?,
             next_cursor: strict_text(&v, "next_cursor").ok()?,
@@ -181,6 +290,8 @@ impl ConnectApps {
         self.apps
             .extend(page.apps.into_iter().filter(|a| !seen.contains(&a.entry)));
         self.by_key = self.by_key || page.by_key;
+        // The removed tafs stay as the first page read them, with its proof: a further page only
+        // adds apps.
         self.provider = page.provider;
         self.next_cursor = page.next_cursor;
     }
@@ -323,6 +434,131 @@ pub fn says_make_a_taf(discover: usize, for_taf: bool, connectable: usize) -> bo
     discover > 0 && !for_taf && connectable == 0
 }
 
+/// Whom a Connect is for (`ConnectRow.ConnectFor`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ConnectFor {
+    /// The taf the list was opened from, by tafs cloud's id.
+    Taf(String),
+    /// The person picks, in "Which taf is this for?".
+    Ask,
+    /// No taf needs it: Coach sets one up.
+    AskCoach,
+    /// No taf can have it: Connect is off, and "Make one first" says why.
+    NoTaf,
+}
+
+/// `ConnectRow.connectFor`: a connection goes only to a taf the person named, among those that
+/// need the app when tafs cloud says (`needed`): the taf the list was opened from, else their
+/// pick, asked even when one taf is all there is. With `needed_by`, none, or a taf opened from
+/// that doesn't need it, is Ask Coach. Without it, every taf the person manages. Never a guess.
+pub fn connect_for(opened_from: Option<&str>, connectable: &[String], needed: bool) -> ConnectFor {
+    if !needed {
+        if let Some(t) = opened_from {
+            return ConnectFor::Taf(t.to_string());
+        }
+        return if connectable.is_empty() {
+            ConnectFor::NoTaf
+        } else {
+            ConnectFor::Ask
+        };
+    }
+    if let Some(t) = opened_from {
+        return if connectable.iter().any(|c| c == t) {
+            ConnectFor::Taf(t.to_string())
+        } else {
+            ConnectFor::AskCoach
+        };
+    }
+    if connectable.is_empty() {
+        ConnectFor::AskCoach
+    } else {
+        ConnectFor::Ask
+    }
+}
+
+/// A taf an app can be connected for (`connectableTafs`): on tafs cloud, managed by this person.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Connectable {
+    /// tafs cloud's id.
+    pub id: String,
+    pub name: String,
+}
+
+/// `connectableTafs(for:)`: of the tafs an app can be connected for, the ones tafs cloud says need
+/// it (`needed_by`), in its order. A tafs cloud that doesn't say leaves every one.
+pub fn connectable_for(tafs: &[Connectable], needed: Option<&[UsedBy]>) -> Vec<Connectable> {
+    match needed {
+        None => tafs.to_vec(),
+        Some(needed) => needed
+            .iter()
+            .filter_map(|n| tafs.iter().find(|t| t.id == n.taf).cloned())
+            .collect(),
+    }
+}
+
+/// The app's name in "Which taf?" and in why it couldn't be connected: tafs cloud's `name`, else
+/// its vendor, else its title.
+pub fn called(app: &App) -> &str {
+    app.name.as_deref().unwrap_or(if app.vendor.is_empty() {
+        &app.title
+    } else {
+        &app.vendor
+    })
+}
+
+/// `startConnect`: `POST /v1/connect/apps/{entry}` (escaped as `TafsCloud.escaped`: the path's
+/// characters but `/`) with the taf's tafs cloud id. planque makes the request for that taf's
+/// KIFF agent; nothing is approved or signed by it.
+pub fn start_path(entry: &str) -> String {
+    format!("/v1/connect/apps/{}", path_escaped(entry))
+}
+
+pub fn start_body(taf: &str) -> Vec<u8> {
+    serde_json::json!({ "taf": taf }).to_string().into_bytes()
+}
+
+/// `addingPercentEncoding(withAllowedCharacters: .urlPathAllowed` without `/`): letters, digits
+/// and `-._~!$&'()*+,;=:@` stay; anything else is %XX.
+pub fn path_escaped(v: &str) -> String {
+    v.bytes()
+        .map(|b| {
+            if b.is_ascii_alphanumeric() || b"-._~!$&'()*+,;=:@".contains(&b) {
+                (b as char).to_string()
+            } else {
+                format!("%{b:02X}")
+            }
+        })
+        .collect()
+}
+
+/// What starting a connection answers (`TafsCloud.ConnectStart`): the request to approve, and
+/// whether it's approved with a key the owner gives. `grant` is planque's id, or its grant as
+/// tafs cloud passes it on, read for its id.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ConnectStart {
+    pub grant: String,
+    pub needs_key: bool,
+}
+
+impl ConnectStart {
+    pub fn read(body: &[u8]) -> Option<ConnectStart> {
+        let v: Value = serde_json::from_slice(body).ok()?;
+        let grant = match v.get("grant")? {
+            Value::String(s) => s.clone(),
+            g => g.get("id")?.as_str()?.to_string(),
+        };
+        let needs_key = match v.get("needs_key") {
+            None | Some(Value::Null) => false,
+            Some(Value::Bool(b)) => *b,
+            Some(_) => return None,
+        };
+        Some(ConnectStart { grant, needs_key })
+    }
+}
+
+/// tafs cloud's code for a taf that doesn't use the app: its words send the person to Coach.
+pub const NOT_NEEDED: &str = "not_needed";
+
 /// `ConnectColumns`: the table's four widths in `total`: App, How it connects, Whose, Status.
 /// The App column has its room first; the other three give way together, each in proportion to
 /// what it can give, down to their least, so App keeps its own least.
@@ -420,12 +656,17 @@ mod tests {
     #[test]
     fn more_apps_are_added_once() {
         let mut shown = ConnectApps {
+            removed_tafs: vec![RemovedTaf {
+                agent: "old".into(),
+                ..RemovedTaf::default()
+            }],
             apps: vec![app("a", "", "available")],
             by_key: true,
             provider: Some("p".into()),
             next_cursor: Some("c".into()),
         };
         shown.add(ConnectApps {
+            removed_tafs: vec![],
             apps: vec![app("a", "", "available"), app("b", "", "available")],
             by_key: false,
             provider: Some("p".into()),
@@ -434,6 +675,136 @@ mod tests {
         assert_eq!(shown.apps.len(), 2);
         assert!(shown.by_key);
         assert_eq!(shown.next_cursor, None);
+        // The removed tafs stay as the first page read them.
+        assert_eq!(shown.removed_tafs.len(), 1);
+    }
+
+    #[test]
+    fn needed_by_and_misplaced_read_leniently() {
+        let a = App::read(&serde_json::json!({"entry": "a", "needed_by": [{"taf": "t1", "name": "Refunds"}, {"name": "No id"}], "misplaced": [{"grant": "g", "name": "Bills"}]})).unwrap();
+        assert_eq!(
+            a.needed_by,
+            Some(vec![UsedBy {
+                taf: "t1".into(),
+                name: "Refunds".into()
+            }])
+        );
+        assert_eq!(a.misplaced[0].grant, "g");
+        // A list it can't read is none sent, never half a list.
+        let a = App::read(&serde_json::json!({"entry": "a", "needed_by": [{"taf": 1}], "misplaced": [{"taf": "t"}]})).unwrap();
+        assert_eq!(a.needed_by, None);
+        assert!(a.misplaced.is_empty());
+        // An empty list is tafs cloud saying no taf needs it.
+        let a = App::read(&serde_json::json!({"entry": "a", "needed_by": []})).unwrap();
+        assert_eq!(a.needed_by, Some(vec![]));
+    }
+
+    #[test]
+    fn the_contracts_read() {
+        for name in [
+            "connect-apps",
+            "connect-apps-removed",
+            "connect-apps-next",
+            "connect-apps-search",
+        ] {
+            let file = format!(
+                "{}/../../shared/contracts/{name}.json",
+                env!("CARGO_MANIFEST_DIR")
+            );
+            let v: Value = serde_json::from_slice(&std::fs::read(file).unwrap()).unwrap();
+            let page = ConnectApps::read(v["answer"].to_string().as_bytes()).unwrap();
+            assert!(!page.apps.is_empty(), "{name}");
+            assert_eq!(page.removed_tafs[0].agent, "old-refunds", "{name}");
+        }
+    }
+
+    #[test]
+    fn whom_a_connect_is_for_never_a_guess() {
+        let one = vec!["t1".to_string()];
+        let two = vec!["t1".to_string(), "t2".to_string()];
+        assert_eq!(
+            connect_for(None, &one, false),
+            ConnectFor::Ask,
+            "one taf is still asked"
+        );
+        assert_eq!(connect_for(None, &two, false), ConnectFor::Ask);
+        assert_eq!(
+            connect_for(Some("t2"), &two, false),
+            ConnectFor::Taf("t2".into())
+        );
+        assert_eq!(connect_for(None, &[], false), ConnectFor::NoTaf);
+        assert_eq!(connect_for(None, &one, true), ConnectFor::Ask);
+        assert_eq!(connect_for(None, &[], true), ConnectFor::AskCoach);
+        assert_eq!(
+            connect_for(Some("t2"), &two, true),
+            ConnectFor::Taf("t2".into())
+        );
+        assert_eq!(
+            connect_for(Some("t9"), &one, true),
+            ConnectFor::AskCoach,
+            "Stripe under a Gmail taf"
+        );
+        let tafs = vec![
+            Connectable {
+                id: "t1".into(),
+                name: "Refunds".into(),
+            },
+            Connectable {
+                id: "t2".into(),
+                name: "Bills".into(),
+            },
+        ];
+        assert_eq!(connectable_for(&tafs, None), tafs);
+        let needed = [
+            UsedBy {
+                taf: "t2".into(),
+                name: "".into(),
+            },
+            UsedBy {
+                taf: "t9".into(),
+                name: "".into(),
+            },
+        ];
+        assert_eq!(connectable_for(&tafs, Some(&needed)), vec![tafs[1].clone()]);
+        assert!(connectable_for(&tafs, Some(&[])).is_empty());
+    }
+
+    #[test]
+    fn starting_a_connection() {
+        assert_eq!(
+            start_path("connector:p:gmail"),
+            "/v1/connect/apps/connector:p:gmail"
+        );
+        assert_eq!(start_path("a/b c"), "/v1/connect/apps/a%2Fb%20c");
+        assert_eq!(start_body("t1"), br#"{"taf":"t1"}"#);
+        assert_eq!(
+            ConnectStart::read(br#"{"grant":"g1","needs_key":true}"#),
+            Some(ConnectStart {
+                grant: "g1".into(),
+                needs_key: true
+            })
+        );
+        assert_eq!(
+            ConnectStart::read(br#"{"grant":{"id":"g2","status":"pending"}}"#),
+            Some(ConnectStart {
+                grant: "g2".into(),
+                needs_key: false
+            })
+        );
+        assert_eq!(ConnectStart::read(br#"{"grant":5}"#), None);
+        assert_eq!(
+            ConnectStart::read(br#"{"grant":"g","needs_key":"yes"}"#),
+            None
+        );
+        // Starting signs nothing: KIFF never takes it, and it's tafs cloud's, as the session.
+        assert!(!crate::signed::signed("POST", &start_path("x")));
+        let a = App::read(
+            &serde_json::json!({"entry": "a", "vendor": "Stripe", "title": "Stripe payments"}),
+        )
+        .unwrap();
+        assert_eq!(called(&a), "Stripe");
+        let a = App::read(&serde_json::json!({"entry": "a", "title": "Stripe payments"})).unwrap();
+        assert_eq!(called(&a), "Stripe payments");
     }
 
     #[test]

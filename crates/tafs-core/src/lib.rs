@@ -17,6 +17,7 @@ pub mod coach;
 pub mod coach_lines;
 pub mod coach_send;
 pub mod connect;
+pub mod connections;
 pub mod devices;
 pub mod doors;
 pub mod export_chats;

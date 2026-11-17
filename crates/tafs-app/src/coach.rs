@@ -1061,7 +1061,7 @@ fn refusal(w: &WordBook, a: &Answer) -> String {
 }
 
 /// This computer's id in KIFF (`thisDeviceID`), for a session with a key and a tenant.
-fn this_device(kept: &KeptSession, languages: &[&'static str]) -> Option<String> {
+pub(crate) fn this_device(kept: &KeptSession, languages: &[&'static str]) -> Option<String> {
     kept.tenant.as_deref().filter(|t| !t.is_empty())?;
     kept.key()?;
     let a = crate::kiff::devices(&kept.token, languages).ok()?;
@@ -1073,7 +1073,7 @@ fn this_device(kept: &KeptSession, languages: &[&'static str]) -> Option<String>
 
 /// This device's signed read of its grants (`grantsReadProof`): only for a session with a key and
 /// a tenant, once KIFF names this computer. None otherwise.
-fn proof(kept: &KeptSession, device: &str) -> Option<String> {
+pub(crate) fn proof(kept: &KeptSession, device: &str) -> Option<String> {
     let tenant = kept.tenant.as_deref().filter(|t| !t.is_empty())?;
     let key = kept.key()?;
     Some(tafs_core::planque::grants_read_proof(
