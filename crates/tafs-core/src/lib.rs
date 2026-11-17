@@ -66,6 +66,7 @@ pub mod unproven;
 pub mod usage;
 pub mod versions;
 pub mod waits;
+pub mod window;
 pub mod words;
 pub mod work;
 pub mod zones;

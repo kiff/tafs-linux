@@ -103,7 +103,23 @@ struct Cloud {
     coach_setup: Option<String>,
 }
 
-/// The window's size, a laptop's, as the screenshots are saved.
+/// The window's first size on this display's first screen (`window::first_size`), or a laptop's
+/// when the display names no screen.
+fn first_size(display: &gtk::gdk::Display) -> (i32, i32) {
+    let monitor = display
+        .monitors()
+        .item(0)
+        .and_then(|m| m.downcast::<gtk::gdk::Monitor>().ok());
+    match monitor {
+        Some(m) => {
+            let g = m.geometry();
+            tafs_core::window::first_size(g.width(), g.height())
+        }
+        None => (WIDTH, HEIGHT),
+    }
+}
+
+/// The screenshots' size, a laptop's.
 const WIDTH: i32 = 1280;
 const HEIGHT: i32 = 800;
 
@@ -463,13 +479,20 @@ fn activate(app: &adw::Application, o: &Options) {
     let display = gtk::gdk::Display::default().expect("a display");
     style::install(&display);
 
+    // Its first size: a screenshot's own, else sized to the screen near 4:3; 900×600 is the
+    // least it can be made, never the size it opens at.
+    let (width, height) = match (o.size, screenshot) {
+        (Some(s), _) => s,
+        (None, true) => (WIDTH, HEIGHT),
+        (None, false) => first_size(&display),
+    };
     let window = adw::ApplicationWindow::builder()
         .application(app)
-        .default_width(o.size.map_or(WIDTH, |s| s.0))
-        .default_height(o.size.map_or(HEIGHT, |s| s.1))
+        .default_width(width)
+        .default_height(height)
         .title(words.line("app.name").unwrap_or_default())
         .build();
-    window.set_size_request(900, 600);
+    window.set_size_request(tafs_core::window::MIN.0, tafs_core::window::MIN.1);
 
     let app_state = Rc::new(App {
         window: window.clone(),
