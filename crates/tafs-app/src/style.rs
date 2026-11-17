@@ -214,6 +214,7 @@ button.tafs-send.brand:disabled { opacity: 0.4; color: white; }
 button.tafs-bar-icon, menubutton.tafs-bar-icon > button { background: none; border: none; box-shadow: none; color: @tafs_ink; min-width: 36px; min-height: 36px; padding: 0; }
 /* CoachMode's `.tint(Theme.coach)`: its bar's buttons in Coach's blue. */
 button.tafs-bar-icon.tafs-coach-tint, menubutton.tafs-bar-icon.tafs-coach-tint > button { color: @tafs_coach; }
+button.tafs-unsent-act.tafs-coach-tint { color: @tafs_coach; font-size: 17px; }
 button.tafs-bar-icon:hover, menubutton.tafs-bar-icon > button:hover { background-color: alpha(@tafs_ink, 0.06); }
 /* Previous conversations: each chat on the panel, the one shown on the raised colour. */
 .tafs-chat-line { background-color: @tafs_panel; border-radius: 12px; padding: 0 14px 0 0; }
@@ -326,7 +327,7 @@ button.tafs-panel-link { background-color: @tafs_panel; background-image: none; 
 button.tafs-back { background: none; border: none; box-shadow: none; color: @tafs_amber_text; padding: 4px 8px; }
 
 /* Connect apps: the inset list's group, its buttons as rows, the search, a Connect as wide as its words. */
-.tafs-group { background-color: @tafs_panel; border-radius: 18px; padding: 0 16px; }
+.tafs-group { background-color: @tafs_panel; border-radius: 26px; padding: 0 20px; }
 button.tafs-list-button { background-color: @tafs_panel; background-image: none; border: none; border-radius: 18px; padding: 16px; box-shadow: none; color: @tafs_amber_text; font-size: 17px; font-weight: 400; }
 button.tafs-list-button label { font-size: 17px; }
 button.tafs-list-button > label { margin: 0; }
@@ -339,7 +340,10 @@ button.tafs-list-button label { margin: 0; }
 /* Devices: the round back button, a text button in red. */
 /* Account: the chevron at the foot while there's more below, over a fade to the background. */
 .tafs-more-below { background-image: linear-gradient(to bottom, alpha(@tafs_background, 0), @tafs_background); }
+menubutton.tafs-attach > button { min-width: 40px; min-height: 40px; padding: 0; border-radius: 999px; background: @tafs_panel; border: 1px solid @tafs_line; box-shadow: none; color: @tafs_ink; }
 button.tafs-round-back { background-color: @tafs_panel; border-radius: 999px; min-width: 44px; min-height: 44px; padding: 0; box-shadow: none; border: none; color: @tafs_ink; }
+.tafs-pushed headerbar button.back { background-color: @tafs_panel; border-radius: 999px; min-width: 44px; min-height: 44px; padding: 0; box-shadow: none; border: none; color: @tafs_ink; }
+.tafs-pushed headerbar { min-height: 60px; }
 button.tafs-text-button { background: none; border: none; box-shadow: none; padding: 4px 0; font-size: 17px; }
 button.tafs-text-button.refuse { color: @tafs_no; }
 
@@ -369,9 +373,11 @@ button.tafs-plain { background: none; border: none; box-shadow: none; padding: 0
 button.tafs-share-button { background-color: @tafs_panel; background-image: none; border: 1px solid @tafs_line; border-radius: 999px; padding: 7px 12px; box-shadow: none; }
 .tafs-person-badge { background-color: @tafs_raised; border-radius: 999px; color: @tafs_ink; font-size: 14px; font-weight: 600; }
 
-button.tafs-row-button { background: none; border: none; box-shadow: none; padding: 12px 0; font-size: 17px; font-weight: 400; }
+button.tafs-row-button { background: none; border: none; box-shadow: none; padding: 14px 0; font-size: 17px; font-weight: 400; }
 button.tafs-row-button.tafs-amber-text { color: @tafs_amber_text; }
+button.tafs-row-button.tafs-amber { color: @tafs_amber; }
 button.tafs-row-button.tafs-no { color: @tafs_no; }
+list.tafs-group > row button.tafs-row-button { padding: 0; min-height: 24px; }
 button.tafs-link.tafs-no { color: @tafs_no; }
 .tafs-strip-bar { background-color: @tafs_line; border-radius: 999px; }
 
@@ -396,7 +402,8 @@ menubutton.tafs-plain > button { background: none; background-image: none; borde
 button.tafs-outline.tafs-ok { color: @tafs_ok; border-color: alpha(@tafs_ok, 0.5); }
 button.tafs-link.tafs-big-link { font-size: 15px; }
 button.tafs-ring-node { padding: 5px; border-radius: 14px; background-color: @tafs_panel; background-image: none; border: 1px solid @tafs_line; box-shadow: none; }
-button.tafs-ring-plus { border-radius: 999px; background-color: @tafs_raised; border: 1px dashed @tafs_line; box-shadow: none; min-width: 46px; min-height: 46px; padding: 0; }
+button.tafs-ring-plus { border-radius: 999px; background-color: @tafs_raised; border: 1px dashed @tafs_line; box-shadow: none; min-width: 46px; min-height: 46px; padding: 0; color: @tafs_amber; }
+button.tafs-link.tafs-tint-link { font-size: 17px; font-weight: 400; color: @tafs_amber; padding: 2px 0; }
 .tafs-knock { padding: 12px; border-radius: 16px; background-color: alpha(@tafs_amber, 0.07); border: 1px solid alpha(@tafs_amber, 0.45); }
 .tafs-knock.paired { background-color: @tafs_panel; border-color: alpha(@tafs_ink, 0.2); }
 button.tafs-knock-do { background: @tafs_amber; color: white; font-size: 14px; font-weight: 600; border-radius: 999px; padding: 8px 14px; border: none; box-shadow: none; min-height: 0; }

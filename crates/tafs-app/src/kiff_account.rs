@@ -36,10 +36,15 @@ fn labeled(label: &str, value: &str) -> gtk::Box {
     row
 }
 
+/// The room between two of the iPad's sections (36) and after a section's footer (22), less the
+/// column's 10.
+const AFTER_GROUP: i32 = 26;
+const AFTER_FOOTER: i32 = 12;
+
 fn footer(words: &str) -> gtk::Label {
     let f = text(words, 13, 400, &["tafs-dim"]);
-    f.set_margin_start(12);
-    f.set_margin_end(12);
+    f.set_margin_start(20);
+    f.set_margin_end(20);
     f
 }
 
@@ -111,7 +116,7 @@ pub fn export_section(w: &Rc<WordBook>, source: Option<Rc<ExportSource>>) -> gtk
     let Ok(lines) = tafs_core::export_chats::lines(w) else {
         return g;
     };
-    let button = row_button(&lines.row, "tafs-amber-text");
+    let button = row_button(&lines.row, "tafs-amber");
     button.set_widget_name("export-chats");
     g.append(&button);
     let Some(source) = source else {
@@ -120,7 +125,7 @@ pub fn export_section(w: &Rc<WordBook>, source: Option<Rc<ExportSource>>) -> gtk
     button.set_sensitive(true);
     let face = gtk::Box::new(gtk::Orientation::Horizontal, 10);
     let spinner = gtk::Spinner::new();
-    let label = one_line(&lines.row, 17, 400, &["tafs-amber-text"]);
+    let label = one_line(&lines.row, 17, 400, &["tafs-amber"]);
     face.append(&spinner);
     face.append(&label);
     spinner.set_visible(false);
@@ -186,7 +191,7 @@ pub fn export_section(w: &Rc<WordBook>, source: Option<Rc<ExportSource>>) -> gtk
         b.set_sensitive(false);
         spinner.set_visible(true);
         spinner.start();
-        label.remove_css_class("tafs-amber-text");
+        label.remove_css_class("tafs-amber");
         label.add_css_class("tafs-dim");
         show_why(None);
         label.set_label(&lines.preparing);
@@ -212,7 +217,7 @@ pub fn export_section(w: &Rc<WordBook>, source: Option<Rc<ExportSource>>) -> gtk
             spinner.stop();
             spinner.set_visible(false);
             label.remove_css_class("tafs-dim");
-            label.add_css_class("tafs-amber-text");
+            label.add_css_class("tafs-amber");
             match read {
                 Err(reason) => show_why(Some(reason)),
                 Ok(files) => {
@@ -347,6 +352,8 @@ pub fn page(
             column.append(&g);
             // A Card's day ends at midnight here, and every time the person reads is in it.
             let g = group();
+            // Set apart from the group above, as the iPad's sections are.
+            g.set_margin_top(AFTER_GROUP);
             // The zone opens its picker (`NavigationLink`), with a chevron.
             let zone_row = labeled(&l("settings.time_zone_title"), &lines.zone);
             let chevron = symbol("go-next-symbolic", 13);
@@ -361,7 +368,7 @@ pub fn page(
                 g.append(&line());
                 // Using this computer's zone is signed: its tap says this computer can't
                 // approve, where the iPad says why the zone didn't change, and sends nothing.
-                let b = row_button(use_this, "tafs-amber-text");
+                let b = row_button(use_this, "tafs-amber");
                 b.set_sensitive(true);
                 b.set_widget_name("kiff-account.use-here");
                 g.append(&b);
@@ -381,10 +388,13 @@ pub fn page(
             column.append(&g);
             column.append(&footer(&l("settings.time_zone.uses_this")));
             // Their own copy, for their rights of access and portability.
-            column.append(&export_section(&w, export.clone()));
+            let export = export_section(&w, export.clone());
+            export.set_margin_top(AFTER_FOOTER);
+            column.append(&export);
             column.append(&footer(&l("export.own_chats_each_taf_coach")));
             if account.allows("account.delete") {
                 let g = group();
+                g.set_margin_top(AFTER_FOOTER);
                 let delete = row_button(&l("settings.delete_account.row"), "tafs-no");
                 // Its sheet opens: what goes, and why this computer can't delete it.
                 delete.set_sensitive(true);

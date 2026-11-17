@@ -202,14 +202,25 @@ again: tafs cloud's words when its refusal has them, "This answer isn't on tafs 
 404, else "It didn't reach KIFF. Try again.". `--report` (with `--chat`) opens it over the chat's last
 answer that can be reported; its Send sends nothing.
 
+## A held call in a streamed answer
+
+As the iPad's `streamingItems`, `anchorHeld` and `placed` (kiff/tafs#206):
+
+- **While it streams,** a call KIFF holds shows in the answer where it was made, after the words
+  before it and those that ask for it, not by the time KIFF held it. It's known by KIFF's decision
+  id, which the stream's `held` names, against the cards' (`heldKeys`).
+- **KIFF is read again for this taf** (its `refresh`) when a call is held and when the stream ends,
+  so the card is there without the window being drawn again: its pin and scroll stay.
+- **Once the answer is recorded,** each held call stays after the recorded words it came after, or
+  after the owner's message when it came first (`anchors`, kept while the app runs).
+- The rules are `tafs-core/src/taf_chat.rs` › `items_of`, `placed`, `anchor_held`, with tests.
+
 ## Not yet
 
 - `SteadyMarkdown`.
-- **A held call made in a streamed answer** is placed where Needs you's list places it, not where
-  it was made in the answer, and KIFF isn't read again at once when it's held or the run ends;
-  what went through before a failure has no amount from the Record.
+- What went through before a failure has no amount from the Record.
 - What became of a held call the owner answered (`OutcomeLine` from the Record: KIFF's answer time
-  isn't read here), and a held call's place from the stream (`anchors`).
+  isn't read here).
 - A door's knocks among the messages (they're on the Activity tab), and keeping across launches
   which unread rows were dealt with.
 - The sample's chat (`sampleReply`).

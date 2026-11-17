@@ -1502,7 +1502,7 @@ impl Page {
             fold.set_visible(false);
             let label = gtk::Box::new(gtk::Orientation::Horizontal, 6);
             label.append(&text(details, 14, 600, &["tafs-amber-text"]));
-            let chevron = symbol("pan-down-symbolic", 12);
+            let chevron = symbol("go-down-symbolic", 12);
             chevron.add_css_class("tafs-amber-text");
             label.append(&chevron);
             let b = gtk::Button::new();
@@ -1516,9 +1516,9 @@ impl Page {
                     let open = !fold.is_visible();
                     fold.set_visible(open);
                     chevron.set_icon_name(Some(if open {
-                        "pan-up-symbolic"
+                        "go-up-symbolic"
                     } else {
-                        "pan-down-symbolic"
+                        "go-down-symbolic"
                     }));
                 });
             }
@@ -2320,7 +2320,7 @@ fn plan_panel(plan: &PlanLines) -> gtk::Box {
     let now = crate::widgets::one_line(&plan.now.label, 14, 600, &["tafs-ink"]);
     v.append(&now);
     h.append(&v);
-    let chevron = symbol("pan-down-symbolic", 12);
+    let chevron = symbol("go-down-symbolic", 12);
     chevron.add_css_class("tafs-dim");
     h.append(&chevron);
     b.set_child(Some(&h));
@@ -2359,9 +2359,9 @@ fn plan_panel(plan: &PlanLines) -> gtk::Box {
             m.set_visible(!open);
         }
         chevron.set_icon_name(Some(if open {
-            "pan-up-symbolic"
+            "go-up-symbolic"
         } else {
-            "pan-down-symbolic"
+            "go-down-symbolic"
         }));
         b.update_property(&[gtk::accessible::Property::Description(if open {
             &folds
@@ -2382,9 +2382,10 @@ fn outcome_with(o: &Outcome, detail: &[String]) -> gtk::Box {
     let h = gtk::Box::new(gtk::Orientation::Horizontal, 8);
     h.add_css_class("tafs-outcome");
     let (icon, class) = match o.mark {
-        Mark::Check => ("emblem-ok-symbolic", tone_class(o.tone)),
-        Mark::Minus => ("list-remove-symbolic", tone_class(o.tone)),
-        Mark::Below => ("go-down-symbolic", tone_class(o.tone)),
+        // `checkmark.circle.fill`, `minus.circle.fill`, `arrow.down.circle.fill`.
+        Mark::Check => ("tafs-check-circle-fill-symbolic", tone_class(o.tone)),
+        Mark::Minus => ("tafs-minus-circle-fill-symbolic", tone_class(o.tone)),
+        Mark::Below => ("tafs-down-circle-fill-symbolic", tone_class(o.tone)),
     };
     let m = symbol(icon, 14);
     m.add_css_class(class);
@@ -2406,7 +2407,7 @@ fn outcome_with(o: &Outcome, detail: &[String]) -> gtk::Box {
         h.append(&v);
     }
     if o.more {
-        let c = symbol("pan-down-symbolic", 11);
+        let c = symbol("go-down-symbolic", 11);
         c.add_css_class("tafs-dim");
         h.append(&c);
     }
@@ -3558,6 +3559,9 @@ fn sheet_page(
     let d = gtk::Button::with_label(done);
     d.add_css_class("tafs-unsent-act");
     d.add_css_class("strong");
+    // In Coach's blue, as Coach's own sheets are on the iPad.
+    d.add_css_class("tafs-coach-tint");
+    d.set_margin_end(8);
     let dialog = dialog.downgrade();
     d.connect_clicked(move |_| {
         if let Some(dialog) = dialog.upgrade() {

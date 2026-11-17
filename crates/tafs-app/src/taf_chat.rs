@@ -61,6 +61,21 @@ pub struct ChatTaf {
     /// Its open trial's own chat (`TrialScreen`), not the taf's: read and sent at the trial's
     /// paths, kept apart, and with no files.
     pub trial: bool,
+    /// How its held calls are read again, from KIFF, for a tafs cloud taf.
+    pub reread: Option<HeldReread>,
+}
+
+/// What reading a taf's held calls again takes (`refresh`'s, for this taf): its KIFF agent, and
+/// what its cards show of it.
+#[derive(Clone)]
+pub struct HeldReread {
+    pub agent: String,
+    pub key: String,
+    pub name: String,
+    pub initial: String,
+    pub color: i64,
+    /// May answer held calls (`canAnswerHolds`).
+    pub may_answer: bool,
 }
 
 impl ChatTaf {
@@ -92,6 +107,8 @@ pub fn forget() {
 struct Page {
     w: Rc<WordBook>,
     taf: ChatTaf,
+    /// Its held calls' cards: as the page opened, then as KIFF was read again here.
+    held: RefCell<Vec<CardLines>>,
     source: ChatSource,
     chat: Rc<RefCell<TafChat>>,
     drawn: RefCell<Option<ChatLines>>,
@@ -170,6 +187,7 @@ pub fn pane(w: Rc<WordBook>, taf: ChatTaf, source: ChatSource) -> gtk::Widget {
     });
     let page = Rc::new(Page {
         w,
+        held: RefCell::new(taf.held.clone()),
         taf,
         source,
         chat,
@@ -643,6 +661,14 @@ impl Page {
                 .chat
                 .borrow_mut()
                 .stream_event(&self.w, &e, sent.as_deref(), &mut f);
+            // A call held: KIFF is read for its card, where the call was made.
+            if matches!(e, tafs_core::stream::Event::Held { .. }) {
+                let p = self.clone();
+                glib::spawn_future_local(async move {
+                    p.reread_held().await;
+                    p.draw();
+                });
+            }
             // Words come many a second: drawn once the ones already here are taken.
             if matches!(then, Ok(coach_send::Then::Draw)) && !events.is_empty() {
                 continue;
@@ -656,11 +682,70 @@ impl Page {
             self.chat.borrow_mut().live_gone();
             return;
         }
-        // The recorded answer first, then the live one goes: no gap between them.
+        // The recorded answer first, then the live one goes: no gap between them. KIFF is read
+        // again (`refresh`), and each held call keeps its place, after what the taf wrote before
+        // it (`anchorHeld`).
         self.chat.borrow_mut().stream_over(&f, &text);
         self.load_now().await;
-        self.chat.borrow_mut().live_gone();
+        self.reread_held().await;
         self.draw();
+        let mut c = self.chat.borrow_mut();
+        c.anchor_held();
+        c.live_gone();
+        drop(c);
+        self.draw();
+    }
+
+    /// `refresh`, for this taf: KIFF's held calls read again, and its cards as Needs you draws
+    /// them. A read that fails changes nothing.
+    async fn reread_held(self: &Rc<Self>) {
+        let (
+            Some(r),
+            ChatSource::Cloud {
+                token,
+                languages,
+                signed_out,
+            },
+        ) = (self.taf.reread.clone(), &self.source)
+        else {
+            return;
+        };
+        let (token, languages, signed_out) = (token.clone(), languages.clone(), signed_out.clone());
+        let read = gtk::gio::spawn_blocking(move || crate::kiff::held(&token, &languages).ok())
+            .await
+            .ok()
+            .flatten();
+        let Some(answer) = read else { return };
+        if answer.status == 401 {
+            signed_out();
+            return;
+        }
+        let Some(exceptions) = (answer.status == 200)
+            .then(|| tafs_core::held::read_held(&answer.body))
+            .flatten()
+        else {
+            return;
+        };
+        let calls: Vec<_> = exceptions
+            .iter()
+            .filter(|e| e.subject == r.agent)
+            .filter_map(|e| tafs_core::held::held(&self.w, e, &r.key).ok())
+            .collect();
+        let holders = [tafs_core::needs_you::Holder {
+            key: &r.key,
+            name: &r.name,
+            initial: &r.initial,
+            color: r.color,
+        }];
+        if let Ok(l) = tafs_core::needs_you::lines(
+            &self.w,
+            &calls,
+            &holders,
+            r.may_answer,
+            chrono::Local::now(),
+        ) {
+            *self.held.borrow_mut() = l.cards;
+        }
     }
 
     /// A screenshot's stream, from its file: each line read as the stream's are, taken as
@@ -794,6 +879,7 @@ impl Page {
                 answer.attachments = vec![];
                 c.thread.messages.push(answer);
                 c.awaiting = None;
+                c.anchor_held();
                 c.live_gone();
                 drop(c);
                 p.draw();
@@ -1012,6 +1098,14 @@ impl Page {
     /// Draws what the chat holds now, unless it's what's drawn already.
     fn draw(self: &Rc<Self>) {
         self.composer_state();
+        // Which call each held card is, by KIFF's id: a streamed answer names its held calls so.
+        let known: Vec<(String, String)> = self
+            .held
+            .borrow()
+            .iter()
+            .filter_map(|h| Some((h.kiff_id.clone()?, h.id.clone())))
+            .collect();
+        self.chat.borrow_mut().know_held(known);
         let c = self.chat.borrow();
         match &c.error {
             Some(why) => {
@@ -1024,8 +1118,8 @@ impl Page {
             return;
         }
         let held: Vec<(String, chrono::DateTime<chrono::Utc>)> = self
-            .taf
             .held
+            .borrow()
             .iter()
             .map(|h| (h.id.clone(), h.held_at.with_timezone(&chrono::Utc)))
             .collect();
@@ -1183,7 +1277,7 @@ impl Page {
                     }
                     v.upcast()
                 }
-                Line::Held(key) => match self.taf.held.iter().find(|h| &h.id == key) {
+                Line::Held(key) => match self.held.borrow().iter().find(|h| &h.id == key) {
                     Some(card) => {
                         let c = crate::needs_you::held_card(&self.w, card);
                         c.set_widget_name(&format!("held.{key}"));

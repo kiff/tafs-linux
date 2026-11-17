@@ -32,11 +32,11 @@ type Refuse = Rc<dyn Fn(Act)>;
 fn head(back_words: &str, title: &str, back: Rc<dyn Fn()>) -> gtk::CenterBox {
     let head = gtk::CenterBox::new();
     let back_button = gtk::Button::new();
-    back_button.add_css_class("tafs-back");
-    let back_row = gtk::Box::new(gtk::Orientation::Horizontal, 4);
-    back_row.append(&symbol("go-previous-symbolic", 17));
-    back_row.append(&one_line(back_words, 17, 400, &[]));
-    back_button.set_child(Some(&back_row));
+    // Round, its words for the screen reader and the pointer, as the iPad's Back.
+    back_button.add_css_class("tafs-round-back");
+    back_button.set_child(Some(&symbol("go-previous-symbolic", 20)));
+    back_button.set_tooltip_text(Some(back_words));
+    back_button.update_property(&[gtk::accessible::Property::Label(back_words)]);
     back_button.connect_clicked(move |_| back());
     back_button.set_margin_start(8);
     head.set_start_widget(Some(&back_button));

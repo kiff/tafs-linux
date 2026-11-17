@@ -35,6 +35,8 @@ pub struct TafPage {
     pub revoked: bool,
     /// Its held calls' cards, from Needs you.
     pub held: Vec<CardLines>,
+    /// How its chat reads its held calls again from KIFF: a tafs cloud taf's.
+    pub held_reread: Option<crate::taf_chat::HeldReread>,
     /// The sample draws its Activity from the Record; a tafs cloud taf's is its own read.
     pub sample: bool,
     /// This person manages the taf (`manages`, KIFF's access read).
@@ -525,6 +527,7 @@ pub fn page(
             ask_coach: t.may_use_coach && t.manages,
             held: t.held.clone(),
             trial: false,
+            reread: t.held_reread.clone(),
         }));
         let panes = panes.clone();
         chat_tab.connect_toggled(move |b| {
@@ -648,7 +651,25 @@ pub fn page(
         }
     }
     crate::widgets::ground(&outer);
-    outer.upcast()
+    // Setup's screens push here, beside the sidebar, with Back and their title in the bar
+    // (`PanelLink`'s `NavigationLink`), as the iPad's do.
+    let nav = adw::NavigationView::new();
+    nav.set_widget_name(crate::starts_when::TAF_NAV);
+    nav.add(&adw::NavigationPage::with_tag(&outer, &t.name, ROOT));
+    nav.upcast()
+}
+
+/// The tag of a taf's page in its navigation.
+const ROOT: &str = "taf";
+
+/// The column of a taf's page, under its navigation: where the window puts what it adds.
+pub fn column(page: &gtk::Widget) -> Option<gtk::Box> {
+    use adw::prelude::NavigationPageExt;
+    page.downcast_ref::<adw::NavigationView>()?
+        .find_page(ROOT)?
+        .child()?
+        .downcast()
+        .ok()
 }
 
 /// The Card tab (`card(_:)`): the Cards as a wallet stack, the front Card's lines, and Revoke.

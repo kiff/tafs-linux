@@ -1527,6 +1527,7 @@ impl App {
                         card_count: 1,
                         revoked: false,
                         held: held_of(&t.key),
+                        held_reread: None,
                         sample: true,
                         manages: false,
                         cards: sample::full_cards(w, &t.key, self.screenshot).unwrap_or_default(),
@@ -1653,6 +1654,15 @@ impl App {
                         runs: runs.clone(),
                         runs_line,
                         held: held_of(&t.key),
+                        // Read again from KIFF in its chat: a tafs cloud taf's, by its agent.
+                        held_reread: t.cloud.then(|| crate::taf_chat::HeldReread {
+                            agent: t.agent.clone(),
+                            key: t.key.clone(),
+                            name: t.name.clone(),
+                            initial: tafs_core::sidebar::initial(&t.name),
+                            color: t.color_index,
+                            may_answer,
+                        }),
                         initial: tafs_core::sidebar::initial(&t.name),
                         cloud_id: t.cloud.then(|| t.key.clone()),
                         key: t.key,

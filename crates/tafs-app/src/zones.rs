@@ -118,7 +118,7 @@ pub fn page(
         .unwrap_or_default(),
     );
     use_here.add_css_class("tafs-row-button");
-    use_here.add_css_class("tafs-amber-text");
+    use_here.add_css_class("amber");
     if let Some(c) = use_here.child() {
         c.set_halign(gtk::Align::Start);
     }
@@ -147,6 +147,8 @@ pub fn page(
     column.append(&first);
     let list = gtk::Box::new(gtk::Orientation::Vertical, 0);
     list.add_css_class("tafs-group");
+    // Its own section, set apart from the first as the iPad's are (36 in all).
+    list.set_margin_top(36 - column.spacing());
     column.append(&list);
     let scroller = gtk::ScrolledWindow::new();
     scroller.set_hscrollbar_policy(gtk::PolicyType::Never);
@@ -179,12 +181,13 @@ pub fn page(
                 let row = gtk::Box::new(gtk::Orientation::Horizontal, 12);
                 row.set_margin_top(12);
                 row.set_margin_bottom(12);
-                let t = one_line(&z.title, 17, 400, &["tafs-ink"]);
+                // In the list's tint, as the iPad draws a row that is a button.
+                let t = one_line(&z.title, 17, 400, &["tafs-amber"]);
                 t.set_hexpand(true);
                 row.append(&t);
                 if current.as_deref() == Some(z.id.as_str()) {
                     let check = symbol("tafs-checkmark-symbolic", 17);
-                    check.add_css_class("tafs-amber-text");
+                    check.add_css_class("tafs-amber");
                     row.append(&check);
                 }
                 // A zone is a button: choosing it would sign.

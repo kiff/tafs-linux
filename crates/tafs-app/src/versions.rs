@@ -274,13 +274,24 @@ impl Opener {
         self.w.line(key).unwrap_or_default()
     }
 
-    /// `VersionsScreen`: the panel, in a sheet, read when it opens and again after a change.
+    /// `VersionsScreen`: the panel, read when it opens and again after a change. Pushed on the
+    /// taf's page, with Back and its title in the bar, as the iPad's; else in a sheet.
     fn versions(&self, over: &gtk::Button) {
-        let sheet = crate::sheet::new(&self.l("version.title"), &self.l("common.done"), None, 560);
         let body = gtk::Box::new(gtk::Orientation::Vertical, 12);
-        sheet.column.append(&body);
         let me = Rc::new(self.clone());
         me.fill(&body);
+        if let Some(nav) = crate::starts_when::taf_nav(over) {
+            let column = gtk::Box::new(gtk::Orientation::Vertical, 12);
+            column.set_margin_start(16);
+            column.set_margin_end(16);
+            column.set_margin_top(12);
+            column.set_margin_bottom(12);
+            column.append(&body);
+            nav.push(&crate::starts_when::page(&self.l("version.title"), &column));
+            return;
+        }
+        let sheet = crate::sheet::new(&self.l("version.title"), &self.l("common.done"), None, 560);
+        sheet.column.append(&body);
         sheet.dialog.present(Some(over));
     }
 
@@ -520,6 +531,7 @@ impl Opener {
                 ask_coach: false,
                 held: vec![],
                 trial: true,
+                reread: None,
             },
             self.taf.chat.clone(),
         );
