@@ -36,6 +36,8 @@ pub enum ChatSource {
     File {
         thread: std::path::PathBuf,
         report: bool,
+        /// A stream's events (`--chat-stream`): an answer as it streams, after the thread.
+        stream: Option<std::path::PathBuf>,
     },
     /// No chat here: the sample's, and a taf tafs cloud doesn't run.
     None,
@@ -196,6 +198,7 @@ pub fn pane(w: Rc<WordBook>, taf: ChatTaf, source: ChatSource) -> gtk::Widget {
         ChatSource::File {
             thread: path,
             report,
+            stream,
         } => {
             let read = std::fs::read(&path)
                 .ok()
@@ -208,6 +211,9 @@ pub fn pane(w: Rc<WordBook>, taf: ChatTaf, source: ChatSource) -> gtk::Widget {
                     let fresh = TafChat::new(&page.taf.id);
                     *page.chat.borrow_mut() = fresh;
                     page.chat.borrow_mut().took(&page.w, t, chrono::Utc::now());
+                    if let Some(stream) = stream {
+                        page.stream_from(&stream);
+                    }
                 }
                 None => {
                     eprintln!(
@@ -246,6 +252,7 @@ pub fn pane(w: Rc<WordBook>, taf: ChatTaf, source: ChatSource) -> gtk::Widget {
             let p = page.clone();
             glib::spawn_future_local(async move {
                 p.load().await;
+                p.resume().await;
                 p.follow_chat().await;
             });
         }
@@ -378,7 +385,12 @@ impl Page {
             if !self.open() {
                 return;
             }
-            if self.reading.get() {
+            // A stream shows what the taf does, and reads the thread itself.
+            if self.reading.get() || self.chat.borrow().live.is_some() {
+                continue;
+            }
+            self.resume().await;
+            if self.chat.borrow().live.is_some() {
                 continue;
             }
             let read = self.polls.borrow_mut().read_now(&self.chat.borrow());
@@ -522,8 +534,33 @@ impl Page {
                 coach_send::message_body(&d.text, &d.target, &d.files),
             )
         };
-        let Some(answer) = self.post(path, body).await else {
-            return false;
+        // Streamed, so the taf's words show as it writes them; sent plainly when the stream can't
+        // open. A trial's turn runs in the background, and its chat is read as it goes.
+        let streamed = match (&self.source, self.taf.trial) {
+            (
+                ChatSource::Cloud {
+                    token, languages, ..
+                },
+                false,
+            ) => crate::chat::open_stream(token, languages, &self.taf.id, body.clone()).await,
+            _ => crate::chat::Streamed::Plain,
+        };
+        let answer = match streamed {
+            crate::chat::Streamed::Opened(events) => {
+                self.chat.borrow_mut().streaming(chrono::Utc::now());
+                self.draw();
+                let p = self.clone();
+                let (text, local) = (d.text.clone(), d.local.clone());
+                glib::spawn_future_local(async move {
+                    p.follow_stream(events, text, Some(local)).await;
+                });
+                return true;
+            }
+            crate::chat::Streamed::Refused(a) => Ok(a),
+            crate::chat::Streamed::Plain => match self.post(path, body).await {
+                Some(answer) => answer,
+                None => return false,
+            },
         };
         let now = chrono::Utc::now();
         let taken = match answer {
@@ -578,6 +615,120 @@ impl Page {
         };
         self.draw();
         taken
+    }
+
+    /// `followChatStream`: the taf's answer drawn as it streams, its words in the order they came.
+    /// A stream that drops leaves the reads to show the rest, as they do without one; leaving the
+    /// chat stops following it (the run goes on at tafs cloud).
+    async fn follow_stream(
+        self: &Rc<Self>,
+        events: async_channel::Receiver<tafs_core::stream::Event>,
+        text: String,
+        sent: Option<String>,
+    ) {
+        let mut f = taf_chat::Following::default();
+        while let Ok(e) = events.recv().await {
+            if !self.open() {
+                self.chat.borrow_mut().live_gone();
+                return;
+            }
+            let then = self
+                .chat
+                .borrow_mut()
+                .stream_event(&self.w, &e, sent.as_deref(), &mut f);
+            // Words come many a second: drawn once the ones already here are taken.
+            if matches!(then, Ok(coach_send::Then::Draw)) && !events.is_empty() {
+                continue;
+            }
+            self.draw();
+            if let Ok(coach_send::Then::Load(_)) = then {
+                self.load_now().await;
+            }
+        }
+        if !self.open() {
+            self.chat.borrow_mut().live_gone();
+            return;
+        }
+        // The recorded answer first, then the live one goes: no gap between them.
+        self.chat.borrow_mut().stream_over(&f, &text);
+        self.load_now().await;
+        self.chat.borrow_mut().live_gone();
+        self.draw();
+    }
+
+    /// A screenshot's stream, from its file: each line read as the stream's are, taken as
+    /// `follow_stream` takes them, with no thread read between.
+    fn stream_from(&self, path: &std::path::Path) {
+        let Ok(lines) = std::fs::read_to_string(path) else {
+            eprintln!("{} isn't a stream's events", path.display());
+            std::process::exit(2);
+        };
+        let mut c = self.chat.borrow_mut();
+        c.streaming(chrono::Utc::now());
+        let (mut reader, mut f) = (
+            tafs_core::stream::Reader::default(),
+            taf_chat::Following::default(),
+        );
+        for line in lines.lines() {
+            if let Some(e) = reader.line(line) {
+                let _ = c.stream_event(&self.w, &e, None, &mut f);
+            }
+        }
+    }
+
+    /// `resumeChat`: a run of the person's that tafs cloud says is at work while nothing here
+    /// follows it is picked back up (`GET …/runs/{run}/stream?after=0`): its steps so far, then
+    /// the rest as it goes, and its end reads the thread, as a message's stream does. Once per
+    /// run: one whose stream can't open is left to the reads. Never a trial's.
+    async fn resume(self: &Rc<Self>) {
+        let ChatSource::Cloud {
+            token, languages, ..
+        } = self.source.clone()
+        else {
+            return;
+        };
+        if self.taf.trial {
+            return;
+        }
+        let Some((run, session)) = self.chat.borrow_mut().to_resume() else {
+            return;
+        };
+        let path = tafs_core::stream::resume_path(&self.taf.id, &run, 0);
+        let opened = gtk::gio::spawn_blocking(move || {
+            crate::kiff::cloud_stream(&token, &languages, "GET", &path, None)
+        })
+        .await;
+        let Ok(Ok(crate::kiff::Opened::Events(events))) = opened else {
+            return;
+        };
+        if !self.open() || self.chat.borrow().live.is_some() {
+            return;
+        }
+        let text = self
+            .chat
+            .borrow_mut()
+            .resuming(&run, &session, chrono::Utc::now());
+        self.draw();
+        let p = self.clone();
+        glib::spawn_future_local(async move {
+            p.follow_stream(events, text, None).await;
+        });
+    }
+
+    /// The thread read now, after a read already going ends.
+    async fn load_now(self: &Rc<Self>) {
+        while self.reading.get() {
+            glib::timeout_future(std::time::Duration::from_millis(50)).await;
+        }
+        self.load().await;
+    }
+
+    /// Retry on a run that failed part-way (`retryChatRun`): its message, sent again.
+    fn retry_run(self: &Rc<Self>) {
+        let retry = self.chat.borrow_mut().retry_run();
+        if let Some(text) = retry {
+            self.send_words(&text, false);
+        }
     }
 
     /// Written to the run while the taf works (`steer`, once, with `hold`): true once taken, held
@@ -854,7 +1005,12 @@ impl Page {
             l.set_margin_bottom(30);
             column.append(&l);
         }
-        for line in &lines.lines {
+        // The answer streaming now: its work block, before its first words.
+        let live_at = lines.live.as_ref().and_then(|(_, at)| *at);
+        for (i, line) in lines.lines.iter().enumerate() {
+            if let (Some((work, _)), true) = (&lines.live, live_at == Some(i)) {
+                column.append(&crate::chat::live_work(work));
+            }
             column.append(&match line {
                 Line::Gap(at) => crate::chat::gap(at),
                 Line::Kickoff(note) => {
@@ -950,9 +1106,16 @@ impl Page {
         for u in &lines.unsent {
             column.append(&self.unsent(u, busy));
         }
-        // The taf at work: the dots where its words will be.
-        if let Some(answering) = &lines.thinking {
-            column.append(&crate::chat::dots(answering));
+        // What the taf is doing and the steps it took, under its words so far; the dots while
+        // nothing streams.
+        match &lines.live {
+            Some((work, None)) => column.append(&crate::chat::live_work(work)),
+            Some(_) => {}
+            None => {
+                if let Some(answering) = &lines.thinking {
+                    column.append(&crate::chat::dots(answering));
+                }
+            }
         }
         // Written to the run while it goes, not read yet.
         for (words, note) in &lines.steering {
@@ -962,6 +1125,22 @@ impl Page {
             n.set_xalign(1.0);
             v.append(&n);
             column.append(&v);
+        }
+        // It failed part-way: what went through before, and Retry, which sends its message again.
+        if let Some((words, retry)) = &lines.failed {
+            let h = gtk::Box::new(gtk::Orientation::Horizontal, 10);
+            h.add_css_class("tafs-notice");
+            h.add_css_class("tafs-failed-run");
+            let l = text(words, 14, 400, &["tafs-ink"]);
+            l.set_hexpand(true);
+            h.append(&l);
+            let b = gtk::Button::with_label(retry);
+            b.add_css_class("flat");
+            b.set_sensitive(!busy);
+            let p = self.clone();
+            b.connect_clicked(move |_| p.retry_run());
+            h.append(&b);
+            column.append(&h);
         }
         // Stopped at its own cap, with no words: why.
         if let Some(capped) = &lines.capped {

@@ -26,7 +26,8 @@ and the person's live chat (`conversation`). It's decoded as the iPad's `thread(
 
 The thread is read when the Chat tab first shows, then every 4 s while the taf owes an answer (the
 owner's message is the thread's last) or works, at most 30 times for each message of the owner's
-(`followChat`'s plain reads: Linux has no stream). One read at a time, and none once the pane is gone.
+(`followChat`'s plain reads), except while an answer streams, which reads it itself. One read at a
+time, and none once the pane is gone.
 What the chat holds (the thread, what was sent and not sent, the stop) is kept for each taf while the
 app runs, and signing out forgets it, with the box's words.
 
@@ -67,6 +68,24 @@ All at tafs cloud, as the session, unsigned; a 401 on any of them signs this com
   A message not sent has its own: Copy, and Delete, which takes it out of the thread unsent
   (`discardUnsentChat`).
 - `--chat <answer.json>` (with `--home`) draws a chat from a file: nothing is read or sent.
+
+- **The answer as it's written** (`openStream`, `followChatStream`): a message goes streamed first,
+  `POST /v1/tafs/{id}/messages/stream` to tafs cloud's stream host, as Coach's does
+  ([coach.md](coach.md)), and plainly when the stream can't open; a trial's chat sends plainly. While
+  it streams, the taf's words show as they come, each part up to a tool call kept as it was
+  written (once: words the thread already holds show there), with `LiveWork` just before the
+  first of them: the live line and the steps done. A message the run took, or a run that said
+  something, is read from the thread. At its end the thread is read, then the live answer goes.
+  Stopped at its own cap, the chat says why. A run that ended with `ERROR` says what went through
+  before it stopped (`failedWords`, in tafs cloud's words when it gave some), with Retry, which
+  sends its message again. Stop stops the streamed message's own chat first.
+- **A run picked back up** (`resumeChat`): when the chat opens, and at each read after, a run
+  tafs cloud says is at work while nothing here follows it (the owner left the chat or the app and
+  came back) is followed from its first step, `GET /v1/tafs/{id}/runs/{run}/stream?after=0` at the
+  stream host, the second of the two routes the session may take there. Once per run: one whose
+  stream can't open is left to the reads; never one the owner stopped, while a message is on its
+  way, or in a trial's chat. Its answer sits under the owner's last message, which Retry sends
+  again should the run fail.
 
 ## What's drawn
 
@@ -170,9 +189,10 @@ answer that can be reported; its Send sends nothing.
 
 ## Not yet
 
-- **The stream** (`streamMessage`, `resumeChat`): the live answer and its work block (`LiveWork`),
-  `SteadyMarkdown`, a run that failed part-way with Retry (`failedWords`: it comes on the stream's
-  `end`), and picking a run back up. Linux reads the thread instead, every 4 s.
+- `SteadyMarkdown`.
+- **A held call made in a streamed answer** is placed where Needs you's list places it, not where
+  it was made in the answer, and KIFF isn't read again at once when it's held or the run ends;
+  what went through before a failure has no amount from the Record.
 - **Pinning a sent message** to the top (a sent message brings the chat to its newest).
 - What became of a held call the owner answered (`OutcomeLine` from the Record: KIFF's answer time
   isn't read here), and a held call's place from the stream (`anchors`).
@@ -186,5 +206,7 @@ answer that can be reported; its Send sends nothing.
 report, a question and its answer, a setting handed to Coach, a message by email and its answer, a
 connection refused, a message a stopped run never read, and the cost cap) and `taf-chat-working`
 (`taf-chat-working.json`: at work, with Stop, the dots, a message the run hasn't read and one tafs
-cloud holds) and `taf-report` (Report this answer over the chat). Both are synthetic, shaped as tafs cloud's `coach-conversation.json` and the iPad's
+cloud holds), `taf-chat-stream` (`--chat-stream taf-chat-stream.txt`, a stream's `event:`/`data:`
+lines taken after `taf-chat.json`'s thread: the answer's words so far, its step running and the one
+done before) and `taf-report` (Report this answer over the chat). Both are synthetic, shaped as tafs cloud's `coach-conversation.json` and the iPad's
 `TafsCloud.Thread`: there's no contract for a taf's own thread at the pin.

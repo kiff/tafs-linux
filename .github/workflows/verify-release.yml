@@ -59,7 +59,7 @@ jobs:
           # Only for tools/check-appimage.sh: the token isn't written into .git/config.
           persist-credentials: false
           path: src
-      - name: On a clean Ubuntu 24.04, its three screens with every icon
+      - name: On a clean Ubuntu 24.04, its screens with every icon, with GL and with no GL ES
         run: |
           docker run --rm -v "$PWD:/w" -w /w ubuntu:24.04 \
             src/tools/check-appimage.sh "$(ls release/tafs-*-x86_64.AppImage)" release

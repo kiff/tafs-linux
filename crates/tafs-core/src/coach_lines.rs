@@ -6,7 +6,7 @@
 //! sign-in says that it can't approve here (`ApprovalGate`), and the other cards' answers are
 //! drawn dimmed.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use chrono::{DateTime, Utc};
 
@@ -58,6 +58,10 @@ pub enum StepStatus {
     Done,
     Error,
     NotMade,
+    /// KIFF held the call for the owner, while the answer streams.
+    Held,
+    /// Still running, while the answer streams, behind the step the live line names.
+    Running,
 }
 
 /// One row of a message's work (`WorkLog.Row`), in its past words.
@@ -316,8 +320,13 @@ pub struct CoachLines {
     pub away: Option<(String, Vec<String>)>,
     /// How the tasks Coach handed tafs went, until Coach reads them.
     pub coach_lines: Vec<String>,
-    /// Coach is at work.
+    /// Coach is at work, and nothing streams: the dots.
     pub thinking: Option<String>,
+    /// What Coach is doing as its answer streams (`LiveWork`), and the line it goes before: the
+    /// first its answer recorded, else under the rest.
+    pub live: Option<(LiveWorkLines, Option<usize>)>,
+    /// Coach's words being written now (Markdown), under its work.
+    pub live_text: Option<String>,
     /// Written to Coach's run while it goes, not read yet, and when it will be.
     pub steering: Vec<(String, String)>,
     /// What tafs cloud holds for this chat, to go once Coach is done (`QueuedBubble`), and that it
@@ -467,15 +476,30 @@ pub fn chat_rows(
         .collect()
 }
 
-/// How the last run ended (`ended`): stopped by the owner.
+/// How the last run ended (`ended`): stopped by the owner, or part way before it finished.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum EndedLines {
+    Stopped(String),
+    /// Its line, and Retry, which sends the message that started it again.
+    Failed {
+        line: String,
+        retry: String,
+    },
+}
+
 pub fn ended(
     w: &WordBook,
-    ended: Option<crate::coach_send::Ended>,
-) -> Result<Option<String>, WordsError> {
-    match ended {
-        Some(crate::coach_send::Ended::Stopped) => w.line("taf.state.stopped").map(Some),
-        None => Ok(None),
-    }
+    ended: Option<&crate::coach_send::Ended>,
+) -> Result<Option<EndedLines>, WordsError> {
+    use crate::coach_send::Ended;
+    Ok(match ended {
+        Some(Ended::Stopped) => Some(EndedLines::Stopped(w.line("taf.state.stopped")?)),
+        Some(Ended::Failed { .. }) => Some(EndedLines::Failed {
+            line: w.line("coach.stopped_part_way_before_finished")?,
+            retry: w.line("chat.retry")?,
+        }),
+        None => None,
+    })
 }
 
 /// A taf on the account's list, by its KIFF agent, with its key and name.
@@ -699,6 +723,29 @@ fn work_lines_in(
         };
         steps.push((words, status));
     }
+    let out = rows(w, steps, false)?;
+    let took = duration(w, work.ms)?;
+    Ok(WorkLines {
+        summary: w.get("chat.work.worked_for", &[("ms", &took)])?,
+        accessible: w.count(
+            "chat.work.worked_for_steps",
+            out.len() as i64,
+            &[("took", &took)],
+        )?,
+        shows: w.line("chat.work.shows_steps")?,
+        hides: w.line("chat.work.hides_steps")?,
+        steps: out,
+    })
+}
+
+/// `WorkLog.rows`: the steps as rows, in their past words. Tries of one step after a failed or
+/// unmade one are one row, with the last try's outcome; a failed step is left out once something
+/// worked, or while the answer is still being worked on (`running`).
+fn rows(
+    w: &WordBook,
+    steps: Vec<(String, StepStatus)>,
+    running: bool,
+) -> Result<Vec<StepRow>, WordsError> {
     let mut groups: Vec<Vec<(String, StepStatus)>> = Vec::new();
     for s in steps {
         match groups.last_mut() {
@@ -715,10 +762,10 @@ fn work_lines_in(
         .iter()
         .map(|g| (g[0].0.clone(), g[g.len() - 1].1, g.len()))
         .collect();
-    let any_done = rows.iter().any(|r| r.1 == StepStatus::Done);
+    let leave_errors = running || rows.iter().any(|r| r.1 == StepStatus::Done);
     let mut out = Vec::new();
     for (words, status, tries) in rows {
-        if any_done && status == StepStatus::Error {
+        if leave_errors && status == StepStatus::Error {
             continue;
         }
         out.push(StepRow {
@@ -733,18 +780,55 @@ fn work_lines_in(
             },
         });
     }
-    let took = duration(w, work.ms)?;
-    Ok(WorkLines {
-        summary: w.get("chat.work.worked_for", &[("ms", &took)])?,
-        accessible: w.count(
-            "chat.work.worked_for_steps",
-            out.len() as i64,
-            &[("took", &took)],
-        )?,
-        shows: w.line("chat.work.shows_steps")?,
-        hides: w.line("chat.work.hides_steps")?,
-        steps: out,
-    })
+    Ok(out)
+}
+
+/// The work of the answer streaming now (`LiveWork`): the live line on top, and the steps done so
+/// far under it. None while it only writes, with no step taken.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LiveWorkLines {
+    pub line: String,
+    pub steps: Vec<StepRow>,
+}
+
+/// `LiveWork` from the answer as it streams, each step in `words`' words (a step with none in its
+/// own tool's name): the step still running is the line, unless tafs cloud's live line says.
+pub fn live_work_lines(
+    w: &WordBook,
+    live: &crate::stream::LiveAnswer,
+    words: impl Fn(&str) -> Result<Option<String>, WordsError>,
+) -> Result<Option<LiveWorkLines>, WordsError> {
+    use crate::stream::StepStatus as Live;
+    let said = |s: &crate::stream::LiveStep| -> Result<String, WordsError> {
+        Ok(match &s.words {
+            Some(words) => words.clone(),
+            None => words(&s.tool)?.unwrap_or_else(|| s.tool.clone()),
+        })
+    };
+    let at = live.steps.iter().rposition(|s| s.status == Live::Running);
+    let current = at.map(|i| said(&live.steps[i])).transpose()?;
+    let mut done = Vec::new();
+    for (i, s) in live.steps.iter().enumerate() {
+        if Some(i) == at {
+            continue;
+        }
+        let status = match s.status {
+            Live::Error => StepStatus::Error,
+            Live::NotMade => StepStatus::NotMade,
+            Live::Held => StepStatus::Held,
+            Live::Running => StepStatus::Running,
+            Live::Done => StepStatus::Done,
+        };
+        done.push((said(s)?, status));
+    }
+    let steps = rows(w, done, true)?;
+    if current.is_none() && !live.text.is_empty() && steps.is_empty() {
+        return Ok(None);
+    }
+    Ok(Some(LiveWorkLines {
+        line: live.line(w, current.as_deref())?,
+        steps,
+    }))
 }
 
 pub fn plan_step(w: &WordBook, status: &str, label: &str) -> Result<PlanStep, WordsError> {
@@ -1428,6 +1512,8 @@ pub fn lines(
                 read: &HashMap::new(),
                 errors: &HashMap::new(),
             },
+            live: None,
+            streaming: false,
         },
     )
 }
@@ -1455,8 +1541,11 @@ pub fn conversation_lines(
                 read: &c.drafts,
                 errors: &c.draft_errors,
             },
+            live: c.live.as_ref().map(|l| (l, &c.live_before)),
+            streaming: !c.live_text().is_empty(),
         },
     )?;
+    lines.live_text = Some(c.live_text()).filter(|t| !t.is_empty());
     // A conversation on a taf, empty: what it's about, and ways to start on it.
     if let (Some(i), true) = (&c.improving, lines.starts.is_some()) {
         let improve = w.get("coach.improve_taf", &[("taf", &i.name)])?;
@@ -1486,6 +1575,10 @@ struct Here<'a> {
     unsent: bool,
     drawn: &'a [crate::coach::Entry],
     drafts: Drafts<'a>,
+    /// The answer streaming now, and the thread's items when it was asked for.
+    live: Option<(&'a crate::stream::LiveAnswer, &'a HashSet<String>)>,
+    /// Its words are being written, and the thread doesn't hold them yet (`setupLiveText`).
+    streaming: bool,
 }
 
 fn lines_while(
@@ -1501,7 +1594,20 @@ fn lines_while(
         unsent,
         drawn,
         drafts,
+        live,
+        streaming,
     } = here;
+    // Text first, then its card (`textBeforeCards`): while Coach's answer is still being
+    // written, the cards that come with it wait, so a question never shows above words still
+    // arriving.
+    let last_owner = thread
+        .items()
+        .iter()
+        .filter_map(|i| match i {
+            Item::Message(m) if m.from == From::Owner => Some(m.at),
+            _ => None,
+        })
+        .max();
     // An answer to a card the thread shows reads once, as the card's outcome: no bubble repeats
     // it. One that didn't go through keeps its bubble, which says so.
     let owner_text = |i: &Item| match i {
@@ -1515,6 +1621,7 @@ fn lines_while(
             Item::Message(m) if m.from == From::Owner => !Answer::parse(&m.text).is_some_and(|a| {
                 !a.failed() && thread.components.iter().any(|c| c.component.id == a.id)
             }),
+            Item::Component(c) => !(streaming && last_owner.is_none_or(|o| c.first_at > o)),
             _ => true,
         })
         .collect();
@@ -1527,8 +1634,20 @@ fn lines_while(
             owner_text: owner_text(i),
         })
         .collect();
+    // The answer streaming now starts at the first item it recorded: its work block goes just
+    // before it, under what started it, so it folds in place to "Worked for" when it ends.
+    let first_of_run = live.and_then(|(_, before)| {
+        items.iter().position(|item| match item {
+            Item::Message(m) if m.from == From::Owner => false,
+            _ => !before.contains(&item.id()),
+        })
+    });
+    let mut live_at = None;
     let mut out = Vec::new();
     for (i, item) in items.iter().enumerate() {
+        if Some(i) == first_of_run {
+            live_at = Some(out.len());
+        }
         let at = item.at();
         if i == 0 || (at - items[i - 1].at()).num_seconds() >= 3600 {
             out.push(Line::Gap(gap(w.language(), at, now)));
@@ -1591,11 +1710,17 @@ fn lines_while(
             .filter(|l| l.away != Some(true))
             .map(say)
             .collect(),
-        thinking: if thinking {
+        thinking: if thinking && live.is_none() {
             Some(w.line("chat.answering")?)
         } else {
             None
         },
+        live: match live {
+            Some((l, _)) => live_work_lines(w, l, |tool| taf_activity_words(w, tool).map(Some))?
+                .map(|work| (work, live_at)),
+            None => None,
+        },
+        live_text: None,
         steering,
         queued: match thread.steering.as_ref().and_then(|s| s.held.as_ref()) {
             Some(m) => Some((m.text.clone(), w.line("chat.held")?)),
@@ -1762,6 +1887,44 @@ mod tests {
         c.new_chat();
         let l = conversation_lines(&w, &c, &[], Mode::Kiff, now()).unwrap();
         assert!(l.improve.is_none() && l.starts.is_some());
+    }
+
+    #[test]
+    fn the_live_work_shows_the_step_running_and_those_done() {
+        use crate::stream::{LiveAnswer, StepStatus as Live};
+        let w = book();
+        let words = |tool: &str| activity_words(&w, tool);
+        let mut live = LiveAnswer::new(0);
+        // Nothing yet: the live line alone, "Thinking…".
+        let l = live_work_lines(&w, &live, words).unwrap().unwrap();
+        assert_eq!((l.line.as_str(), l.steps.len()), ("Thinking…", 0));
+        // Only writing, with no step taken: nothing.
+        live.text.push_str("Here");
+        assert_eq!(live_work_lines(&w, &live, words).unwrap(), None);
+        // A step running is the line; one done, and a failed try of it, are one row under it.
+        live.began("kiff_draft", None, Some("c1"));
+        live.ended(Some("c1"), Live::Error);
+        live.began("kiff_draft", None, Some("c2"));
+        live.ended(Some("c2"), Live::Done);
+        live.began(
+            "planque",
+            Some("Checking your Stripe connection…"),
+            Some("c3"),
+        );
+        let l = live_work_lines(&w, &live, words).unwrap().unwrap();
+        assert_eq!(l.line, "Checking your Stripe connection…");
+        assert_eq!(l.steps.len(), 1);
+        assert_eq!(l.steps[0].status, StepStatus::Done);
+        assert_eq!(l.steps[0].note.as_deref(), Some("2 tries"));
+        // Held: its mark; tafs cloud's live line takes over.
+        live.ended(None, Live::Held);
+        live.state = Some(crate::stream::LiveState {
+            state: "waiting_for_you".into(),
+            words: None,
+        });
+        let l = live_work_lines(&w, &live, words).unwrap().unwrap();
+        assert_eq!(l.line, "Waiting for you");
+        assert_eq!(l.steps.last().unwrap().status, StepStatus::Held);
     }
 
     #[test]

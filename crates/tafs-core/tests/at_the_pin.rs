@@ -1732,7 +1732,7 @@ fn what_is_sent_to_coach_reads_in_every_language() {
         let u = unsent(&w, &c.thread, &c.unsent).unwrap_or_else(|e| panic!("{lang}: {e}"));
         assert!(u[0].resume.is_some() && u[0].edit.is_none(), "{lang}");
         assert!(u[1].edit.is_some() && u[1].resume.is_none(), "{lang}");
-        assert!(ended(&w, Some(Ended::Stopped)).unwrap().is_some());
+        assert!(ended(&w, Some(&Ended::Stopped)).unwrap().is_some());
         assert!(!answered_of(&w, 1, 2).unwrap().contains('{'), "{lang}");
         Refusal::read(409, b"{}").words(&w).unwrap();
         let chats = [tafs_core::coach::Chat {

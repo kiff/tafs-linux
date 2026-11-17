@@ -28,6 +28,18 @@ use tafs_core::words::WordBook;
 use crate::kiff::Kiff;
 use crate::widgets::{outline, primary, text};
 
+/// How a pairing ended short of a kept session: as the claims stopped, or the keyring refused it.
+enum Ended {
+    Stopped(Stopped),
+    Keyring,
+}
+
+/// The keyring refused to keep the sign-in (`pair.keyring_refused`): what it needs, in words,
+/// never the keyring's own error.
+fn keyring_refused(w: &WordBook) -> String {
+    w.line("pair.keyring_refused").unwrap_or_default()
+}
+
 /// The QR code's side on screen, as tafs-macos draws it, and its white margin.
 const SIDE: i32 = 220;
 const MARGIN: i32 = 12;
@@ -423,7 +435,7 @@ pub fn body(
                 }
                 if let Err(refused) = writable {
                     eprintln!("the keyring refused before pairing: {}", refused.0);
-                    return show(&ui, &w, &Step::Failed(refused.0.to_string()));
+                    return show(&ui, &w, &Step::Failed(keyring_refused(&w)));
                 }
                 let name = signin::device_name(&w).unwrap_or_else(|e| panic!("{e}"));
                 let key = Arc::new(DeviceKey::generate());
@@ -446,11 +458,12 @@ pub fn body(
                 let words: WordBook = (*w).clone();
                 let gone = cancelled.clone();
                 let finished = gio::spawn_blocking(move || {
-                    let token = pairing::wait(&Kiff::new(languages), &clock, &body, Some(&words))?;
+                    let token = pairing::wait(&Kiff::new(languages), &clock, &body, Some(&words))
+                        .map_err(Ended::Stopped)?;
                     // Closed while KIFF handed it over: nobody holds it here, so it ends at KIFF.
                     if gone.load(Ordering::SeqCst) {
                         let _ = Kiff::new(vec![]).sign_out(&token.access_token);
-                        return Err(Stopped::Cancelled);
+                        return Err(Ended::Stopped(Stopped::Cancelled));
                     }
                     let now = chrono::Utc::now().timestamp();
                     // The new session and its key are kept first, view-only: a software key
@@ -459,10 +472,7 @@ pub fn body(
                     if let Err(refused) = crate::store::save(&kept, now) {
                         eprintln!("the keyring refused the session: {}", refused.0);
                         let _ = Kiff::new(vec![]).sign_out(&token.access_token);
-                        return Err(Stopped::Failed(KiffError::Server {
-                            status: 0,
-                            message: refused.0.to_string(),
-                        }));
+                        return Err(Ended::Keyring);
                     }
                     // Then the view-only session it replaces ends at KIFF, with its own key.
                     if let Some(old) = replaced {
@@ -470,18 +480,23 @@ pub fn body(
                             let _ = Kiff::new(vec![]).sign_out(&old.token);
                         }
                     }
-                    Ok::<KeptSession, Stopped>(kept)
+                    Ok::<KeptSession, Ended>(kept)
                 })
                 .await
-                .unwrap_or(Err(Stopped::Failed(KiffError::Unreadable)));
+                .unwrap_or(Err(Ended::Stopped(Stopped::Failed(KiffError::Unreadable))));
                 if cancelled.load(Ordering::SeqCst) {
                     return;
                 }
                 match finished {
                     Ok(kept) => done(kept),
-                    Err(Stopped::Cancelled) => {}
-                    Err(Stopped::Failed(KiffError::Expired)) => show(&ui, &w, &Step::Expired),
-                    Err(Stopped::Failed(e)) => show(&ui, &w, &Step::Failed(why(&e, &w))),
+                    Err(Ended::Stopped(Stopped::Cancelled)) => {}
+                    Err(Ended::Stopped(Stopped::Failed(KiffError::Expired))) => {
+                        show(&ui, &w, &Step::Expired)
+                    }
+                    Err(Ended::Stopped(Stopped::Failed(e))) => {
+                        show(&ui, &w, &Step::Failed(why(&e, &w)))
+                    }
+                    Err(Ended::Keyring) => show(&ui, &w, &Step::Failed(keyring_refused(&w))),
                 }
             });
         })

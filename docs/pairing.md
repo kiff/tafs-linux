@@ -24,8 +24,10 @@ signs this computer's key. The iPad has no computer side to port (it has the pho
 1. **The keyring first.** Before a code shows, the keyring is asked to take a session
    (`store::check_writable`, macOS #30's `SecretStore.checkWritable`): the session kept is written
    over itself and read back, or, with none, an empty item is written, read back and deleted. If
-   it refuses, the pairing stops there: "This computer wasn't added: Secret Service. Show a new
-   code and try again.", with no code and nothing for the phone to approve.
+   it refuses, the pairing stops there, with no code and nothing for the phone to approve, and
+   says what it needs in `pair.keyring_refused`'s words: a keyring that's running and unlocked
+   (GNOME Keyring, KWallet, KeePassXC), then a new code. The keyring's own error goes to the log
+   only.
 2. **A new device key and a new nonce** (32 random bytes, base64url) for each code. KIFF refuses a
    pairing for a key that's already a device's, so a view-only computer never pairs its old key.
 3. **The QR code's text**, `kiff.pair.v1`, keys sorted, slashes as they are:
@@ -61,7 +63,7 @@ P-256, DER, standard base64) over `kiff.pair.claim.v1\n{nonce}\n{sha256 hex of t
 ## The session
 
 - **The new session and its key are kept first**, read back from the keyring. If the keyring
-  refuses then, the new session is signed out at KIFF and the pairing says why.
+  refuses then, the new session is signed out at KIFF and the pairing says so in the same words.
 - **Then** a view-only session it replaces is signed out at KIFF, with its own token.
 - If the pairing doesn't happen (the code runs out, KIFF refuses, the person cancels), nothing is
   kept and nothing is signed out: the computer stays as it was.

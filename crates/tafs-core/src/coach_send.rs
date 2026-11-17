@@ -613,10 +613,12 @@ pub const POLL: std::time::Duration = std::time::Duration::from_secs(3);
 pub const WORKING_POLL: std::time::Duration = std::time::Duration::from_secs(1);
 pub const POLL_BUDGET: u32 = 100;
 
-/// How the last run ended, when the owner should know (`RunEnd`): they stopped it.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// How the last run ended, when the owner should know (`RunEnd`): they stopped it, or it stopped
+/// part way, with the message that started it to send again.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Ended {
     Stopped,
+    Failed { retry: String },
 }
 
 /// A message that didn't go through (`UnsentMessage`), kept where it was written.
@@ -694,6 +696,79 @@ pub struct Conversation {
     /// The taf this new conversation improves, until its first message has gone
     /// (`setupImproving`).
     pub improving: Option<Improving>,
+    /// Coach's answer as it streams (`setupLive`).
+    pub live: Option<crate::stream::LiveAnswer>,
+    /// The thread's items when the answer streaming now was asked for (`setupLiveBefore`): its work
+    /// block goes before the first item since.
+    pub live_before: HashSet<String>,
+}
+
+/// What the app does with a stream's event once the conversation took it (`followSetupStream`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Then {
+    Draw,
+    /// Read the thread, then hand `Loaded` back (`after_load`): the words written so far are
+    /// the thread's from then on.
+    Load(Loaded),
+}
+
+/// What follows a thread read the stream asked for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Loaded {
+    /// The live bubble starts again.
+    ClearText,
+    /// It went on after a pause: what came before is the thread's, with its work.
+    NewPart,
+    /// Nothing more: the thread holds what the event said.
+    Keep,
+}
+
+/// A stream followed (`followSetupStream`'s own): how the run ended, once it says, and whether
+/// it waits on the owner.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Following {
+    pub ended: Option<String>,
+    pub waits_on_you: bool,
+}
+
+impl Following {
+    /// `readsHomeAtEnd`: Home is read once more when the run ended, however, or paused on a
+    /// card. A stream that dropped with no end leaves it to the next read.
+    pub fn reads_home_at_end(&self) -> bool {
+        self.waits_on_you || self.ended.is_some()
+    }
+}
+
+/// `stillWaitsOnYou`: `waiting_for_you` says the run waits on its person; any other line but the
+/// last, `done`, says it went on.
+pub fn still_waits_on_you(before: bool, state: &str) -> bool {
+    match state {
+        "waiting_for_you" => true,
+        "done" => before,
+        _ => false,
+    }
+}
+
+/// `alreadyRecorded`: the live words are in the thread already, in a message of the same chat
+/// written since the answer started (less two minutes), which can hold more than they do.
+pub fn already_recorded(
+    words: &str,
+    session: Option<&str>,
+    started: i64,
+    messages: &[ChatMessage],
+) -> bool {
+    let w = words.trim();
+    let Some(session) = session else { return false };
+    if w.is_empty() {
+        return false;
+    }
+    let since = started - 120;
+    messages.iter().any(|m| {
+        m.from == From::Taf
+            && m.session == session
+            && m.at.timestamp() >= since
+            && m.text.trim().starts_with(w)
+    })
 }
 
 /// A taf Coach is on (`setupImproving`): its id at tafs cloud, and its name.
@@ -926,6 +1001,176 @@ impl Conversation {
         self.awaiting = Some(now);
     }
 
+    /// The stream opened for the message (`deliverSetupOnce`, streamed): Coach is at work, and
+    /// its answer shows as it's written, its work block under what the thread holds now.
+    pub fn streaming(&mut self, now: DateTime<Utc>) {
+        self.sending = false;
+        self.awaiting = Some(now);
+        self.live_before = self.thread.items().iter().map(|i| i.id()).collect();
+        self.live = Some(crate::stream::LiveAnswer::new(now.timestamp()));
+    }
+
+    /// One of the stream's events (`followSetupStream`), for the message on its way `sent`:
+    /// what the app does next. tafs cloud moving the answer to a new chat (`followNewSetupChat`)
+    /// makes that chat this stream's, so it says so in `moved`.
+    pub fn stream_event(
+        &mut self,
+        w: &WordBook,
+        e: &crate::stream::Event,
+        sent: Option<&str>,
+        f: &mut Following,
+        moved: &mut bool,
+    ) -> Result<Then, WordsError> {
+        use crate::stream::{Event, LiveState, StepStatus};
+        Ok(match e {
+            Event::Session {
+                session,
+                new_session,
+                run,
+                message,
+            } => {
+                if self.follow_new_chat(session, *new_session, sent.unwrap_or_default()) {
+                    *moved = true;
+                }
+                if let Some(live) = self.live.as_mut() {
+                    live.session = Some(session.clone());
+                    if run.is_some() {
+                        live.run = run.clone();
+                    }
+                }
+                self.settle_chat(session);
+                if let (Some(sent), Some(message)) = (sent, message) {
+                    self.mark_sent(sent, message);
+                }
+                Then::Draw
+            }
+            Event::Text(t) => {
+                if let Some(live) = self.live.as_mut() {
+                    live.text.push_str(t);
+                    live.thinking.clear();
+                }
+                Then::Draw
+            }
+            Event::Thinking(t) => {
+                if let Some(live) = self.live.as_mut() {
+                    live.thinking.push_str(t);
+                }
+                Then::Draw
+            }
+            Event::State { state, words } => {
+                if let Some(live) = self.live.as_mut() {
+                    live.state = Some(LiveState {
+                        state: state.clone(),
+                        words: words.clone(),
+                    });
+                }
+                f.waits_on_you = still_waits_on_you(f.waits_on_you, state);
+                Then::Draw
+            }
+            Event::Activity { tool, step, call } => {
+                // The step shows at once; the thread then picks up the words written so far.
+                let words = match step {
+                    Some(s) => Some(s.clone()),
+                    None => crate::coach_lines::activity_words(w, tool)?,
+                };
+                if let Some(live) = self.live.as_mut() {
+                    live.activity = words.clone();
+                    live.began(tool, words.as_deref(), call.as_deref());
+                }
+                Then::Load(Loaded::ClearText)
+            }
+            Event::Step { call, status } => {
+                if let Some(live) = self.live.as_mut() {
+                    live.ended(Some(call), StepStatus::from_stream(status));
+                }
+                Then::Draw
+            }
+            Event::Component | Event::Said => Then::Load(Loaded::ClearText),
+            Event::Part => Then::Load(Loaded::NewPart),
+            Event::End { status, .. } => {
+                f.ended = Some(status.clone());
+                if status == "PAUSED" {
+                    f.waits_on_you = true;
+                }
+                Then::Draw
+            }
+            Event::Held { .. } => {
+                if let Some(live) = self.live.as_mut() {
+                    live.ended(None, StepStatus::Held);
+                }
+                Then::Draw
+            }
+            Event::Broken | Event::Taken => Then::Draw,
+        })
+    }
+
+    /// After the thread read an event asked for: the live bubble starts again, or, after a
+    /// pause, the steps do, under what the thread holds now.
+    pub fn after_load(&mut self, loaded: Loaded) {
+        let Some(live) = self.live.as_mut() else {
+            return;
+        };
+        match loaded {
+            Loaded::ClearText => live.text.clear(),
+            Loaded::NewPart => {
+                live.new_part();
+                self.live_before = self.thread.items().iter().map(|i| i.id()).collect();
+            }
+            Loaded::Keep => {}
+        }
+    }
+
+    /// The stream is over, ended or dropped (`followSetupStream`'s end): Coach is no longer at
+    /// work once the run ended, and how it ended shows when the owner should know. `text` is
+    /// what started it, sent again by Retry. The live answer goes once the thread is read.
+    pub fn stream_over(&mut self, f: &Following, text: &str) {
+        if f.ended.is_some() {
+            self.awaiting = None;
+        }
+        match f.ended.as_deref() {
+            Some("ERROR") => {
+                self.ended = Some(Ended::Failed {
+                    retry: text.to_string(),
+                })
+            }
+            Some("CANCELLED") => self.ended = Some(Ended::Stopped),
+            _ => {}
+        }
+    }
+
+    /// The stream's answer is the thread's now: it goes.
+    pub fn live_gone(&mut self) {
+        self.live = None;
+    }
+
+    /// `setupLiveText`: the words being written now, unless the thread holds them already.
+    pub fn live_text(&self) -> String {
+        let Some(live) = &self.live else {
+            return String::new();
+        };
+        if already_recorded(
+            &live.text,
+            live.session.as_deref(),
+            live.started,
+            &self.thread.messages,
+        ) {
+            String::new()
+        } else {
+            live.text.clone()
+        }
+    }
+
+    /// `retrySetupRun`: the message the run that stopped part way started with, to send again.
+    pub fn retry_run(&mut self) -> Option<String> {
+        match self.ended.take() {
+            Some(Ended::Failed { retry }) => Some(retry),
+            other => {
+                self.ended = other;
+                None
+            }
+        }
+    }
+
     /// Refused for want of the consent, or because the tafs wait for credits (`why`): the
     /// message leaves the thread, with no Not sent row, and goes back in the box.
     pub fn not_tried(&mut self, d: &Delivery, why: Option<String>) {
@@ -1008,10 +1253,12 @@ impl Conversation {
 
     /// The chat Stop stops (`stopSetup`): the one at work, else the thread's. The wait ends.
     pub fn stop(&mut self) -> Option<String> {
+        // A streamed message's own chat first: a new chat isn't the thread's latest yet.
         let session = self
-            .thread
-            .working
-            .clone()
+            .live
+            .as_ref()
+            .and_then(|l| l.session.clone())
+            .or_else(|| self.thread.working.clone())
             .or_else(|| self.thread.session())?;
         self.setup.as_ref()?;
         self.awaiting = None;
@@ -1152,6 +1399,8 @@ impl Conversation {
         self.error = None;
         self.sending = false;
         self.improving = None;
+        self.live = None;
+        self.live_before.clear();
     }
 
     /// `improveTaf`: a new conversation on the taf `id` (at tafs cloud) called `name`, whose first
@@ -1175,6 +1424,8 @@ impl Conversation {
         self.sent.clear();
         self.ended = None;
         self.improving = None;
+        self.live = None;
+        self.live_before.clear();
     }
 }
 
@@ -1524,6 +1775,142 @@ mod tests {
             at("2026-10-16T13:00:00Z"),
         );
         c
+    }
+
+    #[test]
+    fn a_streamed_answer_shows_as_written_and_ends_as_its_run_did() {
+        use crate::stream::Event;
+        let w = WordBook::load(&WordBook::default_root(), "en").unwrap();
+        let mut c = conversation();
+        let now = at("2026-10-16T13:00:00Z");
+        let Submit::Send(d) = c.submit("More refunds", now) else {
+            panic!("not sent")
+        };
+        let before = c.thread.items().len();
+        c.streaming(now);
+        assert!(c.thinking() && !c.sending);
+        assert_eq!(c.live_before.len(), before);
+        let (mut f, mut moved) = (Following::default(), false);
+        let mut take = |c: &mut Conversation, e: Event| {
+            c.stream_event(&w, &e, Some(&d.local), &mut f, &mut moved)
+                .unwrap()
+        };
+        let session = Event::Session {
+            session: "sess1".into(),
+            new_session: false,
+            run: Some("run9".into()),
+            message: Some("run9.in".into()),
+        };
+        assert_eq!(take(&mut c, session), Then::Draw);
+        assert_eq!(c.live.as_ref().unwrap().run.as_deref(), Some("run9"));
+        assert!(c
+            .thread
+            .messages
+            .iter()
+            .any(|m| m.server_id.as_deref() == Some("run9.in")));
+        take(&mut c, Event::Text("Looking at ".into()));
+        take(&mut c, Event::Text("your refunds.".into()));
+        assert_eq!(c.live_text(), "Looking at your refunds.");
+        // The live words, and no dots: the work block says what Coach does.
+        let lines =
+            crate::coach_lines::conversation_lines(&w, &c, &[], crate::sidebar::Mode::Kiff, now)
+                .unwrap();
+        assert_eq!(lines.live_text.as_deref(), Some("Looking at your refunds."));
+        assert_eq!(lines.thinking, None);
+        // A tool call: its step shows, and once the thread is read the bubble starts again.
+        let activity = Event::Activity {
+            tool: "tafs_state".into(),
+            step: None,
+            call: Some("c1".into()),
+        };
+        assert_eq!(take(&mut c, activity), Then::Load(Loaded::ClearText));
+        c.after_load(Loaded::ClearText);
+        assert_eq!(c.live_text(), "");
+        let lines =
+            crate::coach_lines::conversation_lines(&w, &c, &[], crate::sidebar::Mode::Kiff, now)
+                .unwrap();
+        let (work, place) = lines.live.unwrap();
+        assert_eq!(work.line, w.line("coach.activity.tafs").unwrap());
+        // Nothing recorded since it was asked: the block goes under the rest.
+        assert_eq!(place, None);
+        take(
+            &mut c,
+            Event::Step {
+                call: "c1".into(),
+                status: "done".into(),
+            },
+        );
+        take(
+            &mut c,
+            Event::State {
+                state: "waiting_for_you".into(),
+                words: None,
+            },
+        );
+        take(
+            &mut c,
+            Event::End {
+                status: "ERROR".into(),
+                stop: String::new(),
+                done: vec![],
+                code: None,
+                words: None,
+            },
+        );
+        assert!(f.waits_on_you && f.reads_home_at_end());
+        c.stream_over(&f, &d.text);
+        c.live_gone();
+        assert!(c.awaiting.is_none() && c.live.is_none());
+        assert_eq!(
+            crate::coach_lines::ended(&w, c.ended.as_ref()).unwrap(),
+            Some(crate::coach_lines::EndedLines::Failed {
+                line: w.line("coach.stopped_part_way_before_finished").unwrap(),
+                retry: w.line("chat.retry").unwrap(),
+            })
+        );
+        assert_eq!(c.retry_run().as_deref(), Some("More refunds"));
+        assert_eq!(c.ended, None);
+        assert!(!moved);
+    }
+
+    #[test]
+    fn a_stream_that_drops_leaves_coach_at_work_and_home_unread() {
+        let mut c = conversation();
+        let now = at("2026-10-16T13:00:00Z");
+        c.streaming(now);
+        let f = Following::default();
+        c.stream_over(&f, "hi");
+        assert!(c.awaiting.is_some() && c.ended.is_none());
+        assert!(!f.reads_home_at_end());
+        // A new conversation drops the answer streaming in the last one.
+        c.new_chat();
+        assert!(c.live.is_none() && c.live_before.is_empty());
+    }
+
+    #[test]
+    fn live_words_the_thread_holds_show_there_once() {
+        let mut c = conversation();
+        let m = c
+            .thread
+            .messages
+            .iter()
+            .find(|m| m.from == From::Taf)
+            .unwrap()
+            .clone();
+        let mut live = crate::stream::LiveAnswer::new(m.at.timestamp());
+        live.session = Some(m.session.clone());
+        live.text = m.text.chars().take(5).collect();
+        c.live = Some(live);
+        assert_eq!(c.live_text(), "");
+        // Another chat's, or written more than two minutes before the answer started: shown.
+        c.live.as_mut().unwrap().session = Some("other".into());
+        assert_eq!(c.live_text(), m.text.chars().take(5).collect::<String>());
+        c.live.as_mut().unwrap().session = Some(m.session.clone());
+        c.live.as_mut().unwrap().started = m.at.timestamp() + 121;
+        assert!(!c.live_text().is_empty());
+        assert!(still_waits_on_you(false, "waiting_for_you"));
+        assert!(still_waits_on_you(true, "done"));
+        assert!(!still_waits_on_you(true, "working"));
     }
 
     #[test]

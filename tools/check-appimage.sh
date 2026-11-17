@@ -11,7 +11,8 @@
 #   LD_LIBRARY_PATH, so each must find them by its own RUNPATH; the SVG one draws every icon;
 # - an icon GTK can't load, in any of the three screens it saves: the first screen, the sign-in,
 #   and the sample signed in, whose sidebar draws the app's own icons, then the first screen again
-#   with GTK's own renderer (GL), failing on a GL library it can't open. The container has no MIME
+#   with GTK's own renderer (GL), failing on a GL library it can't open, and once more with no GL
+#   ES installed, where the app must draw with cairo rather than stop. The container has no MIME
 #   database (shared-mime-info), so the AppImage's own is what lets gdk-pixbuf tell an SVG.
 set -euo pipefail
 app=$(realpath "$1")
@@ -96,4 +97,16 @@ if grep -h "Couldn't open lib" "$work/first-screen-gl.log" | grep . >&2; then
   echo "GTK's renderer couldn't open its GL library." >&2
   exit 1
 fi
-echo "Three screens drawn, every icon loaded, and the first again with GTK's own renderer."
+# And once more on a system with no GL ES at all (a bare WSL): libepoxy would stop the app there,
+# so the app draws with cairo instead, and says so.
+dpkg -r --force-depends libgles2 > /dev/null 2>&1
+if ldconfig -p | grep -q "libGLESv2.so.2 "; then
+  echo "GL ES is still installed." >&2
+  exit 1
+fi
+(unset GSK_RENDERER; shot first-screen-no-gles)
+grep -q "no GL ES here: drawing with cairo" "$work/first-screen-no-gles.log" || {
+  echo "With no GL ES, the app didn't fall back to cairo." >&2
+  exit 1
+}
+echo "Three screens drawn, every icon loaded, the first again with GTK's own renderer, and with no GL ES."

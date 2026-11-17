@@ -34,6 +34,7 @@ window, .tafs-ground { background-color: @tafs_background; color: @tafs_ink; }
 .tafs-dim { color: @tafs_dim; }
 .tafs-no { color: @tafs_no; }
 .tafs-amber-text { color: @tafs_amber_text; }
+.tafs-amber { color: @tafs_amber; }
 
 /* Eyebrow: capitals, monospaced 12, tracked 0.7. */
 .tafs-eyebrow { font-family: monospace; font-size: 12px; letter-spacing: 0.7px; color: @tafs_dim; }
