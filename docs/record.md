@@ -39,6 +39,12 @@ was made as) is one line (`KIFFMapping.record`):
   done; refused by the app, saying it still counts against today's total (money, an amount, or
   why); not sent, nothing reached the app; sent, waiting for its answer; the answer lost; or not
   recorded. A connection that refused it before sending says so.
+- **Who refused it at the tool** (`vendors`, `toolVendors`): the vendor of the connected tool the
+  call went through, by its name in KIFF ("Stripe refused it, and it still counts…"), from the
+  account's connected connections; "The connection" for one the connection refused before
+  sending (`refusedBy`). This computer reads no connection from planque
+  ([Connect apps](connect-apps.md)), so signed in with KIFF no tool's vendor is known and a
+  refused call says "The app refused it", as the iPad's does without its connections.
 - **Held** (`owner_required`, `approval_required`): Waiting for you.
 - **Anything else:** refused, "Not sent · " and KIFF's reason when it gives one.
 - **Its title:** the tool's title as KIFF gives it, else the action in words; with its amount
@@ -64,7 +70,6 @@ the scripts' first two rounds, newest first: what each Card allowed ("€40, wit
 ## Not yet
 
 - **"Signed on this computer"** under a line: this computer signs no answer.
-- **Which vendor refused** a call, by its connection (`vendors`).
 
 ## Search (signed in)
 

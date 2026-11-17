@@ -1279,8 +1279,12 @@ impl App {
                         .find(|(a, _)| a == actor)
                         .map(|(_, k)| k.clone())
                 };
+                // `toolVendors`: the vendor of each connected tool, from the account's
+                // connections, which this computer doesn't read from planque: none, so a call a
+                // vendor refused says "The app", as the iPad's does without them.
+                let vendors = tafs_core::connections::tool_vendors(&[]);
                 tafs_core::record::naming(
-                    tafs_core::record::record(&self.words, &c.activity, &taf_of)
+                    tafs_core::record::record(&self.words, &c.activity, &taf_of, &vendors)
                         .unwrap_or_default(),
                     &c.call_refs,
                 )
