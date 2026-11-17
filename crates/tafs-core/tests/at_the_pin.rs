@@ -312,7 +312,7 @@ const LINES: &[(&str, &[&str])] = &[
     ("settings.change_language", &[]),
     ("settings.time_zone_title", &[]),
     ("sign_in.how_works", &[]),
-    ("sign_in.every_action_taf_takes_goes", &["device"]),
+    ("sign_in.every_action_taf_takes_goes_view", &[]),
     ("settings.legal", &[]),
     ("settings.about", &[]),
     ("settings.version", &[]),
@@ -840,7 +840,7 @@ fn account_is_the_ipads_in_its_order() {
     assert!(matches!(actions[0], Row::Action(t, _) if t == "Sign in with KIFF"));
     assert!(matches!(actions[1], Row::Destructive(t, _) if t == "Clear the sample"));
     assert!(
-        matches!(&sample.sections[4].rows[0], Row::Text(t) if t.ends_with("Your answers are signed on this computer."))
+        matches!(&sample.sections[4].rows[0], Row::Text(t) if t.ends_with("Your approvals are signed on your phone."))
     );
 
     let acme = Account {

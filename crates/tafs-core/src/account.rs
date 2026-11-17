@@ -367,14 +367,12 @@ pub fn lines(
             rows: vec![],
         });
     }
-    let device = l("device.linux")?;
+    // This computer is view-only: its approvals are signed on the phone, so it says so
+    // (`sign_in.every_action_taf_takes_goes_view`), never that they're signed here.
     sections.push(Section {
         slot: None,
         header: Some(l("sign_in.how_works")?),
-        rows: vec![Row::Text(w.get(
-            "sign_in.every_action_taf_takes_goes",
-            &[("device", &device)],
-        )?)],
+        rows: vec![Row::Text(l("sign_in.every_action_taf_takes_goes_view")?)],
     });
     // tafs's own pages, in the app's language where kiff.dev has them.
     let legal = |key: &str| legal_label(w, key);

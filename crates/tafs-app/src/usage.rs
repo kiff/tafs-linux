@@ -458,11 +458,12 @@ fn balance_panel(ctx: &Ctx, column: &gtk::Box, s: &State, kiff: bool) {
     }
     column.append(&p);
     if let (true, Some(raise)) = (kiff, &line.raise) {
+        // `ApprovalGate`, as the iPad's: while this computer can't approve, why in Raise's place.
         let b = crate::widgets::primary(&raise.words);
         b.set_widget_name("raise-limit");
-        let ctx = ctx.clone();
-        b.connect_clicked(move |_| ctx.refuse(&Act::RaiseLimit, |s, n| s.raise_refused = n));
-        column.append(&b);
+        let ctx2 = ctx.clone();
+        b.connect_clicked(move |_| ctx2.refuse(&Act::RaiseLimit, |s, n| s.raise_refused = n));
+        column.append(&crate::approval::gate(&ctx.w, ctx.mode(), &b));
         if let Some(n) = &s.raise_refused {
             column.append(&crate::approval::not_ready(n));
         }
@@ -1250,9 +1251,11 @@ fn requests_panel(ctx: &Ctx, column: &gtk::Box, u: &KiffUsage, manages_billing: 
             // `answerRaise`: raising answers every open request for one.
             let raise = crate::widgets::primary(&l("usage.raise_limit_button"));
             raise.set_widget_name(&format!("usage.raise.{}", r.id));
-            let ctx = ctx.clone();
-            raise.connect_clicked(move |_| ctx.refuse(&Act::RaiseLimit, |s, n| s.plan_refused = n));
-            buttons.append(&raise);
+            let ctx2 = ctx.clone();
+            raise
+                .connect_clicked(move |_| ctx2.refuse(&Act::RaiseLimit, |s, n| s.plan_refused = n));
+            // `ApprovalGate`, as the iPad's: while this computer can't approve, why in its place.
+            buttons.append(&crate::approval::gate(&ctx.w, ctx.mode(), &raise));
         }
         let decline_button = outline(&l("usage.requests.decline"));
         decline_button.set_widget_name(&format!("usage.decline.{}", r.id));

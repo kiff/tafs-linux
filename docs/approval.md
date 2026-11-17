@@ -44,8 +44,11 @@ them. Each signed act (`signed::Act`) names the call the iPad would make, and th
 that none of them can be made.
 
 The acts drawn this way: People & groups' changes, signing another device out, and the
-account's time zone (`docs/account.md`); Raise the limit and declining a request
-(`docs/usage.md`).
+account's time zone (`docs/account.md`); declining a request (`docs/usage.md`).
+
+A button the iPad itself wraps in `ApprovalGate` is the exception: there, as on the iPad, the
+gate's line is drawn in the button's place (`approval::gate`), not the button. Raise the limit is
+one (`docs/usage.md`).
 
 Not on Linux: `ReadinessReader` reads again when the app comes back, but this computer's state
 never changes. `openTafsSettings` opens tafs' iOS settings, which don't exist here, and

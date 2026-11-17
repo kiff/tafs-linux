@@ -13,10 +13,10 @@ It reads each time it opens: until then a panel with a spinner, at the screen's 
   semibold), a bar at `meter_pct` (green, amber when `warning`, red when `waiting`), the `detail`
   (14, soft) and the `warning` (14 semibold, in the state's colour). The panel's edge is red at
   50% while waiting, amber at 50% from the warning. When it couldn't be read, why, in red.
-  Signed in with KIFF, tafs cloud's Raise offer (`raise.words`) is under it. Raising is signed
-  (`raiseLimit`), so its tap is the tap that would sign: under it, where the iPad says why the
-  limit wasn't raised, "This device can't approve. Approve on another device signed in to your
-  account." Nothing is sent (`docs/approval.md` › A view-only computer).
+  Signed in with KIFF, tafs cloud's Raise offer (`raise.words`) goes under it, behind
+  `ApprovalGate` as on the iPad: while this computer can't approve, the gate's line ("This device
+  can't approve. Approve on another device signed in to your account.") is drawn in Raise's
+  place, and nothing is sent. The same for Raise the limit on a member's request.
 - **KIFF's plan** (`GET /v1/me/usage` at KIFF), signed in with KIFF, in the iPad's order:
   - who bills it (`billingPanel`): "Billed by Apple", "Billed by Google Play", "Billed by KIFF"
     or "Managed by your company's agreement", none when no plan is billed; after a move from

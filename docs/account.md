@@ -36,8 +36,9 @@ order:
 - **Time zone** (KIFF): the account's, from KIFF, else UTC.
 - **Export my chats** (KIFF, `ExportChatsSection`), with what it exports under it: the same row
   as the KIFF account's (below).
-- **How it works:** "Every action a taf takes goes through KIFF, … Your answers are signed on this
-  computer."
+- **How it works:** "Every action a taf takes goes through KIFF, … Your approvals are signed on
+  your phone." (`sign_in.every_action_taf_takes_goes_view`, the line for a computer that only
+  views, in place of the phones' "signed on this {device}").
 - **Legal:** Terms and Privacy policy, tafs's own pages, saying "(in English)" outside English.
 - **About:** Version, and "They taf. You kiff."
 - **Account actions:** in the sample, Sign in with KIFF and Clear the sample; signed in, Sign out,
@@ -112,9 +113,8 @@ Each section and row of `SettingsView` is here, in its order, with `AccountLines
 What differs:
 - **The theme's segments** have their words alone: `ThemePicker`'s labels carry SF Symbols,
   which this computer doesn't have.
-- **How it works** says "Your answers are signed on this computer.", the shared line with this
-  computer's name in it. This computer only views and signs nothing, so the line isn't true
-  here; the shared strings have no other line for a computer that only views yet.
+- **How it works** says the approvals are signed on the phone (`…_view`), since this computer
+  signs nothing; the iPad's line says they're signed on this device.
 - **Under Account in the sidebar** is the account's name (`accountLabel`), as the iPad's; its
   email is on Account itself, in Signed in as.
 
