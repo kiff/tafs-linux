@@ -887,7 +887,16 @@ impl Screens {
             }
             p.append(&v);
         }
-        p.append(&text(&self.l("setup.approve_note"), 12, 400, &["tafs-dim"]));
+        // "Approve signs on this computer": the approval is this computer's, not a phone's.
+        let note = self
+            .knobs
+            .w
+            .get(
+                "setup.approve_note_device",
+                &[("device", &self.l("device.linux"))],
+            )
+            .unwrap_or_default();
+        p.append(&text(&note, 12, 400, &["tafs-dim"]));
         self.column.append(&p);
     }
 

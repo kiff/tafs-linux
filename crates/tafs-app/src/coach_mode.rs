@@ -213,11 +213,29 @@ impl CoachMode {
         }
     }
 
-    /// The page again, with ⤢ in its new state.
+    /// The page again, with ⤢ in its new state. What Coach pushed on it (a new version's
+    /// Versions) stays where it is: only the conversation under it is drawn anew.
     fn reopen(self: &Rc<Self>) {
-        if self.is_open() {
-            self.fill();
+        if !self.is_open() {
+            return;
         }
+        let Some(nav) = self
+            .slot
+            .first_child()
+            .and_downcast::<adw::NavigationView>()
+        else {
+            return self.fill();
+        };
+        let Some(page) = self.page() else {
+            return;
+        };
+        let stack = nav.navigation_stack();
+        let mut pages = vec![adw::NavigationPage::new(&page, &self.title)];
+        pages.extend(
+            (1..stack.n_items())
+                .filter_map(|i| stack.item(i).and_downcast::<adw::NavigationPage>()),
+        );
+        nav.replace(&pages);
     }
 
     /// Coach's page, in the panel's own navigation: a screen Coach opens (a new version's
@@ -226,9 +244,19 @@ impl CoachMode {
         while let Some(c) = self.slot.first_child() {
             self.slot.remove(&c);
         }
-        let Some(make) = self.make.borrow().clone() else {
+        let Some(page) = self.page() else {
             return;
         };
+        let nav = adw::NavigationView::new();
+        nav.set_widget_name(COACH_NAV);
+        nav.add(&adw::NavigationPage::new(&page, &self.title));
+        nav.set_hexpand(true);
+        self.slot.append(&nav);
+    }
+
+    /// Coach's page, with the panel's title row: Back, and ⤢ in the state the panel is in.
+    fn page(self: &Rc<Self>) -> Option<gtk::Widget> {
+        let make = self.make.borrow().clone()?;
         let (close, toggle) = (Rc::downgrade(self), Rc::downgrade(self));
         let page = make(Chrome {
             close: Rc::new(move || {
@@ -244,11 +272,7 @@ impl CoachMode {
             }),
             full: self.width.get().full,
         });
-        let nav = adw::NavigationView::new();
-        nav.set_widget_name(COACH_NAV);
-        nav.add(&adw::NavigationPage::new(&page, &self.title));
-        nav.set_hexpand(true);
-        self.slot.append(&nav);
+        Some(page)
     }
 
     /// Closes it: the conversation stays where it is at tafs cloud, and its page goes, so its
