@@ -85,6 +85,7 @@ time), so does Linux, when the account's clock isn't this computer's at that mom
 | `--gallery answers.json` | with `--home`: tafs cloud's gallery answer from a file, for Explore jobs and the strip |
 | `--coach-setup answer.json` | with `--home`: Coach as tafs cloud answers `GET /v1/setup`, for Finish setting up |
 | `--unreachable network\|error` | with `--home`: the sidebar as after Home couldn't be read, the Unreachable line at its foot; nothing is read again |
+| `--new-version v1.0.2` | the sidebar's "A new version of tafs is out" line, as when GitHub says that release is out; nothing is read from GitHub |
 | `--halt answer.json` | with `--home`: a halt as tafs cloud answers it; every read is it and nothing is sent ([halting](halt.md)) |
 | `--record-search answers.json` | with `--home`: a Record search page and case as tafs cloud answers them; nothing is sent |
 | `--access answer.json` | with `--home`: what this person may do with each taf, as tafs cloud answers `GET /v1/me/access` |
@@ -113,10 +114,32 @@ account's items), the Overview from the `home.json` contract, Needs you (and wit
 page and its Card tab, Plan & usage and Account over the sample, Plan & usage signed in with
 KIFF from synthetic answers (managing billing, and as a member), Connect apps, Devices, People & groups, Share on a taf's page and its two steps, the KIFF account and its time zone picker (from synthetic answers), Alerts, the
 calendar's Day and Week (and Day at an upright iPad's size, `--size 1032x1376`), a tafs cloud
-taf's page and its Card tab from the contracts (and with its Card's own lines) (and with its work and runs, and a run's own page), the sidebar over the plain sample (and with an agent not run by tafs, with a taf being set up, with the plan's line, and with the Unreachable line), and Home with no taf and a recipe's sheet, the strip and the gallery (and as + New opens it, and Coach with a job handed to it), the halt screens, a Record search, the receipts export open, a Record line's receipt, the Delete account sheet, the security key's PIN sheet,
+taf's page and its Card tab from the contracts (and with its Card's own lines) (and with its work and runs, and a run's own page), the sidebar over the plain sample (and with an agent not run by tafs, with a taf being set up, with the plan's line, with the Unreachable line, and with "A new version of tafs is out"), and Home with no taf and a recipe's sheet, the strip and the gallery (and as + New opens it, and Coach with a job handed to it), the halt screens, a Record search, the receipts export open, a Record line's receipt, the Delete account sheet, the security key's PIN sheet,
 an app event's filters before signing, Coach's conversation from the contract (in Coach mode over the Overview, with its tools step open, full screen, and beside what it has made so far; and with an approval waiting under tafs cloud's wider line, with a confirm and a questions card waiting and a message not sent (landing on the card, and read back to its top with ↓), with Previous conversations open, empty, before it's started, and on a taf to improve), a taf's chat (and while it works, with Report this answer open, and with files in its tray, as in Coach's), a taf's versions (and with a trial open, and the trial itself), Your brief (and with a signed answer tapped, with nothing to decide, and a mission's log), the Overview with Home's label chips (and filtered to one), the
-view-only notice (and once paired), and the boards' empty states (the Overview with no taf, and before its tafs could be read, Needs you with nothing waiting, Halt all once halted, the brief with nothing to decide) in en, fr and pt, light and dark: 726 pictures, as the `screenshots`
+view-only notice (and once paired), and the boards' empty states (the Overview with no taf, and before its tafs could be read, Needs you with nothing waiting, Halt all once halted, the brief with nothing to decide) in en, fr and pt, light and dark: 750 pictures, as the `screenshots`
 artifact of the run. The job fails if any is missing.
+
+## A new version
+
+An AppImage never updates itself, so the app tells, and only tells, when a newer tafs for Linux
+is out (`tafs_core::update`, `src/update.rs`).
+- **When:** at start, then once a day while it stays open. Not under `--sample`, `--home` or a
+  screenshot.
+- **What it reads:** `https://api.github.com/repos/kiff/tafs-linux/releases/latest`, GitHub's
+  public API, which answers only the latest **published** release. A draft or a prerelease never
+  counts, even if an answer says one is the latest, and a tag that isn't `v` and three numbers
+  isn't a version.
+- **What it shows:** when that release is newer than this app (by number: 1.10.0 is after 1.9.3),
+  one line at the sidebar's foot, above Coach, "A new version of tafs is out." (`update.available`,
+  the phones' words, in the 8 languages). It opens the release's page in the browser: only a
+  `github.com/kiff/tafs-linux/releases/tag/…` page, else the releases page.
+- **What it doesn't do:** download, replace or run anything. Nothing runs in the background
+  between checks.
+- **Offline, refused or rate-limited:** no line, no message; the next check tries again. A line
+  already shown stays until a later check finds a newer release.
+- **Privacy:** the request carries no token, cookie or account, nothing about the user or this
+  computer, only the app's own User-Agent with its version (`tafs-linux/1.0.1`). GitHub sees the
+  computer's IP address, as with any visit to github.com.
 
 ## The AppImage
 
