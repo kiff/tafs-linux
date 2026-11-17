@@ -77,7 +77,9 @@ request's Decline with Decline tapped (`usage-decline`).
   shown: its name as the title and Plan & usage to go back, the taf's `words`, then its runs,
   newest first, each tafs cloud's words (semibold when counted, soft when not) and when it ended
   (in the account's time zone); More runs reads the next page (`after`) while there
-  is one, none twice. When nothing could be read, why, and Try again.
+  is one, none twice. When nothing could be read, why, and Try again. Each taf's runs are kept
+  as last read while Plan & usage is open (`tafCredits`, by taf and period): opened again, they're
+  read again, and where that read fails, what the last one gave stays, with why under its runs.
 - **A run's own page** (`CreditsRunRow`): signed in with KIFF, a run tafs cloud says `opens`
   is a link, with a chevron, to the run's own page (`KnobRequestDetail`, [the taf's
   page](taf.md)), read as the session. Try the reply now is there for whoever manages the taf. A

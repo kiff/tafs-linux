@@ -221,15 +221,23 @@ pub fn page(w: Rc<WordBook>, source: UsageSource, names: Names) -> gtk::Widget {
             });
         })
     };
+    // Each taf's runs as last read, by taf and period (`tafCredits`), kept while the screen is.
+    let kept_runs: KeptRuns = Rc::new(RefCell::new(std::collections::BTreeMap::new()));
     let open_runs: Rc<dyn Fn(String, bool)> = {
-        let (w, source, names, screens) =
-            (w.clone(), source.clone(), names.clone(), screens.clone());
+        let (w, source, names, screens, kept_runs) = (
+            w.clone(),
+            source.clone(),
+            names.clone(),
+            screens.clone(),
+            kept_runs.clone(),
+        );
         Rc::new(move |taf: String, previous: bool| {
             let back_to = screens.clone();
             let runs = runs_page(
                 w.clone(),
                 source.clone(),
                 &names,
+                kept_runs.clone(),
                 taf,
                 previous,
                 Rc::new(move || {
@@ -681,12 +689,19 @@ fn credits_panel(
     }
 }
 
+/// Each taf's credits and runs as last read, by its tafs cloud id and whether it's the period
+/// before (`AppModel.tafCredits`, `CreditsKey`).
+type KeptRuns = Rc<RefCell<std::collections::BTreeMap<(String, bool), TafCredits>>>;
+
 /// `TafCreditsView`: one taf's credits in a period, then its runs, newest first, More runs while
 /// there are more. Its title is the taf's name, else Credits; Back returns to Plan & usage.
+/// Opened again, it reads them again; until that read is over, a spinner, then what the last read
+/// gave where this one failed, with why under its runs (`tafCreditsError`).
 fn runs_page(
     w: Rc<WordBook>,
     source: UsageSource,
     names: &Names,
+    kept_runs: KeptRuns,
     taf: String,
     previous: bool,
     back: Rc<dyn Fn()>,
@@ -744,7 +759,10 @@ fn runs_page(
         error: Option<String>,
         loading: bool,
     }
-    let state = Rc::new(RefCell::new(Runs::default()));
+    let state = Rc::new(RefCell::new(Runs {
+        mine: kept_runs.borrow().get(&(taf.clone(), previous)).cloned(),
+        ..Runs::default()
+    }));
     let draw: Rc<RefCell<Option<Redraw>>> = Rc::new(RefCell::new(None));
     let redraw: Redraw = {
         let draw = draw.clone();
@@ -757,12 +775,13 @@ fn runs_page(
     };
     // Reads its credits and newest runs; with `more`, the next page after the runs read.
     let load: Rc<dyn Fn(bool)> = {
-        let (w, source, state, redraw, taf) = (
+        let (w, source, state, redraw, taf, kept_runs) = (
             w.clone(),
             source.clone(),
             state.clone(),
             redraw.clone(),
             taf.clone(),
+            kept_runs.clone(),
         );
         Rc::new(move |more: bool| {
             let after = {
@@ -784,6 +803,7 @@ fn runs_page(
             let path = taf_credits_path(&taf, previous, after.as_deref());
             let (words, source, state, redraw) =
                 ((*w).clone(), source.clone(), state.clone(), redraw.clone());
+            let (kept_runs, key) = (kept_runs.clone(), (taf.clone(), previous));
             gtk::glib::spawn_future_local(async move {
                 let what = words
                     .line(if more {
@@ -807,6 +827,9 @@ fn runs_page(
                             match (&mut s.mine, more) {
                                 (Some(known), true) => known.add(page),
                                 _ => s.mine = Some(page),
+                            }
+                            if let Some(mine) = &s.mine {
+                                kept_runs.borrow_mut().insert(key, mine.clone());
                             }
                         }
                         // A tafs cloud without the read.
