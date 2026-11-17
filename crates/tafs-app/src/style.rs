@@ -68,10 +68,11 @@ button.tafs-primary:hover { background-image: linear-gradient(135deg, BRAND0, BR
 button.tafs-primary:active { opacity: 0.8; }
 button.tafs-primary:disabled { background-image: none; background-color: alpha(@tafs_dim, 0.22); color: @tafs_soft; }
 
-/* OutlineLook: ink 15 medium, 48 high, corners of 14, its edge the ink at 40%. */
+/* OutlineLook: ink 15 medium, 48 high with its edge (46 inside a 1 px edge, no padding above or
+   below), corners of 14, its edge the ink at 40%. */
 button.tafs-outline {
   background: none; color: @tafs_ink; font-size: 15px; font-weight: 500;
-  min-height: 48px; border-radius: 14px; border: 1px solid alpha(@tafs_ink, 0.4); box-shadow: none;
+  min-height: 46px; padding: 0 12px; border-radius: 14px; border: 1px solid alpha(@tafs_ink, 0.4); box-shadow: none;
 }
 button.tafs-outline:hover { background-color: alpha(@tafs_ink, 0.04); }
 button.tafs-outline:active { background-color: alpha(@tafs_ink, 0.08); }
@@ -120,7 +121,7 @@ button.tafs-unreachable-status { padding: 0 2px; min-height: 0; font-size: 12px;
 
 /* Coach: the ink button, the dark ground's colour on it, 44 high, corners of 14. */
 button.tafs-coach { background-color: @tafs_ink; background-image: none; color: @tafs_on_fill; font-size: 15px; font-weight: 600;
-  min-height: 44px; border-radius: 14px; border: none; box-shadow: none; }
+  min-height: 44px; padding: 0 12px; border-radius: 14px; border: none; box-shadow: none; }
 button.tafs-coach:hover { background-color: alpha(@tafs_ink, 0.92); }
 button.tafs-coach.driving { background-color: @tafs_amber; }
 button.tafs-account { background: none; box-shadow: none; border: none; padding: 0; min-height: 44px; }

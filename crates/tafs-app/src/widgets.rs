@@ -140,7 +140,9 @@ pub fn icon_for(sf: &str) -> &'static str {
         "speaker.wave.2" | "speaker.wave.2.fill" => "audio-volume-high-symbolic",
         "bell.slash" => "notifications-disabled-symbolic",
         // A halt's hand: the desktop's stop sign, in red where it's drawn.
-        "hand.raised" | "hand.raised.fill" => "process-stop-symbolic",
+        // The iPad's raised hand: open while every taf runs, filled once one is halted.
+        "hand.raised" => "tafs-hand-raised-symbolic",
+        "hand.raised.fill" => "tafs-hand-raised-fill-symbolic",
         _ => "image-missing-symbolic",
     }
 }
