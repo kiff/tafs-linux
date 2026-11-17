@@ -105,6 +105,12 @@ struct Page {
     scroller: gtk::ScrolledWindow,
     error: gtk::Label,
     composer: Composer,
+    /// The window is wide enough for the panel beside the conversation.
+    wide: Cell<bool>,
+    /// "Taking shape" beside the conversation, and what it holds.
+    side: gtk::Box,
+    shape: gtk::Box,
+    shape_drawn: RefCell<Option<tafs_core::setup_shape::ShapeLines>>,
 }
 
 /// What a draw shows, to compare with the last.
@@ -170,8 +176,11 @@ pub fn page(
     tools.set_visible(false);
     bar.set_end_widget(Some(&tools));
     root.append(&bar);
+    // A wide window (`shaping`): the conversation, and beside it what it has made so far.
+    let chat = gtk::Box::new(gtk::Orientation::Vertical, 0);
+    chat.set_hexpand(true);
     let plan_slot = gtk::Box::new(gtk::Orientation::Vertical, 0);
-    root.append(&plan_slot);
+    chat.append(&plan_slot);
     let column = gtk::Box::new(gtk::Orientation::Vertical, 12);
     column.set_margin_start(16);
     column.set_margin_end(16);
@@ -183,16 +192,49 @@ pub fn page(
     scroller.set_vexpand(true);
     scroller.set_child(Some(&column));
     scroller.add_css_class("tafs-coach-wash");
-    root.append(&scroller);
+    chat.append(&scroller);
     let error = text("", 13, 400, &["tafs-no"]);
     error.set_margin_start(16);
     error.set_margin_end(16);
     error.set_margin_bottom(4);
     error.set_visible(false);
-    root.append(&error);
+    chat.append(&error);
     let composer = crate::chat::composer(crate::chat::Whose::Coach);
     composer.bar.set_visible(false);
-    root.append(&composer.bar);
+    chat.append(&composer.bar);
+    let side = gtk::Box::new(gtk::Orientation::Horizontal, 0);
+    side.append(&gtk::Separator::new(gtk::Orientation::Vertical));
+    let shape = gtk::Box::new(gtk::Orientation::Vertical, 22);
+    shape.set_margin_start(20);
+    shape.set_margin_end(20);
+    shape.set_margin_top(20);
+    shape.set_margin_bottom(20);
+    shape.set_valign(gtk::Align::Start);
+    let shape_scroller = gtk::ScrolledWindow::new();
+    shape_scroller.set_hscrollbar_policy(gtk::PolicyType::Never);
+    shape_scroller.set_size_request(tafs_core::setup_shape::PANEL_WIDTH, -1);
+    shape_scroller.set_child(Some(&shape));
+    shape_scroller.add_css_class("tafs-coach-panel");
+    shape_scroller.set_widget_name("coach.shape");
+    shape_scroller.set_hexpand(false);
+    side.append(&shape_scroller);
+    side.set_hexpand(false);
+    side.set_visible(false);
+    let body = gtk::Box::new(gtk::Orientation::Horizontal, 0);
+    body.set_vexpand(true);
+    body.append(&chat);
+    body.append(&side);
+    let bin = adw::BreakpointBin::new();
+    bin.set_size_request(320, 240);
+    bin.set_vexpand(true);
+    bin.set_child(Some(&body));
+    // Narrower than side by side: the conversation alone (a compact width keeps the chat alone).
+    let narrow = adw::Breakpoint::new(adw::BreakpointCondition::new_length(
+        adw::BreakpointConditionLengthType::MaxWidth,
+        f64::from(tafs_core::setup_shape::SIDE_BY_SIDE - 1),
+        adw::LengthUnit::Px,
+    ));
+    root.append(&bin);
 
     let page = Rc::new(Page {
         w,
@@ -216,8 +258,28 @@ pub fn page(
         scroller,
         error,
         composer,
+        wide: Cell::new(true),
+        side,
+        shape,
+        shape_drawn: RefCell::new(None),
     });
     wire_composer(&page);
+    for compact in [true, false] {
+        let p = Rc::downgrade(&page);
+        let set = move |_: &adw::Breakpoint| {
+            if let Some(p) = p.upgrade() {
+                p.wide.set(!compact);
+                *p.drawn.borrow_mut() = None;
+                p.draw();
+            }
+        };
+        if compact {
+            narrow.connect_apply(set);
+        } else {
+            narrow.connect_unapply(set);
+        }
+    }
+    bin.add_breakpoint(narrow);
     {
         let p = Rc::downgrade(&page);
         new_chat.connect_clicked(move |_| {
@@ -940,6 +1002,30 @@ impl Page {
         self.composer.show(&placeholder, &send, &stop, thinking);
     }
 
+    /// `shaping`: a wide window with Coach's conversation shows what it has made so far beside
+    /// it (`SetupShapePanel`), drawn again only when it changed. Whether it shows.
+    fn draw_shape(&self) -> bool {
+        let shaping = self.wide.get() && self.conv.borrow().setup.is_some();
+        self.side.set_visible(shaping);
+        if !shaping {
+            return false;
+        }
+        let Ok(lines) = tafs_core::setup_shape::SetupShape::new(&self.w, &self.conv.borrow())
+            .and_then(|s| tafs_core::setup_shape::lines(&self.w, &s))
+        else {
+            return true;
+        };
+        if self.shape_drawn.borrow().as_ref() == Some(&lines) {
+            return true;
+        }
+        while let Some(c) = self.shape.first_child() {
+            self.shape.remove(&c);
+        }
+        shape_panel(&self.shape, &lines);
+        *self.shape_drawn.borrow_mut() = Some(lines);
+        true
+    }
+
     /// Draws what the conversation holds now, unless it's what's drawn already.
     fn draw(self: &Rc<Self>) {
         self.composer_state();
@@ -993,6 +1079,7 @@ impl Page {
             selections,
         };
         drop(c);
+        let shaping = self.draw_shape();
         if self.drawn.borrow().as_ref() == Some(&now) {
             return;
         }
@@ -1008,7 +1095,8 @@ impl Page {
         }
         match &now.lines {
             Ok(lines) => {
-                if let Some(plan) = &lines.plan {
+                // Beside the conversation, the plan is in the panel.
+                if let Some(plan) = lines.plan.as_ref().filter(|_| !shaping) {
                     let p = plan_panel(plan);
                     p.set_margin_start(12);
                     p.set_margin_end(12);
@@ -1694,6 +1782,72 @@ fn draft_shown(page: &Rc<Page>, d: &DraftShown) -> gtk::Widget {
             v.upcast()
         }
         DraftShown::Reading(words) => text(words, 13, 400, &["tafs-dim"]).upcast(),
+    }
+}
+
+/// `SetupShapePanel`: "Taking shape", the taf's name or the plan's title, then the plan with
+/// each step's mark, and the Card KIFF drafted, dashed until it's confirmed.
+fn shape_panel(into: &gtk::Box, l: &tafs_core::setup_shape::ShapeLines) {
+    let head = gtk::Box::new(gtk::Orientation::Vertical, 6);
+    head.append(&eyebrow(&l.eyebrow, false));
+    if let Some(h) = &l.heading {
+        head.append(&text(h, 26, 700, &["tafs-ink"]));
+    }
+    if let Some(e) = &l.empty {
+        head.append(&text(e, 14, 400, &["tafs-soft"]));
+    }
+    into.append(&head);
+    if let Some((progress, steps)) = &l.plan {
+        let v = gtk::Box::new(gtk::Orientation::Vertical, 10);
+        v.append(&eyebrow(progress, false));
+        for step in steps {
+            let row = gtk::Box::new(gtk::Orientation::Horizontal, 10);
+            let m = plan_mark(&step.mark);
+            m.set_valign(gtk::Align::Start);
+            m.set_halign(gtk::Align::Start);
+            m.set_hexpand(false);
+            m.set_margin_top(1);
+            row.append(&m);
+            let words = gtk::Box::new(gtk::Orientation::Vertical, 2);
+            words.set_hexpand(true);
+            let label = text(
+                &step.mark.label,
+                14,
+                if step.strong { 600 } else { 400 },
+                &[if step.dim { "tafs-dim" } else { "tafs-ink" }],
+            );
+            if step.struck {
+                if let Some(attrs) = label.attributes() {
+                    attrs.insert(gtk::pango::AttrInt::new_strikethrough(true));
+                    label.set_attributes(Some(&attrs));
+                }
+            }
+            words.append(&label);
+            if let Some(n) = &step.needs_you {
+                words.append(&text(n, 12, 600, &["tafs-amber-text"]));
+            }
+            row.append(&words);
+            v.append(&row);
+        }
+        into.append(&v);
+    }
+    if let Some(card) = &l.card {
+        let v = gtk::Box::new(gtk::Orientation::Vertical, 10);
+        v.append(&eyebrow(&card.eyebrow, false));
+        let face = gtk::Box::new(gtk::Orientation::Vertical, 6);
+        face.add_css_class("tafs-shape-card");
+        if card.confirmed {
+            face.add_css_class("confirmed");
+        }
+        face.append(&text(&card.title, 13, 600, &["tafs-ink", "tafs-mono"]));
+        for line in &card.lines {
+            face.append(&text(line, 12, 400, &["tafs-ink", "tafs-mono"]));
+        }
+        v.append(&face);
+        if let Some(u) = &card.until {
+            v.append(&text(u, 12, 400, &["tafs-dim"]));
+        }
+        into.append(&v);
     }
 }
 

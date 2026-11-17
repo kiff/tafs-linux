@@ -159,6 +159,24 @@ iPad does, and tafs cloud marks no card. The token, the key and the signature ar
 - **After the thread:** "While you were away" and how the tasks Coach handed out went, the dots
   while Coach is at work, and what was written to its run that it hasn't read yet.
 
+## Taking shape
+
+On a window wide enough (the conversation's page at least 780 px wide, `shaping`), what the
+conversation has made so far stands beside it, 420 px wide on Coach mode's deeper blue
+(`SetupShapePanel`, `tafs-core/src/setup_shape.rs`), and the plan moves from above the thread
+into it. Narrower, the conversation is alone. It reads only what this computer already holds:
+"Taking shape", the taf's name once a result hands it over (else the plan's title); the plan's
+steps with their marks, the step at work as "Needs you" while a card waits for the owner
+(`setupWaiting`), a skipped step struck through; with no plan, each card that asked the owner
+something and where it stands; then the Card KIFF drafted for the latest approval that names one,
+dashed until KIFF confirms it, with "A draft until you approve it in the conversation." With
+nothing made yet, what will show there.
+
+The iPad also lists the apps being connected, from planque's grants: this computer doesn't read
+them, so that part isn't drawn. The iPad shows the panel only once the phone is enrolled with
+planque (`planqueReady`), which is how it starts Coach; this computer starts nothing, and shows the
+panel beside any conversation tafs cloud has for it.
+
 ## The phone's, never this computer's
 
 Approve, Decline, a sign-in's button and Not now, and a drive's buttons. This computer is
@@ -177,8 +195,7 @@ For an approval, a sign-in or a drive it gives none, whatever the text, so nothi
 - What the iPad reads beside the thread: planque's grant (its words, terms and profile).
 - The live stream (`LiveWork`, revealing, pinning a sent message, a run that failed part-way with
   Retry), the Needs you bar and ↓, landing on the waiting card (it lands at the latest), New
-  Coach's tools row, "Taking shape"
-  (`SetupShapePanel`), a dial card (`KnobDraftCard`), a drive's steps and why it ended, and a result's
+  Coach's tools row, a dial card (`KnobDraftCard`), a drive's steps and why it ended, and a result's
   See version.
 - A refused connection's lines are decoded but not drawn: the iPad's Coach doesn't draw them.
 

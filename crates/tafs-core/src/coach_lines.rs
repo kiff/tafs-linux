@@ -692,7 +692,7 @@ fn work_lines_in(
     })
 }
 
-fn plan_step(w: &WordBook, status: &str, label: &str) -> Result<PlanStep, WordsError> {
+pub fn plan_step(w: &WordBook, status: &str, label: &str) -> Result<PlanStep, WordsError> {
     Ok(PlanStep {
         status: status.to_string(),
         label: label.to_string(),

@@ -100,6 +100,11 @@ button.tafs-account:hover { background-color: alpha(@tafs_ink, 0.04); }
 /* Coach (`SetupChatView`): its own wash; the owner's words on the brand sweep, corners of 18; cards'
    edges in their state's colour; an answered card's line on the raised colour at 60%. */
 .tafs-coach-wash { background-color: @tafs_coach_wash; }
+/* "Taking shape" beside the conversation: Coach mode's blue a shade deeper; the Card on the panel,
+   corners of 14, its edge dashed until KIFF confirms it, then the ok colour. */
+.tafs-coach-panel { background-color: @tafs_coach_panel; }
+.tafs-shape-card { background-color: @tafs_panel; border: 1px dashed alpha(@tafs_ink, 0.25); border-radius: 14px; padding: 14px; }
+.tafs-shape-card.confirmed { border: 1px solid @tafs_ok; }
 .tafs-coach-text { color: @tafs_coach; }
 .tafs-coach-title { border-bottom: 1px solid @tafs_line; }
 .tafs-owner-bubble { background-image: linear-gradient(135deg, BRAND0, BRAND1, BRAND2); color: white; border-radius: 18px; padding: 10px 14px; }
