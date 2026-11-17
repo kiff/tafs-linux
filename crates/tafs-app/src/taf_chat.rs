@@ -803,13 +803,14 @@ impl Page {
                     stamp,
                     menu,
                     pending,
+                    files,
                 } => self.owner_line(
                     lines,
                     words,
                     answered.as_deref(),
                     stamp.as_deref(),
-                    *menu,
-                    *pending,
+                    (*menu, *pending),
+                    files,
                 ),
                 Line::Taf {
                     work,
@@ -912,8 +913,8 @@ impl Page {
         words: &str,
         answered: Option<&str>,
         stamp: Option<&str>,
-        menu: bool,
-        pending: bool,
+        (menu, pending): (bool, bool),
+        files: &[tafs_core::coach::Attachment],
     ) -> gtk::Widget {
         let v = gtk::Box::new(gtk::Orientation::Vertical, 4);
         if let Some(s) = stamp {
@@ -957,7 +958,18 @@ impl Page {
                 ],
             );
         }
-        v.append(&b);
+        // Files sent alone have no words: their chips stand for the message.
+        if !words.is_empty() || files.is_empty() {
+            v.append(&b);
+        }
+        if !files.is_empty() {
+            let attach = self.attach.clone();
+            v.append(&crate::chat::message_files(
+                &self.w,
+                files,
+                Rc::new(move |f, chip| attach.open_sent(f, chip)),
+            ));
+        }
         v.upcast()
     }
 

@@ -212,6 +212,43 @@ pub fn owner(words: &str, answered: Option<&str>, steered: bool) -> gtk::Widget 
 
 /// The agent's words full width, with no bubble, its Markdown as formatting, under its work
 /// folded to "Worked for".
+/// What a sent file's chip does when tapped: opens it, by the file and its chip.
+pub type OpenFile = std::rc::Rc<dyn Fn(&tafs_core::coach::Attachment, &gtk::Button)>;
+
+/// `MessageFiles`: the files sent with a message, under it at the end, each its icon and name on
+/// the panel colour; a tap opens it full size.
+pub fn message_files(
+    w: &tafs_core::words::WordBook,
+    files: &[tafs_core::coach::Attachment],
+    open: OpenFile,
+) -> gtk::Box {
+    let v = gtk::Box::new(gtk::Orientation::Vertical, 6);
+    v.set_halign(gtk::Align::End);
+    for f in files {
+        let row = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+        row.append(&crate::attach::file_icon(&f.media_type, None));
+        // Its whole name up to 32 characters, then cut with "…".
+        let name = crate::widgets::one_line(&f.name, 14, 500, &["tafs-ink"]);
+        let shown = f.name.chars().count().min(32) as i32;
+        name.set_width_chars(shown);
+        name.set_max_width_chars(shown);
+        row.append(&name);
+        let b = gtk::Button::new();
+        b.set_child(Some(&row));
+        b.add_css_class("tafs-message-file");
+        b.set_widget_name("chat.message-file");
+        let label = w
+            .get("chat.file.open", &[("name", &f.name)])
+            .unwrap_or_default();
+        b.update_property(&[gtk::accessible::Property::Label(&label)]);
+        b.set_tooltip_text(Some(&label));
+        let (open, f) = (open.clone(), f.clone());
+        b.connect_clicked(move |b| open(&f, b));
+        v.append(&b);
+    }
+    v
+}
+
 pub fn answer(work: Option<&WorkLines>, words: &str) -> gtk::Box {
     let v = gtk::Box::new(gtk::Orientation::Vertical, 6);
     if let Some(work) = work {

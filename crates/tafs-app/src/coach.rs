@@ -1549,7 +1549,23 @@ fn draw_thread(page: &Rc<Page>, lines: &CoachLines, drawn: &Drawn) {
             Line::Owner {
                 text: words,
                 answered,
-            } => owner(words, answered.as_deref(), false),
+                files,
+            } => {
+                let v = gtk::Box::new(gtk::Orientation::Vertical, 4);
+                // Files sent alone have no words: their chips stand for the message.
+                if !words.is_empty() || files.is_empty() {
+                    v.append(&owner(words, answered.as_deref(), false));
+                }
+                if !files.is_empty() {
+                    let attach = page.attach.clone();
+                    v.append(&crate::chat::message_files(
+                        &page.w,
+                        files,
+                        Rc::new(move |f, chip| attach.open_sent(f, chip)),
+                    ));
+                }
+                v.upcast()
+            }
             Line::Coach {
                 work,
                 text: words,

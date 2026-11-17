@@ -63,6 +63,14 @@ fn the_conversation_is_the_live_chat_s() {
 #[test]
 fn the_fixture_reads_as_the_ipad_reads_it() {
     let t = TafThread::read(&fixture("taf-chat.json")).unwrap();
+    // A message sent with a file: the file goes with it, by its id, name and kind.
+    let sent = t
+        .messages
+        .iter()
+        .find(|m| !m.attachments.is_empty())
+        .unwrap();
+    assert_eq!(sent.attachments[0].id, "att_label");
+    assert_eq!(sent.attachments[0].media_type, "image/jpeg");
     assert_eq!(t.messages.len(), 8);
     assert_eq!(t.working, None);
     assert_eq!(
@@ -775,7 +783,8 @@ fn the_chat_draws_the_ipad_s_lines() {
             answered: None,
             stamp: Some("BY EMAIL · ana@example.com".into()),
             menu: false,
-            pending: false
+            pending: false,
+            files: vec![]
         })
     );
     assert!(

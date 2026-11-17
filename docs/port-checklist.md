@@ -30,6 +30,7 @@ ports a file updates its line here.
 | NeedsYouView.swift | 603 | Needs you: held calls, "Did this happen?", steps, Coach's waits, knocks, alerts | AppModel.held, coachWaiting, setAsideCoach, unproven, cardUnitExceptions, requestedHold | `NeedsYouView`'s held calls and its empty state, with board 6 (nothing waiting) drawn in shapes over it (`illustrations.rs`); `HeldCallCard`'s face, countdown, taf's words, details, expired and someone-answers states, and Answer in KIFF; `CoachWaitingCard` whole but its swipe: the line, Open Coach on its chat, and Set aside sent to tafs cloud with the device's grants proof (`setAsideCoach`, unsigned); `SetAllAsideButton` and its one ask; `DidThisHappenCard` whole for a computer that can't approve: KIFF's words or title and amount, why, and `ApprovalGate`'s can't-approve line in place of No and Yes; `CardUnitExceptionPanel` whole: its words, Discuss with Coach (a new conversation with tafs cloud's words in the box), and Dismiss, whose tap shows the can't-approve line (signed like a refusal); knocks, each opening its taf's Activity; a hold opened from its notification brought into view (`needs_you.rs`, `tafs-core/needs_you.rs`, `held.rs`, `unproven.rs`, `waits.rs`). Not here: Answering here (approve, extra room, next steps, refuse, Allow this from now on, install: the iPad's `canAnswer` needs a session key, so without one it answers in KIFF, as Linux does); `AlertsCard` (only for a session with an approval key: never Linux's yet); the swipe on a Coach row (its button does the same) |
 | HaltScreen.swift | 176 | A halt of one taf or every taf | AppModel.halt, refreshHalt, resumeHalt | `HaltScreen` whole: halting (one tap, unsigned), Halting… with its parts and Halt again, read every 2 s; board 4 (every taf halted) drawn in shapes over Halt all once it holds (`illustrations.rs`); `HaltRow` framed on a taf's Card; Halt all in the sidebar; Resume, whose tap shows the can't-approve line, as resuming is confirmed and signed by the device (`halt.rs`, `tafs-core/halt.rs`, `signed::Act::Resume`). Not here: Siri's tip (not for Linux) |
 | DiscardSettingUp.swift | 35 | Discard a taf being set up | AppModel.discardSettingUp | `DiscardSettingUpButton` whole: its button in tafs cloud's words, beside the taf, for the person whose setup it was, and its confirmation; the yes is signed behind the approval key, so it shows the can't-approve line and nothing is revoked or sent (`shell.rs`, `signed::Act::DiscardSettingUp`) |
+| AttachViews.swift | 267 | Attaching photos and files in a chat | FilePrep, Attachments, AppModel.openFile | `AttachButton` (Choose photos, Choose file), `FileTray`, `FileChip`, `FileIcon` and `MessageFiles`, in a taf's chat and Coach's: each file made ready as `FilePrep` makes it, declared to tafs cloud and sent to storage, and a sent one opened by the desktop's app for it ([chat](chat.md#files); `attach.rs`, `tafs-core/attach.rs`). Not here: `CameraPicker`: this computer has no camera to take a photo with |
 
 ## Partial
 
@@ -62,7 +63,6 @@ ports a file updates its line here.
 
 | iPad file | Lines | What | Models |
 | :- | -: | :- | :- |
-| AttachViews.swift | 267 | Attaching photos and files in a chat | |
 | MicButton.swift | 122 | The mic in a chat's message bar | |
 | TrialViews.swift | 214 | Trials of a new version | |
 
@@ -127,4 +127,4 @@ ports a file updates its line here.
 
 ## Coverage
 
-Ported 21, partial 22, not started 3, not for Linux 5: the 51 view files at the pin.
+Ported 22, partial 22, not started 2, not for Linux 5: the 51 view files at the pin.

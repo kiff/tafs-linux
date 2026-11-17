@@ -44,6 +44,12 @@ window, .tafs-ground { background-color: @tafs_background; color: @tafs_ink; }
 .tafs-panel { background-color: @tafs_panel; border: 1px solid @tafs_line; border-radius: 18px; padding: 16px; }
 .tafs-panel.amber-edge { border-color: alpha(@tafs_amber, 0.4); }
 
+/* AttachViews: FileIcon, 36 on a soft square with corners of 8; FileChip in the tray and
+   MessageFiles in the thread, on the panel colour, edged in the line colour, corners of 12. */
+.tafs-file-icon { min-width: 36px; min-height: 36px; border-radius: 8px; background-color: alpha(@tafs_line, 0.4); }
+.tafs-file-chip { background-color: @tafs_panel; border: 1px solid @tafs_line; border-radius: 12px; padding: 6px 2px 6px 6px; }
+button.tafs-message-file { background-color: @tafs_panel; border: 1px solid @tafs_line; border-radius: 12px; padding: 6px 12px 6px 6px; box-shadow: none; }
+
 /* PrimaryLook: the brand sweep, white 16 semibold, 54 high, corners of 16. */
 button.tafs-primary {
   background-image: linear-gradient(135deg, BRAND0, BRAND1, BRAND2);

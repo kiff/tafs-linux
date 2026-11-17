@@ -678,6 +678,8 @@ pub enum Line {
         stamp: Option<String>,
         menu: bool,
         pending: bool,
+        /// The files sent with it (`MessageFiles`), each opened full size.
+        files: Vec<crate::coach::Attachment>,
     },
     /// The taf's words full width, with tafs cloud's lines around them: where the run's result
     /// went above, what it counted under, and a connection refused, never folded.
@@ -951,6 +953,7 @@ fn message(w: &WordBook, m: &ChatMessage) -> Result<Line, WordsError> {
                 .transpose()?,
             menu: door.is_none(),
             pending: m.session == PENDING,
+            files: m.attachments.clone(),
         },
         From::Taf => Line::Taf {
             // What it did before writing it, folded.

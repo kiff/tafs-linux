@@ -245,6 +245,70 @@ impl Attach {
         self.changed();
     }
 
+    /// `openFile`: a file sent in this chat, read from tafs cloud (only the person's own), saved
+    /// in this app's cache under its name with its kind's extension, and opened by the desktop's
+    /// app for it, as the iPad's Quick Look. One that can't be read says why, in the tray.
+    pub fn open_sent(self: &Rc<Self>, file: &Attachment, chip: &gtk::Button) {
+        let Some(t) = self.target.borrow().clone() else {
+            return;
+        };
+        chip.set_sensitive(false);
+        let (me, file, chip) = (self.clone(), file.clone(), chip.clone());
+        glib::spawn_future_local(async move {
+            let words = (*me.w).clone();
+            let f = file.clone();
+            let saved = gio::spawn_blocking(move || -> Result<std::path::PathBuf, String> {
+                let why = |e: tafs_core::signin::KiffError| e.words(&words).unwrap_or_default();
+                let a =
+                    crate::kiff::cloud(&t.token, &t.languages, &attach::file_path(&t.taf, &f.id))
+                        .map_err(why)?;
+                let url = (a.status == 200)
+                    .then(|| attach::file_url(&a.body))
+                    .flatten()
+                    .ok_or_else(|| words.line("chat.file.could_not_open").unwrap_or_default())?;
+                let d = crate::kiff::download(&url).map_err(why)?;
+                if !(200..300).contains(&d.status) {
+                    return Err(words.line("chat.file.could_not_open").unwrap_or_default());
+                }
+                // One folder per file, named by its id's letters, digits, `-` and `_` only.
+                let id: String =
+                    f.id.chars()
+                        .filter(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_'))
+                        .collect();
+                if id.is_empty() {
+                    return Err(words.line("chat.file.could_not_open").unwrap_or_default());
+                }
+                let dir = glib::user_cache_dir().join("tafs").join("opened").join(id);
+                std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+                let path = dir.join(attach::opened_name(&f.name, &f.media_type));
+                std::fs::write(&path, &d.body).map_err(|e| e.to_string())?;
+                Ok(path)
+            })
+            .await
+            .unwrap_or_else(|_| Err(String::new()));
+            chip.set_sensitive(true);
+            match saved {
+                Ok(path) => {
+                    let window = chip.root().and_downcast::<gtk::Window>();
+                    gtk::FileLauncher::new(Some(&gio::File::for_path(&path))).launch(
+                        window.as_ref(),
+                        gio::Cancellable::NONE,
+                        |_| {},
+                    );
+                }
+                Err(why) => {
+                    let words =
+                        me.w.get(
+                            "chat.file.not_opened",
+                            &[("file", &file.name), ("why", &why)],
+                        )
+                        .unwrap_or_default();
+                    me.refuse(words);
+                }
+            }
+        });
+    }
+
     /// What Send does with the files: whether some are ready to go, and, while Send waits for
     /// them (`holdsSend`), what it says.
     pub fn send_state(&self, send: &str, thinking: bool) -> (bool, Option<String>) {

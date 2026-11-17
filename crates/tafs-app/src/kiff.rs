@@ -360,6 +360,45 @@ pub fn upload(to: &tafs_core::attach::Upload, data: &[u8]) -> Result<u16, KiffEr
     }
 }
 
+/// A sent file's bytes from the storage address tafs cloud gave (`TafsCloud.attachment`): no
+/// session goes with it, only to HTTPS, no redirect followed, and at most what a file may weigh.
+pub fn download(url: &str) -> Result<Answer, KiffError> {
+    if !tafs_core::attach::storage_address(url) {
+        return Err(KiffError::Unreadable);
+    }
+    let response = match ureq::AgentBuilder::new()
+        .timeout_connect(Duration::from_secs(15))
+        .timeout(Duration::from_secs(120))
+        .redirects(0)
+        .user_agent("tafs-linux")
+        .try_proxy_from_env(true)
+        .build()
+        .get(url)
+        .call()
+    {
+        Ok(r) => r,
+        Err(ureq::Error::Status(status, _)) => {
+            return Ok(Answer {
+                status,
+                body: vec![],
+            })
+        }
+        Err(ureq::Error::Transport(_)) => return Err(KiffError::Offline),
+    };
+    let status = response.status();
+    let mut body = Vec::new();
+    let most = tafs_core::attach::READ_AT_MOST;
+    response
+        .into_reader()
+        .take(most + 1)
+        .read_to_end(&mut body)
+        .map_err(|_| KiffError::Offline)?;
+    if body.len() as u64 > most {
+        return Err(KiffError::Unreadable);
+    }
+    Ok(Answer { status, body })
+}
+
 /// `GET /v1/me/devices` at KIFF as the session (`devices()`).
 pub fn devices(token: &str, languages: &[&str]) -> Result<Answer, KiffError> {
     get(

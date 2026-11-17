@@ -211,15 +211,74 @@ pub struct Upload {
     pub headers: Vec<(String, String)>,
 }
 
+/// Where a sent file is asked for (`TafsCloud.attachment`): only the person's own; another's is
+/// a 404.
+pub fn file_path(taf: &str, file: &str) -> String {
+    format!(
+        "/v1/tafs/{}/attachments/{}",
+        crate::access::escaped(taf),
+        crate::access::escaped(file)
+    )
+}
+
+/// An address storage may be reached at: HTTPS, with a host and no credentials in it.
+pub fn storage_address(url: &str) -> bool {
+    url::Url::parse(url).is_ok_and(|u| {
+        u.scheme() == "https"
+            && u.username().is_empty()
+            && u.password().is_none()
+            && u.host_str().is_some()
+    })
+}
+
+/// The address tafs cloud answers for a sent file's bytes (`url`), when it's one storage may be
+/// reached at; anything else is none.
+pub fn file_url(body: &[u8]) -> Option<String> {
+    let v: Value = serde_json::from_slice(body).ok()?;
+    let url = url::Url::parse(v.get("url")?.as_str()?).ok()?;
+    storage_address(url.as_str()).then(|| url.to_string())
+}
+
+/// The name a sent file is saved under to be opened (`openFile`): its own name's last part, its
+/// extension the one its kind takes, so the desktop opens it as what tafs took it as, never as
+/// a program; a name with nothing left is "file".
+pub fn opened_name(name: &str, media_type: &str) -> String {
+    let last = name.rsplit(['/', '\\']).next().unwrap_or_default();
+    let stem = match last.rsplit_once('.') {
+        Some((stem, _)) if !stem.is_empty() => stem,
+        _ => last,
+    };
+    let stem: String = stem
+        .chars()
+        .filter(|c| !c.is_control())
+        .collect::<String>()
+        .trim_start_matches('.')
+        .trim()
+        .to_string();
+    let stem = if stem.is_empty() {
+        "file".to_string()
+    } else {
+        stem
+    };
+    let ext = match media_type {
+        "image/jpeg" => "jpg",
+        "image/png" => "png",
+        "image/gif" => "gif",
+        "image/webp" => "webp",
+        "application/pdf" => "pdf",
+        "text/csv" => "csv",
+        "text/markdown" => "md",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document" => "docx",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" => "xlsx",
+        _ => "txt",
+    };
+    format!("{stem}.{ext}")
+}
+
 impl Upload {
     /// Only an HTTPS URL, and a method that carries bytes: nothing else is sent.
     pub fn sendable(&self) -> bool {
-        url::Url::parse(&self.url).is_ok_and(|u| {
-            u.scheme() == "https"
-                && u.username().is_empty()
-                && u.password().is_none()
-                && u.host_str().is_some()
-        }) && matches!(self.method.as_str(), "PUT" | "POST")
+        storage_address(&self.url) && matches!(self.method.as_str(), "PUT" | "POST")
     }
 }
 
@@ -407,6 +466,30 @@ mod tests {
             data: vec![b'a'; n],
             thumbnail: None,
         }
+    }
+
+    #[test]
+    fn a_sent_file_opens_as_its_kind() {
+        assert_eq!(
+            file_path("taf 1", "att/1"),
+            "/v1/tafs/taf%201/attachments/att%2F1"
+        );
+        assert_eq!(
+            file_url(br#"{"url":"https://store.example/f?sig=1"}"#).as_deref(),
+            Some("https://store.example/f?sig=1")
+        );
+        assert_eq!(file_url(br#"{"url":"http://store.example/f"}"#), None);
+        assert_eq!(file_url(br#"{"url":"https://u:p@store.example/f"}"#), None);
+        assert_eq!(file_url(b"{}"), None);
+        assert_eq!(opened_name("receipt.jpeg", "image/jpeg"), "receipt.jpg");
+        assert_eq!(opened_name("../../.bashrc", "text/plain"), "bashrc.txt");
+        assert_eq!(opened_name("run.sh", "text/plain"), "run.txt");
+        assert_eq!(
+            opened_name("C:\\x\\Form.PDF", "application/pdf"),
+            "Form.pdf"
+        );
+        assert_eq!(opened_name("", "image/png"), "file.png");
+        assert_eq!(opened_name("evil.desktop", "image/png"), "evil.png");
     }
 
     #[test]
