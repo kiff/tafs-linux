@@ -205,6 +205,9 @@ pub struct ResultLines {
     pub lines: Vec<(String, Tone)>,
     /// The new version is being made: its button, dimmed.
     pub preparing: Option<String>,
+    /// The new version, made, of a taf listed here: its button's words ("See version 3") and the
+    /// taf's key, whose Versions it opens.
+    pub see_version: Option<(String, String)>,
 }
 
 /// A card, by its kind.
@@ -1083,13 +1086,31 @@ fn result(
             open: None,
             lines: vec![],
             preparing: None,
+            see_version: None,
         };
+        // The taf it improves (`improvedTaf`): by its id at tafs cloud, else by its agent.
+        let improved = c.taf.as_ref().and_then(|t| {
+            let improves = t.improves.as_deref();
+            listed
+                .iter()
+                .find(|l| Some(l.key.as_str()) == improves)
+                .or_else(|| listed.iter().find(|l| Some(l.agent.as_str()) == improves))
+                .or_else(|| listed.iter().find(|l| l.agent == t.agent))
+        });
         match thread.improvement(&card) {
-            // Its versions aren't on this computer yet: that it's made, in words.
-            Improvement::Made(n) => out.lines.push((
-                w.get("coach.result.version_made", &[("version", &n.to_string())])?,
-                Tone::Dim,
-            )),
+            // Its Versions, where it's tried and switched to; a taf not listed here, in words.
+            Improvement::Made(n) => match improved {
+                Some(l) => {
+                    out.see_version = Some((
+                        w.get("coach.result.see_version", &[("version", &n.to_string())])?,
+                        l.key.clone(),
+                    ))
+                }
+                None => out.lines.push((
+                    w.get("coach.result.version_made", &[("version", &n.to_string())])?,
+                    Tone::Dim,
+                )),
+            },
             Improvement::Failed(why) => {
                 out.lines.push((
                     w.get(
@@ -1134,6 +1155,7 @@ fn result(
         open: None,
         lines: vec![],
         preparing: None,
+        see_version: None,
     };
     match thread.hand_over(&card, started.is_some()) {
         HandOver::SetUp => {
@@ -2000,6 +2022,48 @@ mod tests {
             panic!()
         };
         assert_eq!(r.open, Some(("See it on Refunds".into(), "taf-1".into())));
+    }
+
+    #[test]
+    fn an_improvement_made_opens_its_tafs_versions_where_it_is_listed() {
+        let w = book();
+        let mut v = contract();
+        for c in v["components"].as_array_mut().unwrap() {
+            if c["component"]["type"] == "result" {
+                c["component"]["taf"]["improves"] = json!("taf-1");
+                c["answer"]["outcome"] = json!({"version": 3});
+            }
+        }
+        let t = read(&v);
+        let result = |listed: &[Listed]| {
+            let l = lines(&w, &t, listed, Mode::Kiff, now()).unwrap();
+            l.lines
+                .into_iter()
+                .find_map(|line| match line {
+                    Line::Card {
+                        card: Card::Result(r),
+                        ..
+                    } => Some(r),
+                    _ => None,
+                })
+                .unwrap()
+        };
+        // Listed by its id at tafs cloud: See version, opening that taf's Versions.
+        let listed = [Listed {
+            agent: "refunds-x".into(),
+            key: "taf-1".into(),
+            name: "Refunds".into(),
+        }];
+        let r = result(&listed);
+        assert_eq!(
+            r.see_version,
+            Some(("See version 3".into(), "taf-1".into()))
+        );
+        assert!(r.lines.is_empty());
+        // Not listed here: that it's made, in words.
+        let r = result(&[]);
+        assert_eq!(r.see_version, None);
+        assert_eq!(r.lines.len(), 1);
     }
 
     #[test]

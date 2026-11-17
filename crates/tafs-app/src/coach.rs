@@ -2313,8 +2313,19 @@ fn result(r: &ResultLines, open: &Rc<dyn Fn(Selection)>) -> gtk::Widget {
     for (words, tone) in &r.lines {
         p.append(&text(words, 13, 400, &[tone_class(*tone)]));
     }
+    if let Some((words, key)) = &r.see_version {
+        // The taf's page, its Versions open.
+        let b = primary(words);
+        b.set_widget_name("coach.see-version");
+        let (open, key) = (open.clone(), key.clone());
+        b.connect_clicked(move |_| {
+            crate::versions::OPEN.with(|o| *o.borrow_mut() = Some("versions"));
+            open(Selection::Taf(key.clone()));
+        });
+        p.append(&b);
+    }
     if let Some(preparing) = &r.preparing {
-        // Its versions aren't on this computer: the button is there, dimmed.
+        // While the version is made: the button is there, dimmed.
         let b = primary(preparing);
         b.set_sensitive(false);
         p.append(&b);

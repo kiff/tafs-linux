@@ -145,7 +145,9 @@ iPad does, and tafs cloud marks no card. The token, the key and the signature ar
   its own-answer field, Send answers once each has an answer, and Chat about this, which puts the
   card away ("Show them again"); an approval; a sign-in; a result (set up, setting up, wasn't set up, a plan needed with
   Choose a plan, or the button that opens the taf once it's on the list; an improvement's new
-  version); a drive's ask; a drive's end ("What I did": the task, each step with what it
+  version, with See version once it's made, which opens the taf it improves (`improvedTaf`: by its
+  id at tafs cloud, else its agent) on its Versions, or that it's made, in words, for a taf not
+  listed here); a drive's ask; a drive's end ("What I did": the task, each step with what it
   touched, and why it ended, in tafs cloud's words or the app's for its reason; its steps are
   read with `try?`, so one it can't read leaves them all out, as on the iPad); a dial card's title. An answered card folds to one line
   (`OutcomeLine`); an approval's opens again on a click, and Fold puts it back. An approval whose
@@ -241,7 +243,7 @@ For an approval, a sign-in or a drive it gives none, whatever the text, so nothi
   (`improve`).
 - What the iPad reads beside the thread: planque's grant (its words, terms and profile).
 - The live stream (`LiveWork`, revealing, pinning a sent message, a run that failed part-way with
-  Retry); a dial card (`KnobDraftCard`); and a result's See version.
+  Retry); and a dial card (`KnobDraftCard`).
 - A refused connection's lines are decoded but not drawn: the iPad's Coach doesn't draw them.
 
 ## Screenshots
