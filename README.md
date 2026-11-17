@@ -17,6 +17,30 @@ It draws what KIFF and tafs cloud send. Nothing in this first version runs actio
 | `shared-pin.json` | The commit of the shared repository the words and contracts are read at. |
 | `docs/` | One page per area. The [port checklist](docs/port-checklist.md) says where each iPad screen stands. |
 
+## Install
+
+Download `tafs-vX.Y.Z-x86_64.AppImage`, `SHA256SUMS` and `SHA256SUMS.asc` from the
+[releases](https://github.com/kiff/tafs-linux/releases) page, into one folder. Runs on Ubuntu 24.04
+and newer, x86_64.
+
+Check them before running anything. `SHA256SUMS` is signed with tafs for Linux's release key,
+[`packaging/tafs-release-key.asc`](packaging/tafs-release-key.asc):
+
+- **Key:** OpenPGP ed25519, signing only, expires 2028-11-16.
+  UID `tafs for Linux (release signing) <support@kiff.dev>`.
+- **Fingerprint:** `73BC 9445 0F18 1366 FE44  3DCB 2845 162C 93DB BCA1`
+
+```
+gpg --import tafs-release-key.asc
+gpg --fingerprint support@kiff.dev                      # must show the fingerprint above
+gpg --verify SHA256SUMS.asc SHA256SUMS                   # "Good signature"
+sha256sum -c SHA256SUMS                                  # the AppImage: OK
+chmod +x tafs-v*-x86_64.AppImage && ./tafs-v*-x86_64.AppImage
+```
+
+`gpg` says the key isn't certified with a trusted signature unless you've signed it yourself:
+that's expected. What counts is the fingerprint, compared with the one here.
+
 ## Build and run
 
 Needs Rust (stable), GTK 4.14 or later and libadwaita 1.5 or later (on Ubuntu 24.04:
