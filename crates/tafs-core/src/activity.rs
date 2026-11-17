@@ -174,11 +174,16 @@ pub fn evidence(
 ) -> Option<crate::record::Entry> {
     use crate::record::Kind;
     e.call.actor_id.as_ref()?;
-    let mut entry =
-        crate::record::record(w, std::slice::from_ref(&e.call), &|_| Some(taf.to_string()))
-            .ok()?
-            .into_iter()
-            .next()?;
+    let mut entry = crate::record::record(
+        w,
+        std::slice::from_ref(&e.call),
+        &|_| Some(taf.to_string()),
+        // No connections are read here: which vendor refused stays unnamed.
+        &Default::default(),
+    )
+    .ok()?
+    .into_iter()
+    .next()?;
     entry.kind = match e.kind.as_str() {
         "done" => Kind::Done,
         "approved" => Kind::Approved,

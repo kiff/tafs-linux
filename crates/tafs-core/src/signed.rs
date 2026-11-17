@@ -254,15 +254,9 @@ impl Act {
             Act::Connect { entry, .. } => ("POST", crate::connect::start_path(entry)),
             Act::StopSlackSubscription { grant, trigger } => (
                 "DELETE",
-                format!(
-                    "grants/{}/triggers/{}",
-                    escaped(grant),
-                    escaped(trigger)
-                ),
+                format!("grants/{}/triggers/{}", escaped(grant), escaped(trigger)),
             ),
-            Act::ConnectAgain { grant } => {
-                ("POST", format!("grants/{}/approve", escaped(grant)))
-            }
+            Act::ConnectAgain { grant } => ("POST", format!("grants/{}/approve", escaped(grant))),
             Act::RemoveTaf { taf } => ("DELETE", format!("/v1/tafs/{}", escaped(taf))),
             Act::ApproveOnce { call } => (
                 "POST",
@@ -392,6 +386,7 @@ mod tests {
             Act::Connect {
                 entry: "qonto@2".into(),
                 taf: "taf-1".into(),
+            },
             Act::StopSlackSubscription {
                 grant: "g1".into(),
                 trigger: "tr_1".into(),
