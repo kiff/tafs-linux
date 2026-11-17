@@ -27,7 +27,7 @@ pub fn page(
     column.append(&title);
     // In the iPad's order: the steps the tafs handed the person, then Coach's chats waiting on them.
     for step in &n.steps {
-        column.append(&step_card(step));
+        column.append(&step_card(&w, step));
     }
     if let Some(clear) = &n.set_all_aside {
         // Setting chats aside is the person's act: there, dimmed, until it's ported.
@@ -74,8 +74,9 @@ pub fn page(
 
 /// `YourStepCard`: tafs cloud's title, the taf, what and why, the vendor's page when tafs cloud
 /// vouched for its link (it opens in the browser, with where it really goes under it), and Done or
-/// Skip it, signed: there, dimmed, until this computer can sign an answer.
-fn step_card(step: &tafs_core::waits::YourStep) -> gtk::Box {
+/// Skip it: the answer is signed by the device key, so their tap says this computer can't approve,
+/// under them, and sends nothing.
+fn step_card(w: &Rc<WordBook>, step: &tafs_core::waits::YourStep) -> gtk::Box {
     let p = panel(true);
     p.set_spacing(10);
     if !step.title.is_empty() {
@@ -102,13 +103,26 @@ fn step_card(step: &tafs_core::waits::YourStep) -> gtk::Box {
     }
     let row = gtk::Box::new(gtk::Orientation::Horizontal, 8);
     row.set_homogeneous(true);
+    let slot = crate::approval::refusal_slot();
     let done = crate::widgets::primary(&step.done);
-    done.set_sensitive(false);
     row.append(&done);
     let skip = outline(&step.skip);
-    skip.set_sensitive(false);
     row.append(&skip);
+    for b in [&done, &skip] {
+        let (w, slot, handoff) = (w.clone(), slot.clone(), step.handoff.clone());
+        b.connect_clicked(move |_| {
+            crate::approval::refuse(
+                &w,
+                tafs_core::sidebar::Mode::Kiff,
+                &tafs_core::signed::Act::AnswerStep {
+                    handoff: handoff.clone(),
+                },
+                &slot,
+            )
+        });
+    }
     p.append(&row);
+    p.append(&slot);
     p
 }
 

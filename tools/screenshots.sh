@@ -13,7 +13,7 @@ export XDG_CONFIG_HOME=$(mktemp -d)
 mkdir -p "$XDG_CONFIG_HOME/gtk-4.0"
 printf '[Settings]\ngtk-font-name=Inter 11\ngtk-hint-font-metrics=1\n' > "$XDG_CONFIG_HOME/gtk-4.0/settings.ini"
 missing=0
-for screen in welcome sign-in sign-in-code sign-in-narrow pair connected overview overview-home overview-empty needs-you needs-you-empty needs-you-waits needs-you-happened record taf taf-card taf-home taf-home-card taf-card-lines taf-work taf-run taf-knocks taf-setup taf-units usage usage-kiff usage-kiff-member usage-ask usage-decline connect-apps connect-apps-narrow devices devices-sign-out people people-rename people-add kiff-account account-kiff consent time-zone time-zone-use language alerts calendar calendar-week calendar-compact account sidebar-sample sidebar-others sidebar-setting-up sidebar-plan view-only view-only-paired recipes recipe-sheet gallery-strip gallery halt-all halt-all-halted halt-one record-search record-export record-receipt record-on delete-account pin-sheet coach coach-wider coach-asks coach-chats coach-empty coach-start taf-chat taf-chat-working taf-report brief brief-answer brief-clear overview-labels overview-label mission-log; do
+for screen in welcome sign-in sign-in-code sign-in-narrow pair connected overview overview-home overview-empty overview-unread needs-you needs-you-empty needs-you-waits needs-you-happened record taf taf-card taf-home taf-home-card taf-card-lines taf-work taf-work-manage taf-next taf-card-manage taf-run taf-knocks doors doors-door taf-dial taf-setup-apps taf-starts taf-results taf-setup taf-units usage usage-kiff usage-kiff-member usage-ask usage-decline connect-apps connect-apps-narrow connect-app connect-connection connect-remove connect-kiff connect-which-taf connect-approve devices devices-sign-out people people-rename people-add share share-step2 kiff-account account-kiff consent time-zone time-zone-use language alerts calendar calendar-week calendar-compact account sidebar-sample sidebar-others sidebar-setting-up sidebar-unreachable sidebar-plan view-only view-only-paired recipes recipe-sheet gallery-strip gallery new-taf coach-hand halt-all halt-all-halted halt-one record-search record-export record-receipt record-on delete-account pin-sheet app-event coach coach-wider coach-asks coach-chats coach-empty coach-start coach-draft coach-draft-refused coach-tools coach-full coach-drive taf-chat taf-chat-working taf-report brief brief-answer brief-clear overview-labels overview-label mission-log; do
   case $screen in
     welcome) opts=(--page welcome) ;;
     sign-in) opts=(--page sign-in) ;;
@@ -25,6 +25,8 @@ for screen in welcome sign-in sign-in-code sign-in-narrow pair connected overvie
     overview-home) opts=(--home shared/contracts/home.json) ;;
     # No taf and no recipes listed: the Overview's "No tafs yet", under board 2.
     overview-empty) opts=(--home crates/tafs-app/fixtures/home-empty.json) ;;
+    # Home couldn't be read yet: the mascot and "Couldn't load your tafs.", the Unreachable line.
+    overview-unread) opts=(--view-only --unreachable network) ;;
     needs-you) opts=(--sample --signed-in --page needs-you) ;;
     # Nothing waiting: board 6 over its words.
     needs-you-empty) opts=(--home shared/contracts/home.json --page needs-you) ;;
@@ -48,6 +50,14 @@ for screen in welcome sign-in sign-in-code sign-in-narrow pair connected overvie
     people-add) opts=(--home shared/contracts/home.json --people crates/tafs-app/fixtures/people-kiff.json --page people-add) ;;
     connect-apps-narrow) opts=(--sample --signed-in --size 900x800 --page connect-apps) ;;
     connect-apps) opts=(--sample --signed-in --page connect-apps) ;;
+    # The reference set's connections: Stripe's, one connection's detail, and its Remove access.
+    connect-app) opts=(--sample --signed-in --page connect-app) ;;
+    connect-connection) opts=(--sample --signed-in --page connect-connection) ;;
+    connect-remove) opts=(--sample --signed-in --page connect-remove) ;;
+    # Signed in with KIFF, read from a fixture: Connect, "Which taf?", and a taf picked (can't approve here).
+    connect-kiff) opts=(--home shared/contracts/home.json --access crates/tafs-app/fixtures/access-manage.json --connect crates/tafs-app/fixtures/connect-kiff.json --page connect-apps) ;;
+    connect-which-taf) opts=(--home shared/contracts/home.json --access crates/tafs-app/fixtures/access-manage.json --connect crates/tafs-app/fixtures/connect-kiff.json --page connect-which-taf) ;;
+    connect-approve) opts=(--home shared/contracts/home.json --access crates/tafs-app/fixtures/access-manage.json --connect crates/tafs-app/fixtures/connect-kiff.json --page connect-approve) ;;
     usage) opts=(--sample --signed-in --page usage) ;;
     usage-kiff) opts=(--home shared/contracts/home.json --usage crates/tafs-app/fixtures/usage-kiff.json --page usage) ;;
     usage-kiff-member) opts=(--home shared/contracts/home.json --usage crates/tafs-app/fixtures/usage-kiff-member.json --page usage) ;;
@@ -58,8 +68,26 @@ for screen in welcome sign-in sign-in-code sign-in-narrow pair connected overvie
     taf) opts=(--sample --signed-in --page taf) ;;
     taf-home) opts=(--home shared/contracts/home.json --page taf:taf-aaaa0000000000000000) ;;
     taf-work) opts=(--home shared/contracts/home.json --work crates/tafs-app/fixtures/taf-work.json --runs crates/tafs-app/fixtures/taf-runs-page.json --page taf:taf-aaaa0000000000000000) ;;
+    # Its work for whoever manages it (Answer within, Send again), and its Card for a view-only
+    # session's manager (Revoke's line). Nothing is sent.
+    taf-next) opts=(--home shared/contracts/home.json --access crates/tafs-app/fixtures/access-manage.json --me crates/tafs-app/fixtures/me-manager.json --taf-activity crates/tafs-app/fixtures/taf-activity-next.json --page taf:taf-aaaa0000000000000000) ;;
+    taf-work-manage) opts=(--home shared/contracts/home.json --access crates/tafs-app/fixtures/access-manage.json --me crates/tafs-app/fixtures/me-manager.json --work crates/tafs-app/fixtures/taf-work.json --runs crates/tafs-app/fixtures/taf-runs-page.json --page taf:taf-aaaa0000000000000000) ;;
+    taf-card-manage) opts=(--home crates/tafs-app/fixtures/home-card-lines.json --access crates/tafs-app/fixtures/access-manage.json --me crates/tafs-app/fixtures/me-manager.json --page taf-card:taf-aaaa0000000000000000) ;;
     taf-setup) opts=(--home shared/contracts/home.json --access crates/tafs-app/fixtures/access-manage.json --memory crates/tafs-app/fixtures/taf-memory.json --page taf-setup:taf-aaaa0000000000000000) ;;
     taf-knocks) opts=(--home shared/contracts/home.json --access crates/tafs-app/fixtures/access-manage.json --doors crates/tafs-app/fixtures/taf-doors.json --page taf:taf-aaaa0000000000000000) ;;
+    # A taf's doors (`DoorsView`): the doors' own dial over the door at the top, and one door's
+    # screen with its keys and knocks. Read from a file (no contract at the pin); nothing is sent.
+    doors) opts=(--home shared/contracts/home.json --access crates/tafs-app/fixtures/access-manage.json --me crates/tafs-app/fixtures/me-manager.json --doors crates/tafs-app/fixtures/taf-doors-dial.json --page doors:taf-aaaa0000000000000000) ;;
+    # The taf's dial in the doors' own dial's place, over its doors (synthetic: the iPad's
+    # `Screenshots.knob` with four services). Nothing is sent.
+    taf-dial) opts=(--home shared/contracts/home.json --access crates/tafs-app/fixtures/access-manage.json --me crates/tafs-app/fixtures/me-manager.json --doors crates/tafs-app/fixtures/taf-doors-dial.json --knob crates/tafs-app/fixtures/taf-knob-dial.json --work crates/tafs-app/fixtures/taf-work.json --page doors:taf-aaaa0000000000000000) ;;
+    doors-door) opts=(--home shared/contracts/home.json --access crates/tafs-app/fixtures/access-manage.json --me crates/tafs-app/fixtures/me-manager.json --doors crates/tafs-app/fixtures/taf-doors-dial.json --page doors:taf-aaaa0000000000000000:door_email) ;;
+    # Setup with its own Connect again and a connected app on the ring (tafs cloud's contract);
+    # Starts when and Results go to over its dial from a file (synthetic, the iPad's
+    # `Screenshots.setupKnob` with a version waiting). Nothing is sent.
+    taf-setup-apps) opts=(--home shared/contracts/home.json --access crates/tafs-app/fixtures/access-manage.json --me crates/tafs-app/fixtures/me-manager.json --setup shared/contracts/taf-setup-reconnect.json --knob crates/tafs-app/fixtures/taf-knob-setup.json --page taf-setup:taf-aaaa0000000000000000) ;;
+    taf-starts) opts=(--home shared/contracts/home.json --access crates/tafs-app/fixtures/access-manage.json --me crates/tafs-app/fixtures/me-manager.json --knob crates/tafs-app/fixtures/taf-knob-setup.json --doors crates/tafs-app/fixtures/taf-doors-dial.json --page starts:taf-aaaa0000000000000000) ;;
+    taf-results) opts=(--home shared/contracts/home.json --access crates/tafs-app/fixtures/access-manage.json --me crates/tafs-app/fixtures/me-manager.json --knob crates/tafs-app/fixtures/taf-knob-setup.json --work crates/tafs-app/fixtures/taf-work.json --page results:taf-aaaa0000000000000000) ;;
     # A taf's chat from a file (synthetic: no contract for a taf's own thread at the pin): at rest, and at work.
     taf-chat) opts=(--home shared/contracts/home.json --access crates/tafs-app/fixtures/access-manage.json --chat crates/tafs-app/fixtures/taf-chat.json --page taf:taf-aaaa0000000000000000) ;;
     taf-chat-working) opts=(--home shared/contracts/home.json --chat crates/tafs-app/fixtures/taf-chat-working.json --page taf:taf-aaaa0000000000000000) ;;
@@ -71,13 +99,17 @@ for screen in welcome sign-in sign-in-code sign-in-narrow pair connected overvie
     taf-card) opts=(--sample --signed-in --page taf-card) ;;
     taf-home-card) opts=(--home shared/contracts/home.json --page taf-card:taf-aaaa0000000000000000) ;;
     sidebar-plan) opts=(--home shared/contracts/home.json --balance crates/tafs-app/fixtures/balance-home-line.json --page overview) ;;
-    sidebar-setting-up) opts=(--home crates/tafs-app/fixtures/home-setting-up.json --page overview) ;;
+    sidebar-setting-up) opts=(--home crates/tafs-app/fixtures/home-setting-up.json --me crates/tafs-app/fixtures/me-manager.json --coach-setup crates/tafs-app/fixtures/setup-coach.json --page overview) ;;
+    # Home couldn't be read: the Unreachable line at the foot, as the app tries again (nothing is read).
+    sidebar-unreachable) opts=(--home shared/contracts/home.json --me crates/tafs-app/fixtures/me-manager.json --unreachable network) ;;
     sidebar-others) opts=(--home crates/tafs-app/fixtures/home-others.json --page overview) ;;
     sidebar-sample) opts=(--sample) ;;
     view-only) opts=(--view-only) ;;
     view-only-paired) opts=(--view-only --paired) ;;
     recipes) opts=(--home crates/tafs-app/fixtures/home-empty.json --recipes crates/tafs-app/fixtures/recipes.json) ;;
     pin-sheet) opts=(--home shared/contracts/home.json --page pin-sheet) ;;
+    # An app event's filters before signing (synthetic, the iPad's test's stop): Approve is the gate's line.
+    app-event) opts=(--home shared/contracts/home.json --app-event crates/tafs-app/fixtures/app-event.json) ;;
     delete-account) opts=(--home shared/contracts/home.json --people crates/tafs-app/fixtures/people-kiff.json --page delete-account) ;;
     record-export) opts=(--home shared/contracts/home.json --access crates/tafs-app/fixtures/access.json --record-search crates/tafs-app/fixtures/record-search.json --receipts crates/tafs-app/fixtures/receipts.json --page record-export) ;;
     alerts) opts=(--home shared/contracts/home.json --page alerts) ;;
@@ -97,6 +129,15 @@ for screen in welcome sign-in sign-in-code sign-in-narrow pair connected overvie
     coach-asks) opts=(--home shared/contracts/home.json --me crates/tafs-app/fixtures/me-manager.json --coach crates/tafs-app/fixtures/coach-asks.json --page coach) ;;
     coach-chats) opts=(--home shared/contracts/home.json --me crates/tafs-app/fixtures/me-manager.json --coach shared/contracts/coach-conversation.json --coach-chats shared/contracts/coach-chats.json --page coach) ;;
     coach-empty) opts=(--home crates/tafs-app/fixtures/home-empty.json --me crates/tafs-app/fixtures/me-manager.json --coach crates/tafs-app/fixtures/coach-empty.json --page coach) ;;
+    # An approval naming KIFF's draft, read from a file (--coach-drafts, nothing is read): the Card drawn, and KIFF's refusal with Try again.
+    coach-draft) opts=(--home shared/contracts/home.json --me crates/tafs-app/fixtures/me-manager.json --coach crates/tafs-app/fixtures/coach-card.json --coach-drafts crates/tafs-app/fixtures/coach-drafts.json --page coach) ;;
+    coach-draft-refused) opts=(--home shared/contracts/home.json --me crates/tafs-app/fixtures/me-manager.json --coach crates/tafs-app/fixtures/coach-card.json --coach-drafts crates/tafs-app/fixtures/coach-drafts-refused.json --page coach) ;;
+    # Coach's tools still to give (tafs cloud's contract): the row over the conversation, and the step open, the gate's line in Give's place.
+    coach-tools) opts=(--home shared/contracts/home.json --me crates/tafs-app/fixtures/me-manager.json --coach crates/tafs-app/fixtures/coach-asks.json --coach-setup shared/contracts/setup-coach.json --page coach-tools) ;;
+    # Coach mode full screen: the conversation and, beside it, what it has made so far, with KIFF's draft of the Card.
+    coach-full) opts=(--home shared/contracts/home.json --me crates/tafs-app/fixtures/me-manager.json --coach crates/tafs-app/fixtures/coach-card.json --coach-drafts crates/tafs-app/fixtures/coach-drafts.json --page coach-full) ;;
+    # Coach asks to drive the app (approving it is the phone's), after a drive that ended: what it did and why it ended.
+    coach-drive) opts=(--home shared/contracts/home.json --me crates/tafs-app/fixtures/me-manager.json --coach crates/tafs-app/fixtures/coach-drive.json --page coach-full) ;;
     coach-start) opts=(--home shared/contracts/home.json --me crates/tafs-app/fixtures/me-manager.json --coach shared/contracts/setup-start.json --page coach) ;;
     # Your brief in Needs you's place, from tafs cloud's answer in a file (nothing is sent): with a
     # signed answer tapped (ApprovalGate's words), and with nothing to decide (board 3).
@@ -108,6 +149,14 @@ for screen in welcome sign-in sign-in-code sign-in-narrow pair connected overvie
     # Home's labels as chips over the Overview's grid and on each taf's line, and filtered to one.
     overview-labels) opts=(--home crates/tafs-app/fixtures/home-missions.json) ;;
     overview-label) opts=(--home crates/tafs-app/fixtures/home-missions.json --page overview-label:l_clients) ;;
+    # + New's gallery: "Say it in your own words" with board 8 beside it, then every job.
+    new-taf) opts=(--home shared/contracts/home.json --me crates/tafs-app/fixtures/me-manager.json --gallery crates/tafs-app/fixtures/gallery.json --recipes crates/tafs-app/fixtures/recipes.json --page new-taf) ;;
+    # A job handed to Coach from its sheet: a new conversation, the job's words in the box, nothing sent.
+    coach-hand) opts=(--home crates/tafs-app/fixtures/home-empty.json --me crates/tafs-app/fixtures/me-manager.json --recipes crates/tafs-app/fixtures/recipes.json --coach crates/tafs-app/fixtures/coach-empty.json --page coach-hand:refunds) ;;
+    # Share on a taf's page and its sheet's two steps (from --people's grants), Share tapped on the
+    # second: the can't-approve line, nothing sent.
+    share) opts=(--home shared/contracts/home.json --access crates/tafs-app/fixtures/access-manage.json --people crates/tafs-app/fixtures/people-kiff.json --page share:taf-aaaa0000000000000000) ;;
+    share-step2) opts=(--home shared/contracts/home.json --access crates/tafs-app/fixtures/access-manage.json --people crates/tafs-app/fixtures/people-kiff.json --page share-step2:taf-aaaa0000000000000000) ;;
     recipe-sheet) opts=(--home crates/tafs-app/fixtures/home-empty.json --recipes crates/tafs-app/fixtures/recipes.json --page recipe:refunds) ;;
   esac
   for lang in en fr pt; do

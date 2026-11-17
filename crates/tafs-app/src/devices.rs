@@ -248,7 +248,7 @@ fn sign_out(
     ask.connect_response(None, move |_, response| {
         if response == "sign-out" {
             crate::approval::refuse(&w, mode, &act, &refused);
-            refused_panel.set_visible(refused.is_visible());
+            refused_panel.set_visible(refused.get_visible());
         }
     });
     ask.present(Some(over));

@@ -100,9 +100,32 @@ pub fn grants_authority(method: &str, path: &str) -> bool {
         && !p[4].is_empty()
 }
 
+/// `answerHandoff`: a step a taf handed its owner, answered with the device key's signature in its
+/// body (`handoffMessage`).
+fn answers_handoff(method: &str, path: &str) -> bool {
+    let p = parts(path);
+    method == "POST"
+        && p.len() == 6
+        && path.starts_with("/v1/me/handoffs/")
+        && p[5] == "answer"
+        && !p[4].is_empty()
+}
+
+/// `approveOnce`, `reject`, `changeCard`: a held call answered, with the device key's signature
+/// in its body (`AnswerSignature`).
+fn answers_hold(method: &str, path: &str) -> bool {
+    let p = parts(path);
+    method == "POST"
+        && p.len() == 6
+        && path.starts_with("/v1/me/card-exceptions/")
+        && matches!(p[5], "approve-once" | "reject" | "change-card")
+        && !p[4].is_empty()
+}
+
 /// Whether KIFF takes `method` on `path` only signed: a signed setup call, one that grants
 /// authority, the session's approval key and its relink, or one the iPad builds and signs
-/// beforehand (a device signed out, a computer's pairing, a passkey added or removed).
+/// beforehand (a device signed out, a computer's pairing, a passkey added or removed, a step's
+/// or a held call's answer).
 pub fn signed(method: &str, path: &str) -> bool {
     // A path that isn't plain (`//`, `/./`, `/../`) is taken as signed: nothing here builds one,
     // and none may slip past the lists below by its spelling.
@@ -120,11 +143,19 @@ pub fn signed(method: &str, path: &str) -> bool {
         || (method == "DELETE" && path.starts_with("/v1/me/devices/"))
         || (method == "POST" && path == "/v1/me/pairings")
         || (method != "GET" && path.starts_with("/v1/me/passkeys"))
+        || answers_handoff(method, path)
+        || answers_hold(method, path)
 }
 
 /// A path part, escaped (`KIFFClient.escaped`).
 fn escaped(v: &str) -> String {
     crate::access::escaped(v)
+}
+
+/// `KIFFClient.revoke(cardID:)`'s path: a Card revoked as the session, unsigned (it only takes
+/// authority away).
+pub fn revoke_path(card: &str) -> String {
+    format!("/v1/me/mandates/{}/revoke", escaped(card))
 }
 
 /// An act the iPad signs, which this computer draws up to its signature.
@@ -152,6 +183,60 @@ pub enum Act {
     RaiseLimit,
     /// `declineRequest`: a member's request declined, with a note.
     DeclineRequest { request: String },
+    /// `disconnect(grantID:)`: a connection's access removed, or its waiting request or sign-in
+    /// cancelled, after its question (Connect apps). planque's call, behind Face ID.
+    Disconnect { grant: String },
+    /// `clearRemovedConnections`: a removed taf's connections cleared, one Face ID for all,
+    /// then the device key signs each disconnect.
+    ClearRemoved { grants: Vec<String> },
+    /// `reconnect`: a connection signed in again, approved behind Face ID first.
+    SignInAgain { grant: String },
+    /// Connect apps' Connect, once "Which taf?" is answered: the iPad starts the connection
+    /// (`startConnect`) only to approve it behind Face ID on its sheet. Started here, it would
+    /// leave a request at planque this computer can never approve, so nothing is sent at all.
+    Connect { entry: String, taf: String },
+    /// `removeSlackDoor`: a Slack door's subscription stopped at planque, signed by the device,
+    /// before the door goes.
+    StopSlackSubscription { grant: String, trigger: String },
+    /// `connectAgain`, `reconnect`: a connection signed in again, its approval at planque signed
+    /// by the device before the vendor's page.
+    ConnectAgain { grant: String },
+    /// `useVersion`: a version made live, behind the device's own check before tafs cloud's
+    /// switch begins (and the Card's confirmation when it brings one). The switch stops the taf
+    /// until it's finished, so this computer doesn't begin it.
+    MakeLive { taf: String, version: i64 },
+    /// `removeTaf`: Remove for good, the `DELETE` to tafs cloud signed by the approval key.
+    RemoveTaf { taf: String },
+    /// `answerYourStep`: Done or Skip it on a step a taf handed its owner.
+    AnswerStep { handoff: String },
+    /// `approveOnce`: a held call approved once, from the dial's face.
+    ApproveOnce { call: String },
+    /// `approveKnobEvent`: an app event's subscription at planque, signed by the device.
+    ApproveEvent { grant: String, event: String },
+    /// `share(agent:with:)`: a taf shared with a group or a person, from Share's second step.
+    Share {
+        agent: String,
+        group: Option<String>,
+        subject: Option<String>,
+    },
+    /// `unshare(agent:from:)`: a share taken away, from the same step.
+    Unshare {
+        agent: String,
+        group: Option<String>,
+        subject: Option<String>,
+    },
+}
+
+/// A query's value, escaped (`KIFFClient.escapedQuery`): letters, digits and `-._~` as they are.
+fn escaped_query(v: &str) -> String {
+    v.bytes()
+        .map(|b| match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~' => {
+                (b as char).to_string()
+            }
+            _ => format!("%{b:02X}"),
+        })
+        .collect()
 }
 
 impl Act {
@@ -178,7 +263,82 @@ impl Act {
                 "POST",
                 format!("/v1/me/pack-requests/{}/decline", escaped(request)),
             ),
+            // planque's, under the account's path (`PlanqueClient.raw`): each removed one is
+            // its own DELETE, the first named here.
+            Act::Disconnect { grant } => ("DELETE", format!("grants/{}", escaped(grant))),
+            Act::ClearRemoved { grants } => (
+                "DELETE",
+                format!(
+                    "grants/{}",
+                    escaped(grants.first().map(String::as_str).unwrap_or_default())
+                ),
+            ),
+            Act::SignInAgain { grant } => ("POST", format!("grants/{}/approve", escaped(grant))),
+            // tafs cloud's start, then planque's approval: this computer makes neither.
+            Act::Connect { entry, .. } => ("POST", crate::connect::start_path(entry)),
+            Act::StopSlackSubscription { grant, trigger } => (
+                "DELETE",
+                format!("grants/{}/triggers/{}", escaped(grant), escaped(trigger)),
+            ),
+            Act::ConnectAgain { grant } => ("POST", format!("grants/{}/approve", escaped(grant))),
+            Act::RemoveTaf { taf } => ("DELETE", format!("/v1/tafs/{}", escaped(taf))),
+            Act::ApproveOnce { call } => (
+                "POST",
+                format!("/v1/me/card-exceptions/{}/approve-once", escaped(call)),
+            ),
+            Act::ApproveEvent { grant, .. } => {
+                ("POST", format!("grants/{}/triggers", escaped(grant)))
+            }
+            Act::AnswerStep { handoff } => (
+                "POST",
+                format!("/v1/me/handoffs/{}/answer", escaped(handoff)),
+            ),
+            Act::MakeLive { taf, version } => (
+                "POST",
+                format!("/v1/tafs/{}/versions/{version}/switch", escaped(taf)),
+            ),
+            Act::Share { agent, .. } => ("POST", format!("/v1/agents/{}/grants", escaped(agent))),
+            Act::Unshare {
+                agent,
+                group,
+                subject,
+            } => {
+                let query = match (group, subject) {
+                    (Some(g), _) => format!("group={}", escaped_query(g)),
+                    (None, Some(s)) => format!("subject={}", escaped_query(s)),
+                    (None, None) => String::new(),
+                };
+                (
+                    "DELETE",
+                    format!("/v1/agents/{}/grants?{query}", escaped(agent)),
+                )
+            }
         }
+    }
+
+    /// An act this computer never sends anything for, not even the unsigned call before its
+    /// signature: planque's, and a connection's start.
+    pub fn sends_nothing(&self) -> bool {
+        self.at_planque() || self.at_device() || matches!(self, Act::Connect { .. })
+    }
+
+    /// Whether the device checks the person, or signs with its approval key, before a tafs
+    /// cloud call (`useVersion`, `removeTaf`): this computer never sends it.
+    pub fn at_device(&self) -> bool {
+        matches!(self, Act::MakeLive { .. } | Act::RemoveTaf { .. })
+    }
+
+    /// The call goes to planque, which this computer never reaches (`session::may_send_to`).
+    pub fn at_planque(&self) -> bool {
+        matches!(
+            self,
+            Act::Disconnect { .. }
+                | Act::ClearRemoved { .. }
+                | Act::SignInAgain { .. }
+                | Act::StopSlackSubscription { .. }
+                | Act::ConnectAgain { .. }
+                | Act::ApproveEvent { .. }
+        )
     }
 }
 
@@ -254,6 +414,47 @@ mod tests {
             Act::DeclineRequest {
                 request: "req_1".into(),
             },
+            Act::Disconnect {
+                grant: "g_1".into(),
+            },
+            Act::ClearRemoved {
+                grants: vec!["g_1".into(), "g_2".into()],
+            },
+            Act::SignInAgain {
+                grant: "g_1".into(),
+            },
+            Act::Connect {
+                entry: "qonto@2".into(),
+                taf: "taf-1".into(),
+            },
+            Act::StopSlackSubscription {
+                grant: "g1".into(),
+                trigger: "tr_1".into(),
+            },
+            Act::ConnectAgain { grant: "g1".into() },
+            Act::MakeLive {
+                taf: "t1".into(),
+                version: 8,
+            },
+            Act::RemoveTaf { taf: "t1".into() },
+            Act::AnswerStep {
+                handoff: "h1".into(),
+            },
+            Act::ApproveOnce { call: "ce1".into() },
+            Act::ApproveEvent {
+                grant: "g1".into(),
+                event: "NEW_TICKET".into(),
+            },
+            Act::Share {
+                agent: "a1".into(),
+                group: Some("g1".into()),
+                subject: None,
+            },
+            Act::Unshare {
+                agent: "a1".into(),
+                group: None,
+                subject: Some("auth0|rae".into()),
+            },
         ]
     }
 
@@ -261,6 +462,30 @@ mod tests {
     fn no_signed_act_makes_a_request() {
         for act in acts() {
             let (method, path) = act.route();
+            if act.at_planque() {
+                // planque's: this computer sends nothing there, signed or not.
+                let url = format!("{}/v1/accounts/t1/{path}", crate::planque::PLANQUE);
+                assert!(!crate::session::may_send_to(&url), "{act:?}");
+                continue;
+            }
+            if act.at_device() {
+                // The device signs or checks first; the app never sends it.
+                assert!(path.starts_with("/v1/tafs/t1"), "{act:?}");
+                assert!(
+                    matches!(method, "POST" | "DELETE"),
+                    "{act:?} changes something"
+                );
+                continue;
+            }
+            if act.sends_nothing() {
+                // A connection's start: never sent from here, though tafs cloud would take it
+                // unsigned (the app has no call that makes it: `connections.rs`' test).
+                assert_eq!(
+                    (method, path.as_str()),
+                    ("POST", "/v1/connect/apps/qonto@2")
+                );
+                continue;
+            }
             assert!(
                 signed(method, &path),
                 "{act:?} is signed at {method} {path}"
@@ -291,6 +516,14 @@ mod tests {
                 .line,
             "This device can't approve. Approve on another device signed in to your account."
         );
+    }
+
+    #[test]
+    fn revoking_a_card_is_the_sessions() {
+        // `KIFFClient.revoke(cardID:)`: no signature, as the iPad sends it.
+        let path = revoke_path("card 1");
+        assert_eq!(path, "/v1/me/mandates/card%201/revoke");
+        assert!(Unsigned::new("POST", path, b"{}".to_vec()).is_some());
     }
 
     #[test]
@@ -342,6 +575,17 @@ mod tests {
         assert!(signed("DELETE", "/v1/me/passkeys/pk1"));
         assert!(!signed("GET", "/v1/me/passkeys"));
         assert!(signed("POST", "/v1/me/device/approval-key"));
+        // A step's answer carries the device's signature; reading the step doesn't.
+        assert!(signed("POST", "/v1/me/handoffs/h1/answer"));
+        assert!(!signed("GET", "/v1/me/handoffs/h1"));
+        // A held call's answers carry it too; reading the call doesn't.
+        for answer in ["approve-once", "reject", "change-card"] {
+            assert!(signed(
+                "POST",
+                &format!("/v1/me/card-exceptions/ce1/{answer}")
+            ));
+        }
+        assert!(!signed("GET", "/v1/me/card-exceptions/ce1"));
     }
 
     #[test]

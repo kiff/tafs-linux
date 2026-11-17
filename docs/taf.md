@@ -55,10 +55,18 @@ in tafs cloud's words (`tafs-core/src/activity.rs`):
 - tafs cloud's filters, from its first page, as bordered buttons (the chosen one in the amber as
   text); choosing one reads its first page again;
 - each day group's title (12 semibold, dim), then each call (`SourceActivityRow`): its title (15
-  semibold) and detail (13, soft), its time (12, dim) and amount (13 semibold) at its end, and
-  under it its next step in tafs cloud's words;
+  semibold) and detail (13, soft), its time (12, dim) and amount (13 semibold) at its end. The row
+  opens its receipt (`ReceiptView`, the Record's, on the call as the Record's line with tafs
+  cloud's kind, title and detail: `activity::evidence`). Under it its next step (`NextStepRow`):
+  for whoever manages the taf, signed in, a button in tafs cloud's words: Connect it again opens
+  Connect apps (signing that connection in again where its vendor signed it out needs planque's
+  grants, which this computer doesn't read), Ask Coach opens Coach with tafs cloud's message, else
+  the row's own words, in the box, nothing sent (for whoever may use Coach); anyone else, and a
+  kind the app doesn't know, reads the words alone (`activity::next_action`);
 - at the foot: the next page as the list reaches its end (`next_cursor`), tafs cloud's end words,
   "Nothing here." when no page has an entry, or what went wrong and Try again.
+- `--taf-activity crates/tafs-app/fixtures/taf-activity-next.json` (synthetic: the contract's page
+  with two not-done calls and their next steps) in the contract's place: CI's `taf-next`.
 
 Read as strictly as the iPad's decoder, with one exception: a call's `held`, which the iPad's
 `ActivityCall` requires and tafs cloud's `taf-activity.json` doesn't send, reads as not held when
@@ -79,7 +87,8 @@ or time, none; the rest of a knock when it can be.
 
 - **Knocks · waiting on you** (amber eyebrow, the panel's edge in amber at 45%): each open knock
   from someone not paired, then **Paired**, a paired sender's message kept from its knock. The
-  door's line about its day's messages (`rest`) isn't one of them: it's the Doors tab's.
+  door's line about its day's messages (`rest`) isn't one of them, here or on the doors' screen
+  (as the iPad filters it); `KnockCard` draws it with OK (an Ignore) where it's given one.
 - **Each knock** (`KnockCard`), on amber at 7% with an amber edge, a paired sender's on the panel
   with a quiet edge: "● KNOCK · BY EMAIL" or "PAIRED · BY EMAIL" (10 semibold, monospaced), with
   "· DIDN'T CHECK OUT" when the sender check failed; for a paired sender "Paired · Do it or
@@ -97,25 +106,126 @@ or time, none; the rest of a knock when it can be.
 its answers send nothing: `crates/tafs-app/fixtures/taf-doors.json` (synthetic), with
 `access-manage.json` so the taf is managed, CI's `taf-knocks`.
 
+## Its doors
+
+`DoorsView` (`crates/tafs-app/src/doors.rs`, `tafs-core/src/doors.rs`), with one `DoorsModel` per
+view that every panel and sheet on it listens to. At the pin the iPad's page has no tab for it (its
+tabs are Chat, Activity, Card and Setup): one door's screen opens from Setup › Starts when › Doors ›
+Edit (`only`), and the whole of it, with the doors' own dial, from nowhere. Linux draws both, in a
+sheet over the page.
+
+- **The doors' dial** (`DoorDial`, without the taf's own dial): DOORS · TURN TO PICK, PRESS TO
+  OPEN; the taf's avatar in the middle on a knob with grip ticks, in a glow that breathes while a
+  door is open; each door's arc on the ring, lit in the taf's colour while open, grey while resting,
+  dashed while closed; a pointer at the top; each door's badge on the ring (`DoorBadge`: "@" for
+  email, "W" for WhatsApp, else its initial; filled in its colour while open) with an amber dot
+  while a knock waits there, its name outside in capitals, and a last dashed "+" stop, ADD. Under
+  the avatar, "EMAIL · OPEN" or ADD A DOOR, in the taf's colour unless the door is closed. Under the
+  dial, tafs cloud's tap words for the door, else "Press Rae to close Email", or "Press Rae to add
+  a door". The ring is Cairo shapes; every word and letter on it is a label over it (rule 14).
+- **Turning it:** dragging turns it (past 6 points), a tap on a stop turns the short way to it,
+  the arrow keys a stop at a time, each springing to its stop (`DialMath`, its tests ported);
+  with animations off it jumps. A tap on the taf, Enter or Space presses: for whoever manages it,
+  the door at the top opens or closes, or Add a door opens. It's a slider to a screen reader, with
+  "Email door, open, 1 of 3".
+- **The door at the top** (or the screen's own door): tafs cloud's line that its settings are
+  below; its badge, EMAIL DOOR and where it stands (tafs cloud's words, else Open, Closed or
+  Resting until tomorrow), with a switch in green for whoever manages it; its address (monospaced,
+  selectable), Copy address for email ("Copied" for 1.4 s); a meter of today's messages, in the
+  taf's colour or grey while resting, and the day's lines. Then PAIRED · CAN GIVE WORK with each key
+  ("You" only on this person's own sign-in email; a name that is only the address isn't said
+  twice; Unpair for one the owner paired), how it knows who wrote, Pair someone; or, for a door
+  that can't tell, why no one can give work. Remove door in red.
+- **With no door:** for whoever manages it, ADD A DOOR, what a door is, and Add a door (none left:
+  "No more doors can be added here."); for anyone else, that someone who manages it can add one.
+  A door removed from its own screen: "This door was removed."
+- **Its knocks:** Paired, then Knocks · waiting on you, each `KnockCard` as on the Activity; why
+  a change failed, in red; the footer.
+- **Add a door** (`AddDoorSheet`): its title and Done, a search, the apps that can tell who's
+  writing, then those that can't, each with its badge and how; "No app called "…" here yet." or
+  none left; replies only go to who wrote.
+- **Pair someone** (`PairSheet`): what pairing does, the sender (email address, phone number, Slack
+  member ID or the door's own word for it), a name (optional), Pair while there's a sender, Cancel.
+- **The owner's changes, as the session, unsigned** (`kiff::cloud_send`): adding a door
+  (`POST /v1/tafs/{id}/doors {"app"}`), opening or closing it (`PATCH …/doors/{door} {"open"}`),
+  pairing (`POST …/keys {"id", "name"?}`, the sender trimmed), unpairing (`DELETE …/keys/{sender}`),
+  each answered with the door (`{"door"}`), which replaces the one shown; removing it
+  (`DELETE …/doors/{door}`, answered `{"removed"}`), after its question. A change that fails says
+  why in red and leaves the doors as they were.
+- **WhatsApp:** its signup comes back to the iPhone's own address, which this computer has none
+  of, so Add says "WhatsApp doors are added from tafs on an iPhone for now; once added, they show
+  here." and sends nothing.
+- **A Slack door's removal**, from one door's screen: planque's subscription is stopped first,
+  signed by the device; this computer can't, so Remove's yes shows the can't-approve line and the
+  door stays ([approval](approval.md)). Adding one through Slack's own sheet is Starts when's.
+
+### The taf's dial
+
+Where the taf's dial was read, it stands in the doors' own dial (`TafDialPanel`, `TafKnobView`,
+`crates/tafs-app/src/dial.rs`, `tafs-core/src/knob.rs` › `nav`, `face_lines`), the door's panels
+under it, as on the iPad's Doors tab:
+
+- DRAFT · V8 · NOT LIVE while a version waits; Ask Coach or find anything (opens Coach); the
+  service menu, "Showing All services", with This taf and each connection's stops ("Notion · 2
+  stops"), a new choice starting from the job with every ring unturned.
+- **The dial**, on its 360 grid: today's work round the rim (done green, working blue, retrying
+  amber, needing you red), When, What and Where as bands in their own colours inside it, in tafs
+  cloud's order, each showing six stops at a time (`page`), a door's stop with its arc (amber while
+  a knock waits, grey while resting, dashed while closed) and its light; the pointer at the chosen
+  ring's top stop, or at the rim; the face with its kicker, its big word (the stop's state, its
+  size, its label; the call's amount; else the taf's why) and its hint. Choosing a stop turns its
+  ring the short way to bring it to the top (`nearestTurn`) and dims the other rings; a door's
+  stop on When picks that door for the panels below. The rings are shapes; the stops' labels are
+  buttons over them, upright (the iPad turns each with its ring).
+- **The face pressed:** a held call that may be approved once (signed: the can't-approve line);
+  Coach for an "Add a door" stop; else, for whoever manages the taf, the chosen stop's act as the
+  session: a door opened or closed (`PATCH …/doors/{door}`), a run started (`POST …/run`), a
+  follow-up removed; an app event's Approve is signed at planque (refused here). With nothing
+  chosen, it walks to the first stop.
+- Under it, the stop's words or the dial's caption, the size in force, Needs you while a call may
+  be approved once (its face), ‹ Why back to the job; **the remote** (Back, Lower, the power
+  button to pause or resume every start, Raise, Next), under the dial here since a sheet that
+  scrolls has no foot to keep it on; the waiting version's lines and Make it live (refused, as in
+  Starts when); tafs cloud's line for today's work, opening its requests (`KnobRequestsSheet`),
+  the one still asking for attention opened at once on its own page (`KnobRequestDetail`).
+
+`--knob crates/tafs-app/fixtures/taf-knob-dial.json` (synthetic: the iPad's `Screenshots.knob`
+with four services) with `--page doors:<id>` is CI's `taf-dial`.
+
+`--page doors:<id>` with `--doors` and `--home` opens the doors over the taf's page, and
+`--page doors:<id>:<door>` one door's screen, from a file, sending nothing:
+`crates/tafs-app/fixtures/taf-doors-dial.json` (synthetic, from the iPad's `DoorsModel.sample` and
+`DoorsTests`), with `access-manage.json` and `me-manager.json`, whose email is the owner's key.
+CI's `doors` and `doors-door`.
+
 ## Its work
 
 Above its Activity, after its held calls, a tafs cloud taf's work (`WorkPanel`,
-`crates/tafs-app/src/work_panel.rs`, `tafs-core/src/work.rs`). It's read once as the session
-(`GET /v1/tafs/{id}/work`), and nothing is drawn until it's read, as the iPad's. Under "Its work":
+`crates/tafs-app/src/work_panel.rs`, `tafs-core/src/work.rs`). It's read as the session
+(`GET /v1/tafs/{id}/work`), and again after a change; nothing is drawn until it's read, as the
+iPad's. Under "Its work":
 - **its line** (15, ink), unless its health's first line already says it (`repeats(workLine:)`);
 - **its health** (`HealthLines`): the work's, else Home's. Each line is amber, or red when it's
-  failing. A `credits` fix opens Plan & usage. A `coach` fix draws no button: Coach isn't on this
-  computer, as the iPad's without `mayUseCoach`;
+  failing. A `credits` fix opens Plan & usage. A `coach` fix, for whoever may use Coach and
+  manages the taf, opens Coach with tafs cloud's words in its box, nothing sent;
 - **its oldest waiting case** in tafs cloud's words, amber and semibold once past the promise;
+- **Answer within** (`PromiseRow`), for whoever manages the taf: the promise ("4 hours", "1 day")
+  or Not set, and a menu of Not set and 1, 2, 4, 8, 24, 48 and 168 hours; a choice is
+  `PUT /v1/tafs/{id}/promise {"hours"}` (null clears it) as the session, then the work is read
+  again; "It couldn't be set. …" when it wasn't. "You're told when a case waits longer." under it;
 - **its requests and skipped firings,** newest first. A request's line is amber when it needs
   you, red when it failed, else soft, with what it used ("34 credits") and where its result went
-  under it. A skipped firing is dim: nothing ran, which isn't a failure.
+  under it. A door reply given up on offers **Send again** to whoever manages the taf
+  (`POST …/requests/{run}/deliveries/{place}/send`, unsigned; "Sending again…" while it goes,
+  "It wasn't sent again. …" when it didn't). A skipped firing is dim: nothing ran, which isn't a
+  failure.
 - **What went wrong reading it** in red, in its place.
 
 Read as leniently as the iPad's `TafWork`: a part that isn't one reads as none, and a list with
 one item it can't read reads as empty. The screenshot (`--work
 crates/tafs-app/fixtures/taf-work.json`, synthetic: no contract for it at the pin) is CI's
-`taf-work`.
+`taf-work`, and with `access-manage.json`, Answer within and Send again, `taf-work-manage`; a
+screenshot's changes send nothing.
 
 ## Its runs
 
@@ -161,8 +271,13 @@ On the Card tab, as the iPad's `card(_:)`, all from Home as tafs cloud read it f
   - what of its totals is from calls the tool refused (`pending_text`, the money total's then
     the count's, 13, soft). This shows only for a live, active Card (`countsForReal`), since a
     test Card's totals aren't what the taf may do for real;
-  - why its total has no currency (`unit_words`, 13, soft). Its Connect again opens Coach,
-    which isn't on this computer.
+  - why its total has no currency (`unit_words`, 13, soft), with **Reconnect it in Coach** for
+    whoever manages the taf and may use Coach, signed in (`offersReconnect`), which opens Coach.
+- **Revoke**, for whoever manages the taf: a view-only session (KIFF's `approval_mode: view`)
+  gets "To revoke this Card, use a device that can approve." in its place, as on every device;
+  otherwise its question (Revoke and stop in red), whose yes revokes each of its Cards at KIFF as
+  the session (`POST /v1/me/mandates/{id}/revoke`, unsigned: it takes authority away), then the
+  button goes; KIFF's refusal is said under it. The sample's is there, dimmed.
 - The screenshot (`--home crates/tafs-app/fixtures/home-card-lines.json`, synthetic) is CI's
   `taf-card-lines`.
 
@@ -176,8 +291,23 @@ place of the connections. Until it's read, a spinner; when it can't be, why and 
 the iPad's order:
 
 - **Its Card unit requests** (`card_unit_exceptions`), as Needs you draws them.
+- **Its own Connect again** (`connect_again`, for whoever manages it): tafs cloud's words in amber,
+  and its button in tafs cloud's words. Signing that connection in again is approved at planque,
+  signed by the device: the tap shows the can't-approve line and sends nothing ([approval](approval.md)).
 - **The job:** THE JOB, and its job as tafs cloud says it (`job_summary`), else "Works under {n}
-  Cards". Improve in Coach is Coach's, which isn't on this computer.
+  Cards"; **Improve in Coach** for whoever manages it and may use Coach, which opens Coach.
+- **Starts when** and, after the connected apps, **Results go to**: rows that open their screens
+  (below).
+- **Connected apps** (`ConnectedToolsRing`): why tafs cloud left the connections out (this
+  computer reads Setup without planque's grants proof, so it says so), with Try again; the taf in
+  the middle (its job in an alert), one node per app around it (`setup::nodes`: the connection with
+  actions, else one to sign in again, else the first; its name and actions, green while it runs),
+  dashed lines to it and a green arc while it runs, and + for whoever manages it, opening Connect
+  apps. Under it the workflow, folded: its title and summary, each step (green while it runs) and
+  Change the workflow with Coach. A node opens its sheet (`ConnectedAppSheet`): where it stands
+  (Sign in again: signed, refused here), what it may do, its workflow, its calls (opening the
+  Activity), other connections, Add actions with Coach, and Remove access, whose question's yes is
+  signed at planque and refused here.
 - **What it remembers** (`MemorySummaryPanel`): tafs cloud's line for its notes (15 semibold), its
   latest (14, soft, two lines), and See all.
   - **See all** opens every note (`MemoryPanel`, `GET /v1/tafs/{id}/memory?all=true`), newest
@@ -188,22 +318,87 @@ the iPad's order:
     Cancel). Its yes takes the note away at once and `DELETE`s it at tafs cloud as the session,
     unsigned; a note already gone (404) counts as forgotten. A refusal puts it back, with
     "It wasn't forgotten. {why}".
-- **Remove for good**, for whoever manages it: signed, so it's there, dimmed.
+- **Remove for good**, for whoever manages it: tapped, it reads what goes with the taf
+  (`GET /v1/tafs/{id}/removal`, ending nothing), then asks ("Remove Rae for good?", what always
+  goes and tafs cloud's words, Remove in red). Its yes is signed by the approval key: this
+  computer shows the can't-approve line under the button, and nothing is removed.
 
 `--page taf-setup:<id>` with `--home shared/contracts/home.json` reads the contract's
-`taf-setup.json` beside it, and `--memory crates/tafs-app/fixtures/taf-memory.json` (synthetic)
-for See all; Forget sends nothing. CI's `taf-setup`.
+`taf-setup.json` beside it (`--setup` another, such as `taf-setup-reconnect.json`), and `--memory
+crates/tafs-app/fixtures/taf-memory.json` (synthetic) for See all; Forget sends nothing. CI's
+`taf-setup` and `taf-setup-apps`.
+
+### Starts when and Results go to
+
+`TafSetupViews.swift` (`crates/tafs-app/src/starts_when.rs`, `tafs-core/src/knob.rs`), each a sheet
+with its own navigation, over the dial as tafs cloud sends it (`GET /v1/tafs/{id}/knob`, and when a
+version waits, `?version=` that one; a 404 then reads it again as it is now). Read as strictly as
+the iPad's `Knob`: a field in the wrong shape and the dial isn't read ("The dial couldn't be read:
+…"); one missing takes the iPad's default. Until it's read, "Reading what starts it…" or "Reading
+where its results go…".
+
+- **The waiting version** (`KnobPendingPanel`, for whoever manages it): DRAFT · V8 · NOT LIVE in
+  amber, tafs cloud's lines for it, and Make 2 changes live with your passcode (what the iPad names
+  on a device with no Face ID or Touch ID). Making it live begins tafs cloud's switch, which stops
+  the taf until it's finished, after the device's own check: this computer begins nothing, and the
+  tap shows the can't-approve line.
+- **Starts when** (`StartsWhenView`): its schedule (each line, − and + through tafs cloud's sizes,
+  held while a newer version than the one shown waits, `acceptsChoices`; the next run and the
+  account's zone; Skip it or Run after while still working); app events (Approve, disabled as the
+  iPad disables it where the device can't approve; or Listening and Stop); its doors (each with
+  Edit, opening the door's screen on top, [its doors](#its-doors), and Add a door…, whose Slack door
+  opens Slack's sheet: planque's Slack connections aren't read here, so it says to connect the bot
+  first); follow-ups it set itself, with their end and Remove; Change when it starts with Coach;
+  Pause every start, or Resume ("Not every start could be paused. Try again." on a 502).
+- **Results go to** (`ResultsGoToView`): at least one place stays on; tafs' own places (Reply to
+  the sender, Alert our phones, Email me with the person's email), switched from the live taf's
+  `results` and never a waiting version's, the last one on disabled (`liveBuiltIns`, `places`);
+  each place in a connected app, through its other choice; Add a place from a connected app… with
+  Coach; replies not sent, with Send again.
+- **As the session, unsigned:** a dial change (`PUT …/knob`, the live `setting` copied, changed and
+  sent whole, `when: {busy}`; it waits as the next version), tafs' own places (`PUT …/results
+  {"places"}`, live at once), a follow-up removed (`DELETE …/follow-ups/{id}`), every start paused
+  or resumed (`POST …/pause`, `…/resume`), a reply sent again. Each failure says why in red.
+
+`--page starts:<id>` and `--page results:<id>` (the iPad's `-screen starts`, `-screen results`) open
+them over Setup, with `--knob crates/tafs-app/fixtures/taf-knob-setup.json` (synthetic, the iPad's
+`Screenshots.setupKnob` with a version waiting), `--doors` and `--work`; nothing is sent. CI's
+`taf-starts` and `taf-results`.
+
+## Sharing it
+
+Under the head row, for whoever manages the taf, signed in with KIFF (`headerLine`'s `ShareLine`):
+**Share** (a capsule with the share mark, 15 semibold) and who it's shared with beside it (14,
+soft): "Shared with Finance and sam@example.test", "Shared with everyone" for KIFF's default group
+alone, "Not shared" (the reader is never named), "Sharing…" until read. The shares
+(`GET /v1/agents/{agent}/grants`), groups and people are read as the session, and again when the
+sheet closes (`share.rs`, `tafs-core/share.rs`).
+
+Share opens its sheet (`ShareTafSheet`), "Share {taf}", in two steps:
+1. **Who uses it**: each group, its people under it, managers first ("Maria (manager), Ana"), and
+   each person with their badge, each picked with a circle; "Choose someone on the account." under
+   them. Cancel at the start; Next once read and something changed.
+2. **What it means**: "Who gets {taf}" (or "{taf} won't be shared"), then each person's own chats,
+   who gets it (a group with its people, everyone, a person) and who stops using it. Back at the
+   start. **Share** at the end is signed on the iPad (one Face ID for every grant added and taken
+   away, `signsSetup`'s grants route), so its tap says this computer can't approve, and nothing is
+   sent.
+
+The line sits under the head row from `shell.rs`, as the taf page's own file belongs to another
+port. Screenshots: `--home shared/contracts/home.json --access
+crates/tafs-app/fixtures/access-manage.json --people crates/tafs-app/fixtures/people-kiff.json`
+with `--page share:taf-aaaa0000000000000000` (step one, CI's `share`) or `share-step2:…` (step two
+with a change picked and Share tapped, CI's `share-step2`).
 
 ## Not yet
 
 - **The sample's Chat**, there, dimmed. A tafs cloud taf's page opens on its chat ([chat.md](chat.md)).
-- **On the Setup tab:** Starts when, Results go to, the connected apps' ring, its own Connect
-  again (signed), Improve in Coach, and the sample's Setup (there, dimmed).
-- **On the Card tab:** Connect again (Coach), the halt row,
-  Versions, Usage; Revoke itself (dimmed).
-- **Above a tafs cloud taf's Activity:** the next step's buttons (Connect it
-  again, Ask Coach), shown as their words for now; a call's receipt; "All apps" for a selection.
+- **On the Setup tab:** the sample's Setup (there, dimmed); pulling Starts when or Results go to
+  to read them again.
+- **On the Card tab:** Usage (`TafCreditsView` is Plan & usage's own, not reachable from here yet);
+  Versions (with trials).
+- **On a tafs cloud taf's Activity:** "All apps" for a selection (an app's calls open the
+  Activity unfiltered).
 - **The line under the head:** its version and who it's shared with (`headerLine`, `ShareLine`).
-- **In its work:** Answer within (`PromiseRow`, whoever manages the taf), Send again, and a step
-  it handed you as its card (`YourStepCard`): its line for now.
+- **In its work:** a step it handed you as its card (`YourStepCard`): its line for now.
 - **The side column** on a wide window, Remove, and folding the head while scrolling.

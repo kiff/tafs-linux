@@ -3,14 +3,20 @@
 mod account;
 mod ai_consent;
 mod alerts;
+mod app_event_sheet;
 mod approval;
 mod brief;
 mod calendar;
 mod chat;
 mod coach;
+mod coach_mode;
+mod coach_start;
 mod connect;
 mod connected;
+mod connections;
 mod devices;
+mod dial;
+mod doors;
 mod fido_key;
 mod halt;
 mod illustrations;
@@ -31,9 +37,11 @@ mod record_search;
 mod report_sheet;
 mod runs_panel;
 mod setup_pane;
+mod share;
 mod sheet;
 mod shell;
 mod sign_in;
+mod starts_when;
 mod store;
 mod style;
 mod taf;
@@ -88,6 +96,9 @@ struct Cloud {
     /// "Your brief" (`GET /v1/brief`), read with the list: none (a 404, an error, nothing in
     /// it) keeps Needs you as today.
     brief: Option<tafs_core::brief::Brief>,
+    /// Coach's id at tafs cloud (`setupTaf?.id`, `GET /v1/setup`), read with Home when a row's
+    /// setup stopped partway: only Coach's own chat can be finished there.
+    coach_setup: Option<String>,
 }
 
 /// The window's size, a laptop's, as the screenshots are saved.
@@ -109,6 +120,7 @@ struct Options {
     usage: Option<String>,
     /// Synthetic answers for People & groups signed in with KIFF, for its screenshot.
     people: Option<String>,
+    connect: Option<String>,
     /// With `--home`: KIFF's "Did this happen?" answer from a file, for its screenshot.
     unproven: Option<String>,
     /// With `--home`: tafs cloud's recipes answer from a file, for Home with no taf.
@@ -136,6 +148,14 @@ struct Options {
     /// With `--home`: a taf's doors as tafs cloud answers `GET /v1/tafs/{id}/doors`; its knocks'
     /// answers send nothing.
     doors: Option<String>,
+    /// With `--home`: a taf's knob as tafs cloud answers `GET /v1/tafs/{id}/knob` (Starts when,
+    /// Results go to, the dial); its changes send nothing.
+    knob: Option<String>,
+    /// With `--home`: a taf's Setup as tafs cloud answers `GET /v1/tafs/{id}/setup`, in place of
+    /// the contract's `taf-setup.json`.
+    setup: Option<String>,
+    /// With `--home`: a taf's Activity as tafs cloud answers `GET /v1/tafs/{id}/activity`.
+    taf_activity: Option<String>,
     /// With `--home`: Account's reads, `{"suggestions": …, "consent": …}`, each as tafs cloud
     /// answers it; its changes send nothing.
     account_reads: Option<String>,
@@ -155,6 +175,12 @@ struct Options {
     coach: Option<String>,
     /// With `--coach`: Coach's chats as tafs cloud answers them, opening Previous conversations.
     coach_chats: Option<String>,
+    /// With `--coach`: KIFF's answers to the drafts its approvals name, by draft id, each
+    /// `{"status": …, "answer": …}`: nothing is read.
+    coach_drafts: Option<String>,
+    /// Coach as tafs cloud answers `GET /v1/setup`: with `--coach`, for Coach's tools; with
+    /// `--home`, for Finish setting up. Nothing is read.
+    coach_setup: Option<String>,
     /// With `--home`: a taf's chat as tafs cloud answers `GET /v1/tafs/{id}/conversation`, read
     /// from a file: nothing is sent.
     chat: Option<String>,
@@ -166,13 +192,19 @@ struct Options {
     /// With `--brief`: a mission's log as tafs cloud answers `GET /v1/missions/{id}/log`, for
     /// every mission's Evidence.
     mission_log: Option<String>,
+    /// With `--home`: Home couldn't be read just now (`network` or `error`), and the app tries
+    /// again, for the Unreachable line's screenshot. Nothing is read again.
+    unreachable: Option<String>,
+    /// A dial's stop with its approval, as tafs cloud sends it in the knob's `wakes`: its sheet
+    /// opens over the window, for its screenshot. Nothing is signed or subscribed.
+    app_event: Option<String>,
     /// `--size WxH`: the window's size, for a screenshot of a narrower layout.
     size: Option<(i32, i32)>,
     screenshot: Option<String>,
 }
 
 const USAGE: &str = "tafs [--lang en|de|fr|es|it|pt|nl|pl] [--theme light|dark] [--sample] [--signed-in] [--view-only [--paired]]
-     [--home contract.json] [--usage answers.json] [--people answers.json] [--unproven answers.json] [--recipes answers.json] [--gallery answers.json] [--halt answer.json] [--record-search answers.json] [--access answer.json] [--receipts answer.json] [--activity answer.json] [--calls answer.json] [--receipt answer.json] [--work answer.json] [--doors answer.json] [--account-reads answers.json] [--me answer.json] [--memory answer.json] [--runs answer.json] [--request answer.json] [--balance answer.json] [--coach answer.json] [--coach-chats answer.json] [--chat answer.json [--report]] [--brief answer.json] [--mission-log answer.json] [--size WxH] [--page welcome|sign-in|pair|recipe:<id>|gallery|halt-all|halt:<id>|record-search:<q>|record-export|receipt:<proposal id>|run:<taf id>|pin-sheet|coach|overview|overview-label:<id>|needs-you|brief-answer:<decision id>|mission-log:<mission id>|record|calendar|calendar-week|usage|usage-ask|usage-decline|connect-apps|account|kiff-account|time-zone|time-zone-use|alerts|devices|devices-sign-out|people|people-rename|people-add|taf|taf-card|taf-setup|consent|connected|sign-in-code] [--screenshot out.png]";
+     [--home contract.json] [--usage answers.json] [--people answers.json] [--connect answers.json] [--knob answer.json] [--setup answer.json] [--taf-activity answer.json] [--unproven answers.json] [--recipes answers.json] [--gallery answers.json] [--halt answer.json] [--record-search answers.json] [--access answer.json] [--receipts answer.json] [--activity answer.json] [--calls answer.json] [--receipt answer.json] [--work answer.json] [--doors answer.json] [--account-reads answers.json] [--me answer.json] [--memory answer.json] [--runs answer.json] [--request answer.json] [--balance answer.json] [--coach answer.json] [--coach-chats answer.json] [--coach-drafts answers.json] [--chat answer.json [--report]] [--brief answer.json] [--mission-log answer.json] [--coach-setup answer.json] [--unreachable network|error] [--app-event item.json] [--size WxH] [--page welcome|sign-in|pair|recipe:<id>|gallery|new-taf|halt-all|halt:<id>|record-search:<q>|record-export|receipt:<proposal id>|run:<taf id>|pin-sheet|share:<key>|share-step2:<key>|coach|coach-tools|coach-full|coach-hand:<id>|overview|overview-label:<id>|needs-you|brief-answer:<decision id>|mission-log:<mission id>|record|calendar|calendar-week|usage|usage-ask|usage-decline|connect-apps|connect-app|connect-connection|connect-remove|connect-which-taf|connect-approve|account|kiff-account|time-zone|time-zone-use|alerts|devices|devices-sign-out|people|people-rename|people-add|taf|taf-card|taf-setup|taf-setup:<id>|starts:<id>|results:<id>|doors:<id>[:<door>]|consent|connected|sign-in-code] [--screenshot out.png]";
 
 fn options() -> Result<Options, String> {
     let mut o = Options::default();
@@ -187,6 +219,7 @@ fn options() -> Result<Options, String> {
             "--home" => o.home = Some(value()?),
             "--usage" => o.usage = Some(value()?),
             "--people" => o.people = Some(value()?),
+            "--connect" => o.connect = Some(value()?),
             "--unproven" => o.unproven = Some(value()?),
             "--recipes" => o.recipes = Some(value()?),
             "--gallery" => o.gallery = Some(value()?),
@@ -199,6 +232,9 @@ fn options() -> Result<Options, String> {
             "--receipt" => o.receipt = Some(value()?),
             "--work" => o.work = Some(value()?),
             "--doors" => o.doors = Some(value()?),
+            "--knob" => o.knob = Some(value()?),
+            "--setup" => o.setup = Some(value()?),
+            "--taf-activity" => o.taf_activity = Some(value()?),
             "--account-reads" => o.account_reads = Some(value()?),
             "--me" => o.me = Some(value()?),
             "--memory" => o.memory = Some(value()?),
@@ -207,10 +243,14 @@ fn options() -> Result<Options, String> {
             "--request" => o.request = Some(value()?),
             "--coach" => o.coach = Some(value()?),
             "--coach-chats" => o.coach_chats = Some(value()?),
+            "--coach-drafts" => o.coach_drafts = Some(value()?),
+            "--coach-setup" => o.coach_setup = Some(value()?),
             "--chat" => o.chat = Some(value()?),
             "--report" => o.report = true,
             "--brief" => o.brief = Some(value()?),
             "--mission-log" => o.mission_log = Some(value()?),
+            "--unreachable" => o.unreachable = Some(value()?),
+            "--app-event" => o.app_event = Some(value()?),
             "--size" => {
                 let v = value()?;
                 let (w, h) = v.split_once('x').ok_or("--size takes WxH")?;
@@ -262,7 +302,12 @@ fn selection_of(page: Option<&str>) -> Selection {
         Some("record") => Selection::Record,
         Some("calendar") | Some("calendar-week") => Selection::Calendar,
         Some("usage") | Some("usage-ask") | Some("usage-decline") => Selection::Usage,
-        Some("connect-apps") => Selection::ConnectApps,
+        Some("connect-apps")
+        | Some("connect-app")
+        | Some("connect-connection")
+        | Some("connect-remove")
+        | Some("connect-which-taf")
+        | Some("connect-approve") => Selection::ConnectApps,
         Some("account") => Selection::Account,
         Some("devices") | Some("devices-sign-out") => Selection::Devices,
         Some("people") | Some("people-rename") | Some("people-add") => Selection::People,
@@ -270,12 +315,19 @@ fn selection_of(page: Option<&str>) -> Selection {
         Some("time-zone") | Some("time-zone-use") => Selection::TimeZone,
         Some("alerts") => Selection::Alerts,
         Some("language") => Selection::Language,
-        Some("coach") => Selection::Coach,
+        Some("coach") | Some("coach-tools") | Some("coach-full") => Selection::Coach,
+        Some(other) if other.starts_with("coach-hand:") => Selection::Coach,
         // The sample's Refunds, as the reference set's taf.png opens it.
         Some("taf") | Some("taf-card") => Selection::Taf("refunds".into()),
         // With `--home`, the contract's first taf.
         Some(other) if other.starts_with("taf:") => Selection::Taf(other["taf:".len()..].into()),
         Some(other) if other.starts_with("run:") => Selection::Taf(other["run:".len()..].into()),
+        Some(other) if other.starts_with("share:") => {
+            Selection::Taf(other["share:".len()..].into())
+        }
+        Some(other) if other.starts_with("share-step2:") => {
+            Selection::Taf(other["share-step2:".len()..].into())
+        }
         Some("halt-all") => Selection::HaltAll,
         Some(other) if other.starts_with("record-search:") => Selection::Record,
         Some("record-export") => Selection::Record,
@@ -286,6 +338,16 @@ fn selection_of(page: Option<&str>) -> Selection {
         }
         Some(other) if other.starts_with("taf-setup:") => {
             Selection::Taf(other["taf-setup:".len()..].into())
+        }
+        Some(other) if other.starts_with("starts:") => {
+            Selection::Taf(other["starts:".len()..].into())
+        }
+        Some(other) if other.starts_with("results:") => {
+            Selection::Taf(other["results:".len()..].into())
+        }
+        Some(other) if other.starts_with("doors:") => {
+            let rest = &other["doors:".len()..];
+            Selection::Taf(rest.split(':').next().unwrap_or(rest).into())
         }
         _ => Selection::Overview,
     }
@@ -353,6 +415,18 @@ fn activate(app: &adw::Application, o: &Options) {
 
     let app_state = Rc::new(App {
         window: window.clone(),
+        shell: RefCell::new(None),
+        unreachable: Cell::new(o.unreachable.as_deref().map(|why| {
+            (
+                if why == "error" {
+                    tafs_core::sidebar::Unreachable::Error
+                } else {
+                    tafs_core::sidebar::Unreachable::Network
+                },
+                0,
+            )
+        })),
+        account_reads: Cell::new(0),
         words,
         languages,
         signed_in: o.signed_in,
@@ -371,12 +445,17 @@ fn activate(app: &adw::Application, o: &Options) {
         home_file: o.home.as_ref().map(std::path::PathBuf::from),
         work_file: o.work.as_ref().map(std::path::PathBuf::from),
         doors_file: o.doors.as_ref().map(std::path::PathBuf::from),
+        knob_file: o.knob.as_ref().map(std::path::PathBuf::from),
+        setup_file: o.setup.as_ref().map(std::path::PathBuf::from),
+        taf_activity_file: o.taf_activity.as_ref().map(std::path::PathBuf::from),
         account_reads_file: o.account_reads.as_ref().map(std::path::PathBuf::from),
         memory_file: o.memory.as_ref().map(std::path::PathBuf::from),
         runs_file: o.runs.as_ref().map(std::path::PathBuf::from),
         request_file: o.request.as_ref().map(std::path::PathBuf::from),
         coach_file: o.coach.as_ref().map(std::path::PathBuf::from),
         coach_chats: o.coach_chats.as_ref().map(std::path::PathBuf::from),
+        coach_drafts: o.coach_drafts.as_ref().map(std::path::PathBuf::from),
+        coach_setup: o.coach_setup.as_ref().map(std::path::PathBuf::from),
         chat_file: o.chat.as_ref().map(std::path::PathBuf::from),
         open_report: o.report,
         brief_file: o.brief.as_ref().map(std::path::PathBuf::from),
@@ -384,6 +463,7 @@ fn activate(app: &adw::Application, o: &Options) {
         open_run: o.page.as_deref().is_some_and(|p| p.starts_with("run:")),
         usage_file: o.usage.as_ref().map(std::path::PathBuf::from),
         people_file: o.people.as_ref().map(std::path::PathBuf::from),
+        connect_file: o.connect.as_ref().map(std::path::PathBuf::from),
         halt_file: halt_file(o.halt.as_deref()),
         record_search_file: record_search_file(o.record_search.as_deref()),
         receipts_file: o.receipts.as_deref().map(|p| match std::fs::read(p) {
@@ -417,10 +497,19 @@ fn activate(app: &adw::Application, o: &Options) {
             .page
             .as_deref()
             .is_some_and(|p| p == "taf-card" || p.starts_with("taf-card:")),
-        on_setup: o
+        on_setup: o.page.as_deref().is_some_and(|p| {
+            p.starts_with("taf-setup:") || p.starts_with("starts:") || p.starts_with("results:")
+        }),
+        on_setup_screen: match o.page.as_deref() {
+            Some(p) if p.starts_with("starts:") => Some(starts_when::Screen::StartsWhen),
+            Some(p) if p.starts_with("results:") => Some(starts_when::Screen::ResultsGoTo),
+            _ => None,
+        },
+        on_doors: o
             .page
             .as_deref()
-            .is_some_and(|p| p.starts_with("taf-setup:")),
+            .and_then(|p| p.strip_prefix("doors:"))
+            .map(|rest| rest.split_once(':').map(|(_, door)| door.to_string())),
     });
     if let Some(id) = o
         .page
@@ -443,15 +532,53 @@ fn activate(app: &adw::Application, o: &Options) {
     {
         brief::ANSWERED.with(|a| *a.borrow_mut() = Some(id.to_string()));
     }
+    // `--page coach-hand:<recipe id>`: a job handed to Coach from its sheet, its words in Coach's
+    // box (`handRecipeToCoach`); nothing is sent.
+    if let Some(id) = o
+        .page
+        .as_deref()
+        .and_then(|p| p.strip_prefix("coach-hand:"))
+    {
+        if let Some(r) = recipes_file(o.recipes.as_deref())
+            .and_then(|r| r.recipes.into_iter().find(|x| x.id == id))
+        {
+            coach::set_draft(&r.say);
+        }
+    }
+    // `--page share:<key>` (and `share-step2:<key>`): Share's sheet over that taf's page.
+    if let Some(page) = o.page.as_deref() {
+        if let Some(key) = page
+            .strip_prefix("share:")
+            .or_else(|| page.strip_prefix("share-step2:"))
+        {
+            share::OPEN.with(|s| *s.borrow_mut() = Some(key.to_string()));
+            share::OPEN_STEP2.with(|s| s.set(page.starts_with("share-step2:")));
+        }
+    }
     if o.page.as_deref() == Some("delete-account") {
         kiff_account::OPEN_DELETE.with(|d| d.set(true));
     }
     match o.page.as_deref() {
         Some("people-rename") => people::OPEN.with(|p| p.set(Some("rename"))),
+        Some(
+            open @ ("connect-app" | "connect-connection" | "connect-remove" | "connect-which-taf"
+            | "connect-approve"),
+        ) => {
+            let open: &'static str = match open {
+                "connect-app" => "connect-app",
+                "connect-connection" => "connect-connection",
+                "connect-remove" => "connect-remove",
+                "connect-which-taf" => "connect-which-taf",
+                _ => "connect-approve",
+            };
+            connect::OPEN.with(|c| c.set(Some(open)));
+        }
         Some("people-add") => people::OPEN.with(|p| p.set(Some("add"))),
         Some("devices-sign-out") => devices::OPEN_SIGN_OUT.with(|d| d.set(true)),
         Some("time-zone-use") => zones::TAP_USE_HERE.with(|t| t.set(true)),
         Some("usage-ask") => usage::OPEN.with(|u| u.set(Some("ask"))),
+        Some("coach-tools") => coach::OPEN_TOOLS.with(|t| t.set(true)),
+        Some("coach-full") => coach_mode::START_FULL.with(|f| f.set(true)),
         Some("usage-decline") => usage::OPEN.with(|u| u.set(Some("decline-tapped"))),
         _ => {}
     }
@@ -501,6 +628,17 @@ fn activate(app: &adw::Application, o: &Options) {
             used_by: Default::default(),
             reports: Default::default(),
             balance: balance_file(o.balance.as_deref()),
+            coach_setup: o.coach_setup.as_deref().map(|path| {
+                std::fs::read(path)
+                    .ok()
+                    .and_then(|b| serde_json::from_slice::<serde_json::Value>(&b).ok())
+                    .and_then(|v| serde_json::to_vec(v.get("answer").unwrap_or(&v)).ok())
+                    .and_then(|b| tafs_core::coach::setup_id(&b).ok().flatten())
+                    .unwrap_or_else(|| {
+                        eprintln!("{path} isn't Coach as tafs cloud answers GET /v1/setup");
+                        std::process::exit(2);
+                    })
+            }),
             brief: o.brief.as_deref().map(|path| {
                 std::fs::read(path)
                     .ok()
@@ -534,8 +672,13 @@ fn activate(app: &adw::Application, o: &Options) {
                     );
                 }
             }
-            // `--page gallery`: the jobs' gallery, browsing, for its screenshot.
-            if o.page.as_deref() == Some("gallery") {
+            // `--page gallery`: the jobs' gallery, browsing, for its screenshot; `new-taf`, as
+            // + New opens it.
+            if let Some(mode) = match o.page.as_deref() {
+                Some("gallery") => Some(recipes::GalleryMode::Browse),
+                Some("new-taf") => Some(recipes::GalleryMode::Create),
+                _ => None,
+            } {
                 if let Some(g) = from_file.as_deref().and_then(|c| c.gallery.clone()) {
                     let pane = recipes::GalleryPane {
                         labels: from_file
@@ -545,7 +688,7 @@ fn activate(app: &adw::Application, o: &Options) {
                         gallery: g,
                         may_use_coach: true,
                     };
-                    recipes::gallery(&pane, &window);
+                    recipes::gallery(&pane, mode, &window);
                 }
             }
             // `--page recipe:<id>`: Home's recipe opens its sheet, for its screenshot.
@@ -600,6 +743,16 @@ fn activate(app: &adw::Application, o: &Options) {
             Rc::new(|_| {}),
         );
     }
+    // `--app-event`: an app event's filters before signing (`AppEventApprovalSheet`), signed in,
+    // for its screenshot: its Approve is the gate's line, so nothing is ever signed.
+    if let Some(item) = o
+        .app_event
+        .as_deref()
+        .and_then(|p| std::fs::read(p).ok())
+        .and_then(|b| tafs_core::app_event::Item::parse(&b))
+    {
+        app_event_sheet::present(&app_state.words, Mode::Kiff, &item, &window);
+    }
     if let Some(path) = o.screenshot.clone() {
         // Saved 1.5 s after the window shows, once it's drawn. On a busy machine the first frame
         // can come later, with no renderer or nothing drawn yet: tried again every half second,
@@ -631,6 +784,13 @@ fn activate(app: &adw::Application, o: &Options) {
 /// The window and what it shows: the welcome, or the shell over the sample or the account.
 struct App {
     window: adw::ApplicationWindow,
+    /// The window's shell once drawn: what's open in it, and its Unreachable line.
+    shell: RefCell<Option<shell::Shell>>,
+    /// Home couldn't be read (`unreachable`): why, and how many times the app has tried again by
+    /// itself (`retries`); none once a read goes through.
+    unreachable: Cell<Option<(tafs_core::sidebar::Unreachable, usize)>>,
+    /// The account's reads in force: a sign-out or another sign-in ends the app's tries.
+    account_reads: Cell<u64>,
     words: Rc<WordBook>,
     languages: Vec<&'static str>,
     /// `--signed-in`: the sample with the account's items, as the reference set draws it.
@@ -659,6 +819,12 @@ struct App {
     work_file: Option<std::path::PathBuf>,
     /// `--doors`: a taf's doors as tafs cloud answers them, for its knocks' screenshot.
     doors_file: Option<std::path::PathBuf>,
+    /// `--knob`'s dial: Setup's screens read it, and their changes send nothing.
+    knob_file: Option<std::path::PathBuf>,
+    /// `--setup`'s Setup read, in the contract's place beside `--home`.
+    setup_file: Option<std::path::PathBuf>,
+    /// `--taf-activity`'s page, in the contract's place beside `--home`.
+    taf_activity_file: Option<std::path::PathBuf>,
     /// `--account-reads`: Account's reads for its screenshots.
     account_reads_file: Option<std::path::PathBuf>,
     /// `--memory`: a taf's notes for its Setup screenshots.
@@ -671,6 +837,10 @@ struct App {
     coach_file: Option<std::path::PathBuf>,
     /// `--coach-chats`: Previous conversations open over it, with these chats.
     coach_chats: Option<std::path::PathBuf>,
+    /// `--coach-drafts`: KIFF's answers for the drafts, never read.
+    coach_drafts: Option<std::path::PathBuf>,
+    /// `--coach-setup`: Coach's tools from tafs cloud's answer, never read.
+    coach_setup: Option<std::path::PathBuf>,
     /// `--chat`: a taf's chat from a file, never sent.
     chat_file: Option<std::path::PathBuf>,
     /// `--report`: Report this answer open over the chat.
@@ -702,12 +872,19 @@ struct App {
     receipt_open: Option<String>,
     /// `--people`'s file of synthetic answers.
     people_file: Option<std::path::PathBuf>,
+    /// `--connect`'s file of synthetic answers: Connect apps' first page, and a start.
+    connect_file: Option<std::path::PathBuf>,
     /// A screenshot: the sample's Refunds has the reference set's three Cards.
     screenshot: bool,
     /// `--page taf-card`: the taf opens on its Card tab.
     on_card: bool,
     /// `--page taf-setup:<id>`: a taf's page opens on Setup.
     on_setup: bool,
+    /// `--page starts:<id>` or `results:<id>`: Setup's screen open over its tab.
+    on_setup_screen: Option<starts_when::Screen>,
+    /// `--page doors:<id>[:<door>]`: a taf's doors open over its page (`DoorsView`), or one door's
+    /// screen, for a screenshot.
+    on_doors: Option<Option<String>>,
     /// `--page calendar`: the calendar opens on Day, as the reference set's `calendar.png`.
     calendar_day: bool,
 }
@@ -717,8 +894,8 @@ enum Read {
     Cloud(Box<Cloud>),
     /// KIFF answered 401: the session is over.
     SignedOut,
-    /// Nothing that could be read: the screen stays as it was.
-    Nothing,
+    /// Home couldn't be read: the screen stays as it was, and the sidebar says why.
+    Unreachable(tafs_core::sidebar::Unreachable),
 }
 
 impl App {
@@ -736,6 +913,10 @@ impl App {
         ai_consent::forget();
         // Signed out: nothing written to Coach for the last account stays.
         coach::forget();
+        coach_start::forget();
+        // And the app's tries at reading the last account.
+        self.account_reads.set(self.account_reads.get() + 1);
+        self.unreachable.set(None);
         // And nothing written to a taf.
         taf_chat::forget();
         // Signed out: no account, so this computer's zone.
@@ -811,14 +992,34 @@ impl App {
         ai_consent::forget();
         let view_only = kept.approval_mode.is_view_only();
         *self.kept.borrow_mut() = Some(kept.clone());
+        self.unreachable.set(None);
         self.open_shell(Mode::Kiff, view_only, None);
+        self.read_account(kept, view_only);
+    }
+
+    /// The account's reads (`refresh`): the account, Home and the held calls, then the shell drawn
+    /// again with them. When Home can't be read, the sidebar says so quietly (`UnreachableLine`)
+    /// and the app tries again by itself, then less often, and stops after a few tries.
+    fn read_account(self: &Rc<Self>, kept: KeptSession, view_only: bool) {
+        let generation = self.account_reads.get() + 1;
+        self.account_reads.set(generation);
         let (me, languages, token) = (self.clone(), self.languages.clone(), kept.token.clone());
         let words: WordBook = (*self.words).clone();
         glib::spawn_future_local(async move {
             let read = gio::spawn_blocking(move || {
                 let signed_out = |a: &tafs_core::signin::Answer| a.status == 401;
                 let me = kiff::me(&token, &languages).ok();
-                let home = kiff::home(&token, &languages).ok();
+                let home = kiff::home(&token, &languages);
+                // What a failed read of Home says (`refreshWords`): the network, or an error.
+                let home_failed = match &home {
+                    Err(tafs_core::signin::KiffError::Offline) => {
+                        Some(tafs_core::sidebar::Unreachable::Network)
+                    }
+                    Err(_) => Some(tafs_core::sidebar::Unreachable::Error),
+                    Ok(a) if a.status != 200 => Some(tafs_core::sidebar::Unreachable::Error),
+                    Ok(_) => None,
+                };
+                let home = home.ok();
                 let held = kiff::held(&token, &languages).ok();
                 let activity = kiff::activity(&token, &languages).ok();
                 // KIFF ended the session (a 401 on any of them: the computer removed in Devices,
@@ -848,7 +1049,9 @@ impl App {
                     .filter(|a| a.status == 200)
                     .and_then(|a| Home::read(&a.body))
                 else {
-                    return Read::Nothing;
+                    return Read::Unreachable(
+                        home_failed.unwrap_or(tafs_core::sidebar::Unreachable::Error),
+                    );
                 };
                 // KIFF's held calls: none read, none shown, and Home still is.
                 let held = held
@@ -888,7 +1091,28 @@ impl App {
                     .ok()
                     .filter(|a| a.status == 200)
                     .and_then(|a| brief::read_answer(&a.body, &words));
+                // Coach's id, only when a row's setup stopped partway and this person may use
+                // Coach (`canFinishSetup`): a read that fails finishes none here.
+                let stopped = home.setting_up().iter().any(|s| s.chat.is_some())
+                    || home
+                        .other_agents()
+                        .iter()
+                        .any(|t| t.finish_chat().is_some());
+                let coach_setup = if stopped
+                    && account.as_ref().is_some_and(|a| {
+                        a.capabilities
+                            .as_ref()
+                            .is_some_and(|c| c.iter().any(|x| x == "members.manage"))
+                    }) {
+                    kiff::cloud(&token, &languages, tafs_core::coach::SETUP_PATH)
+                        .ok()
+                        .filter(|a| a.status == 200)
+                        .and_then(|a| tafs_core::coach::setup_id(&a.body).ok().flatten())
+                } else {
+                    None
+                };
                 Read::Cloud(Box::new(Cloud {
+                    coach_setup,
                     brief,
                     balance,
                     home,
@@ -906,9 +1130,24 @@ impl App {
                 }))
             })
             .await
-            .unwrap_or(Read::Nothing);
+            .unwrap_or(Read::Unreachable(tafs_core::sidebar::Unreachable::Error));
+            // Signed out, or another account's reads, since: this one's answer is dropped.
+            if me.account_reads.get() != generation {
+                return;
+            }
             match read {
                 Read::Cloud(cloud) => {
+                    // Read: nothing to say, and no try waiting. What was open stays open.
+                    if me.unreachable.take().is_some() {
+                        let open = me
+                            .shell
+                            .borrow()
+                            .as_ref()
+                            .and_then(|s| s.selection.borrow().clone());
+                        if let Some(open) = open {
+                            *me.first.borrow_mut() = open;
+                        }
+                    }
                     // KIFF's word for how the session approves is what counts (contract §1.2).
                     let view_only = match cloud
                         .account
@@ -934,7 +1173,69 @@ impl App {
                     me.watch_holds(&cloud);
                 }
                 Read::SignedOut => me.signed_out_by_kiff(),
-                Read::Nothing => {}
+                Read::Unreachable(why) => me.unreachable_now(why, kept, view_only, generation),
+            }
+        });
+    }
+
+    /// Home couldn't be read (`refreshFailed`): said quietly at the sidebar's foot, and read again
+    /// a moment later, then less often, and no more after a few tries.
+    fn unreachable_now(
+        self: &Rc<Self>,
+        why: tafs_core::sidebar::Unreachable,
+        kept: KeptSession,
+        view_only: bool,
+        generation: u64,
+    ) {
+        use tafs_core::sidebar::RETRY_WAITS;
+        let tries = self.unreachable.get().map_or(0, |(_, n)| n);
+        let retrying = tries < RETRY_WAITS.len();
+        self.unreachable
+            .set(Some((why, (tries + 1).min(RETRY_WAITS.len()))));
+        // Nothing read yet: the Overview said it was loading, and now says it couldn't load,
+        // where the person was.
+        if tries == 0 && self.cloud.borrow().is_none() {
+            let open = self
+                .shell
+                .borrow()
+                .as_ref()
+                .and_then(|s| s.selection.borrow().clone());
+            if let Some(open) = open {
+                *self.first.borrow_mut() = open;
+            }
+            self.open_shell(Mode::Kiff, view_only, None);
+            return self.try_again_later(tries, kept, view_only, generation);
+        }
+        if let Some(shell) = self.shell.borrow().as_ref() {
+            shell.set_unreachable(
+                tafs_core::sidebar::unreachable_line(&self.words, why, retrying)
+                    .ok()
+                    .as_ref(),
+            );
+        }
+        if retrying {
+            self.try_again_later(tries, kept, view_only, generation);
+        }
+    }
+
+    /// The app's own next try, `RETRY_WAITS[tries]` seconds from now, unless the account's reads
+    /// moved on meanwhile.
+    fn try_again_later(
+        self: &Rc<Self>,
+        tries: usize,
+        kept: KeptSession,
+        view_only: bool,
+        generation: u64,
+    ) {
+        let Some(wait) = tafs_core::sidebar::RETRY_WAITS.get(tries) else {
+            return;
+        };
+        let me = Rc::downgrade(self);
+        glib::timeout_add_seconds_local_once(*wait as u32, move || {
+            if let Some(me) = me.upgrade() {
+                if me.account_reads.get() == generation {
+                    me.read_account(kept, view_only);
+                }
             }
         });
     }
@@ -979,9 +1280,11 @@ impl App {
                 token: kept.token.clone(),
                 languages: self.languages.clone(),
             },
-            (None, Some(home)) => {
-                taf::ActivitySource::File(home.with_file_name("taf-activity.json"))
-            }
+            (None, Some(home)) => taf::ActivitySource::File(
+                self.taf_activity_file
+                    .clone()
+                    .unwrap_or_else(|| home.with_file_name("taf-activity.json")),
+            ),
             _ => taf::ActivitySource::None,
         };
         // Where a tafs cloud taf's work is read: tafs cloud as the session; a screenshot's from
@@ -1002,7 +1305,10 @@ impl App {
                 languages: self.languages.clone(),
             },
             (None, Some(home)) => setup_pane::SetupSource::File {
-                setup: home.with_file_name("taf-setup.json"),
+                setup: self
+                    .setup_file
+                    .clone()
+                    .unwrap_or_else(|| home.with_file_name("taf-setup.json")),
                 notes: self.memory_file.clone(),
             },
             _ => setup_pane::SetupSource::None,
@@ -1016,6 +1322,16 @@ impl App {
                 languages: self.languages.clone(),
             },
             _ => knocks::DoorsSource::None,
+        };
+        // Where Setup's screens read and change its dial: tafs cloud as the session; a
+        // screenshot's from `--knob`, whose changes send nothing.
+        let knob = match (self.kept.borrow().as_ref(), &self.knob_file) {
+            (_, Some(file)) => starts_when::KnobSource::File(file.clone()),
+            (Some(kept), None) => starts_when::KnobSource::Cloud {
+                token: kept.token.clone(),
+                languages: self.languages.clone(),
+            },
+            _ => starts_when::KnobSource::None,
         };
         // Where its runs are read and Run now sent: tafs cloud as the session; a screenshot's
         // first page from `--runs`, and its Run now sends nothing.
@@ -1082,6 +1398,16 @@ impl App {
                         issued_by: w.line("common.you").unwrap_or_default(),
                         opens_on_card: self.on_card,
                         opens_on_setup: self.on_setup,
+                        opens_doors: None,
+                        opens_setup_screen: None,
+                        my_email: None,
+                        view_only: false,
+                        card_ids: vec![],
+                        knob: starts_when::KnobSource::None,
+                        works_from_chat: false,
+                        next_run_line: None,
+                        paused: false,
+                        results: None,
                         cloud_id: None,
                         source: taf::ActivitySource::None,
                         work: work_panel::WorkSource::None,
@@ -1119,6 +1445,18 @@ impl App {
                         h.time_zone_words.clone(),
                         h.schedule_time_zone_words.clone(),
                         job,
+                        (
+                            h.unscheduled == Some(true),
+                            tafs_core::knob::next_run_line(
+                                w,
+                                h,
+                                c.account.as_ref().and_then(|a| a.time_zone.as_deref()),
+                            )
+                            .ok()
+                            .flatten(),
+                            h.status.as_deref() == Some("paused"),
+                            h.results.clone(),
+                        ),
                     );
                     Some((
                         tafs_core::home::taf(w, h).ok()?,
@@ -1139,6 +1477,11 @@ impl App {
                         time_zone_words: zones.0,
                         schedule_time_zone_words: zones.1,
                         job: zones.2,
+                        knob: knob.clone(),
+                        works_from_chat: zones.3 .0,
+                        next_run_line: zones.3 .1,
+                        paused: zones.3 .2,
+                        results: zones.3 .3,
                         setup: setup.clone(),
                         work: work.clone(),
                         // Its knocks, where tafs cloud offers doors (`doorsOffered`); a
@@ -1189,6 +1532,20 @@ impl App {
                         },
                         opens_on_card: self.on_card,
                         opens_on_setup: self.on_setup,
+                        opens_doors: self.on_doors.clone(),
+                        opens_setup_screen: self.on_setup_screen,
+                        my_email: c.account.as_ref().and_then(|a| a.email.clone()),
+                        // KIFF's word for how the session approves, else the kept session's.
+                        view_only: match c.account.as_ref().and_then(|a| a.approval_mode.as_deref())
+                        {
+                            Some(word) => ApprovalMode::from_kiff(Some(word)).is_view_only(),
+                            None => self
+                                .kept
+                                .borrow()
+                                .as_ref()
+                                .is_some_and(|k| k.approval_mode.is_view_only()),
+                        },
+                        card_ids: t.card_ids.clone(),
                         source: source.clone(),
                         chat: chat.clone(),
                     },
@@ -1255,8 +1612,12 @@ impl App {
                         .find(|(a, _)| a == actor)
                         .map(|(_, k)| k.clone())
                 };
+                // `toolVendors`: the vendor of each connected tool, from the account's
+                // connections, which this computer doesn't read from planque: none, so a call a
+                // vendor refused says "The app", as the iPad's does without them.
+                let vendors = tafs_core::connections::tool_vendors(&[]);
                 tafs_core::record::naming(
-                    tafs_core::record::record(&self.words, &c.activity, &taf_of)
+                    tafs_core::record::record(&self.words, &c.activity, &taf_of, &vendors)
                         .unwrap_or_default(),
                     &c.call_refs,
                 )
@@ -1560,13 +1921,47 @@ impl App {
                 .as_ref()
                 .is_some_and(|c| c.iter().any(|x| x == "members.manage"));
         }
+        // `canFinishSetup`: the rows whose setup stopped partway that Coach can finish, by key.
+        if let (Mode::Kiff, Some(c)) = (mode, cloud.as_deref()) {
+            let coach = c.coach_setup.as_deref();
+            let may = model.may_use_coach;
+            let setting_up = c
+                .home
+                .setting_up()
+                .into_iter()
+                .filter_map(|s| Some((s.key(), s.chat.clone()?)));
+            let others = c
+                .home
+                .other_agents()
+                .iter()
+                .filter_map(|t| Some((t.key(), t.finish_chat()?)));
+            model.finish = setting_up
+                .chain(others)
+                .filter(|(_, f)| f.can_finish(true, may, coach))
+                .map(|(key, f)| (key, f.session))
+                .collect();
+        }
+        // KIFF couldn't be reached at the last read, and whether the app tries again.
+        if mode == Mode::Kiff {
+            model.unreachable = self
+                .unreachable
+                .get()
+                .map(|(why, tries)| (why, tries < tafs_core::sidebar::RETRY_WAITS.len()));
+        }
         let count = model.needs_you_count();
         let needs_you_words = match cloud_words {
             Some(words) => words,
             None => tafs_core::overview::needs_you_words(words, count).unwrap_or_else(|e| fail(e)),
         };
+        // Signed in, the list is being read until Home comes, or couldn't be read.
+        let list = match (mode, &cloud, self.unreachable.get()) {
+            (Mode::Kiff, None, Some(_)) => tafs_core::overview::ListState::Unread,
+            (Mode::Kiff, None, None) => tafs_core::overview::ListState::Loading,
+            _ => tafs_core::overview::ListState::Read,
+        };
         let overview =
             tafs_core::overview::lines(words, &tafs, &model.held, count, &needs_you_words)
+                .and_then(|o| o.with_list(words, list))
                 .unwrap_or_else(|e| fail(e));
         // Home's labels, as chips over the grid and on each taf's line (docs/labels.md); none
         // sent, none drawn. The sample's are the iPad's screenshots' only.
@@ -1730,7 +2125,32 @@ impl App {
             }),
             _ => None,
         };
+        // Sharing, signed in with KIFF: read as the session, or a screenshot's from `--people`.
+        let share = match (mode, self.kept.borrow().as_ref(), &self.people_file) {
+            (Mode::Kiff, Some(kept), _) => Some(share::ShareSource::Cloud {
+                token: kept.token.clone(),
+                languages: self.languages.clone(),
+            }),
+            (Mode::Kiff, None, Some(f)) => Some(share::ShareSource::File(f.clone())),
+            _ => None,
+        };
+        let share_agents = Rc::new(
+            cloud
+                .as_deref()
+                .map(|c| {
+                    c.home
+                        .tafs
+                        .iter()
+                        .filter_map(|h| tafs_core::home::taf(words, h).ok())
+                        .map(|t| (t.key, t.agent))
+                        .collect()
+                })
+                .unwrap_or_default(),
+        );
         let screens = shell::Screens {
+            share,
+            share_agents,
+            account_email: account.as_ref().and_then(|a| a.email.clone()),
             brief,
             overview,
             needs_you,
@@ -1891,20 +2311,43 @@ impl App {
                 },
                 _ => devices::DevicesSource::None,
             },
-            connect: match (mode, self.kept.borrow().as_ref()) {
-                (Mode::Sample, _) => connect::ConnectSource::Sample {
-                    screenshot: self.screenshot,
-                },
-                (Mode::Kiff, Some(kept)) => connect::ConnectSource::Cloud {
-                    token: kept.token.clone(),
-                    languages: self.languages.clone(),
-                    connectable: tafs
-                        .iter()
-                        .filter(|t| t.manages)
-                        .filter_map(|t| t.cloud_id.clone())
-                        .collect(),
-                },
-                _ => connect::ConnectSource::None,
+            connect: {
+                // `connectableTafs`: on tafs cloud and managed by this person, by tafs cloud's id.
+                let connectable: Vec<tafs_core::connect::Connectable> = tafs
+                    .iter()
+                    .filter(|t| t.manages)
+                    .filter_map(|t| {
+                        Some(tafs_core::connect::Connectable {
+                            id: t.cloud_id.clone()?,
+                            name: t.name.clone(),
+                        })
+                    })
+                    .collect();
+                // `canManageCards`.
+                let manages = account.as_ref().is_none_or(|a| a.allows("cards.manage"));
+                match (mode, self.kept.borrow().as_ref(), &self.connect_file) {
+                    (Mode::Sample, _, _) => connect::ConnectSource::Sample {
+                        screenshot: self.screenshot,
+                        // The sample's tafs, which its connections are made for.
+                        tafs: tafs
+                            .iter()
+                            .filter(|t| !t.revoked)
+                            .map(|t| (t.key.clone(), t.name.clone()))
+                            .collect(),
+                    },
+                    (Mode::Kiff, _, Some(f)) => connect::ConnectSource::File {
+                        path: f.clone(),
+                        connectable,
+                        manages,
+                    },
+                    (Mode::Kiff, Some(kept), None) => connect::ConnectSource::Cloud {
+                        kept: Box::new(kept.clone()),
+                        languages: self.languages.clone(),
+                        connectable,
+                        manages,
+                    },
+                    _ => connect::ConnectSource::None,
+                }
             },
             // Coach, signed in with KIFF: its conversation read as the session with this device's
             // proof, or a screenshot's from `--coach`, never sent. The sample has no Coach.
@@ -1912,6 +2355,8 @@ impl App {
                 (Mode::Kiff, _, Some(f)) => coach::CoachSource::File {
                     thread: f.clone(),
                     chats: self.coach_chats.clone(),
+                    drafts: self.coach_drafts.clone(),
+                    setup: self.coach_setup.clone(),
                 },
                 (Mode::Kiff, Some(kept), None) => coach::CoachSource::Cloud {
                     kept: Box::new(kept.clone()),
@@ -1973,6 +2418,7 @@ impl App {
             self.first.borrow().clone(),
         );
         self.window.set_content(Some(&shell.root));
+        *self.shell.borrow_mut() = Some(shell);
     }
 
     /// A language picked in Account › Language (`AppLanguage.choose`): kept for the next launch,
@@ -2272,6 +2718,8 @@ fn kiff_model() -> SidebarModel {
         setting_up: vec![],
         plan: None,
         brief_tab: None,
+        finish: Default::default(),
+        unreachable: None,
     }
 }
 

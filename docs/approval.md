@@ -46,11 +46,31 @@ can be made unsigned. Each signed act (`signed::Act`) names the call the iPad wo
 that none of them can be made.
 
 The acts drawn this way: People & groups' changes, signing another device out, and the
-account's time zone (`docs/account.md`); declining a request (`docs/usage.md`).
+account's time zone (`docs/account.md`); declining a request (`docs/usage.md`); sharing a taf and taking a share away (`docs/taf.md`); connecting an app
+once its taf is picked (nothing is started, so nothing waits at planque), removing an app's
+access, cancelling its request or sign-in, clearing a removed taf's connections and signing in
+again, which are planque's (`docs/connect-apps.md`); removing a Slack
+door, whose subscription at planque the device signs first, making a taf's waiting version live, which the device checks before
+tafs cloud's switch begins, and removing a taf for good, whose `DELETE` the approval key signs
+(`docs/taf.md`); Done and Skip it on a step a taf handed its owner, whose answer carries the
+device key's signature (`docs/needs-you.md`; `signed` lists `POST /v1/me/handoffs/{id}/answer`);
+and on the taf's dial, approving a held call once and an app event (`docs/taf.md`; `signed` lists a
+held call's answers, `POST /v1/me/card-exceptions/{id}/approve-once|reject|change-card`). Revoking a Card isn't signed (it only takes authority away): it really goes, as
+the session, unless KIFF keeps the session view-only. planque's acts
+(`Act::at_planque`) have no route here at all: this computer's only planque call is its grants read.
+Making a version live and removing a taf (`Act::at_device`) are checked or signed by the device before a call it makes as the
+session; this computer never begins either, since a switch stops the taf until it's finished.
+
+Approving an app event's subscription in Starts when is one the iPad disables itself where the
+device can't approve (`approvalBlocked`): disabled here too.
 
 A button the iPad itself wraps in `ApprovalGate` is the exception: there, as on the iPad, the
 gate's line is drawn in the button's place (`approval::gate`), not the button. Raise the limit is
-one (`docs/usage.md`).
+one (`docs/usage.md`); so is a connection's approval (`docs/connect-apps.md`); an app event's filters before its subscription is signed
+(`AppEventApprovalSheet`, `app_event_sheet.rs`) is another: the sheet is drawn whole, its filters
+as the iPad's `JSONEncoder` writes them, and the gate's line stands where Approve would. It opens
+from Setup › Starts when and the dial, neither on Linux yet; `--app-event item.json` opens it for
+its screenshot.
 
 Not on Linux: `ReadinessReader` reads again when the app comes back, but this computer's state
 never changes. `openTafsSettings` opens tafs' iOS settings, which don't exist here, and

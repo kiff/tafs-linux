@@ -131,6 +131,8 @@ pub fn sidebar(
         setting_up: vec![],
         plan: None,
         brief_tab: None,
+        finish: Default::default(),
+        unreachable: None,
     })
 }
 
@@ -247,6 +249,8 @@ pub fn record(w: &WordBook, now: DateTime<Local>) -> Result<Vec<crate::record::E
         receipt: None,
         proposal: None,
         reason: None,
+        refused_by_tool: false,
+        refused_by: None,
     };
     let held = held(w, now)?;
     let l = |k: &str| w.line(k);

@@ -1,13 +1,24 @@
 //! Connect apps beside the sidebar (`ConnectAppsView`): what tafs cloud offers to connect, the
 //! person's own first (Yours) with a ✓, then the rest (Discover), searched as the person types,
 //! as the iPad's table on a wide window: App, How it connects, Whose, Status (`ConnectColumns`).
-//! The lines are `tafs-core/src/connect.rs`.
+//! Connect asks "Which taf?"; picking one says this computer can't approve, and nothing is
+//! started (the iPad starts a connection only to approve it). An app with connections opens them
+//! (`connections.rs`). The lines are `tafs-core/src/connect.rs` and `connections.rs`.
 
 use std::cell::RefCell;
+use std::path::PathBuf;
 use std::rc::Rc;
+use std::sync::{Arc, Mutex};
 
 use adw::prelude::*;
-use tafs_core::connect::{path, says_make_a_taf, split, App, ConnectApps, Row};
+use tafs_core::connect::{
+    called, connect_for, connectable_for, path, says_make_a_taf, split, App, ConnectApps,
+    ConnectFor, Connectable, Row,
+};
+use tafs_core::connections::{connections_of, opens_connections, Grant};
+use tafs_core::session::KeptSession;
+use tafs_core::sidebar::Mode;
+use tafs_core::signed::Act;
 use tafs_core::words::WordBook;
 
 use crate::widgets::{one_line, outline, symbol, text};
@@ -15,18 +26,119 @@ use crate::widgets::{one_line, outline, symbol, text};
 /// Where Connect apps is read from.
 #[derive(Clone)]
 pub enum ConnectSource {
-    /// The sample: the reference set's apps in a screenshot (`SampleScreens.connectApps`),
-    /// else nothing, as the iPad's sample.
-    Sample { screenshot: bool },
-    /// tafs cloud, as the session, and the tafs an app can be connected for (`connectableTafs`:
-    /// on tafs cloud and managed by this person), by tafs cloud's id.
+    /// The sample: the reference set's apps and connections in a screenshot
+    /// (`SampleScreens.connectApps`, `.grants`), else nothing, as the iPad's sample. `tafs` are
+    /// the sample's tafs by key and name, which its connections are made for.
+    Sample {
+        screenshot: bool,
+        tafs: Vec<(String, String)>,
+    },
+    /// tafs cloud, as the session, with this computer's signed grants read where it can make one,
+    /// and the tafs an app can be connected for (`connectableTafs`).
     Cloud {
-        token: String,
+        kept: Box<KeptSession>,
         languages: Vec<&'static str>,
-        connectable: Vec<String>,
+        connectable: Vec<Connectable>,
+        manages: bool,
+    },
+    /// A screenshot's answers (`--connect`): `answer` as tafs cloud's first page. A fixture's
+    /// read never sends.
+    File {
+        path: PathBuf,
+        connectable: Vec<Connectable>,
+        manages: bool,
     },
     /// Signed out: nothing read.
     None,
+}
+
+/// The sample's connections' KIFF agents, and the sample taf each is for, by its template
+/// (`SampleScreens.grantAgents`).
+const SAMPLE_AGENTS: [(&str, &str); 2] = [
+    ("sample-refunds", "refunds"),
+    ("sample-chargebacks", "chargebacks"),
+];
+
+thread_local! {
+    /// A screenshot's page: `connect-app` opens the app with the most connections,
+    /// `connect-connection` its first connection's detail, `connect-remove` that connection's
+    /// Remove access question, `connect-which-taf` "Which taf?" for the first app it asks for,
+    /// `connect-approve` that app's first taf picked.
+    pub static OPEN: std::cell::Cell<Option<&'static str>> = const { std::cell::Cell::new(None) };
+}
+
+impl ConnectSource {
+    pub(crate) fn mode(&self) -> Mode {
+        match self {
+            ConnectSource::Sample { .. } => Mode::Sample,
+            ConnectSource::Cloud { .. } | ConnectSource::File { .. } => Mode::Kiff,
+            ConnectSource::None => Mode::SignedOut,
+        }
+    }
+
+    /// `connectableTafs`: the tafs an app can be connected for; the sample's none.
+    fn connectable(&self) -> &[Connectable] {
+        match self {
+            ConnectSource::Cloud { connectable, .. } | ConnectSource::File { connectable, .. } => {
+                connectable
+            }
+            _ => &[],
+        }
+    }
+
+    /// `canManageCards`: the account's capabilities, as read; the sample's account manages.
+    fn manages(&self) -> bool {
+        match self {
+            ConnectSource::Cloud { manages, .. } | ConnectSource::File { manages, .. } => *manages,
+            _ => true,
+        }
+    }
+}
+
+/// What every screen of Connect apps shares: the words, where it reads, the account's
+/// connections as this computer has them, and the tafs they're for.
+pub(crate) struct Ctx {
+    pub w: Rc<WordBook>,
+    pub source: ConnectSource,
+    /// The account's connections: the sample's in a screenshot, else none. This computer reads
+    /// none from planque (`readsConnections`).
+    pub grants: Vec<Grant>,
+    /// Each KIFF agent's taf by name (`holderIDs`), revoked ones left out.
+    pub holders: Vec<(String, String)>,
+}
+
+impl Ctx {
+    pub(crate) fn mode(&self) -> Mode {
+        self.source.mode()
+    }
+
+    pub(crate) fn manages(&self) -> bool {
+        self.source.manages()
+    }
+
+    /// `tafOf`: the taf a connection was made for, by its name.
+    pub(crate) fn taf_of(&self, g: &Grant) -> Option<String> {
+        self.holders
+            .iter()
+            .find(|(agent, _)| *agent == g.request.agent)
+            .map(|(_, name)| name.clone())
+    }
+
+    /// The tafs whose connections to an app this computer names (`connectionGroups(of:).tafs`),
+    /// for "Used by" while tafs cloud sends no `used_by`.
+    fn used_here(&self, app: &App, removed: &std::collections::BTreeSet<String>) -> Vec<String> {
+        let conns = connections_of(app, &self.grants);
+        tafs_core::connections::groups(
+            &conns,
+            &|g| self.taf_of(g),
+            removed,
+            &tafs_core::connections::attention,
+        )
+        .tafs
+        .into_iter()
+        .map(|g| g.taf)
+        .collect()
+    }
 }
 
 #[derive(Default)]
@@ -49,11 +161,49 @@ fn sample_apps() -> Option<ConnectApps> {
     ConnectApps::read(&std::fs::read(file).ok()?)
 }
 
+/// The reference set's connections (`Samples/grants.json`, kept as a fixture).
+fn sample_grants() -> Vec<Grant> {
+    let file = concat!(env!("CARGO_MANIFEST_DIR"), "/fixtures/grants.json");
+    std::fs::read(file)
+        .ok()
+        .and_then(|b| Grant::read_list(&b))
+        .unwrap_or_default()
+}
+
+/// A screenshot's file: its `answer`.
+fn file_part(path: &PathBuf, key: &str) -> Option<Vec<u8>> {
+    let v: serde_json::Value = serde_json::from_slice(&std::fs::read(path).ok()?).ok()?;
+    Some(v.get(key)?.to_string().into_bytes())
+}
+
+/// This computer's signed read of the account's grants (`grantsReadProof`), made as the iPad
+/// sends it with Connect apps' reads: tafs cloud then says which tafs need an app.
+/// None without a key, a tenant, or KIFF's name for this computer. Never logged.
+fn proof(
+    kept: &KeptSession,
+    languages: &[&'static str],
+    device: &Mutex<Option<String>>,
+) -> Option<String> {
+    let known = device.lock().ok()?.clone();
+    let id = match known {
+        Some(id) => id,
+        None => {
+            let id = crate::coach::this_device(kept, languages)?;
+            if let Ok(mut d) = device.lock() {
+                *d = Some(id.clone());
+            }
+            id
+        }
+    };
+    crate::coach::proof(kept, &id)
+}
+
 /// Reads a page from tafs cloud: why not, in the iPad's words, when it can't.
 fn read_page(
     w: &WordBook,
-    token: &str,
-    languages: &[&str],
+    kept: &KeptSession,
+    languages: &[&'static str],
+    device: &Mutex<Option<String>>,
     p: &str,
     more: bool,
 ) -> Result<ConnectApps, String> {
@@ -65,8 +215,13 @@ fn read_page(
         };
         w.get(key, &[("why", &why)]).unwrap_or(why)
     };
-    let answer =
-        crate::kiff::cloud(token, languages, p).map_err(|e| why(e.words(w).unwrap_or_default()))?;
+    let proof = proof(kept, languages, device);
+    let headers: Vec<(&str, &str)> = proof
+        .as_deref()
+        .map(|p| vec![(tafs_core::planque::HEADER, p)])
+        .unwrap_or_default();
+    let answer = crate::kiff::cloud_with(&kept.token, languages, p, &headers)
+        .map_err(|e| why(e.words(w).unwrap_or_default()))?;
     if !(200..300).contains(&answer.status) {
         return Err(why(tafs_core::signin::refusal(&answer, Some(w))
             .words(w)
@@ -76,18 +231,61 @@ fn read_page(
         .ok_or_else(|| why(tafs_core::signin::plain_words(w, 200).unwrap_or_default()))
 }
 
-impl ConnectSource {
-    /// `connectableTafs`: the tafs an app can be connected for; the sample's none.
-    fn connectable(&self) -> usize {
-        match self {
-            ConnectSource::Cloud { connectable, .. } => connectable.len(),
-            _ => 0,
+/// The page's screens: the list, an app's connections over it, and one connection's detail over
+/// that, each with a way back.
+pub(crate) struct Screens {
+    pub stack: gtk::Stack,
+}
+
+impl Screens {
+    /// Shows `page` as `name`, replacing the one there.
+    pub(crate) fn show(&self, name: &str, page: &gtk::Widget) {
+        if let Some(old) = self.stack.child_by_name(name) {
+            self.stack.remove(&old);
         }
+        self.stack.add_named(page, Some(name));
+        self.stack.set_visible_child_name(name);
+    }
+
+    pub(crate) fn back(&self, name: &str) {
+        self.stack.set_visible_child_name(name);
     }
 }
 
 pub fn page(w: Rc<WordBook>, source: ConnectSource, open_coach: Rc<dyn Fn()>) -> gtk::Widget {
     let l = |k: &str| w.line(k).unwrap_or_default();
+    // The account's connections, and the tafs they're for: the sample's in a screenshot.
+    let (grants, holders) = match &source {
+        ConnectSource::Sample {
+            screenshot: true,
+            tafs,
+        } => (
+            sample_grants(),
+            SAMPLE_AGENTS
+                .iter()
+                .filter_map(|(agent, key)| {
+                    tafs.iter()
+                        .find(|(k, _)| k == key)
+                        .map(|(_, name)| (agent.to_string(), name.clone()))
+                })
+                .collect(),
+        ),
+        _ => (vec![], vec![]),
+    };
+    let ctx = Rc::new(Ctx {
+        w: w.clone(),
+        source: source.clone(),
+        grants,
+        holders,
+    });
+    let device: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
+    let screens = Rc::new(Screens {
+        stack: gtk::Stack::new(),
+    });
+    screens
+        .stack
+        .set_transition_type(gtk::StackTransitionType::SlideLeftRight);
+
     let outer = gtk::Box::new(gtk::Orientation::Vertical, 0);
     let column = gtk::Box::new(gtk::Orientation::Vertical, 10);
     column.set_margin_start(16);
@@ -114,6 +312,8 @@ pub fn page(w: Rc<WordBook>, source: ConnectSource, open_coach: Rc<dyn Fn()>) ->
     scroller.set_vexpand(true);
     scroller.set_child(Some(&column));
     outer.append(&scroller);
+    crate::widgets::ground(&outer);
+    screens.stack.add_named(&outer, Some("apps"));
 
     let state = Rc::new(RefCell::new(State::default()));
     let draw: Rc<RefCell<Option<Redraw>>> = Rc::new(RefCell::new(None));
@@ -126,23 +326,119 @@ pub fn page(w: Rc<WordBook>, source: ConnectSource, open_coach: Rc<dyn Fn()>) ->
             }
         })
     };
+    // An app's connections, over the list.
+    let open_app: Rc<dyn Fn(App)> = {
+        let (ctx, screens, state) = (ctx.clone(), screens.clone(), state.clone());
+        Rc::new(move |app: App| {
+            let removed = state
+                .borrow()
+                .apps
+                .as_ref()
+                .map(|a| a.removed_tafs.clone())
+                .unwrap_or_default();
+            let page = crate::connections::app_page(ctx.clone(), screens.clone(), app, removed);
+            screens.show("app", &page);
+        })
+    };
+    // Where Connect's tap says this computer can't approve, over the list, once a taf is
+    // picked: hidden until then.
+    let refused = crate::approval::refusal_slot();
+    let refused_panel = crate::widgets::panel(false);
+    refused_panel.append(&refused);
+    refused_panel.set_visible(false);
+    column.insert_child_after(&refused_panel, Some(&head));
+    // Connect for one taf, once picked: the iPad starts the connection only to approve it on its
+    // sheet behind Face ID. This computer can't approve, so it says so and starts nothing: a
+    // request left at planque could never be approved from here.
+    let connect_for_taf: Rc<dyn Fn(App, String)> = {
+        let (ctx, refused, refused_panel) = (ctx.clone(), refused.clone(), refused_panel.clone());
+        Rc::new(move |app: App, taf: String| {
+            let act = Act::Connect {
+                entry: app.entry.clone(),
+                taf,
+            };
+            crate::approval::refuse(&ctx.w, ctx.mode(), &act, &refused);
+            refused_panel.set_visible(refused.get_visible());
+        })
+    };
+    // "Which taf is this for?": the tafs that can have the app, then Cancel.
+    let which_taf: Rc<dyn Fn(App, gtk::Widget)> = {
+        let (ctx, connect_for_taf) = (ctx.clone(), connect_for_taf.clone());
+        Rc::new(move |app: App, over: gtk::Widget| {
+            let w = &ctx.w;
+            let tafs = connectable_for(ctx.source.connectable(), app.needed_by.as_deref());
+            let ask = adw::AlertDialog::new(
+                Some(&w.line("connect.which_taf").unwrap_or_default()),
+                Some(
+                    &w.get("connect.one_taf", &[("app", called(&app))])
+                        .unwrap_or_default(),
+                ),
+            );
+            for (i, t) in tafs.iter().enumerate() {
+                ask.add_response(&format!("t{i}"), &t.name);
+            }
+            ask.add_response("cancel", &w.line("common.cancel").unwrap_or_default());
+            ask.set_close_response("cancel");
+            let connect_for_taf = connect_for_taf.clone();
+            ask.connect_response(None, move |_, r| {
+                if let Some(i) = r.strip_prefix('t').and_then(|i| i.parse::<usize>().ok()) {
+                    if let Some(t) = tafs.get(i) {
+                        connect_for_taf(app.clone(), t.id.clone());
+                    }
+                }
+            });
+            ask.present(Some(&over));
+        })
+    };
+    // Connect: the taf first, the person's pick (`ConnectRow.connectFor`); Ask Coach where no
+    // taf needs it.
+    let connect: Rc<dyn Fn(App, gtk::Widget)> = {
+        let (ctx, which_taf, open_coach) = (ctx.clone(), which_taf.clone(), open_coach.clone());
+        Rc::new(move |app: App, over: gtk::Widget| match route(&ctx, &app) {
+            ConnectFor::Taf(_) | ConnectFor::Ask => which_taf(app, over),
+            ConnectFor::AskCoach => open_coach(),
+            ConnectFor::NoTaf => {}
+        })
+    };
     // Reads the first page for what was typed, or the next page for the same search.
     let load: Rc<dyn Fn(bool)> = {
-        let (w, source, state, redraw) = (w.clone(), source.clone(), state.clone(), redraw.clone());
+        let (w, ctx, state, redraw, device) = (
+            w.clone(),
+            ctx.clone(),
+            state.clone(),
+            redraw.clone(),
+            device.clone(),
+        );
         Rc::new(move |more: bool| {
-            let ConnectSource::Cloud {
-                token, languages, ..
-            } = &source
-            else {
+            let (kept, languages) = match &ctx.source {
+                ConnectSource::Cloud {
+                    kept, languages, ..
+                } => (kept.clone(), languages.clone()),
+                ConnectSource::File { path, .. } => {
+                    let mut s = state.borrow_mut();
+                    if s.query.is_empty() {
+                        s.apps = file_part(path, "answer").and_then(|b| ConnectApps::read(&b));
+                    }
+                    drop(s);
+                    redraw();
+                    return;
+                }
                 // The sample lists the reference set's apps, unsearched.
-                if let ConnectSource::Sample { screenshot: true } = source {
+                ConnectSource::Sample {
+                    screenshot: true, ..
+                } => {
                     let mut s = state.borrow_mut();
                     if s.query.is_empty() {
                         s.apps = sample_apps();
                     }
+                    drop(s);
+                    redraw();
+                    return;
                 }
-                redraw();
-                return;
+                _ => {
+                    redraw();
+                    return;
+                }
             };
             let (request, p) = {
                 let mut s = state.borrow_mut();
@@ -165,11 +461,11 @@ pub fn page(w: Rc<WordBook>, source: ConnectSource, open_coach: Rc<dyn Fn()>) ->
                     (s.request, path(&s.query, None, None))
                 }
             };
-            let (words, token, languages) = ((*w).clone(), token.clone(), languages.clone());
-            let (state, redraw) = (state.clone(), redraw.clone());
+            let words = (*w).clone();
+            let (state, redraw, device) = (state.clone(), redraw.clone(), device.clone());
             gtk::glib::spawn_future_local(async move {
                 let read = gtk::gio::spawn_blocking(move || {
-                    read_page(&words, &token, &languages, &p, more)
+                    read_page(&words, &kept, &languages, &device, &p, more)
                 })
                 .await
                 .unwrap_or_else(|_| Err(String::new()));
@@ -203,12 +499,15 @@ pub fn page(w: Rc<WordBook>, source: ConnectSource, open_coach: Rc<dyn Fn()>) ->
         });
     }
     *draw.borrow_mut() = Some(Rc::new({
-        let (w, list, state, load, open_coach) = (
+        let (w, ctx, list, state, load, open_coach, connect, open_app) = (
             w.clone(),
+            ctx.clone(),
             list.clone(),
             state.clone(),
             load.clone(),
             open_coach.clone(),
+            connect.clone(),
+            open_app.clone(),
         );
         move || {
             while let Some(c) = list.first_child() {
@@ -229,6 +528,12 @@ pub fn page(w: Rc<WordBook>, source: ConnectSource, open_coach: Rc<dyn Fn()>) ->
                 }
                 return;
             };
+            let removed: std::collections::BTreeSet<String> =
+                apps.removed_tafs.iter().map(|t| t.agent.clone()).collect();
+            let row_for = |app: &App| {
+                let used = ctx.used_here(app, &removed);
+                row(&ctx, app, &used, s.narrow, &connect, &open_app)
+            };
             let (yours, discover) = split(&apps.apps);
             if !yours.is_empty() {
                 list.append(&section_header(&l("connect.apps.yours")));
@@ -241,7 +546,7 @@ pub fn page(w: Rc<WordBook>, source: ConnectSource, open_coach: Rc<dyn Fn()>) ->
                     if i > 0 || !s.narrow {
                         group.append(&separator());
                     }
-                    group.append(&row(&w, app, s.narrow));
+                    group.append(&row_for(app));
                 }
                 list.append(&group);
             }
@@ -250,7 +555,7 @@ pub fn page(w: Rc<WordBook>, source: ConnectSource, open_coach: Rc<dyn Fn()>) ->
                 let group = group();
                 let mut first = true;
                 // Connecting needs a taf: said over the apps to connect, never over Yours.
-                if says_make_a_taf(discover.len(), false, source.connectable()) {
+                if says_make_a_taf(discover.len(), false, ctx.source.connectable().len()) {
                     let note = text(
                         &l("connect.apps_connect_taf_make_one"),
                         13,
@@ -274,7 +579,7 @@ pub fn page(w: Rc<WordBook>, source: ConnectSource, open_coach: Rc<dyn Fn()>) ->
                         group.append(&separator());
                     }
                     first = false;
-                    group.append(&row(&w, app, s.narrow));
+                    group.append(&row_for(app));
                 }
                 list.append(&group);
             }
@@ -308,7 +613,50 @@ pub fn page(w: Rc<WordBook>, source: ConnectSource, open_coach: Rc<dyn Fn()>) ->
     }));
     redraw();
     load(false);
-    crate::widgets::ground(&outer);
+    // A screenshot's page, once the list is read.
+    if let Some(open) = OPEN.with(|o| o.take()) {
+        let apps = state.borrow().apps.clone();
+        if let Some(apps) = apps {
+            match open {
+                // `-screen connect-app`: the app with the most connections, the first of equals.
+                "connect-app" | "connect-connection" | "connect-remove" => {
+                    let mut best: Option<&App> = None;
+                    for a in &apps.apps {
+                        let n = connections_of(a, &ctx.grants).len();
+                        if best.is_none_or(|b| n > connections_of(b, &ctx.grants).len()) {
+                            best = Some(a);
+                        }
+                    }
+                    if let Some(app) = best.cloned() {
+                        crate::connections::OPEN.with(|o| o.set(Some(open)));
+                        open_app(app);
+                    }
+                }
+                "connect-which-taf" | "connect-approve" => {
+                    let asks = apps
+                        .apps
+                        .iter()
+                        .find(|a| route(&ctx, a) == ConnectFor::Ask)
+                        .cloned();
+                    if let Some(app) = asks {
+                        let over: gtk::Widget = outer.clone().upcast();
+                        if open == "connect-which-taf" {
+                            let which_taf = which_taf.clone();
+                            gtk::glib::idle_add_local_once(move || which_taf(app, over));
+                        } else {
+                            let tafs =
+                                connectable_for(ctx.source.connectable(), app.needed_by.as_deref());
+                            if let Some(t) = tafs.first() {
+                                let (connect_for_taf, id) = (connect_for_taf.clone(), t.id.clone());
+                                gtk::glib::idle_add_local_once(move || connect_for_taf(app, id));
+                            }
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
     // Below the table's least width (App's and the three others' least, with their spacing,
     // inside the page's margins), each app is one row with a second line, as on an iPhone.
     let least = tafs_core::connect::APP_LEAST
@@ -317,7 +665,7 @@ pub fn page(w: Rc<WordBook>, source: ConnectSource, open_coach: Rc<dyn Fn()>) ->
         + 32.0;
     let bin = adw::BreakpointBin::new();
     bin.set_size_request(320, 240);
-    bin.set_child(Some(&outer));
+    bin.set_child(Some(&screens.stack));
     let narrow = adw::Breakpoint::new(adw::BreakpointCondition::new_length(
         adw::BreakpointConditionLengthType::MaxWidth,
         least,
@@ -341,8 +689,18 @@ pub fn page(w: Rc<WordBook>, source: ConnectSource, open_coach: Rc<dyn Fn()>) ->
     bin.upcast()
 }
 
+/// Whom an app's Connect is for (`route`): never a taf the list was opened from, as Connect apps
+/// here is always the sidebar's.
+fn route(ctx: &Ctx, app: &App) -> ConnectFor {
+    let tafs: Vec<String> = connectable_for(ctx.source.connectable(), app.needed_by.as_deref())
+        .into_iter()
+        .map(|t| t.id)
+        .collect();
+    connect_for(None, &tafs, app.needed_by.is_some())
+}
+
 /// A section's header, as the iPad's inset list draws it: 17 semibold, soft, inset.
-fn section_header(words: &str) -> gtk::Label {
+pub(crate) fn section_header(words: &str) -> gtk::Label {
     let h = one_line(words, 17, 600, &["tafs-soft"]);
     h.set_margin_start(12);
     h.set_margin_top(10);
@@ -350,13 +708,13 @@ fn section_header(words: &str) -> gtk::Label {
 }
 
 /// The inset list's group: a white panel with corners of 18.
-fn group() -> gtk::Box {
+pub(crate) fn group() -> gtk::Box {
     let g = gtk::Box::new(gtk::Orientation::Vertical, 0);
     g.add_css_class("tafs-group");
     g
 }
 
-fn separator() -> gtk::Separator {
+pub(crate) fn separator() -> gtk::Separator {
     let s = gtk::Separator::new(gtk::Orientation::Horizontal);
     s.add_css_class("tafs-line");
     s
@@ -466,10 +824,20 @@ fn columns(w: &WordBook) -> gtk::Widget {
     r
 }
 
-/// One app (`cells`): its name and what it is, how it connects, whose it is, and where it stands
-/// with who uses it, then its ✓ or Connect. A connected app's detail opens with its port.
-fn row(w: &WordBook, app: &App, narrow: bool) -> gtk::Widget {
-    let said = Row::new(w, app, &[]).unwrap_or_else(|_| Row {
+/// One app (`row`, `cells`): its name and what it is, how it connects, whose it is, and where it
+/// stands with who uses it, then its ✓ or Connect. An app with connections opens them, with a
+/// chevron: a connected one always, and one this computer holds a connection to that isn't
+/// connected (a declined sign-in), its Connect still beside it.
+fn row(
+    ctx: &Ctx,
+    app: &App,
+    used_here: &[String],
+    narrow: bool,
+    connect: &Rc<dyn Fn(App, gtk::Widget)>,
+    open_app: &Rc<dyn Fn(App)>,
+) -> gtk::Widget {
+    let w = &ctx.w;
+    let said = Row::new(w, app, used_here).unwrap_or_else(|_| Row {
         how: String::new(),
         whose: None,
         status: None,
@@ -477,6 +845,7 @@ fn row(w: &WordBook, app: &App, narrow: bool) -> gtk::Widget {
         line: None,
         setup: None,
     });
+    let opens = opens_connections(app, &ctx.grants);
     // The logo, from tafs cloud only, beside the name (`name`). The name on one line, cut at its
     // end only as a last resort; what it is under it, in two.
     let named = gtk::Box::new(gtk::Orientation::Horizontal, 10);
@@ -504,9 +873,16 @@ fn row(w: &WordBook, app: &App, narrow: bool) -> gtk::Widget {
         s.set_ellipsize(gtk::pango::EllipsizeMode::End);
         name.append(&s);
     }
+    let end = trailing(ctx, app, connect);
+    let chevron = opens.then(|| {
+        let c = symbol("go-next-symbolic", 13);
+        c.add_css_class("tafs-dim");
+        c.set_valign(gtk::Align::Center);
+        c
+    });
     // A narrow window (the iPhone's): the name, and how it connects, whose it is and where it
     // stands in one line under it, then its ✓ or Connect.
-    if narrow {
+    let r: gtk::Widget = if narrow {
         let r = gtk::Box::new(gtk::Orientation::Horizontal, 12);
         let v = gtk::Box::new(gtk::Orientation::Vertical, 2);
         v.set_hexpand(true);
@@ -523,65 +899,83 @@ fn row(w: &WordBook, app: &App, narrow: bool) -> gtk::Widget {
             }],
         ));
         r.append(&v);
-        if let Some(t) = trailing(w, app) {
+        if let Some(t) = end {
             t.set_valign(gtk::Align::Center);
             r.append(&t);
         }
-        r.set_size_request(-1, 52);
-        r.set_margin_top(10);
-        r.set_margin_bottom(10);
-        return r.upcast();
-    }
-    let how = one_line(&said.how, 14, 400, &["tafs-soft"]);
-    let whose = one_line(said.whose.as_deref().unwrap_or(""), 14, 400, &["tafs-soft"]);
-    let status = gtk::Box::new(gtk::Orientation::Horizontal, 8);
-    if let Some(setup) = said.setup.as_ref().filter(|s| !s.is_empty()) {
-        let t = text(setup, 13, 400, &["tafs-soft"]);
-        t.set_lines(2);
-        t.set_ellipsize(gtk::pango::EllipsizeMode::End);
-        t.set_hexpand(true);
-        status.append(&t);
-    } else {
-        let v = gtk::Box::new(gtk::Orientation::Vertical, 2);
-        v.set_hexpand(true);
-        if let Some(st) = &said.status {
-            v.append(&one_line(
-                st,
-                14,
-                600,
-                &[if app.connected() {
-                    "tafs-ok"
-                } else {
-                    "tafs-amber-text"
-                }],
-            ));
-            if let Some(used) = &said.used_by {
-                let u = text(used, 12, 400, &["tafs-dim"]);
-                u.set_lines(2);
-                u.set_ellipsize(gtk::pango::EllipsizeMode::End);
-                v.append(&u);
-            }
+        if let Some(c) = &chevron {
+            r.append(c);
         }
-        status.append(&v);
-    }
-    if let Some(t) = trailing(w, app) {
-        status.append(&t);
-    }
-    let r = table_row([
-        named.upcast(),
-        how.upcast(),
-        whose.upcast(),
-        status.upcast(),
-    ]);
+        r.upcast()
+    } else {
+        let how = one_line(&said.how, 14, 400, &["tafs-soft"]);
+        let whose = one_line(said.whose.as_deref().unwrap_or(""), 14, 400, &["tafs-soft"]);
+        let status = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+        if let Some(setup) = said.setup.as_ref().filter(|s| !s.is_empty()) {
+            let t = text(setup, 13, 400, &["tafs-soft"]);
+            t.set_lines(2);
+            t.set_ellipsize(gtk::pango::EllipsizeMode::End);
+            t.set_hexpand(true);
+            status.append(&t);
+        } else {
+            let v = gtk::Box::new(gtk::Orientation::Vertical, 2);
+            v.set_hexpand(true);
+            if let Some(st) = &said.status {
+                v.append(&one_line(
+                    st,
+                    14,
+                    600,
+                    &[if app.connected() {
+                        "tafs-ok"
+                    } else {
+                        "tafs-amber-text"
+                    }],
+                ));
+                if let Some(used) = &said.used_by {
+                    let u = text(used, 12, 400, &["tafs-dim"]);
+                    u.set_lines(2);
+                    u.set_ellipsize(gtk::pango::EllipsizeMode::End);
+                    v.append(&u);
+                }
+            }
+            status.append(&v);
+        }
+        if let Some(t) = end {
+            status.append(&t);
+        }
+        if let Some(c) = &chevron {
+            status.append(c);
+        }
+        table_row([
+            named.upcast(),
+            how.upcast(),
+            whose.upcast(),
+            status.upcast(),
+        ])
+    };
     r.set_size_request(-1, 52);
     r.set_margin_top(10);
     r.set_margin_bottom(10);
+    if opens {
+        // The row opens its connections; a Connect beside it takes its own click.
+        r.set_cursor_from_name(Some("pointer"));
+        let click = gtk::GestureClick::new();
+        let (open_app, opened) = (open_app.clone(), app.clone());
+        click.connect_released(move |g, _, _, _| {
+            g.set_state(gtk::EventSequenceState::Claimed);
+            open_app(opened.clone());
+        });
+        r.add_controller(click);
+        r.update_property(&[gtk::accessible::Property::Label(app.display_name())]);
+    }
     r
 }
 
-/// `trailing`: a ✓ for a connected app; else Connect (or Sign in again) as wide as its words,
-/// dimmed while no taf can have it; nothing for an app not set up yet.
-fn trailing(w: &WordBook, app: &App) -> Option<gtk::Widget> {
+/// `trailing`: a ✓ for a connected app; else Connect (or Sign in again, or Ask Coach where no taf
+/// needs it) as wide as its words, off while no taf can have it;
+/// nothing for an app not set up yet.
+fn trailing(ctx: &Ctx, app: &App, connect: &Rc<dyn Fn(App, gtk::Widget)>) -> Option<gtk::Widget> {
+    let w = &ctx.w;
     if app.needs_setup() {
         None
     } else if app.connected() {
@@ -592,8 +986,11 @@ fn trailing(w: &WordBook, app: &App) -> Option<gtk::Widget> {
         )]);
         Some(check.upcast())
     } else {
+        let route = route(ctx, app);
         let label = w
-            .line(if app.needs_reconnect() {
+            .line(if route == ConnectFor::AskCoach {
+                "coach.ask"
+            } else if app.needs_reconnect() {
                 "connect.sign_in_again"
             } else {
                 "connect.apps.connect"
@@ -603,9 +1000,9 @@ fn trailing(w: &WordBook, app: &App) -> Option<gtk::Widget> {
         b.set_hexpand(false);
         b.add_css_class("compact");
         b.set_valign(gtk::Align::Center);
-        // Connecting is signed with this computer's key (`ConnectApprovalSheet`), which isn't
-        // ported: Connect stays dimmed even where a taf could have the app.
-        b.set_sensitive(false);
+        b.set_sensitive(route != ConnectFor::NoTaf);
+        let (connect, app) = (connect.clone(), app.clone());
+        b.connect_clicked(move |b| connect(app.clone(), b.clone().upcast()));
         Some(b.upcast())
     }
 }

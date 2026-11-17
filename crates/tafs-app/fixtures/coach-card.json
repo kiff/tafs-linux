@@ -1,0 +1,98 @@
+{
+  "about": "The app's own fixture (synthetic, not a contract): Coach's conversation with its plan, Stripe connected, and an approval of the taf's Card naming KIFF's draft drf_refunds, for the screenshots of the draft read (--coach-drafts) and of what Coach has made so far.",
+  "answer": {
+    "messages": [
+      {
+        "id": "run2.in",
+        "at": "2026-10-16T12:00:00.000Z",
+        "from": "owner",
+        "kind": "message",
+        "text": "Set up refunds for my shop",
+        "session": "sess1"
+      },
+      {
+        "id": "run2.3",
+        "at": "2026-10-16T12:00:10.000Z",
+        "from": "taf",
+        "kind": "message",
+        "text": "I'll set up Refunds: it refunds orders from your Stripe account, within limits you choose.",
+        "session": "sess1"
+      },
+      {
+        "id": "run2.7",
+        "at": "2026-10-16T12:00:50.000Z",
+        "from": "taf",
+        "kind": "message",
+        "text": "Stripe is connected. Last, approve the Card Refunds works under.",
+        "session": "sess1"
+      }
+    ],
+    "components": [
+      {
+        "at": "2026-10-16T12:00:11.000Z",
+        "session": "sess1",
+        "run": "run2",
+        "seq": 3,
+        "component": {
+          "type": "steps",
+          "id": "plan",
+          "title": "Set up Refunds",
+          "steps": [
+            {
+              "label": "Connect Stripe",
+              "status": "done"
+            },
+            {
+              "label": "Choose the limits",
+              "status": "done"
+            },
+            {
+              "label": "Approve Refunds' Card",
+              "status": "active"
+            },
+            {
+              "label": "Try a first run",
+              "status": "pending"
+            }
+          ]
+        },
+        "key": "sess1#plan"
+      },
+      {
+        "at": "2026-10-16T12:00:25.000Z",
+        "session": "sess1",
+        "run": "run2",
+        "seq": 5,
+        "component": {
+          "type": "approval",
+          "id": "connect-stripe",
+          "grant": "grt_1",
+          "title": "Connect Stripe",
+          "text": "Approve to connect Stripe for Refunds.",
+          "waits": "owner"
+        },
+        "answer": {
+          "state": "answered",
+          "words": "Approved",
+          "at": "2026-10-16T12:00:40.000Z"
+        },
+        "key": "sess1#connect-stripe"
+      },
+      {
+        "at": "2026-10-16T12:00:51.000Z",
+        "session": "sess1",
+        "run": "run2",
+        "seq": 8,
+        "component": {
+          "type": "approval",
+          "id": "card",
+          "title": "Refunds' Card",
+          "text": "Approve the Card Refunds works under: what it may refund, and how much.",
+          "draft": "drf_refunds",
+          "waits": "owner"
+        },
+        "key": "sess1#card"
+      }
+    ]
+  }
+}

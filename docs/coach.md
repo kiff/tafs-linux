@@ -1,7 +1,7 @@
 # Coach
 
-The iPad's Coach conversation (`SetupChatView` at a regular width), beside the sidebar, with its
-message box. Its Coach button opens it, signed in with KIFF by someone who may use Coach; the sample
+The iPad's Coach conversation (`SetupChatView` at a regular width) in Coach mode over the app
+(below), with its message box. Its Coach button opens it, signed in with KIFF by someone who may use Coach; the sample
 has no Coach, so there it still opens its title alone. What it reads and how it's decoded is
 `tafs-core/src/coach.rs`; the device's proof is `tafs-core/src/planque.rs`; what's sent, and how the
 conversation holds it while it goes, is `tafs-core/src/coach_send.rs`; what it draws is
@@ -17,7 +17,7 @@ In the iPad's order (`loadSetup`, `loadSetupThread`), at tafs cloud as the sessi
 1. **Coach's taf:** `GET /v1/setup`'s `setup.id` (`setupRead`, contract `setup-coach.json`), read
    as strictly as the iPad's `CloudTaf`. No Coach yet: its start (`introBefore`), board 9 and
    "Coach mode", with why this computer can't in Start's place: starting Coach is signed, so it's
-   done on the phone. Linux sends no `X-Time-Zone` with it: on a new account that header sets the account's zone, and this computer changes nothing.
+   done on the phone. The same answer's `tools` is Coach's tools as KIFF has them (below). Linux sends no `X-Time-Zone` with it: on a new account that header sets the account's zone, and this computer changes nothing.
 2. **Its newest conversation:** `GET /v1/tafs/{id}/chats` (contract `coach-chats.json`), the chat
    with the latest `updated`. Without the list, the conversation reads without a session, as on
    the iPad.
@@ -26,6 +26,12 @@ In the iPad's order (`loadSetup`, `loadSetupThread`), at tafs cloud as the sessi
    `coach-conversation.json`) with the proof in `Planque-Device-Signature`. `?can=` goes only
    with a proof and steps this device signs beyond connecting and cards; this computer signs none,
    so it is never sent.
+5. **KIFF's drafts** (`readCardDraft`): after each read, every draft an approval or a sign-in
+   names that isn't read as confirmed, `GET /v1/me/agent-drafts/{id}` at KIFF as the session, an
+   unsigned read (`tafs-core/src/drafts.rs` › `draft_read`; confirming a draft is signed, on the
+   phone). It's decoded as `AgentDraft` (as strict as the iPad's synthesized decoder, an unknown
+   field left alone). A read KIFF refuses keeps KIFF's reason for the card (`setupDraftErrors`),
+   and a draft read before stays drawn.
 
 The answer is decoded as `setupThread(decoding:)`: the messages strictly (one the app can't read
 fails the read, and the screen says "The conversation couldn't be loaded: …"); each card, coach
@@ -137,15 +143,76 @@ iPad does, and tafs cloud marks no card. The token, the key and the signature ar
   its own-answer field, Send answers once each has an answer, and Chat about this, which puts the
   card away ("Show them again"); an approval; a sign-in; a result (set up, setting up, wasn't set up, a plan needed with
   Choose a plan, or the button that opens the taf once it's on the list; an improvement's new
-  version); a drive's ask; a dial card's title. An answered card folds to one line
-  (`OutcomeLine`); an approval's opens again on a click, and Fold puts it back.
+  version); a drive's ask; a drive's end ("What I did": the task, each step with what it
+  touched, and why it ended, in tafs cloud's words or the app's for its reason; its steps are
+  read with `try?`, so one it can't read leaves them all out, as on the iPad); a dial card's title. An answered card folds to one line
+  (`OutcomeLine`); an approval's opens again on a click, and Fold puts it back. An approval whose
+  Card KIFF took the signature for (`signed`: confirmed or claimed) names that Card on its line,
+  with the Card's lines under it.
 - **Approvals and sign-ins:** the eyebrow in the card's state, the card's words (tafs cloud's
   line when the connection is already done, else Coach's title and words for it, since this
-  computer reads no grant from planque), tafs cloud's line for a Card approved next, then
+  computer reads no grant from planque), the taf's Card as KIFF drafted it (its title, or tafs
+  cloud's words when it's the one approved next, then its lines in monospace: KIFF's own, else
+  `DraftCard.lines` in the app's words, two grants that read alike each adding their action),
+  or, while it isn't read, "Reading KIFF's words…", or KIFF's reason with Try again, which reads
+  it again; tafs cloud's line for a Card approved next on a card with no draft, then
   **tafs cloud's `wider.words`** in the amber (14 medium, as `WiderLine`), above where the buttons
   go, then why this computer can't approve (`ApprovalGate`'s line) in the buttons' place.
 - **After the thread:** "While you were away" and how the tasks Coach handed out went, the dots
   while Coach is at work, and what was written to its run that it hasn't read yet.
+
+## Coach mode
+
+Coach slides in from the right over whatever is open (`CoachPanel`, `crates/tafs-app/src/coach_mode.rs`,
+`tafs-core/src/coach_mode.rs`), which stays in view under a light shade; anything that opens Coach
+(the sidebar's Coach, the brief's next move, Connect apps' Ask Coach) opens it there. It opens at a
+third of the window, or the width last chosen, kept in the user's config folder (`coach.width`,
+`coach.full`). Its left edge drags it wider, up to full screen within 40 px of the window's edge,
+or narrower, never under a third; dragged more than 60 px past that, it closes. Its title row has
+Back and ⤢ (Full screen, or Back to its width) before the title, as the iPad's `CoachView`. A click
+on the shade (not when full screen), Escape and Back close it. Closing never ends a conversation:
+its page goes, its reads stop, and opening it again reads it anew, the words not sent kept.
+
+Not on Linux: the swipe of the conversation to the right that closes it on a touch screen (a drag
+there selects text here), and the phone's `PhoneCoachPanel` (a compact width, which this computer's
+sidebar layout doesn't have). The iPad slides it in and out; here it appears and goes.
+
+## Coach's tools
+
+While `GET /v1/setup`'s `tools` says they're still to give (`to_give`, `taken` or `unknown`),
+one line above the conversation says so in tafs cloud's words (`CoachToolsRow`, the step's
+`row`, else "Coach's tools"), and opens the step (`CoachToolsSheet`,
+`tafs-core/src/coach_tools.rs`): its title, its intro, a few groups up front, "Each tool and its
+limits", which unfolds each tool with what it does and why and Coach's Cards in KIFF's words, then
+the ask. Every word is tafs cloud's or KIFF's; the app's own stand in only for a tafs cloud that
+sends none. Taken, it says which name another tool in KIFF holds; unknown, that KIFF didn't
+answer. Once given, there's no line.
+
+Giving them is the one confirmation, signed on the phone behind Face ID, and the iPad wraps its
+button in `ApprovalGate`: here the gate's line stands in the button's place, and nothing is sent
+(the connections batch and Coach's Cards' draft are never built or sent from this computer).
+Not now closes the step. The iPad also opens the step at the end of a first Start; this computer
+starts nothing, so it opens only from the line. `tools` is read as leniently as the iPad's
+`JSONSerialization` read: a field of another shape is none, a group or a tool that isn't an
+object is left out, and a tool with no name too.
+
+## Taking shape
+
+On a window wide enough (the conversation's page at least 780 px wide, `shaping`), what the
+conversation has made so far stands beside it, 420 px wide on Coach mode's deeper blue
+(`SetupShapePanel`, `tafs-core/src/setup_shape.rs`), and the plan moves from above the thread
+into it. Narrower, the conversation is alone. It reads only what this computer already holds:
+"Taking shape", the taf's name once a result hands it over (else the plan's title); the plan's
+steps with their marks, the step at work as "Needs you" while a card waits for the owner
+(`setupWaiting`), a skipped step struck through; with no plan, each card that asked the owner
+something and where it stands; then the Card KIFF drafted for the latest approval that names one,
+dashed until KIFF confirms it, with "A draft until you approve it in the conversation." With
+nothing made yet, what will show there.
+
+The iPad also lists the apps being connected, from planque's grants: this computer doesn't read
+them, so that part isn't drawn. The iPad shows the panel only once the phone is enrolled with
+planque (`planqueReady`), which is how it starts Coach; this computer starts nothing, and shows the
+panel beside any conversation tafs cloud has for it.
 
 ## The phone's, never this computer's
 
@@ -162,12 +229,10 @@ For an approval, a sign-in or a drive it gives none, whatever the text, so nothi
   (`startSwitch`, `improveTaf`).
 - The microphone and attachments; the recipes on an empty chat; Copy and Delete on a message not
   sent (the iPad's context menu); an improvement's first message (`improve`).
-- What the iPad reads beside the thread: planque's grant (its words, terms and profile) and KIFF's
-  draft of a Card on an approval.
+- What the iPad reads beside the thread: planque's grant (its words, terms and profile).
 - The live stream (`LiveWork`, revealing, pinning a sent message, a run that failed part-way with
   Retry), the Needs you bar and ↓, landing on the waiting card (it lands at the latest), New
-  Coach's tools row, "Taking shape"
-  (`SetupShapePanel`), a dial card (`KnobDraftCard`), a drive's steps and why it ended, and a result's
+  a dial card (`KnobDraftCard`), and a result's
   See version.
 - A refused connection's lines are decoded but not drawn: the iPad's Coach doesn't draw them.
 
@@ -182,4 +247,13 @@ questions card waiting, a message its run never read as Not sent, and one tafs c
 `coach-empty` (`crates/tafs-app/fixtures/coach-empty.json` with no taf: board 7 over the empty
 chat), `coach-start` (`shared/contracts/setup-start.json`: no Coach yet, board 9) and
 `coach-chats` (`--coach-chats shared/contracts/coach-chats.json`: Previous conversations open over
-the contract's conversation).
+the contract's conversation). `--coach-drafts <answers.json>` gives KIFF's answers to the drafts
+by id (`{"status", "answer"}`), never read: `coach-draft`
+(`crates/tafs-app/fixtures/coach-card.json` with `coach-drafts.json`: an approval with its Card
+read) and `coach-draft-refused` (`coach-drafts-refused.json`: KIFF's refusal, with Try again).
+`--coach-setup <answer.json>` gives tafs cloud's `GET /v1/setup` answer for Coach's tools, and
+`--page coach-tools` opens their step: `coach-tools` (`shared/contracts/setup-coach.json` over
+`coach-asks.json`). `--page coach` opens Coach mode at a third of the window over the Overview, and
+`--page coach-full` full screen, keeping nothing: `coach-full` (`coach-card.json` with its draft,
+"Taking shape" beside it) and `coach-drive` (`crates/tafs-app/fixtures/coach-drive.json`: a drive's
+end and a new ask).

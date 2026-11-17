@@ -84,6 +84,7 @@ button.tafs-link { background: none; box-shadow: none; border: none; color: @taf
 .tafs-sidebar .taf-now.no { color: @tafs_no; }
 .tafs-sidebar .brand { font-size: 22px; font-weight: 700; color: @tafs_ink; }
 .tafs-dot { background-color: @tafs_amber; border-radius: 4px; min-width: 8px; min-height: 8px; }
+button.tafs-unreachable-status { padding: 0 2px; min-height: 0; font-size: 12px; font-weight: 600; }
 
 /* Coach: the ink button, the dark ground's colour on it, 44 high, corners of 14. */
 button.tafs-coach { background-color: @tafs_ink; background-image: none; color: @tafs_on_fill; font-size: 15px; font-weight: 600;
@@ -100,6 +101,20 @@ button.tafs-account:hover { background-color: alpha(@tafs_ink, 0.04); }
 /* Coach (`SetupChatView`): its own wash; the owner's words on the brand sweep, corners of 18; cards'
    edges in their state's colour; an answered card's line on the raised colour at 60%. */
 .tafs-coach-wash { background-color: @tafs_coach_wash; }
+/* "Taking shape" beside the conversation: Coach mode's blue a shade deeper; the Card on the panel,
+   corners of 14, its edge dashed until KIFF confirms it, then the ok colour. */
+.tafs-coach-panel { background-color: @tafs_coach_panel; }
+/* Coach mode over the app: a light shade over what's behind, the panel's shadow on its left,
+   and its edge's handle, a capsule in the dim colour at 50%. */
+.tafs-scrim { background-color: rgba(0, 0, 0, 0.12); }
+.tafs-coach-mode { box-shadow: -4px 0 24px rgba(0, 0, 0, 0.18); }
+.tafs-step-dot { background-color: @tafs_dim; border-radius: 999px; min-width: 5px; min-height: 5px; }
+.tafs-handle { background-color: alpha(@tafs_dim, 0.5); border-radius: 999px; }
+/* Coach's tools still to give, one line above the conversation (`CoachToolsRow`). */
+button.tafs-tools-row { background: none; border: none; box-shadow: none; border-radius: 0; padding: 0 16px; min-height: 44px; }
+button.tafs-tools-row:hover { background-color: alpha(@tafs_ink, 0.04); }
+.tafs-shape-card { background-color: @tafs_panel; border: 1px dashed alpha(@tafs_ink, 0.25); border-radius: 14px; padding: 14px; }
+.tafs-shape-card.confirmed { border: 1px solid @tafs_ok; }
 .tafs-coach-text { color: @tafs_coach; }
 .tafs-coach-title { border-bottom: 1px solid @tafs_line; }
 .tafs-owner-bubble { background-image: linear-gradient(135deg, BRAND0, BRAND1, BRAND2); color: white; border-radius: 18px; padding: 10px 14px; }
@@ -308,6 +323,7 @@ button.tafs-plain { background: none; border: none; box-shadow: none; padding: 0
 .tafs-dot9 { min-width: 9px; min-height: 9px; border-radius: 999px; }
 .tafs-event { background-color: @tafs_panel; border-radius: 10px; padding: 10px; }
 
+button.tafs-share-button { background-color: @tafs_panel; background-image: none; border: 1px solid @tafs_line; border-radius: 999px; padding: 7px 12px; box-shadow: none; }
 .tafs-person-badge { background-color: @tafs_raised; border-radius: 999px; color: @tafs_ink; font-size: 14px; font-weight: 600; }
 
 button.tafs-row-button { background: none; border: none; box-shadow: none; padding: 12px 0; font-size: 17px; font-weight: 400; }
@@ -326,6 +342,18 @@ link, label link { color: @tafs_amber_text; }
 /* A taf's knocks: the panel's edge in amber at 45%; a stranger's knock on amber at 7%, a
    paired sender's calmly; Do it in amber, Pair outlined, Ignore plain. */
 .tafs-panel.knocks-edge { border-color: alpha(@tafs_amber, 0.45); }
+switch.tafs-ok-switch:checked { background-color: @tafs_ok; }
+button.tafs-app-row { padding: 12px; border-radius: 14px; background-color: @tafs_panel; border: 1px solid @tafs_line; box-shadow: none; }
+button.tafs-search-capsule { background-color: @tafs_panel; background-image: none; border: 1px solid @tafs_line; border-radius: 999px; box-shadow: none; min-height: 46px; padding: 0 14px; }
+menubutton.tafs-service-menu > button { background-color: @tafs_panel; background-image: none; border: 1px solid @tafs_line; border-radius: 14px; box-shadow: none; min-height: 44px; padding: 0 14px; }
+button.tafs-remote { background-color: @tafs_panel; background-image: none; border: 1px solid @tafs_line; border-radius: 16px; box-shadow: none; color: @tafs_ink; }
+button.tafs-remote-power { background-color: @tafs_ink; background-image: none; border: 1px solid @tafs_line; border-radius: 26px; box-shadow: none; color: white; }
+button.tafs-remote-power.paused { background-color: @tafs_dim; }
+menubutton.tafs-plain > button { background: none; background-image: none; border: none; box-shadow: none; padding: 0; }
+button.tafs-outline.tafs-ok { color: @tafs_ok; border-color: alpha(@tafs_ok, 0.5); }
+button.tafs-link.tafs-big-link { font-size: 15px; }
+button.tafs-ring-node { padding: 5px; border-radius: 14px; background-color: @tafs_panel; background-image: none; border: 1px solid @tafs_line; box-shadow: none; }
+button.tafs-ring-plus { border-radius: 999px; background-color: @tafs_raised; border: 1px dashed @tafs_line; box-shadow: none; min-width: 46px; min-height: 46px; padding: 0; }
 .tafs-knock { padding: 12px; border-radius: 16px; background-color: alpha(@tafs_amber, 0.07); border: 1px solid alpha(@tafs_amber, 0.45); }
 .tafs-knock.paired { background-color: @tafs_panel; border-color: alpha(@tafs_ink, 0.2); }
 button.tafs-knock-do { background: @tafs_amber; color: white; font-size: 14px; font-weight: 600; border-radius: 999px; padding: 8px 14px; border: none; box-shadow: none; min-height: 0; }

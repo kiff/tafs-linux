@@ -181,7 +181,7 @@ pub fn cloud_send(
     body: Option<&[u8]>,
 ) -> Result<Answer, KiffError> {
     let url = format!("{}{path}", tafs_core::home::TAFS_CLOUD);
-    if !may_send_to(&url) || !matches!(method, "POST" | "PUT" | "DELETE") {
+    if !may_send_to(&url) || !matches!(method, "POST" | "PUT" | "PATCH" | "DELETE") {
         return Err(KiffError::Unreadable);
     }
     let request = agent()

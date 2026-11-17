@@ -1057,9 +1057,12 @@ fn kiffs_activity_reads_as_the_ipad_shows_it() {
       {"proposal_id":"p5","action_name":"list_charges","actor_id":"someone-else","outcome":"allowed","created_at":"2026-11-15T10:04:00Z","held":false,"tool_outcome":{"status":"done"}}
     ]}"#;
     let calls = read_activity(body).expect("KIFF's activity reads");
-    let entries = record(&w, &calls, &|actor| {
-        (actor == "rae").then(|| "taf-rae".to_string())
-    })
+    let entries = record(
+        &w,
+        &calls,
+        &|actor| (actor == "rae").then(|| "taf-rae".to_string()),
+        &Default::default(),
+    )
     .unwrap();
     assert_eq!(
         entries.len(),

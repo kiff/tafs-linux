@@ -149,7 +149,7 @@ pub fn page(
         let (w, refused, refused_panel) = (w.clone(), refused.clone(), refused_panel.clone());
         Rc::new(move |act: Act| {
             crate::approval::refuse(&w, mode, &act, &refused);
-            refused_panel.set_visible(refused.is_visible());
+            refused_panel.set_visible(refused.get_visible());
         })
     };
     let draw: Rc<dyn Fn()> = {

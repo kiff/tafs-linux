@@ -233,6 +233,12 @@ pub struct Entry {
     pub proposal: Option<String>,
     /// KIFF's words for why (`reason`), never its codes.
     pub reason: Option<String>,
+    /// KIFF allowed the call and the vendor refused it, and it still counts against the Card's
+    /// totals (`refusedByTool`).
+    pub refused_by_tool: bool,
+    /// Who refused it at the tool (`refusedBy`): "the connection" for one the connection refused
+    /// before sending, else the vendor as connected, when known.
+    pub refused_by: Option<String>,
 }
 
 /// `recordID`: KIFF's call id as a stable key.
@@ -340,11 +346,13 @@ pub fn executed(
 }
 
 /// `KIFFMapping.record`: one entry a call of a holder the app shows, by its taf's key
-/// (`taf_of` from KIFF's actor id).
+/// (`taf_of` from KIFF's actor id). `vendors` names the vendor each connected tool is from, by
+/// its name in KIFF (`toolVendors`), for a call the vendor refused.
 pub fn record(
     w: &WordBook,
     calls: &[ActivityCall],
     taf_of: &dyn Fn(&str) -> Option<String>,
+    vendors: &std::collections::BTreeMap<String, String>,
 ) -> Result<Vec<Entry>, WordsError> {
     let mut out = Vec::new();
     for c in calls {
@@ -352,7 +360,13 @@ pub fn record(
             continue;
         };
         let (kind, mut detail) = match c.outcome.as_str() {
-            "allowed" => executed(w, c.tool_outcome.as_ref(), c.held, None, counted(c))?,
+            "allowed" => executed(
+                w,
+                c.tool_outcome.as_ref(),
+                c.held,
+                vendors.get(&c.action_name).map(String::as_str),
+                counted(c),
+            )?,
             "owner_required" | "approval_required" => {
                 (Kind::Held, w.line("record.waiting_for_you")?)
             }
@@ -395,6 +409,14 @@ pub fn record(
             receipt: c.receipt.clone(),
             proposal: Some(c.proposal_id.clone()),
             reason: c.reason.clone().filter(|r| !r.trim().is_empty()),
+            refused_by_tool,
+            refused_by: if !refused_by_tool {
+                None
+            } else if tool.is_some_and(|t| t.refused_by.as_deref() == Some("connection")) {
+                Some(w.line("record.the_connection")?)
+            } else {
+                vendors.get(&c.action_name).cloned()
+            },
         });
     }
     Ok(out)
@@ -912,6 +934,50 @@ mod tests {
         assert_eq!(short_date("fr", d), "13 nov.");
         assert_eq!(weekday("en", d), "Friday");
         assert_eq!(weekday("fr", d), "vendredi");
+    }
+
+    #[test]
+    fn a_refused_call_names_its_vendor_by_its_connection() {
+        let w = WordBook::load(&WordBook::default_root(), "en").unwrap();
+        let body = br#"{"calls":[
+          {"proposal_id":"p1","action_name":"create_refund","actor_id":"rae","outcome":"allowed","created_at":"2026-11-15T10:00:00Z","held":false,
+           "tool_outcome":{"status":"refused_by_tool","message":"card_declined"}},
+          {"proposal_id":"p2","action_name":"send","actor_id":"rae","outcome":"allowed","created_at":"2026-11-15T10:01:00Z","held":false,
+           "tool_outcome":{"status":"refused_by_tool","refused_by":"connection","code":"x"},"detail":"Gmail refused it before sending"},
+          {"proposal_id":"p3","action_name":"other","actor_id":"rae","outcome":"allowed","created_at":"2026-11-15T10:02:00Z","held":false,
+           "tool_outcome":{"status":"refused_by_tool"}},
+          {"proposal_id":"p4","action_name":"create_refund","actor_id":"rae","outcome":"allowed","created_at":"2026-11-15T10:03:00Z","held":false,
+           "tool_outcome":{"status":"done"}}
+        ]}"#;
+        let calls = read_activity(body).unwrap();
+        let vendors: std::collections::BTreeMap<String, String> =
+            [("create_refund".to_string(), "Stripe".to_string())].into();
+        let e = record(&w, &calls, &|_| Some("rae".into()), &vendors).unwrap();
+        assert!(
+            e[0].detail.starts_with("Stripe refused it"),
+            "{}",
+            e[0].detail
+        );
+        assert_eq!(
+            (e[0].refused_by_tool, e[0].refused_by.as_deref()),
+            (true, Some("Stripe"))
+        );
+        assert_eq!(e[1].refused_by.as_deref(), Some("The connection"));
+        assert_eq!(e[1].detail, "Gmail refused it before sending");
+        // No connection names the tool's vendor: "The app".
+        assert!(
+            e[2].detail.starts_with("The app refused it"),
+            "{}",
+            e[2].detail
+        );
+        assert_eq!(
+            (e[2].refused_by_tool, e[2].refused_by.as_deref()),
+            (true, None)
+        );
+        assert_eq!(
+            (e[3].refused_by_tool, e[3].refused_by.as_deref()),
+            (false, None)
+        );
     }
 
     #[test]

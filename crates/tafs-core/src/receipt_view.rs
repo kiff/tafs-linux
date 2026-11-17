@@ -379,6 +379,8 @@ mod tests {
             }),
             proposal: None,
             reason: None,
+            refused_by_tool: false,
+            refused_by: None,
         }
     }
 

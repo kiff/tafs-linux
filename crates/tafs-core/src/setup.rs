@@ -204,6 +204,65 @@ pub fn forget_path(taf: &str, note: &str) -> String {
     )
 }
 
+/// One node of `ConnectedToolsRing` per app: the connection that does the work, with any other
+/// sign-in to the same app inside its sheet (`ConnectedToolsRing.Node`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Node {
+    pub app: ConnectedApp,
+    pub others: Vec<ConnectedApp>,
+}
+
+/// `ConnectedToolsRing.nodes`: in tafs cloud's order of each app's first connection; the one shown
+/// is the first with actions, else one to sign in again, else the first.
+pub fn nodes(apps: &[ConnectedApp]) -> Vec<Node> {
+    let mut order: Vec<&str> = Vec::new();
+    for a in apps {
+        if !order.contains(&a.name.as_str()) {
+            order.push(&a.name);
+        }
+    }
+    order
+        .into_iter()
+        .map(|name| {
+            let all: Vec<&ConnectedApp> = apps.iter().filter(|a| a.name == name).collect();
+            let main = all
+                .iter()
+                .find(|a| a.action_count > 0)
+                .or_else(|| all.iter().find(|a| a.reconnect))
+                .unwrap_or(&all[0]);
+            Node {
+                app: (*main).clone(),
+                others: all
+                    .iter()
+                    .filter(|a| a.id != main.id)
+                    .map(|a| (*a).clone())
+                    .collect(),
+            }
+        })
+        .collect()
+}
+
+/// `removalPreview`'s path: what goes with the taf, read when Remove is tapped, ending nothing.
+pub fn removal_path(taf: &str) -> String {
+    format!("/v1/tafs/{}/removal", crate::work::segment(taf))
+}
+
+/// `RemovalPreview`: tafs cloud's words, trimmed; none when it sent none, or blank, or another
+/// shape.
+pub fn removal_words(body: &[u8]) -> Option<String> {
+    let v: Value = serde_json::from_slice(body).ok()?;
+    let words = v.get("words")?.as_str()?.trim();
+    (!words.is_empty()).then(|| words.to_string())
+}
+
+/// `AppModel.removeBody`: what always goes, then tafs cloud's words when it sent some.
+pub fn remove_body(body: &str, goes: Option<&str>) -> String {
+    match goes.filter(|g| !g.is_empty()) {
+        Some(g) => format!("{body}\n\n{g}"),
+        None => body.to_string(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -237,5 +296,60 @@ mod tests {
             serde_json::from_str(r#"{"grant":" g ","title":"T","words":7}"#).unwrap();
         assert_eq!(a.grant, "g");
         assert!(!a.usable());
+    }
+
+    #[test]
+    fn one_node_per_app() {
+        let base: ConnectedApp = serde_json::from_value(
+            serde_json::from_str::<serde_json::Value>(include_str!(
+                "../../../shared/contracts/taf-setup-connected.json"
+            ))
+            .unwrap()["answer"]["connections"][0]
+                .clone(),
+        )
+        .unwrap();
+        let mut idle = base.clone();
+        idle.id = "grt_2".into();
+        idle.action_count = 0;
+        let mut again = base.clone();
+        again.id = "grt_3".into();
+        again.action_count = 0;
+        again.reconnect = true;
+        let mut other = base.clone();
+        other.id = "grt_stripe".into();
+        other.name = "Stripe".into();
+        let n = nodes(&[idle.clone(), other.clone(), again.clone(), base.clone()]);
+        assert_eq!(n.len(), 2);
+        assert_eq!(n[0].app.id, "grt_gmail", "the one with actions");
+        assert_eq!(
+            n[0].others
+                .iter()
+                .map(|a| a.id.as_str())
+                .collect::<Vec<_>>(),
+            ["grt_2", "grt_3"]
+        );
+        assert_eq!(n[1].app.id, "grt_stripe");
+        let n = nodes(&[idle.clone(), again.clone()]);
+        assert_eq!(n[0].app.id, "grt_3", "else one to sign in again");
+        assert_eq!(nodes(&[idle]).len(), 1);
+    }
+
+    #[test]
+    fn what_goes_with_a_removed_taf() {
+        assert_eq!(removal_path("t/1"), "/v1/tafs/t%2F1/removal");
+        assert_eq!(
+            removal_words(br#"{"words":" Qonto goes with it. "}"#).as_deref(),
+            Some("Qonto goes with it.")
+        );
+        assert_eq!(removal_words(br#"{"words":"  "}"#), None);
+        assert_eq!(removal_words(br#"{"words":3}"#), None);
+        assert_eq!(
+            remove_body("Its Cards are revoked.", None),
+            "Its Cards are revoked."
+        );
+        assert_eq!(
+            remove_body("Its Cards are revoked.", Some("Qonto goes with it.")),
+            "Its Cards are revoked.\n\nQonto goes with it."
+        );
     }
 }

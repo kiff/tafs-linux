@@ -46,6 +46,25 @@ pub struct TafPage {
     pub opens_on_card: bool,
     /// Opens on the Setup tab (`--page taf-setup:<id>`).
     pub opens_on_setup: bool,
+    /// Its doors open over the page (`DoorsView`, `--page doors:<id>`), or one door's screen
+    /// (`--page doors:<id>:<door>`), for a screenshot.
+    pub opens_doors: Option<Option<String>>,
+    /// Setup's screen open over its tab (`-screen starts`, `-screen results`), for a screenshot.
+    pub opens_setup_screen: Option<crate::starts_when::Screen>,
+    /// This person's sign-in email: their own key at a door reads "You", and Email me's line.
+    pub my_email: Option<String>,
+    /// KIFF keeps this session view-only (`approval_mode: view`): Revoke's line in its place.
+    pub view_only: bool,
+    /// Its Cards' ids at KIFF, revoked by Revoke.
+    pub card_ids: Vec<String>,
+    /// Where Setup's screens read and change its dial (`GET …/knob`), and what they say of it
+    /// from Home: no schedule (`worksFromChat`), its next run, paused, and where tafs cloud
+    /// delivers its results itself.
+    pub knob: crate::starts_when::KnobSource,
+    pub works_from_chat: bool,
+    pub next_run_line: Option<String>,
+    pub paused: bool,
+    pub results: Option<Vec<serde_json::Value>>,
     /// tafs cloud's id for it, and where its Activity is read from.
     pub cloud_id: Option<String>,
     pub source: ActivitySource,
@@ -93,6 +112,8 @@ pub fn page(
     entries: Rc<Vec<Entry>>,
     halt_row: Option<gtk::Button>,
     open_usage: Rc<dyn Fn()>,
+    open_coach: Rc<dyn Fn()>,
+    open_connect: Rc<dyn Fn()>,
 ) -> gtk::Widget {
     let outer = gtk::Box::new(gtk::Orientation::Vertical, 12);
     outer.set_margin_start(16);
@@ -216,7 +237,18 @@ pub fn page(
                 id.clone(),
                 t.work.clone(),
                 t.health.clone(),
-                Rc::new(crate::work_panel::Opens { usage: open_usage }),
+                Rc::new(crate::work_panel::Opens {
+                    usage: open_usage.clone(),
+                    coach: {
+                        let open = open_coach.clone();
+                        Rc::new(move |say: String| {
+                            crate::coach::set_draft(&say);
+                            open();
+                        })
+                    },
+                    manages: t.manages,
+                    may_use_coach: t.may_use_coach,
+                }),
             ));
             // Its runs: when it runs next and Run now, then the runs tafs cloud kept, read again
             // once Run now started one.
@@ -234,11 +266,30 @@ pub fn page(
                 }
             }
             body.append(&kept);
+            let rows = Rc::new(RowOpens {
+                taf: t.key.clone(),
+                manages: t.manages,
+                may_use_coach: t.may_use_coach,
+                coach: open_coach.clone(),
+                connect: open_connect.clone(),
+                receipt: match &t.source {
+                    ActivitySource::Cloud { token, languages } => {
+                        Some(Rc::new(crate::receipt_sheet::ReceiptSource {
+                            token: token.clone(),
+                            languages: languages.clone(),
+                            canned: None,
+                            open: None,
+                        }))
+                    }
+                    _ => None,
+                },
+            });
             body.append(&cloud_activity(
                 w.clone(),
                 id.clone(),
                 t.source.clone(),
                 units_of,
+                rows,
             ));
         }
     }
@@ -320,7 +371,7 @@ pub fn page(
     scroller.set_vexpand(true);
     let card_scroller = gtk::ScrolledWindow::new();
     card_scroller.set_hscrollbar_policy(gtk::PolicyType::Never);
-    let card = card_pane(&w, t);
+    let card = card_pane(&w, t, &open_coach);
     // `HaltRow(tafID:framed:)`, at the Card's foot as on the iPad.
     if let Some(row) = halt_row {
         row.set_margin_start(16);
@@ -332,6 +383,36 @@ pub fn page(
     let panes = gtk::Stack::new();
     panes.add_named(&scroller, Some("activity"));
     panes.add_named(&card_scroller, Some("card"));
+    // Its dial, shared by Setup's screens and its doors (`knobs[tafID]`), signed in with KIFF.
+    let dial_knobs = match (
+        &t.cloud_id,
+        matches!(t.knob, crate::starts_when::KnobSource::None),
+    ) {
+        (Some(id), false) => Some({
+            crate::starts_when::Knobs::new(
+                w.clone(),
+                crate::starts_when::KnobTaf {
+                    id: id.clone(),
+                    name: t.name.clone(),
+                    initial: t.initial.clone(),
+                    color: t.color,
+                    manages: t.manages,
+                    may_use_coach: t.may_use_coach,
+                    works_from_chat: t.works_from_chat,
+                    next_run: t.next_run_line.clone(),
+                    paused: t.paused,
+                    results: t.results.clone(),
+                    email: t.my_email.clone(),
+                    doors: t.doors.clone(),
+                    work: t.work.clone(),
+                    runs: t.runs.clone(),
+                    open_coach: open_coach.clone(),
+                },
+                t.knob.clone(),
+            )
+        }),
+        _ => None,
+    };
     // Setup: read when it's first shown.
     if let (true, Some(id)) = (has_setup, &t.cloud_id) {
         let setup_scroller = gtk::ScrolledWindow::new();
@@ -343,16 +424,41 @@ pub fn page(
         setup_scroller.set_child(Some(&column));
         panes.add_named(&setup_scroller, Some("setup"));
         let made = std::cell::Cell::new(false);
+        let knobs = dial_knobs.clone();
+        let open_activity: Rc<dyn Fn()> = {
+            let tab = activity_tab.downgrade();
+            Rc::new(move || {
+                if let Some(t) = tab.upgrade() {
+                    t.set_active(true);
+                }
+            })
+        };
         let (w, taf, source) = (
             w.clone(),
             Rc::new(crate::setup_pane::SetupTaf {
                 id: id.clone(),
+                name: t.name.clone(),
+                initial: t.initial.clone(),
+                color: t.color,
                 job: t.job.clone(),
                 manages: t.manages,
                 discuss: t.may_use_coach && t.manages,
+                may_use_coach: t.may_use_coach,
+                knobs,
+                open_coach: open_coach.clone(),
+                open_connect: open_connect.clone(),
+                open_activity,
             }),
             t.setup.clone(),
         );
+        if let (Some(screen), Some(knobs)) = (t.opens_setup_screen, taf.knobs.clone()) {
+            let once = std::cell::Cell::new(Some(knobs));
+            outer.connect_map(move |o| {
+                if let Some(knobs) = once.take() {
+                    crate::starts_when::open(knobs, screen, o);
+                }
+            });
+        }
         let panes = panes.clone();
         setup_tab.connect_toggled(move |b| {
             if b.is_active() {
@@ -419,12 +525,42 @@ pub fn page(
     } else {
         activity_tab.set_active(true);
     }
+    // `DoorsView`, the doors' own dial over the door it's turned to: the iPad's page has no tab
+    // for it at the pin, so a screenshot opens it over the page.
+    if let (Some(focus), Some(id)) = (&t.opens_doors, &t.cloud_id) {
+        if !matches!(t.doors, crate::knocks::DoorsSource::None) {
+            let model = crate::doors::DoorsModel::new(w.clone(), id.clone(), t.doors.clone());
+            let taf = crate::doors::DoorsTaf {
+                name: t.name.clone(),
+                initial: t.initial.clone(),
+                color: t.color,
+            };
+            let opens = crate::doors::Opens {
+                manages: t.manages,
+                my_email: t.my_email.clone(),
+                focus: focus.clone(),
+                knob: dial_knobs
+                    .clone()
+                    .map(|k| (k, crate::dial::held_faces(&t.held))),
+                ..Default::default()
+            };
+            let once = std::cell::Cell::new(Some((model, taf, opens)));
+            outer.connect_map(move |o| {
+                if let Some((model, taf, opens)) = once.take() {
+                    crate::doors::sheet(model, taf, opens, o);
+                }
+            });
+        }
+    }
     crate::widgets::ground(&outer);
     outer.upcast()
 }
 
 /// The Card tab (`card(_:)`): the Cards as a wallet stack, the front Card's lines, and Revoke.
-fn card_pane(w: &Rc<WordBook>, t: &TafPage) -> gtk::Box {
+fn card_pane(w: &Rc<WordBook>, t: &TafPage, open_coach: &Rc<dyn Fn()>) -> gtk::Box {
+    // `offersReconnect`: signed in, for whoever manages the taf and may use Coach.
+    let reconnect: Option<Rc<dyn Fn()>> =
+        (!t.sample && t.manages && t.may_use_coach).then(|| open_coach.clone());
     let pane = gtk::Box::new(gtk::Orientation::Vertical, 16);
     pane.set_margin_top(12);
     pane.set_margin_bottom(12);
@@ -445,13 +581,14 @@ fn card_pane(w: &Rc<WordBook>, t: &TafPage) -> gtk::Box {
     let (color, issued_by, revoked) = (t.color, t.issued_by.clone(), t.revoked);
     let draw: Rc<RefCell<Option<Redraw>>> = Rc::new(RefCell::new(None));
     *draw.borrow_mut() = Some(Rc::new({
-        let (w, stack_box, lines_box, cards, front, draw) = (
+        let (w, stack_box, lines_box, cards, front, draw, reconnect) = (
             w.clone(),
             stack_box.clone(),
             lines_box.clone(),
             cards.clone(),
             front.clone(),
             draw.clone(),
+            reconnect.clone(),
         );
         move || {
             while let Some(c) = stack_box.first_child() {
@@ -515,7 +652,7 @@ fn card_pane(w: &Rc<WordBook>, t: &TafPage) -> gtk::Box {
                     }
                     lines_box.append(&panel);
                 }
-                card_own_lines(&w, card, &lines_box);
+                card_own_lines(&w, card, &lines_box, reconnect.as_ref());
             }
         }
     }));
@@ -523,22 +660,138 @@ fn card_pane(w: &Rc<WordBook>, t: &TafPage) -> gtk::Box {
     if let Some(f) = f {
         f();
     }
-    // Revoke, for the sample or whoever manages the taf (`manages`, from KIFF's access read):
-    // there, dimmed, until revoking is ported with approvals.
+    // Revoke, for the sample or whoever manages the taf (`manages`, from KIFF's access read). A
+    // view-only session (KIFF's `view`) isn't offered it, on every device alike: the shared line
+    // says where it's done. Otherwise its question, then each Card revoked at KIFF as the
+    // session, unsigned. The sample's is the sample's own, there, dimmed.
     if t.state != TafState::Revoked && (t.sample || t.manages) {
-        let revoke = crate::widgets::outline(&w.line("taf.revoke").unwrap_or_default());
-        revoke.add_css_class("refuse");
-        revoke.set_sensitive(false);
-        pane.append(&revoke);
+        if !t.sample && t.view_only {
+            pane.append(&text(
+                &w.line("taf.revoke_needs_approver").unwrap_or_default(),
+                13,
+                400,
+                &["tafs-soft"],
+            ));
+        } else {
+            let revoke = crate::widgets::outline(&w.line("taf.revoke").unwrap_or_default());
+            revoke.add_css_class("refuse");
+            revoke.set_sensitive(!t.sample);
+            let why = text("", 13, 400, &["tafs-no"]);
+            why.set_visible(false);
+            let (w, name, ids, source, why2) = (
+                w.clone(),
+                t.name.clone(),
+                t.card_ids.clone(),
+                t.setup.clone(),
+                why.clone(),
+            );
+            revoke.connect_clicked(move |b| {
+                ask_revoke(&w, &name, ids.clone(), source.clone(), b, &why2)
+            });
+            pane.append(&revoke);
+            pane.append(&why);
+        }
     }
     pane
 }
 
+/// Revoke's question; its yes revokes each of the taf's Cards at KIFF as the session
+/// (`POST /v1/me/mandates/{id}/revoke`, unsigned), then the button goes. What KIFF refused is said
+/// under it.
+fn ask_revoke(
+    w: &Rc<WordBook>,
+    name: &str,
+    ids: Vec<String>,
+    source: crate::setup_pane::SetupSource,
+    button: &gtk::Button,
+    why: &gtk::Label,
+) {
+    use adw::prelude::*;
+    let l = |k: &str| w.line(k).unwrap_or_default();
+    let ask = adw::AlertDialog::new(
+        Some(
+            &w.get("taf.revoke_title", &[("taf", name)])
+                .unwrap_or_default(),
+        ),
+        Some(&l("taf.revoke_body")),
+    );
+    ask.add_response("cancel", &l("common.cancel"));
+    ask.add_response("revoke", &l("taf.revoke_and_stop"));
+    ask.set_response_appearance("revoke", adw::ResponseAppearance::Destructive);
+    ask.set_default_response(Some("cancel"));
+    ask.set_close_response("cancel");
+    let (w, b, why) = (w.clone(), button.downgrade(), why.downgrade());
+    ask.connect_response(None, move |_, r| {
+        if r != "revoke" {
+            return;
+        }
+        let (w, ids, source, b, why) = (
+            w.clone(),
+            ids.clone(),
+            source.clone(),
+            b.clone(),
+            why.clone(),
+        );
+        gtk::glib::spawn_future_local(async move {
+            let words: WordBook = (*w).clone();
+            let failed = gtk::gio::spawn_blocking(move || -> Option<String> {
+                let crate::setup_pane::SetupSource::Cloud { token, languages } = &source else {
+                    // A screenshot's Cards: nothing is sent.
+                    return None;
+                };
+                for id in &ids {
+                    let call = tafs_core::signed::Unsigned::new(
+                        "POST",
+                        tafs_core::signed::revoke_path(id),
+                        b"{}".to_vec(),
+                    )?;
+                    match crate::kiff::kiff_send(token, languages, &call) {
+                        Ok(a) if (200..300).contains(&a.status) => {}
+                        Ok(a) => {
+                            return Some(
+                                tafs_core::signin::refusal(&a, Some(&words))
+                                    .words(&words)
+                                    .unwrap_or_default(),
+                            )
+                        }
+                        Err(e) => return Some(e.words(&words).unwrap_or_default()),
+                    }
+                }
+                None
+            })
+            .await
+            .unwrap_or(None);
+            match failed {
+                Some(reason) => {
+                    if let Some(why) = why.upgrade() {
+                        why.set_label(
+                            &w.get("card.revoke_failed", &[("why", &reason)])
+                                .unwrap_or(reason),
+                        );
+                        why.set_visible(true);
+                    }
+                }
+                None => {
+                    if let Some(b) = b.upgrade() {
+                        b.set_visible(false);
+                    }
+                }
+            }
+        });
+    });
+    ask.present(Some(button));
+}
+
 /// The front Card's lines in tafs cloud's and KIFF's own words, under its limits (`card(_:)`):
 /// its totals for each item apart; How this is counted, opening each tool's lines; what's
-/// pending, for a Card that counts for real; and why its total has no currency. Connect it again
-/// (Coach) isn't on this computer.
-fn card_own_lines(w: &Rc<WordBook>, card: &tafs_core::cards::FullCard, into: &gtk::Box) {
+/// pending, for a Card that counts for real; and why its total has no currency, with Reconnect it
+/// in Coach (`offersReconnect`).
+fn card_own_lines(
+    w: &Rc<WordBook>,
+    card: &tafs_core::cards::FullCard,
+    into: &gtk::Box,
+    reconnect: Option<&Rc<dyn Fn()>>,
+) {
     let lines = gtk::Box::new(gtk::Orientation::Vertical, 12);
     lines.set_margin_top(16);
     for line in &card.extra.each_item {
@@ -569,8 +822,22 @@ fn card_own_lines(w: &Rc<WordBook>, card: &tafs_core::cards::FullCard, into: &gt
     for line in card.pending_shown() {
         lines.append(&text(line, 13, 400, &["tafs-soft"]));
     }
+    // Its total has no currency because a tool it grants isn't connected any more: KIFF's words,
+    // and for whoever manages the taf and may use Coach, signed in, Coach to connect it again.
     if let Some(words) = &card.extra.unit_words {
-        lines.append(&text(words, 13, 400, &["tafs-soft"]));
+        let v = gtk::Box::new(gtk::Orientation::Vertical, 4);
+        v.append(&text(words, 13, 400, &["tafs-soft"]));
+        if let Some(open) = reconnect {
+            let b =
+                gtk::Button::with_label(&w.line("connect.reconnect_in_coach").unwrap_or_default());
+            b.add_css_class("tafs-link");
+            b.set_halign(gtk::Align::Start);
+            b.set_widget_name("card-reconnect");
+            let open = open.clone();
+            b.connect_clicked(move |_| open());
+            v.append(&b);
+        }
+        lines.append(&v);
     }
     if lines.first_child().is_some() {
         into.append(&lines);
@@ -849,7 +1116,13 @@ impl Units {
     }
 }
 
-fn cloud_activity(w: Rc<WordBook>, id: String, source: ActivitySource, units: Units) -> gtk::Box {
+fn cloud_activity(
+    w: Rc<WordBook>,
+    id: String,
+    source: ActivitySource,
+    units: Units,
+    rows: Rc<RowOpens>,
+) -> gtk::Box {
     use tafs_core::activity::{foot, path, ActivityPage, Foot};
     struct State {
         filter: String,
@@ -990,7 +1263,7 @@ fn cloud_activity(w: Rc<WordBook>, id: String, source: ActivitySource, units: Un
                         root.append(&text(&group.title, 12, 600, &["tafs-dim"]));
                     }
                     for e in &group.entries {
-                        root.append(&source_row(e));
+                        root.append(&activity_row(&w, e, &rows));
                     }
                 }
             }
@@ -1036,6 +1309,77 @@ fn cloud_activity(w: Rc<WordBook>, id: String, source: ActivitySource, units: Un
     redraw();
     load(false);
     root
+}
+
+/// What a row on a tafs cloud taf's Activity opens: its receipt, and its next step's button.
+pub struct RowOpens {
+    /// The taf's key, the Record line's taf.
+    pub taf: String,
+    pub manages: bool,
+    pub may_use_coach: bool,
+    /// Coach on the taf (its words in the box), and Connect apps.
+    pub coach: Rc<dyn Fn()>,
+    pub connect: Rc<dyn Fn()>,
+    /// Where its receipt is read, signed in with KIFF; none for a screenshot's.
+    pub receipt: Option<Rc<crate::receipt_sheet::ReceiptSource>>,
+}
+
+/// `SourceActivityRow` on a taf's Activity: the row opens its receipt (`ReceiptView`), and its next
+/// step is a button for whoever manages the taf (`NextStepRow`): Connect it again opens Connect
+/// apps, Ask Coach opens Coach with its words in the box, nothing sent; anyone else, and a kind
+/// the app doesn't know, reads its words.
+fn activity_row(
+    w: &Rc<WordBook>,
+    e: &tafs_core::activity::ActivityEntry,
+    opens: &Rc<RowOpens>,
+) -> gtk::Box {
+    use tafs_core::activity::{next_action, next_has_button, NextAction};
+    let v = gtk::Box::new(gtk::Orientation::Vertical, 6);
+    let head = source_row(&tafs_core::activity::ActivityEntry {
+        next: None,
+        ..e.clone()
+    });
+    let b = gtk::Button::new();
+    b.set_child(Some(&head));
+    b.add_css_class("tafs-plain");
+    b.update_property(&[gtk::accessible::Property::Description(
+        &w.line("record.shows_receipt").unwrap_or_default(),
+    )]);
+    {
+        let (w, e, opens) = (w.clone(), e.clone(), opens.clone());
+        b.connect_clicked(move |b| {
+            if let Some(entry) = tafs_core::activity::evidence(&w, &e, &opens.taf) {
+                crate::receipt_sheet::present(
+                    w.clone(),
+                    opens.receipt.clone(),
+                    entry,
+                    None,
+                    Rc::new(|_| {}),
+                    b,
+                );
+            }
+        });
+    }
+    v.append(&b);
+    if let Some(next) = &e.next {
+        let action = next_action(next, &format!("{}: {}", e.title, e.detail));
+        if next_has_button(&action, opens.manages, opens.may_use_coach) {
+            let button = crate::widgets::outline(&next.words);
+            let opens = opens.clone();
+            button.connect_clicked(move |_| match &action {
+                NextAction::AskCoach(words) => {
+                    crate::coach::set_draft(words);
+                    (opens.coach)();
+                }
+                NextAction::ConnectApps => (opens.connect)(),
+                NextAction::Line => {}
+            });
+            v.append(&button);
+        } else {
+            v.append(&text(&next.words, 13, 400, &["tafs-soft"]));
+        }
+    }
+    v
 }
 
 /// `SourceActivityRow`: its title and detail, its time and amount at its end, and its next step.
