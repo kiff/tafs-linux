@@ -311,7 +311,9 @@ the iPad's order:
   apps. Under it the workflow, folded: its title and summary, each step (green while it runs) and
   Change the workflow with Coach. A node opens its sheet (`ConnectedAppSheet`): where it stands
   (Sign in again: signed, refused here), what it may do, its workflow, its calls (opening the
-  Activity), other connections, Add actions with Coach, and Remove access, whose question's yes is
+  Activity narrowed to them: tafs cloud's `activity_query` after the filter, as it wrote it, left
+  out unless it's a plain query; "All apps" over the list shows every app's again), other
+  connections, Add actions with Coach, and Remove access, whose question's yes is
   signed at planque and refused here.
 - **What it remembers** (`MemorySummaryPanel`): tafs cloud's line for its notes (15 semibold), its
   latest (14, soft, two lines), and See all.
@@ -440,8 +442,6 @@ nothing shows until they're read, or when they can't be. A 401 signs this comput
   to read them again.
 - **In the trial's sheet:** its guide stays above the chat once messages are in (the iPad shows it
   before the first only), and the chat's box is under it, a scroll down.
-- **On a tafs cloud taf's Activity:** "All apps" for a selection (an app's calls open the
-  Activity unfiltered).
 - **The line under the head:** who it's shared with (`ShareLine`) sits under the tabs.
 - **In its work:** a step it handed you as its card (`YourStepCard`): its line for now.
 - Remove, and folding the head while scrolling.

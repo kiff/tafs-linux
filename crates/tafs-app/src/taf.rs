@@ -117,6 +117,8 @@ pub fn page(
 ) -> gtk::Widget {
     // Coach from a tafs cloud taf's page is Coach on this taf (`improveTaf`, `askCoachAbout`): a
     // new conversation whose first message goes with the taf's context, the words in the box.
+    // How Activity is narrowed to an app's calls, once it's drawn.
+    let selects_apps: Rc<RefCell<Option<Selects>>> = Rc::new(RefCell::new(None));
     let open_coach: Rc<dyn Fn()> = match (&t.cloud_id, t.sample) {
         (Some(id), false) if t.manages && t.may_use_coach => {
             let (id, name) = (id.clone(), t.name.clone());
@@ -299,13 +301,10 @@ pub fn page(
                     _ => None,
                 },
             });
-            body.append(&cloud_activity(
-                w.clone(),
-                id.clone(),
-                t.source.clone(),
-                units_of,
-                rows,
-            ));
+            let (list, select) =
+                cloud_activity(w.clone(), id.clone(), t.source.clone(), units_of, rows);
+            *selects_apps.borrow_mut() = Some(select);
+            body.append(&list);
         }
     }
     if t.sample {
@@ -440,9 +439,13 @@ pub fn page(
         panes.add_named(&setup_scroller, Some("setup"));
         let made = std::cell::Cell::new(false);
         let knobs = dial_knobs.clone();
-        let open_activity: Rc<dyn Fn()> = {
-            let tab = activity_tab.downgrade();
-            Rc::new(move || {
+        // An app's calls: Activity, narrowed to them (`activitySelection`).
+        let open_activity: Rc<dyn Fn(String)> = {
+            let (tab, selects) = (activity_tab.downgrade(), selects_apps.clone());
+            Rc::new(move |query: String| {
+                if let Some(select) = selects.borrow().clone() {
+                    select(query);
+                }
                 if let Some(t) = tab.upgrade() {
                     t.set_active(true);
                 }
@@ -1273,16 +1276,25 @@ impl Units {
     }
 }
 
+/// Narrows Activity to one app's calls: its `activity_query`, or empty for every app.
+type Selects = Rc<dyn Fn(String)>;
+
+/// The Activity list from tafs cloud, and how it's narrowed to one app's calls (an app's
+/// `activity_query`; empty, every app).
 fn cloud_activity(
     w: Rc<WordBook>,
     id: String,
     source: ActivitySource,
     units: Units,
     rows: Rc<RowOpens>,
-) -> gtk::Box {
+) -> (gtk::Box, Rc<dyn Fn(String)>) {
     use tafs_core::activity::{foot, path, ActivityPage, Foot};
     struct State {
         filter: String,
+        /// One app's calls (`selection`), as tafs cloud wrote the query; empty, every app.
+        selection: String,
+        /// Bumped by each new selection: a read for an older one is dropped.
+        generation: u64,
         pages: Vec<ActivityPage>,
         error: Option<String>,
         loading: bool,
@@ -1290,6 +1302,8 @@ fn cloud_activity(
     let root = gtk::Box::new(gtk::Orientation::Vertical, 14);
     let state = Rc::new(RefCell::new(State {
         filter: "all".into(),
+        selection: String::new(),
+        generation: 0,
         pages: vec![],
         error: None,
         loading: false,
@@ -1314,7 +1328,7 @@ fn cloud_activity(
             source.clone(),
         );
         Rc::new(move |more: bool| {
-            let (filter, cursor) = {
+            let (filter, cursor, selection, generation) = {
                 let mut s = state.borrow_mut();
                 if s.loading {
                     return;
@@ -1328,9 +1342,11 @@ fn cloud_activity(
                     } else {
                         None
                     },
+                    s.selection.clone(),
+                    s.generation,
                 )
             };
-            let p = path(&id, &filter, cursor.as_deref());
+            let p = path(&id, &filter, cursor.as_deref(), &selection);
             let source = source.clone();
             let words: WordBook = (*w).clone();
             let (state, redraw) = (state.clone(), redraw.clone());
@@ -1364,6 +1380,9 @@ fn cloud_activity(
                 .unwrap_or_else(|_| Err(String::new()));
                 {
                     let mut s = state.borrow_mut();
+                    if s.generation != generation {
+                        return;
+                    }
                     s.loading = false;
                     match read {
                         Ok(page) => {
@@ -1392,6 +1411,27 @@ fn cloud_activity(
                 root.remove(&c);
             }
             let s = state.borrow();
+            // Narrowed to one app's calls: All apps shows every app's again.
+            if !s.selection.is_empty() {
+                let all =
+                    gtk::Button::with_label(&w.line("taf.activity.all_apps").unwrap_or_default());
+                all.add_css_class("tafs-link");
+                all.set_halign(gtk::Align::Start);
+                all.set_widget_name("taf.activity.all-apps");
+                let (state, load, redraw) = (state.clone(), load.clone(), redraw.clone());
+                all.connect_clicked(move |_| {
+                    {
+                        let mut s = state.borrow_mut();
+                        s.selection.clear();
+                        s.generation += 1;
+                        s.pages.clear();
+                        s.loading = false;
+                    }
+                    redraw();
+                    load(false);
+                });
+                root.append(&all);
+            }
             // tafs cloud's filters, from its first page.
             let filters = gtk::Box::new(gtk::Orientation::Horizontal, 6);
             for choice in s
@@ -1465,7 +1505,22 @@ fn cloud_activity(
     }));
     redraw();
     load(false);
-    root
+    let select: Rc<dyn Fn(String)> = Rc::new(move |selection: String| {
+        {
+            let mut s = state.borrow_mut();
+            if s.selection == selection && !s.pages.is_empty() {
+                return;
+            }
+            s.selection = selection;
+            s.generation += 1;
+            s.pages.clear();
+            // A read under way is for the last selection: it's dropped, and this one read.
+            s.loading = false;
+        }
+        redraw();
+        load(false);
+    });
+    (root, select)
 }
 
 /// What a row on a tafs cloud taf's Activity opens: its receipt, and its next step's button.

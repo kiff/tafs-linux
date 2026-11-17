@@ -54,7 +54,8 @@ pub struct SetupTaf {
     /// Activity (an app's calls).
     pub open_coach: Rc<dyn Fn()>,
     pub open_connect: Rc<dyn Fn()>,
-    pub open_activity: Rc<dyn Fn()>,
+    /// Activity, narrowed to an app's calls (its `activity_query`).
+    pub open_activity: Rc<dyn Fn(String)>,
 }
 
 fn file_answer(path: &std::path::Path) -> Option<Vec<u8>> {
@@ -678,12 +679,16 @@ fn app_sheet(
     calls.set_halign(gtk::Align::Start);
     calls.set_sensitive(!app.actions.is_empty());
     {
-        let (open, d) = (taf.open_activity.clone(), s.dialog.downgrade());
+        let (open, d, query) = (
+            taf.open_activity.clone(),
+            s.dialog.downgrade(),
+            app.stats.activity_query.clone(),
+        );
         calls.connect_clicked(move |_| {
             if let Some(d) = d.upgrade() {
                 d.close();
             }
-            open();
+            open(query.clone());
         });
     }
     stats.append(&calls);
