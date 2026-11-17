@@ -242,6 +242,27 @@ pub fn nodes(apps: &[ConnectedApp]) -> Vec<Node> {
         .collect()
 }
 
+/// `removalPreview`'s path: what goes with the taf, read when Remove is tapped, ending nothing.
+pub fn removal_path(taf: &str) -> String {
+    format!("/v1/tafs/{}/removal", crate::work::segment(taf))
+}
+
+/// `RemovalPreview`: tafs cloud's words, trimmed; none when it sent none, or blank, or another
+/// shape.
+pub fn removal_words(body: &[u8]) -> Option<String> {
+    let v: Value = serde_json::from_slice(body).ok()?;
+    let words = v.get("words")?.as_str()?.trim();
+    (!words.is_empty()).then(|| words.to_string())
+}
+
+/// `AppModel.removeBody`: what always goes, then tafs cloud's words when it sent some.
+pub fn remove_body(body: &str, goes: Option<&str>) -> String {
+    match goes.filter(|g| !g.is_empty()) {
+        Some(g) => format!("{body}\n\n{g}"),
+        None => body.to_string(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -311,5 +332,24 @@ mod tests {
         let n = nodes(&[idle.clone(), again.clone()]);
         assert_eq!(n[0].app.id, "grt_3", "else one to sign in again");
         assert_eq!(nodes(&[idle]).len(), 1);
+    }
+
+    #[test]
+    fn what_goes_with_a_removed_taf() {
+        assert_eq!(removal_path("t/1"), "/v1/tafs/t%2F1/removal");
+        assert_eq!(
+            removal_words(br#"{"words":" Qonto goes with it. "}"#).as_deref(),
+            Some("Qonto goes with it.")
+        );
+        assert_eq!(removal_words(br#"{"words":"  "}"#), None);
+        assert_eq!(removal_words(br#"{"words":3}"#), None);
+        assert_eq!(
+            remove_body("Its Cards are revoked.", None),
+            "Its Cards are revoked."
+        );
+        assert_eq!(
+            remove_body("Its Cards are revoked.", Some("Qonto goes with it.")),
+            "Its Cards are revoked.\n\nQonto goes with it."
+        );
     }
 }

@@ -119,6 +119,12 @@ fn escaped(v: &str) -> String {
     crate::access::escaped(v)
 }
 
+/// `KIFFClient.revoke(cardID:)`'s path: a Card revoked as the session, unsigned (it only takes
+/// authority away).
+pub fn revoke_path(card: &str) -> String {
+    format!("/v1/me/mandates/{}/revoke", escaped(card))
+}
+
 /// An act the iPad signs, which this computer draws up to its signature.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Act {
@@ -156,6 +162,8 @@ pub enum Act {
     /// switch begins (and the Card's confirmation when it brings one). The switch stops the taf
     /// until it's finished, so this computer doesn't begin it.
     MakeLive { taf: String, version: i64 },
+    /// `removeTaf`: Remove for good, the `DELETE` to tafs cloud signed by the approval key.
+    RemoveTaf { taf: String },
 }
 
 impl Act {
@@ -194,6 +202,7 @@ impl Act {
                 ("POST", format!("/v1/grants/{}/approve", escaped(grant)))
             }
             Act::Disconnect { grant } => ("DELETE", format!("/v1/grants/{}", escaped(grant))),
+            Act::RemoveTaf { taf } => ("DELETE", format!("/v1/tafs/{}", escaped(taf))),
             Act::MakeLive { taf, version } => (
                 "POST",
                 format!("/v1/tafs/{}/versions/{version}/switch", escaped(taf)),
@@ -201,10 +210,10 @@ impl Act {
         }
     }
 
-    /// Whether the device checks the person before a tafs cloud call it makes as the session
-    /// (`useVersion`): this computer never begins it.
+    /// Whether the device checks the person, or signs with its approval key, before a tafs
+    /// cloud call (`useVersion`, `removeTaf`): this computer never sends it.
     pub fn at_device(&self) -> bool {
-        matches!(self, Act::MakeLive { .. })
+        matches!(self, Act::MakeLive { .. } | Act::RemoveTaf { .. })
     }
 
     /// Whether the call goes to planque (`PlanqueClient`), which takes every change signed by the
@@ -299,6 +308,7 @@ mod tests {
                 taf: "t1".into(),
                 version: 8,
             },
+            Act::RemoveTaf { taf: "t1".into() },
         ]
     }
 
@@ -312,10 +322,11 @@ mod tests {
                 continue;
             }
             if act.at_device() {
-                // The device's own check comes first; the app never begins the switch.
-                assert_eq!(
-                    (method, path.as_str()),
-                    ("POST", "/v1/tafs/t1/versions/8/switch")
+                // The device signs or checks first; the app never sends it.
+                assert!(path.starts_with("/v1/tafs/t1"), "{act:?}");
+                assert!(
+                    matches!(method, "POST" | "DELETE"),
+                    "{act:?} changes something"
                 );
                 continue;
             }
@@ -349,6 +360,14 @@ mod tests {
                 .line,
             "This device can't approve. Approve on another device signed in to your account."
         );
+    }
+
+    #[test]
+    fn revoking_a_card_is_the_sessions() {
+        // `KIFFClient.revoke(cardID:)`: no signature, as the iPad sends it.
+        let path = revoke_path("card 1");
+        assert_eq!(path, "/v1/me/mandates/card%201/revoke");
+        assert!(Unsigned::new("POST", path, b"{}".to_vec()).is_some());
     }
 
     #[test]

@@ -53,6 +53,10 @@ pub struct TafPage {
     pub opens_setup_screen: Option<crate::starts_when::Screen>,
     /// This person's sign-in email: their own key at a door reads "You", and Email me's line.
     pub my_email: Option<String>,
+    /// KIFF keeps this session view-only (`approval_mode: view`): Revoke's line in its place.
+    pub view_only: bool,
+    /// Its Cards' ids at KIFF, revoked by Revoke.
+    pub card_ids: Vec<String>,
     /// Where Setup's screens read and change its dial (`GET …/knob`), and what they say of it
     /// from Home: no schedule (`worksFromChat`), its next run, paused, and where tafs cloud
     /// delivers its results itself.
@@ -233,7 +237,18 @@ pub fn page(
                 id.clone(),
                 t.work.clone(),
                 t.health.clone(),
-                Rc::new(crate::work_panel::Opens { usage: open_usage }),
+                Rc::new(crate::work_panel::Opens {
+                    usage: open_usage.clone(),
+                    coach: {
+                        let open = open_coach.clone();
+                        Rc::new(move |say: String| {
+                            crate::coach::set_draft(&say);
+                            open();
+                        })
+                    },
+                    manages: t.manages,
+                    may_use_coach: t.may_use_coach,
+                }),
             ));
             // Its runs: when it runs next and Run now, then the runs tafs cloud kept, read again
             // once Run now started one.
@@ -337,7 +352,7 @@ pub fn page(
     scroller.set_vexpand(true);
     let card_scroller = gtk::ScrolledWindow::new();
     card_scroller.set_hscrollbar_policy(gtk::PolicyType::Never);
-    let card = card_pane(&w, t);
+    let card = card_pane(&w, t, &open_coach);
     // `HaltRow(tafID:framed:)`, at the Card's foot as on the iPad.
     if let Some(row) = halt_row {
         row.set_margin_start(16);
@@ -511,7 +526,10 @@ pub fn page(
 }
 
 /// The Card tab (`card(_:)`): the Cards as a wallet stack, the front Card's lines, and Revoke.
-fn card_pane(w: &Rc<WordBook>, t: &TafPage) -> gtk::Box {
+fn card_pane(w: &Rc<WordBook>, t: &TafPage, open_coach: &Rc<dyn Fn()>) -> gtk::Box {
+    // `offersReconnect`: signed in, for whoever manages the taf and may use Coach.
+    let reconnect: Option<Rc<dyn Fn()>> =
+        (!t.sample && t.manages && t.may_use_coach).then(|| open_coach.clone());
     let pane = gtk::Box::new(gtk::Orientation::Vertical, 16);
     pane.set_margin_top(12);
     pane.set_margin_bottom(12);
@@ -532,13 +550,14 @@ fn card_pane(w: &Rc<WordBook>, t: &TafPage) -> gtk::Box {
     let (color, issued_by, revoked) = (t.color, t.issued_by.clone(), t.revoked);
     let draw: Rc<RefCell<Option<Redraw>>> = Rc::new(RefCell::new(None));
     *draw.borrow_mut() = Some(Rc::new({
-        let (w, stack_box, lines_box, cards, front, draw) = (
+        let (w, stack_box, lines_box, cards, front, draw, reconnect) = (
             w.clone(),
             stack_box.clone(),
             lines_box.clone(),
             cards.clone(),
             front.clone(),
             draw.clone(),
+            reconnect.clone(),
         );
         move || {
             while let Some(c) = stack_box.first_child() {
@@ -602,7 +621,7 @@ fn card_pane(w: &Rc<WordBook>, t: &TafPage) -> gtk::Box {
                     }
                     lines_box.append(&panel);
                 }
-                card_own_lines(&w, card, &lines_box);
+                card_own_lines(&w, card, &lines_box, reconnect.as_ref());
             }
         }
     }));
@@ -610,22 +629,138 @@ fn card_pane(w: &Rc<WordBook>, t: &TafPage) -> gtk::Box {
     if let Some(f) = f {
         f();
     }
-    // Revoke, for the sample or whoever manages the taf (`manages`, from KIFF's access read):
-    // there, dimmed, until revoking is ported with approvals.
+    // Revoke, for the sample or whoever manages the taf (`manages`, from KIFF's access read). A
+    // view-only session (KIFF's `view`) isn't offered it, on every device alike: the shared line
+    // says where it's done. Otherwise its question, then each Card revoked at KIFF as the
+    // session, unsigned. The sample's is the sample's own, there, dimmed.
     if t.state != TafState::Revoked && (t.sample || t.manages) {
-        let revoke = crate::widgets::outline(&w.line("taf.revoke").unwrap_or_default());
-        revoke.add_css_class("refuse");
-        revoke.set_sensitive(false);
-        pane.append(&revoke);
+        if !t.sample && t.view_only {
+            pane.append(&text(
+                &w.line("taf.revoke_needs_approver").unwrap_or_default(),
+                13,
+                400,
+                &["tafs-soft"],
+            ));
+        } else {
+            let revoke = crate::widgets::outline(&w.line("taf.revoke").unwrap_or_default());
+            revoke.add_css_class("refuse");
+            revoke.set_sensitive(!t.sample);
+            let why = text("", 13, 400, &["tafs-no"]);
+            why.set_visible(false);
+            let (w, name, ids, source, why2) = (
+                w.clone(),
+                t.name.clone(),
+                t.card_ids.clone(),
+                t.setup.clone(),
+                why.clone(),
+            );
+            revoke.connect_clicked(move |b| {
+                ask_revoke(&w, &name, ids.clone(), source.clone(), b, &why2)
+            });
+            pane.append(&revoke);
+            pane.append(&why);
+        }
     }
     pane
 }
 
+/// Revoke's question; its yes revokes each of the taf's Cards at KIFF as the session
+/// (`POST /v1/me/mandates/{id}/revoke`, unsigned), then the button goes. What KIFF refused is said
+/// under it.
+fn ask_revoke(
+    w: &Rc<WordBook>,
+    name: &str,
+    ids: Vec<String>,
+    source: crate::setup_pane::SetupSource,
+    button: &gtk::Button,
+    why: &gtk::Label,
+) {
+    use adw::prelude::*;
+    let l = |k: &str| w.line(k).unwrap_or_default();
+    let ask = adw::AlertDialog::new(
+        Some(
+            &w.get("taf.revoke_title", &[("taf", name)])
+                .unwrap_or_default(),
+        ),
+        Some(&l("taf.revoke_body")),
+    );
+    ask.add_response("cancel", &l("common.cancel"));
+    ask.add_response("revoke", &l("taf.revoke_and_stop"));
+    ask.set_response_appearance("revoke", adw::ResponseAppearance::Destructive);
+    ask.set_default_response(Some("cancel"));
+    ask.set_close_response("cancel");
+    let (w, b, why) = (w.clone(), button.downgrade(), why.downgrade());
+    ask.connect_response(None, move |_, r| {
+        if r != "revoke" {
+            return;
+        }
+        let (w, ids, source, b, why) = (
+            w.clone(),
+            ids.clone(),
+            source.clone(),
+            b.clone(),
+            why.clone(),
+        );
+        gtk::glib::spawn_future_local(async move {
+            let words: WordBook = (*w).clone();
+            let failed = gtk::gio::spawn_blocking(move || -> Option<String> {
+                let crate::setup_pane::SetupSource::Cloud { token, languages } = &source else {
+                    // A screenshot's Cards: nothing is sent.
+                    return None;
+                };
+                for id in &ids {
+                    let call = tafs_core::signed::Unsigned::new(
+                        "POST",
+                        tafs_core::signed::revoke_path(id),
+                        b"{}".to_vec(),
+                    )?;
+                    match crate::kiff::kiff_send(token, languages, &call) {
+                        Ok(a) if (200..300).contains(&a.status) => {}
+                        Ok(a) => {
+                            return Some(
+                                tafs_core::signin::refusal(&a, Some(&words))
+                                    .words(&words)
+                                    .unwrap_or_default(),
+                            )
+                        }
+                        Err(e) => return Some(e.words(&words).unwrap_or_default()),
+                    }
+                }
+                None
+            })
+            .await
+            .unwrap_or(None);
+            match failed {
+                Some(reason) => {
+                    if let Some(why) = why.upgrade() {
+                        why.set_label(
+                            &w.get("card.revoke_failed", &[("why", &reason)])
+                                .unwrap_or(reason),
+                        );
+                        why.set_visible(true);
+                    }
+                }
+                None => {
+                    if let Some(b) = b.upgrade() {
+                        b.set_visible(false);
+                    }
+                }
+            }
+        });
+    });
+    ask.present(Some(button));
+}
+
 /// The front Card's lines in tafs cloud's and KIFF's own words, under its limits (`card(_:)`):
 /// its totals for each item apart; How this is counted, opening each tool's lines; what's
-/// pending, for a Card that counts for real; and why its total has no currency. Connect it again
-/// (Coach) isn't on this computer.
-fn card_own_lines(w: &Rc<WordBook>, card: &tafs_core::cards::FullCard, into: &gtk::Box) {
+/// pending, for a Card that counts for real; and why its total has no currency, with Reconnect it
+/// in Coach (`offersReconnect`).
+fn card_own_lines(
+    w: &Rc<WordBook>,
+    card: &tafs_core::cards::FullCard,
+    into: &gtk::Box,
+    reconnect: Option<&Rc<dyn Fn()>>,
+) {
     let lines = gtk::Box::new(gtk::Orientation::Vertical, 12);
     lines.set_margin_top(16);
     for line in &card.extra.each_item {
@@ -656,8 +791,22 @@ fn card_own_lines(w: &Rc<WordBook>, card: &tafs_core::cards::FullCard, into: &gt
     for line in card.pending_shown() {
         lines.append(&text(line, 13, 400, &["tafs-soft"]));
     }
+    // Its total has no currency because a tool it grants isn't connected any more: KIFF's words,
+    // and for whoever manages the taf and may use Coach, signed in, Coach to connect it again.
     if let Some(words) = &card.extra.unit_words {
-        lines.append(&text(words, 13, 400, &["tafs-soft"]));
+        let v = gtk::Box::new(gtk::Orientation::Vertical, 4);
+        v.append(&text(words, 13, 400, &["tafs-soft"]));
+        if let Some(open) = reconnect {
+            let b =
+                gtk::Button::with_label(&w.line("connect.reconnect_in_coach").unwrap_or_default());
+            b.add_css_class("tafs-link");
+            b.set_halign(gtk::Align::Start);
+            b.set_widget_name("card-reconnect");
+            let open = open.clone();
+            b.connect_clicked(move |_| open());
+            v.append(&b);
+        }
+        lines.append(&v);
     }
     if lines.first_child().is_some() {
         into.append(&lines);

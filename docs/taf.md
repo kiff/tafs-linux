@@ -160,22 +160,31 @@ CI's `doors` and `doors-door`.
 ## Its work
 
 Above its Activity, after its held calls, a tafs cloud taf's work (`WorkPanel`,
-`crates/tafs-app/src/work_panel.rs`, `tafs-core/src/work.rs`). It's read once as the session
-(`GET /v1/tafs/{id}/work`), and nothing is drawn until it's read, as the iPad's. Under "Its work":
+`crates/tafs-app/src/work_panel.rs`, `tafs-core/src/work.rs`). It's read as the session
+(`GET /v1/tafs/{id}/work`), and again after a change; nothing is drawn until it's read, as the
+iPad's. Under "Its work":
 - **its line** (15, ink), unless its health's first line already says it (`repeats(workLine:)`);
 - **its health** (`HealthLines`): the work's, else Home's. Each line is amber, or red when it's
-  failing. A `credits` fix opens Plan & usage. A `coach` fix draws no button: Coach isn't on this
-  computer, as the iPad's without `mayUseCoach`;
+  failing. A `credits` fix opens Plan & usage. A `coach` fix, for whoever may use Coach and
+  manages the taf, opens Coach with tafs cloud's words in its box, nothing sent;
 - **its oldest waiting case** in tafs cloud's words, amber and semibold once past the promise;
+- **Answer within** (`PromiseRow`), for whoever manages the taf: the promise ("4 hours", "1 day")
+  or Not set, and a menu of Not set and 1, 2, 4, 8, 24, 48 and 168 hours; a choice is
+  `PUT /v1/tafs/{id}/promise {"hours"}` (null clears it) as the session, then the work is read
+  again; "It couldn't be set. …" when it wasn't. "You're told when a case waits longer." under it;
 - **its requests and skipped firings,** newest first. A request's line is amber when it needs
   you, red when it failed, else soft, with what it used ("34 credits") and where its result went
-  under it. A skipped firing is dim: nothing ran, which isn't a failure.
+  under it. A door reply given up on offers **Send again** to whoever manages the taf
+  (`POST …/requests/{run}/deliveries/{place}/send`, unsigned; "Sending again…" while it goes,
+  "It wasn't sent again. …" when it didn't). A skipped firing is dim: nothing ran, which isn't a
+  failure.
 - **What went wrong reading it** in red, in its place.
 
 Read as leniently as the iPad's `TafWork`: a part that isn't one reads as none, and a list with
 one item it can't read reads as empty. The screenshot (`--work
 crates/tafs-app/fixtures/taf-work.json`, synthetic: no contract for it at the pin) is CI's
-`taf-work`.
+`taf-work`, and with `access-manage.json`, Answer within and Send again, `taf-work-manage`; a
+screenshot's changes send nothing.
 
 ## Its runs
 
@@ -221,8 +230,13 @@ On the Card tab, as the iPad's `card(_:)`, all from Home as tafs cloud read it f
   - what of its totals is from calls the tool refused (`pending_text`, the money total's then
     the count's, 13, soft). This shows only for a live, active Card (`countsForReal`), since a
     test Card's totals aren't what the taf may do for real;
-  - why its total has no currency (`unit_words`, 13, soft). Its Connect again opens Coach,
-    which isn't on this computer.
+  - why its total has no currency (`unit_words`, 13, soft), with **Reconnect it in Coach** for
+    whoever manages the taf and may use Coach, signed in (`offersReconnect`), which opens Coach.
+- **Revoke**, for whoever manages the taf: a view-only session (KIFF's `approval_mode: view`)
+  gets "To revoke this Card, use a device that can approve." in its place, as on every device;
+  otherwise its question (Revoke and stop in red), whose yes revokes each of its Cards at KIFF as
+  the session (`POST /v1/me/mandates/{id}/revoke`, unsigned: it takes authority away), then the
+  button goes; KIFF's refusal is said under it. The sample's is there, dimmed.
 - The screenshot (`--home crates/tafs-app/fixtures/home-card-lines.json`, synthetic) is CI's
   `taf-card-lines`.
 
@@ -263,7 +277,10 @@ the iPad's order:
     Cancel). Its yes takes the note away at once and `DELETE`s it at tafs cloud as the session,
     unsigned; a note already gone (404) counts as forgotten. A refusal puts it back, with
     "It wasn't forgotten. {why}".
-- **Remove for good**, for whoever manages it: signed, so it's there, dimmed.
+- **Remove for good**, for whoever manages it: tapped, it reads what goes with the taf
+  (`GET /v1/tafs/{id}/removal`, ending nothing), then asks ("Remove Rae for good?", what always
+  goes and tafs cloud's words, Remove in red). Its yes is signed by the approval key: this
+  computer shows the can't-approve line under the button, and nothing is removed.
 
 `--page taf-setup:<id>` with `--home shared/contracts/home.json` reads the contract's
 `taf-setup.json` beside it (`--setup` another, such as `taf-setup-reconnect.json`), and `--memory
@@ -312,11 +329,10 @@ them over Setup, with `--knob crates/tafs-app/fixtures/taf-knob-setup.json` (syn
 - **The sample's Chat**, there, dimmed. A tafs cloud taf's page opens on its chat ([chat.md](chat.md)).
 - **On the Setup tab:** the sample's Setup (there, dimmed); pulling Starts when or Results go to
   to read them again.
-- **On the Card tab:** Connect again (Coach), the halt row,
-  Versions, Usage; Revoke itself (dimmed).
+- **On the Card tab:** Usage (`TafCreditsView` is Plan & usage's own, not reachable from here yet);
+  Versions (with trials).
 - **Above a tafs cloud taf's Activity:** the next step's buttons (Connect it
   again, Ask Coach), shown as their words for now; a call's receipt; "All apps" for a selection.
 - **The line under the head:** its version and who it's shared with (`headerLine`, `ShareLine`).
-- **In its work:** Answer within (`PromiseRow`, whoever manages the taf), Send again, and a step
-  it handed you as its card (`YourStepCard`): its line for now.
+- **In its work:** a step it handed you as its card (`YourStepCard`): its line for now.
 - **The side column** on a wide window, Remove, and folding the head while scrolling.

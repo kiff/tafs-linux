@@ -328,6 +328,7 @@ link, label link { color: @tafs_amber_text; }
 .tafs-panel.knocks-edge { border-color: alpha(@tafs_amber, 0.45); }
 switch.tafs-ok-switch:checked { background-color: @tafs_ok; }
 button.tafs-app-row { padding: 12px; border-radius: 14px; background-color: @tafs_panel; border: 1px solid @tafs_line; box-shadow: none; }
+menubutton.tafs-plain > button { background: none; background-image: none; border: none; box-shadow: none; padding: 0; }
 button.tafs-outline.tafs-ok { color: @tafs_ok; border-color: alpha(@tafs_ok, 0.5); }
 button.tafs-link.tafs-big-link { font-size: 15px; }
 button.tafs-ring-node { padding: 5px; border-radius: 14px; background-color: @tafs_panel; background-image: none; border: 1px solid @tafs_line; box-shadow: none; }

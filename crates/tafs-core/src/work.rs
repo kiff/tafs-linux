@@ -261,6 +261,44 @@ pub fn panel(work: &Work, home_health: Option<&Health>) -> Panel {
     }
 }
 
+/// `TafWork.promiseChoices`: Answer within's whole hours.
+pub const PROMISE_CHOICES: [i64; 7] = [1, 2, 4, 8, 24, 48, 168];
+
+/// `PromiseRow.label`: whole days as days (24 h is "1 day"), anything else in hours.
+pub fn promise_label(
+    w: &crate::words::WordBook,
+    hours: i64,
+) -> Result<String, crate::words::WordsError> {
+    if hours >= 24 && hours % 24 == 0 {
+        w.count("work.answer_within_days", hours / 24, &[])
+    } else {
+        w.count("work.answer_within_hours", hours, &[])
+    }
+}
+
+/// `PromiseRow.value`: the promise, or Not set.
+pub fn promise_value(
+    w: &crate::words::WordBook,
+    hours: Option<i64>,
+) -> Result<String, crate::words::WordsError> {
+    match hours {
+        Some(h) => promise_label(w, h),
+        None => w.line("work.answer_within_none"),
+    }
+}
+
+/// `setPromise`'s path.
+pub fn promise_path(taf: &str) -> String {
+    format!("/v1/tafs/{}/promise", segment(taf))
+}
+
+/// `setPromise`'s body: the hours, or null to clear it.
+pub fn promise_body(hours: Option<i64>) -> Vec<u8> {
+    serde_json::json!({ "hours": hours })
+        .to_string()
+        .into_bytes()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -342,5 +380,20 @@ mod tests {
         assert_eq!(tone("failed"), Tone::No);
         assert_eq!(tone("done"), Tone::Soft);
         assert_eq!(path("taf/1"), "/v1/tafs/taf%2F1/work");
+    }
+
+    #[test]
+    fn answer_within() {
+        let w =
+            crate::words::WordBook::load(&crate::words::WordBook::default_root(), "en").unwrap();
+        assert_eq!(promise_value(&w, None).unwrap(), "Not set");
+        assert_eq!(promise_label(&w, 1).unwrap(), "1 hour");
+        assert_eq!(promise_label(&w, 8).unwrap(), "8 hours");
+        assert_eq!(promise_label(&w, 24).unwrap(), "1 day");
+        assert_eq!(promise_label(&w, 168).unwrap(), "7 days");
+        assert_eq!(promise_label(&w, 36).unwrap(), "36 hours");
+        assert_eq!(promise_path("t 1"), "/v1/tafs/t%201/promise");
+        assert_eq!(promise_body(Some(24)), br#"{"hours":24}"#);
+        assert_eq!(promise_body(None), br#"{"hours":null}"#);
     }
 }

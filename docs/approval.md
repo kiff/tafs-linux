@@ -46,11 +46,13 @@ that none of them can be made.
 The acts drawn this way: People & groups' changes, signing another device out, and the
 account's time zone (`docs/account.md`); declining a request (`docs/usage.md`); removing a Slack
 door, whose subscription at planque the device signs first, signing a connection in again and
-removing its access, and making a taf's waiting version live, which the device checks before
-tafs cloud's switch begins (`docs/taf.md`). planque's acts
+removing its access, making a taf's waiting version live, which the device checks before
+tafs cloud's switch begins, and removing a taf for good, whose `DELETE` the approval key signs
+(`docs/taf.md`). Revoking a Card isn't signed (it only takes authority away): it really goes, as
+the session, unless KIFF keeps the session view-only. planque's acts
 (`Act::at_planque`) have no route here at all: this computer's only planque call is its grants read.
-Making a version live (`Act::at_device`) is checked by the device before a call it makes as the
-session; this computer never begins it, since the switch stops the taf until it's finished.
+Making a version live and removing a taf (`Act::at_device`) are checked or signed by the device before a call it makes as the
+session; this computer never begins either, since a switch stops the taf until it's finished.
 
 Approving an app event's subscription in Starts when is one the iPad disables itself where the
 device can't approve (`approvalBlocked`): disabled here too.

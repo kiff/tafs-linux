@@ -2,7 +2,7 @@
 //! requests, its own Connect again (signed: drawn up to the signature), its job with Improve in
 //! Coach, Starts when, its connected apps (`ConnectedToolsRing` and `ConnectedAppSheet`),
 //! Results go to, what it remembers (`MemorySummaryPanel`, and `MemoryPanel` behind See all, where
-//! a note is forgotten), and Remove for good, dimmed. tafs cloud's Setup read
+//! a note is forgotten), and Remove for good with its question, drawn up to the signature. tafs cloud's Setup read
 //! (`GET /v1/tafs/{id}/setup`) is made without planque's grants proof, which this computer can't
 //! sign, so tafs cloud sends why it left the connections out. The reads are
 //! `tafs-core/src/setup.rs`; Starts when and Results go to are `starts_when.rs`.
@@ -286,13 +286,84 @@ fn draw(
         memory.append(&all);
         root.append(&memory);
     }
-    // Remove for good, for whoever manages it: signed, so it's there, dimmed.
+    // Remove for good, for whoever manages it: its question opens once tafs cloud has said what
+    // goes with the taf, or hasn't; its yes is signed by the approval key, which this computer
+    // hasn't, so it says so and nothing is removed.
     if taf.manages {
         let remove = outline(&l("setup.remove_for_good"));
         remove.add_css_class("tafs-no");
-        remove.set_sensitive(false);
+        let slot = crate::approval::refusal_slot();
+        let (w, taf, source, slot2) = (w.clone(), taf.clone(), source.clone(), slot.clone());
+        remove.connect_clicked(move |b| {
+            let (w, taf, source, slot, b) = (
+                w.clone(),
+                taf.clone(),
+                source.clone(),
+                slot2.clone(),
+                b.clone(),
+            );
+            glib::spawn_future_local(async move {
+                let goes = removal_words(&source, &taf.id).await;
+                ask_remove(&w, &taf, goes.as_deref(), &slot, &b);
+            });
+        });
         root.append(&remove);
+        root.append(&slot);
     }
+}
+
+/// `removalWords`: tafs cloud's words for what goes with the taf (`GET …/removal`), ending
+/// nothing; none when they can't be read.
+async fn removal_words(source: &SetupSource, id: &str) -> Option<String> {
+    let (source, id) = (source.clone(), id.to_string());
+    gio::spawn_blocking(move || match &source {
+        SetupSource::Cloud { token, languages } => {
+            let a = crate::kiff::cloud(token, languages, &setup::removal_path(&id)).ok()?;
+            (a.status == 200)
+                .then(|| setup::removal_words(&a.body))
+                .flatten()
+        }
+        _ => None,
+    })
+    .await
+    .ok()
+    .flatten()
+}
+
+/// Remove's question: what always goes, then tafs cloud's words for the apps that go with it or
+/// stay; Remove in red, Cancel.
+fn ask_remove(
+    w: &Rc<WordBook>,
+    taf: &Rc<SetupTaf>,
+    goes: Option<&str>,
+    slot: &gtk::Box,
+    parent: &gtk::Button,
+) {
+    let l = |k: &str| w.line(k).unwrap_or_default();
+    let ask = adw::AlertDialog::new(
+        Some(
+            &w.get("taf.remove_title", &[("taf", &taf.name)])
+                .unwrap_or_default(),
+        ),
+        Some(&setup::remove_body(&l("taf.remove_body"), goes)),
+    );
+    ask.add_response("cancel", &l("common.cancel"));
+    ask.add_response("remove", &l("taf.remove.button"));
+    ask.set_response_appearance("remove", adw::ResponseAppearance::Destructive);
+    ask.set_default_response(Some("cancel"));
+    ask.set_close_response("cancel");
+    let (w, id, slot) = (w.clone(), taf.id.clone(), slot.clone());
+    ask.connect_response(None, move |_, r| {
+        if r == "remove" {
+            crate::approval::refuse(
+                &w,
+                tafs_core::sidebar::Mode::Kiff,
+                &tafs_core::signed::Act::RemoveTaf { taf: id.clone() },
+                &slot,
+            );
+        }
+    });
+    ask.present(Some(parent));
 }
 
 /// `PanelLink`: a row that opens one of Setup's screens, its mark, words and caret.

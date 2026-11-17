@@ -1134,6 +1134,8 @@ impl App {
                         opens_doors: None,
                         opens_setup_screen: None,
                         my_email: None,
+                        view_only: false,
+                        card_ids: vec![],
                         knob: starts_when::KnobSource::None,
                         works_from_chat: false,
                         next_run_line: None,
@@ -1266,6 +1268,17 @@ impl App {
                         opens_doors: self.on_doors.clone(),
                         opens_setup_screen: self.on_setup_screen,
                         my_email: c.account.as_ref().and_then(|a| a.email.clone()),
+                        // KIFF's word for how the session approves, else the kept session's.
+                        view_only: match c.account.as_ref().and_then(|a| a.approval_mode.as_deref())
+                        {
+                            Some(word) => ApprovalMode::from_kiff(Some(word)).is_view_only(),
+                            None => self
+                                .kept
+                                .borrow()
+                                .as_ref()
+                                .is_some_and(|k| k.approval_mode.is_view_only()),
+                        },
+                        card_ids: t.card_ids.clone(),
                         source: source.clone(),
                         chat: chat.clone(),
                     },
