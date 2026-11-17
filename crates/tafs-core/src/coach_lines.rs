@@ -290,6 +290,18 @@ pub enum Line {
     },
 }
 
+/// The empty chat of a conversation on a taf (`starts` with `setupImproving`): what it's about, as
+/// a choice (`startSwitch`: a new taf, or this taf, chosen), "Improve {taf}" and what Coach does
+/// with it, and three first messages that send as they are (`improveExamples`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ImproveLines {
+    pub about: String,
+    pub new_taf: String,
+    pub improve: String,
+    pub line: String,
+    pub examples: Vec<String>,
+}
+
 /// Coach's screen.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CoachLines {
@@ -297,6 +309,8 @@ pub struct CoachLines {
     pub plan: Option<PlanLines>,
     /// The empty chat: the question it answers, and what Coach does.
     pub starts: Option<(String, String)>,
+    /// The empty chat of a conversation on a taf, in `starts`' place.
+    pub improve: Option<ImproveLines>,
     pub lines: Vec<Line>,
     /// What ended while the owner was away, in one message.
     pub away: Option<(String, Vec<String>)>,
@@ -1427,7 +1441,7 @@ pub fn conversation_lines(
     mode: Mode,
     now: DateTime<Utc>,
 ) -> Result<CoachLines, WordsError> {
-    lines_while(
+    let mut lines = lines_while(
         w,
         &c.thread,
         listed,
@@ -1442,7 +1456,27 @@ pub fn conversation_lines(
                 errors: &c.draft_errors,
             },
         },
-    )
+    )?;
+    // A conversation on a taf, empty: what it's about, and ways to start on it.
+    if let (Some(i), true) = (&c.improving, lines.starts.is_some()) {
+        let improve = w.get("coach.improve_taf", &[("taf", &i.name)])?;
+        lines.starts = None;
+        lines.improve = Some(ImproveLines {
+            about: w.line("coach.what_conversation_about")?,
+            new_taf: w.line("home.new_taf")?,
+            improve,
+            line: w.get("coach.improve_line", &[("name", &i.name)])?,
+            examples: [
+                "coach.improve.how_is_it_going",
+                "coach.improve.why_refused",
+                "coach.improve.cant_find_work",
+            ]
+            .into_iter()
+            .map(|k| w.line(k))
+            .collect::<Result<_, _>>()?,
+        });
+    }
+    Ok(lines)
 }
 
 /// What the conversation holds here beside the thread: Coach at work or awaited, a message not
@@ -1544,6 +1578,7 @@ fn lines_while(
         } else {
             None
         },
+        improve: None,
         lines: out,
         away: if away.is_empty() {
             None
@@ -1700,6 +1735,33 @@ mod tests {
 
     fn book() -> WordBook {
         WordBook::load(&WordBook::default_root(), "en").unwrap()
+    }
+
+    #[test]
+    fn an_empty_conversation_on_a_taf_says_so_and_offers_first_messages() {
+        let w = book();
+        let mut c = crate::coach_send::Conversation::default();
+        c.improve("taf_1", "Rae");
+        let l = conversation_lines(&w, &c, &[], Mode::Kiff, now()).unwrap();
+        assert_eq!(l.starts, None);
+        let i = l.improve.unwrap();
+        assert_eq!(
+            (i.new_taf.as_str(), i.improve.as_str()),
+            ("New taf", "Improve Rae")
+        );
+        assert!(i.line.contains("what Rae did"));
+        assert_eq!(
+            i.examples,
+            [
+                "How is it going?",
+                "Why was something refused or held?",
+                "It can't find the work it should do"
+            ]
+        );
+        // On no taf: Coach's own empty chat.
+        c.new_chat();
+        let l = conversation_lines(&w, &c, &[], Mode::Kiff, now()).unwrap();
+        assert!(l.improve.is_none() && l.starts.is_some());
     }
 
     #[test]

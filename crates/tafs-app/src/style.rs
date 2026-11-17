@@ -107,6 +107,14 @@ button.tafs-needs-pill { background-color: @tafs_panel; border: 1px solid alpha(
 button.tafs-jump { background-color: @tafs_panel; border: 1px solid @tafs_line; border-radius: 999px;
   min-width: 38px; min-height: 38px; padding: 0; box-shadow: 0 2px 6px alpha(@tafs_ink, 0.12); }
 .tafs-jump-dot { background-color: @tafs_amber; border-radius: 999px; min-width: 10px; min-height: 10px; }
+/* What a conversation on a taf is about (`startSwitch`): a capsule on the panel, edged in the line;
+   its choices 14 semibold in Coach's blue, the chosen one on it in the fill's colour. An
+   improvement's first messages on the panel, corners of 14, edged in the line. */
+.tafs-start-switch { background-color: @tafs_panel; border: 1px solid @tafs_line; border-radius: 999px; padding: 3px; }
+button.tafs-start-choice { background: none; box-shadow: none; border: none; border-radius: 999px; padding: 8px 14px;
+  min-height: 0; color: @tafs_coach; font-size: 14px; font-weight: 600; }
+button.tafs-start-choice.selected { background-color: @tafs_coach; color: @tafs_on_fill; }
+button.tafs-example { background-color: @tafs_panel; border: 1px solid @tafs_line; border-radius: 14px; padding: 12px 14px; box-shadow: none; }
 button.tafs-unreachable-status { padding: 0 2px; min-height: 0; font-size: 12px; font-weight: 600; }
 
 /* Coach: the ink button, the dark ground's colour on it, 44 high, corners of 14. */

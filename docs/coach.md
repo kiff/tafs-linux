@@ -97,7 +97,11 @@ out, as every other read does.
   `POST /v1/tafs/{taf}/improve` with `{"text"}` alone (`improve`: tafs cloud adds the taf's
   context, so it takes no files and the files stay), the dots from the send; then the conversation
   goes on in the chat tafs cloud answered with, as any other. A new conversation, or another
-  reopened, is on no taf.
+  reopened, is on no taf. Empty, it says what it's about as a choice at its top (`startSwitch`: New
+  taf starts a new conversation; "Improve Rae" is chosen), then "Improve Rae" and "Say what should
+  change, or ask how it's going…", and three first messages that send as they are
+  (`improveExamples`: How is it going?, Why was something refused or held?, It can't find the work
+  it should do), in place of board 7 and "Ask anything about your tafs".
 - **The box** keeps what's typed while the app runs (`setupDraft`); signing out clears it. Ctrl+Enter
   sends (the iPad's ⌘↩). A screenshot's conversation (`--coach`) sends nothing: Send, Stop and the
   cards' answers do nothing there.
@@ -245,8 +249,8 @@ For an approval, a sign-in or a drive it gives none, whatever the text, so nothi
 
 ## Not yet
 
-- Setting a chat aside from Needs you; New conversation's choice of a taf to improve
-  (`startSwitch`).
+- Setting a chat aside from Needs you; `startSwitch`'s offer of the taf on screen (`tafOnScreen`):
+  the switch shows only while Coach is on a taf.
 - The microphone and attachments; the recipes on an empty chat.
 - What the iPad reads beside the thread: planque's grant (its words, terms and profile).
 - The live stream (`LiveWork`, revealing, pinning a sent message, a run that failed part-way with

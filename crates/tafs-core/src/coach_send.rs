@@ -691,9 +691,16 @@ pub struct Conversation {
     pub drafts: HashMap<String, crate::drafts::AgentDraft>,
     /// Why KIFF's draft wasn't read, by id, until a read gives it (`setupDraftErrors`).
     pub draft_errors: HashMap<String, String>,
-    /// The taf this new conversation improves, by its id at tafs cloud, until its first message
-    /// has gone (`setupImproving`).
-    pub improving: Option<String>,
+    /// The taf this new conversation improves, until its first message has gone
+    /// (`setupImproving`).
+    pub improving: Option<Improving>,
+}
+
+/// A taf Coach is on (`setupImproving`): its id at tafs cloud, and its name.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct Improving {
+    pub id: String,
+    pub name: String,
 }
 
 impl Conversation {
@@ -1147,11 +1154,14 @@ impl Conversation {
         self.improving = None;
     }
 
-    /// `improveTaf`: a new conversation on the taf `taf` (its id at tafs cloud), whose first
+    /// `improveTaf`: a new conversation on the taf `id` (at tafs cloud) called `name`, whose first
     /// message goes through tafs cloud with the taf's context.
-    pub fn improve(&mut self, taf: &str) {
+    pub fn improve(&mut self, id: &str, name: &str) {
         self.new_chat();
-        self.improving = Some(taf.into());
+        self.improving = Some(Improving {
+            id: id.into(),
+            name: name.into(),
+        });
     }
 
     /// One of Coach's chats reopened (`openSetupChat`): shown alone, and messages go on in it.
@@ -1619,11 +1629,17 @@ mod tests {
     #[test]
     fn an_improvement_first_message_goes_with_the_tafs_context() {
         assert_eq!(improve_path("taf 1"), "/v1/tafs/taf%201/improve");
-        assert_eq!(v(&improve_body("Make it faster")), json!({"text": "Make it faster"}));
+        assert_eq!(
+            v(&improve_body("Make it faster")),
+            json!({"text": "Make it faster"})
+        );
         // The session's, as any message: not one of the device-signed routes.
-        assert!(!crate::signed::signed_at_cloud("POST", &improve_path("taf_1")));
+        assert!(!crate::signed::signed_at_cloud(
+            "POST",
+            &improve_path("taf_1")
+        ));
         let mut c = conversation();
-        c.improve("taf_1");
+        c.improve("taf_1", "Refunds");
         assert!(c.fresh && c.improving.is_some() && !c.is_empty());
         let now = at("2026-10-16T13:00:00Z");
         let Submit::Send(d) = c.submit("Make it faster", now) else {
@@ -1642,7 +1658,7 @@ mod tests {
         assert_eq!(c.chat.as_deref(), Some("sess7"));
         assert!(c.thinking() && !c.sending);
         // Another chat reopened is on no taf.
-        c.improve("taf_1");
+        c.improve("taf_1", "Refunds");
         c.open_chat("sess2");
         assert_eq!(c.improving, None);
     }

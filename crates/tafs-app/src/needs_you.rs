@@ -408,8 +408,8 @@ pub fn card_unit_panel(w: &Rc<WordBook>, ask: &tafs_core::needs_you::CardUnitLin
         b.add_css_class("tafs-link");
         b.set_halign(gtk::Align::Start);
         // `discussCardUnit`: Coach on its taf, its words in the box.
-        let (taf, say) = (ask.taf.clone(), ask.coach_text.clone());
-        b.connect_clicked(move |_| crate::coach_start::improve(&taf, Some(&say)));
+        let (taf, name, say) = (ask.taf.clone(), ask.name.clone(), ask.coach_text.clone());
+        b.connect_clicked(move |_| crate::coach_start::improve(&taf, &name, Some(&say)));
         p.append(&b);
     }
     let slot = crate::approval::refusal_slot();

@@ -741,6 +741,23 @@ impl Page {
         );
     }
 
+    /// One of an improvement's first messages (`improveExamples`): sent as it is, the box left as
+    /// it was (`submitSetup(example)`).
+    fn send_now(self: &Rc<Self>, words: &str) {
+        if matches!(self.source, CoachSource::File { .. }) || self.conv.borrow().sending {
+            return;
+        }
+        let submit = self.conv.borrow_mut().submit(words, chrono::Utc::now());
+        if let Submit::Send(d) = submit {
+            self.follow.set(true);
+            self.draw();
+            let p = self.clone();
+            glib::spawn_future_local(async move {
+                p.deliver(d).await;
+            });
+        }
+    }
+
     /// Send (`send`, `submitSetup`): the words leave the box; a message goes now, or, while Coach
     /// works, to its run. Words that weren't taken go back in the box.
     fn send(self: &Rc<Self>) {
@@ -816,7 +833,7 @@ impl Page {
             self.draw();
             return false;
         }
-        let (path, body) = match &improving {
+        let (path, body) = match improving.as_ref().map(|i| &i.id) {
             Some(taf) => {
                 self.conv.borrow_mut().awaiting = Some(chrono::Utc::now());
                 self.draw();
@@ -1601,6 +1618,56 @@ fn eyebrow_in(s: &str, tone: Tone) -> gtk::Label {
     l
 }
 
+/// The empty chat of a conversation on a taf: what it's about as a choice (`startSwitch`: a new
+/// taf starts a new conversation; this taf is chosen), "Improve {taf}" and its line, and three
+/// first messages, each sent as it is.
+fn improving(page: &Rc<Page>, i: &tafs_core::coach_lines::ImproveLines) -> gtk::Widget {
+    let v = gtk::Box::new(gtk::Orientation::Vertical, 12);
+    v.set_margin_top(16);
+    v.set_margin_bottom(16);
+    let switch = gtk::Box::new(gtk::Orientation::Horizontal, 0);
+    switch.add_css_class("tafs-start-switch");
+    switch.set_halign(gtk::Align::Start);
+    switch.update_property(&[gtk::accessible::Property::Label(&i.about)]);
+    let new_taf = gtk::Button::with_label(&i.new_taf);
+    new_taf.add_css_class("tafs-start-choice");
+    new_taf.set_widget_name("coach.start.new-taf");
+    {
+        let p = Rc::downgrade(page);
+        new_taf.connect_clicked(move |_| {
+            if let Some(p) = p.upgrade() {
+                p.new_conversation();
+            }
+        });
+    }
+    switch.append(&new_taf);
+    let this = gtk::Button::with_label(&i.improve);
+    this.add_css_class("tafs-start-choice");
+    this.add_css_class("selected");
+    switch.append(&this);
+    v.append(&switch);
+    let title = text(&i.improve, 26, 700, &["tafs-ink"]);
+    title.set_accessible_role(gtk::AccessibleRole::Heading);
+    v.append(&title);
+    v.append(&text(&i.line, 15, 400, &["tafs-soft"]));
+    let busy = page.conv.borrow().sending;
+    for example in &i.examples {
+        let b = gtk::Button::new();
+        b.add_css_class("tafs-example");
+        let l = text(example, 15, 400, &["tafs-ink"]);
+        b.set_child(Some(&l));
+        b.set_sensitive(!busy);
+        let (p, words) = (Rc::downgrade(page), example.clone());
+        b.connect_clicked(move |_| {
+            if let Some(p) = p.upgrade() {
+                p.send_now(&words);
+            }
+        });
+        v.append(&b);
+    }
+    v.upcast()
+}
+
 fn draw_thread(page: &Rc<Page>, lines: &CoachLines, drawn: &Drawn) {
     let column = &page.column;
     if page.no_coach.get() {
@@ -1617,6 +1684,9 @@ fn draw_thread(page: &Rc<Page>, lines: &CoachLines, drawn: &Drawn) {
         v.append(&text(title, 26, 700, &["tafs-ink"]));
         v.append(&text(line, 15, 400, &["tafs-soft"]));
         column.append(&v);
+    }
+    if let Some(i) = &lines.improve {
+        column.append(&improving(page, i));
     }
     for line in &lines.lines {
         column.append(&match line {

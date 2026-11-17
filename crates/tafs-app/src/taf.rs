@@ -119,8 +119,8 @@ pub fn page(
     // new conversation whose first message goes with the taf's context, the words in the box.
     let open_coach: Rc<dyn Fn()> = match (&t.cloud_id, t.sample) {
         (Some(id), false) => {
-            let id = id.clone();
-            Rc::new(move || crate::coach_start::improve(&id, None))
+            let (id, name) = (id.clone(), t.name.clone());
+            Rc::new(move || crate::coach_start::improve(&id, &name, None))
         }
         _ => open_coach,
     };
