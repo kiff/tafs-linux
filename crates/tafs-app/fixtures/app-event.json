@@ -1,0 +1,1 @@
+{"id":"trg_event_1","kind":"app_event","label":"Support inbox","words":"Listen for new tickets in queue one","on":false,"ok":"approve","approval":{"state":"needed","grant":"g_9","event":"NEW_TICKET","config":{"queue":"one","include_archived":false,"filters":{"tags":["paid","urgent"],"minimum":12.5}}}}
