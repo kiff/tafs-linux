@@ -154,7 +154,7 @@ building those two from source on 22.04, or shipping a Flatpak.
 **On a clean Ubuntu 24.04** (`tools/check-appimage.sh`, in an `ubuntu:24.04` container): the
 container has what every Ubuntu 24.04 desktop has and the AppImage counts on, since linuxdeploy
 leaves those base libraries out on purpose (fribidi, HarfBuzz, fontconfig, FreeType, GL/EGL/GL ES, X11,
-xkbcommon, the Wayland client, GL ES), plus a virtual display (`xvfb`) and one font. It never has GTK,
+xkbcommon, the Wayland client), plus a virtual display (`xvfb`) and one font. It never has GTK,
 libadwaita or a MIME database (`shared-mime-info`): the check fails if one is installed. It then
 fails on:
 - a library the app finds in neither the AppImage nor that base (a bare container without the
