@@ -8,8 +8,9 @@ pub const MIN: (i32, i32) = (900, 600);
 const OF_HEIGHT: f64 = 0.85;
 const OF_WIDTH: f64 = 0.9;
 
-/// The window's first size on a screen of `width`×`height` (its work area, in the desktop's
-/// pixels): 4:3, 85% of the screen's height, narrower when the screen is narrower than that, and
+/// The window's first size on a screen of `width`×`height` (the monitor's whole size, in the
+/// desktop's pixels: GTK 4 gives no work area, so a panel's height is inside the 15% left over):
+/// 4:3, 85% of the screen's height, narrower when the screen is narrower than that, and
 /// never under the minimum (a screen smaller than it gets the minimum).
 pub fn first_size(width: i32, height: i32) -> (i32, i32) {
     let (w, h) = (f64::from(width), f64::from(height));
