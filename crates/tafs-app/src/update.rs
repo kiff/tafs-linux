@@ -33,6 +33,11 @@ pub fn line(w: &WordBook) -> gtk::Button {
     let label = text(&words, 12, 600, &["tafs-amber-text"]);
     label.set_hexpand(true);
     h.append(&label);
+    // The words don't say "open", so the line looks like what it is: a way somewhere.
+    let chevron = symbol("go-next-symbolic", 13);
+    chevron.add_css_class("tafs-amber-text");
+    chevron.set_valign(gtk::Align::Center);
+    h.append(&chevron);
     b.set_child(Some(&h));
     b.update_property(&[gtk::accessible::Property::Label(&words)]);
     b.connect_clicked(|b| {

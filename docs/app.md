@@ -131,7 +131,8 @@ is out (`tafs_core::update`, `src/update.rs`).
   isn't a version.
 - **What it shows:** when that release is newer than this app (by number: 1.10.0 is after 1.9.3),
   one line at the sidebar's foot, above Coach, "A new version of tafs is out." (`update.available`,
-  the phones' words, in the 8 languages). It opens the release's page in the browser: only a
+  the phones' words, in the 8 languages), with a chevron, since the words don't say "open". It
+  opens the release's page in the browser: only a
   `github.com/kiff/tafs-linux/releases/tag/…` page, else the releases page.
 - **What it doesn't do:** download, replace or run anything. Nothing runs in the background
   between checks.
