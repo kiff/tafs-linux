@@ -6,6 +6,9 @@
     <file alias="icons/scalable/actions/tafs-stack-symbolic.svg">icons/tafs-stack-symbolic.svg</file>
     <file alias="icons/scalable/actions/tafs-hand-raised-symbolic.svg">icons/tafs-hand-raised-symbolic.svg</file>
     <file alias="icons/scalable/actions/tafs-arrow-up-symbolic.svg">icons/tafs-arrow-up-symbolic.svg</file>
+    <file alias="icons/scalable/actions/tafs-down-circle-fill-symbolic.svg">icons/tafs-down-circle-fill-symbolic.svg</file>
+    <file alias="icons/scalable/actions/tafs-minus-circle-fill-symbolic.svg">icons/tafs-minus-circle-fill-symbolic.svg</file>
+    <file alias="icons/scalable/actions/tafs-check-circle-fill-symbolic.svg">icons/tafs-check-circle-fill-symbolic.svg</file>
     <file alias="icons/scalable/actions/tafs-hand-raised-fill-symbolic.svg">icons/tafs-hand-raised-fill-symbolic.svg</file>
     <file alias="icons/scalable/actions/tafs-list-symbolic.svg">icons/tafs-list-symbolic.svg</file>
     <file alias="icons/scalable/actions/tafs-calendar-symbolic.svg">icons/tafs-calendar-symbolic.svg</file>

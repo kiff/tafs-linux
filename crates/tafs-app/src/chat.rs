@@ -519,7 +519,7 @@ pub fn work_summary(work: &WorkLines) -> gtk::Box {
     b.set_halign(gtk::Align::Start);
     let h = gtk::Box::new(gtk::Orientation::Horizontal, 4);
     h.append(&text(&work.summary, 13, 400, &["tafs-dim"]));
-    let chevron = symbol("pan-end-symbolic", 11);
+    let chevron = symbol("go-next-symbolic", 11);
     chevron.add_css_class("tafs-dim");
     h.append(&chevron);
     b.set_child(Some(&h));
@@ -536,9 +536,9 @@ pub fn work_summary(work: &WorkLines) -> gtk::Box {
         let open = !steps.is_visible();
         steps.set_visible(open);
         chevron.set_icon_name(Some(if open {
-            "pan-down-symbolic"
+            "go-down-symbolic"
         } else {
-            "pan-end-symbolic"
+            "go-next-symbolic"
         }));
         b.update_property(&[gtk::accessible::Property::Description(if open {
             &hides
@@ -705,7 +705,7 @@ impl Jump {
         pill_words.set_ellipsize(gtk::pango::EllipsizeMode::End);
         pill_words.set_hexpand(true);
         row.append(&pill_words);
-        let up = symbol("pan-up-symbolic", 13);
+        let up = symbol("go-up-symbolic", 13);
         up.add_css_class("tafs-dim");
         row.append(&up);
         pill.set_child(Some(&row));
