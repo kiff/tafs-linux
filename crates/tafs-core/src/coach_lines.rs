@@ -6,6 +6,8 @@
 //! sign-in says that it can't approve here (`ApprovalGate`), and the other cards' answers are
 //! drawn dimmed.
 
+use std::collections::HashMap;
+
 use chrono::{DateTime, Utc};
 
 use crate::approval::{self, Gate, NotReady};
@@ -13,6 +15,7 @@ use crate::coach::{
     vendor_words, Answer, ChatMessage, Component, From, HandOver, Improvement, Item, Kind,
     MessageKind, SetupThread, ShownComponent, Work,
 };
+use crate::drafts::AgentDraft;
 use crate::sidebar::Mode;
 use crate::words::{WordBook, WordsError};
 
@@ -132,6 +135,46 @@ pub struct ApprovalLines {
     pub failed: Option<String>,
     /// Why this computer can't approve, in the buttons' place.
     pub gate: Option<NotReady>,
+    /// KIFF's draft of the taf's Card, as far as it's read.
+    pub draft: Option<DraftShown>,
+    /// What was approved, under the folded line: the signed Card's lines, as KIFF has them.
+    pub signed_lines: Vec<String>,
+}
+
+/// The taf's Card on an approval (`SetupApproval`): KIFF's draft as it reads, or why it isn't
+/// drawn yet.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DraftShown {
+    /// The Card's lines under its title, or, as the one approved next, under tafs cloud's words
+    /// for it and dimmed.
+    Card {
+        title: Option<String>,
+        next_words: Option<String>,
+        lines: Vec<String>,
+    },
+    /// KIFF wouldn't give it: its reason, and Try again, which reads draft `id` again.
+    NotRead {
+        id: String,
+        why: String,
+        try_again: String,
+    },
+    /// Not read yet.
+    Reading(String),
+}
+
+/// KIFF's drafts as this computer read them, and why one wasn't (`setupDrafts`,
+/// `setupDraftErrors`).
+#[derive(Clone, Copy)]
+pub struct Drafts<'a> {
+    pub read: &'a HashMap<String, AgentDraft>,
+    pub errors: &'a HashMap<String, String>,
+}
+
+impl<'a> Drafts<'a> {
+    /// The draft a card names, as read.
+    pub fn of(&self, c: &Component) -> Option<&'a AgentDraft> {
+        c.draft.as_deref().and_then(|d| self.read.get(d))
+    }
 }
 
 /// A vendor's sign-in (`SetupComponentView.signIn`), read only.
@@ -727,8 +770,13 @@ fn approval_lines(
     thread: &SetupThread,
     c: &Component,
     mode: Mode,
+    drafts: Drafts,
 ) -> Result<ApprovalLines, WordsError> {
     let state = card_state(thread, c);
+    let draft = drafts.of(c);
+    // The draft whose Card this card's approval signed: KIFF took the signature, and it holds
+    // tools (`signedCard`).
+    let signed_card = draft.filter(|d| d.signed() && d.holds_tools());
     let replaced = thread.replaced(&c.id);
     let answer = thread.answer_to(&c.id);
     let title = nonblank(c.title.as_deref());
@@ -754,6 +802,16 @@ fn approval_lines(
         })
     } else if matches!(state, CardState::Done | CardState::Declined) {
         let declined = state == CardState::Declined;
+        // A Card that was signed is named first, before Coach's title for the card.
+        let signed = match signed_card {
+            Some(d) if !declined => Some(d.card_title(w)?),
+            _ => None,
+        };
+        // An approval with the taf's Card is the Card's, not the tool's again.
+        let card = match draft.filter(|d| d.holds_tools()) {
+            Some(d) => Some(d.card_title(w)?),
+            None => None,
+        };
         let text = if !declined
             && answer
                 .as_ref()
@@ -762,9 +820,20 @@ fn approval_lines(
             format!(
                 "{} · {}",
                 w.line("coach.already_approved")?,
-                title.clone().unwrap_or(vendor.clone())
+                signed.clone().or(title.clone()).unwrap_or(vendor.clone())
             )
+        } else if let Some(t) = &signed {
+            w.get("coach.answer.approved_title", &[("title", t)])?
         } else if let Some(t) = &title {
+            w.get(
+                if declined {
+                    "coach.answer.declined_title"
+                } else {
+                    "coach.answer.approved_title"
+                },
+                &[("title", t)],
+            )?
+        } else if let Some(t) = &card {
             w.get(
                 if declined {
                     "coach.answer.declined_title"
@@ -821,7 +890,36 @@ fn approval_lines(
         _ => None,
     };
     let asks = !replaced && matches!(state, CardState::NeedsYou | CardState::Failed(_));
+    // The taf's Card as the approval signs it, or, by tafs cloud's mark, as the one approved
+    // next: under its words and dimmed. Marked next with no words, it isn't drawn. A draft not
+    // read yet says so, never a blank: KIFF's reason with Try again when it wouldn't give it.
+    let next = c.signs.as_ref().is_some_and(|s| s.card_next());
+    let next_words = c.signs.as_ref().and_then(|s| s.words.clone());
+    let draft_shown = match (draft, &c.draft) {
+        (Some(d), _) if d.cards.is_some() && !(next && next_words.is_none()) => {
+            Some(DraftShown::Card {
+                title: if next { None } else { Some(d.card_title(w)?) },
+                next_words: if next { next_words } else { None },
+                lines: d.lines(w)?,
+            })
+        }
+        (None, Some(id)) if !replaced => Some(match drafts.errors.get(id) {
+            Some(why) => DraftShown::NotRead {
+                id: id.clone(),
+                why: w.get("coach.card_draft_not_read", &[("why", why)])?,
+                try_again: w.line("common.try_again")?,
+            },
+            None => DraftShown::Reading(w.line("coach.reading_kiff_words")?),
+        }),
+        _ => None,
+    };
+    let signed_lines = match (&state, signed_card) {
+        (CardState::Done, Some(d)) => d.lines(w)?,
+        _ => vec![],
+    };
     Ok(ApprovalLines {
+        draft: draft_shown,
+        signed_lines,
         fold: if folded.is_some() {
             Some(w.line("coach.plan.fold_short")?)
         } else {
@@ -1035,6 +1133,7 @@ fn card(
     shown: &ShownComponent,
     listed: &[Listed],
     mode: Mode,
+    drafts: Drafts,
 ) -> Result<Option<Card>, WordsError> {
     let c = &shown.component;
     Ok(Some(match c.kind {
@@ -1135,7 +1234,7 @@ fn card(
                 },
             }
         }
-        Kind::Approval => Card::Approval(approval_lines(w, thread, c, mode)?),
+        Kind::Approval => Card::Approval(approval_lines(w, thread, c, mode, drafts)?),
         Kind::SignIn => sign_in(w, thread, c, mode)?,
         Kind::Result => result(w, thread, shown, listed)?,
         Kind::Drive => {
@@ -1203,6 +1302,10 @@ pub fn lines(
             thinking: thread.working.is_some(),
             unsent: false,
             drawn: &[],
+            drafts: Drafts {
+                read: &HashMap::new(),
+                errors: &HashMap::new(),
+            },
         },
     )
 }
@@ -1226,6 +1329,10 @@ pub fn conversation_lines(
             thinking: c.thinking(),
             unsent: !c.unsent.is_empty(),
             drawn: &c.drawn,
+            drafts: Drafts {
+                read: &c.drafts,
+                errors: &c.draft_errors,
+            },
         },
     )
 }
@@ -1236,6 +1343,7 @@ struct Here<'a> {
     thinking: bool,
     unsent: bool,
     drawn: &'a [crate::coach::Entry],
+    drafts: Drafts<'a>,
 }
 
 fn lines_while(
@@ -1250,6 +1358,7 @@ fn lines_while(
         thinking,
         unsent,
         drawn,
+        drafts,
     } = here;
     // An answer to a card the thread shows reads once, as the card's outcome: no bubble repeats
     // it. One that didn't go through keeps its bubble, which says so.
@@ -1285,7 +1394,7 @@ fn lines_while(
         match item {
             Item::Message(m) => out.push(message(w, thread, m)?),
             Item::Component(c) => {
-                if let Some(card) = card(w, thread, c, listed, mode)? {
+                if let Some(card) = card(w, thread, c, listed, mode, drafts)? {
                     out.push(Line::Card {
                         card_ref: c.card_ref(),
                         card,
@@ -1503,6 +1612,134 @@ mod tests {
         DateTime::parse_from_rfc3339("2026-10-16T13:00:00Z")
             .unwrap()
             .with_timezone(&Utc)
+    }
+
+    /// A thread with one approval naming KIFF's draft `drf_s1`, answered with `answer` or waiting.
+    fn approval_thread(answer: Option<&str>) -> crate::coach_send::Conversation {
+        let mut card = json!({
+            "at": "2026-10-16T12:00:25.000Z", "session": "sess1", "run": "run2", "seq": 6,
+            "component": {"type": "approval", "id": "card", "title": "Refunds' Card",
+                          "text": "Approve the Card Refunds works under.", "draft": "drf_s1",
+                          "waits": "owner"},
+            "key": "sess1#card"
+        });
+        if let Some(a) = answer {
+            card["answer"] =
+                json!({"state": "answered", "words": a, "at": "2026-10-16T12:00:40.000Z"});
+        }
+        let mut c = crate::coach_send::Conversation::default();
+        c.took(read(&json!({"messages": [], "components": [card]})), now());
+        c
+    }
+
+    fn approval_of(c: &crate::coach_send::Conversation) -> ApprovalLines {
+        let l = conversation_lines(&book(), c, &[], Mode::Kiff, now()).unwrap();
+        l.lines
+            .into_iter()
+            .find_map(|l| match l {
+                Line::Card {
+                    card: Card::Approval(a),
+                    ..
+                } => Some(a),
+                _ => None,
+            })
+            .unwrap()
+    }
+
+    fn draft(status: &str) -> AgentDraft {
+        AgentDraft::read(
+            json!({"id": "drf_s1", "agent_id": "refunds-x", "status": status, "version": "v1",
+                   "label": "Refunds", "cards": [{"lines": ["Refund a payment: up to €5 each"]}]})
+            .to_string()
+            .as_bytes(),
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn an_approvals_draft_is_read_said_or_drawn() {
+        let mut c = approval_thread(None);
+        assert_eq!(c.drafts_to_read(), ["drf_s1"]);
+        // Not read yet: said, never a blank.
+        assert_eq!(
+            approval_of(&c).draft,
+            Some(DraftShown::Reading(
+                "Reading KIFF's words for this connection…".into()
+            ))
+        );
+        // KIFF wouldn't give it: its reason, with Try again.
+        c.took_draft("drf_s1", Err("Not found.".into()));
+        assert_eq!(
+            approval_of(&c).draft,
+            Some(DraftShown::NotRead {
+                id: "drf_s1".into(),
+                why: "KIFF's draft of this Card couldn't be read. Not found.".into(),
+                try_again: "Try again".into(),
+            })
+        );
+        // Read: its title and KIFF's lines, and the error gone.
+        c.took_draft("drf_s1", Ok(draft("draft")));
+        assert!(c.draft_errors.is_empty());
+        let a = approval_of(&c);
+        assert_eq!(
+            a.draft,
+            Some(DraftShown::Card {
+                title: Some("Refunds' Card".into()),
+                next_words: None,
+                lines: vec!["Refund a payment: up to €5 each".into()],
+            })
+        );
+        assert!(a.gate.is_some(), "Approve stays the phone's");
+        // A draft read before stays drawn when a later read fails.
+        c.took_draft("drf_s1", Err("Offline.".into()));
+        assert!(matches!(
+            approval_of(&c).draft,
+            Some(DraftShown::Card { .. })
+        ));
+        // Confirmed, it isn't read again.
+        c.took_draft("drf_s1", Ok(draft("confirmed")));
+        assert!(c.drafts_to_read().is_empty());
+    }
+
+    #[test]
+    fn an_approved_card_names_the_card_it_signed() {
+        let mut c = approval_thread(Some("approved"));
+        // Coach's title for the card, while the draft isn't read.
+        let a = approval_of(&c);
+        assert_eq!(a.folded.unwrap().text, "Approved · Refunds' Card");
+        assert!(a.signed_lines.is_empty());
+        c.took_draft("drf_s1", Ok(draft("claimed")));
+        let a = approval_of(&c);
+        assert_eq!(a.folded.unwrap().text, "Approved · Refunds' Card");
+        assert_eq!(a.signed_lines, ["Refund a payment: up to €5 each"]);
+        // Not signed yet at KIFF: no lines under the line.
+        c.took_draft("drf_s1", Ok(draft("draft")));
+        assert!(approval_of(&c).signed_lines.is_empty());
+    }
+
+    #[test]
+    fn a_card_marked_next_draws_under_tafs_clouds_words() {
+        let mut c = approval_thread(None);
+        let mut t = c.thread.clone();
+        t.components[0].component.signs = Some(crate::coach::Signs {
+            card: Some(false),
+            words: Some("Next, you approve Refunds' Card.".into()),
+            takes: None,
+        });
+        c.took(t.clone(), now());
+        c.took_draft("drf_s1", Ok(draft("draft")));
+        assert_eq!(
+            approval_of(&c).draft,
+            Some(DraftShown::Card {
+                title: None,
+                next_words: Some("Next, you approve Refunds' Card.".into()),
+                lines: vec!["Refund a payment: up to €5 each".into()],
+            })
+        );
+        // Marked next with no words, it isn't drawn.
+        t.components[0].component.signs.as_mut().unwrap().words = None;
+        c.took(t, now());
+        assert_eq!(approval_of(&c).draft, None);
     }
 
     #[test]

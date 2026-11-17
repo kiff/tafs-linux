@@ -26,6 +26,12 @@ In the iPad's order (`loadSetup`, `loadSetupThread`), at tafs cloud as the sessi
    `coach-conversation.json`) with the proof in `Planque-Device-Signature`. `?can=` goes only
    with a proof and steps this device signs beyond connecting and cards; this computer signs none,
    so it is never sent.
+5. **KIFF's drafts** (`readCardDraft`): after each read, every draft an approval or a sign-in
+   names that isn't read as confirmed, `GET /v1/me/agent-drafts/{id}` at KIFF as the session, an
+   unsigned read (`tafs-core/src/drafts.rs` › `draft_read`; confirming a draft is signed, on the
+   phone). It's decoded as `AgentDraft` (as strict as the iPad's synthesized decoder, an unknown
+   field left alone). A read KIFF refuses keeps KIFF's reason for the card (`setupDraftErrors`),
+   and a draft read before stays drawn.
 
 The answer is decoded as `setupThread(decoding:)`: the messages strictly (one the app can't read
 fails the read, and the screen says "The conversation couldn't be loaded: …"); each card, coach
@@ -138,10 +144,16 @@ iPad does, and tafs cloud marks no card. The token, the key and the signature ar
   card away ("Show them again"); an approval; a sign-in; a result (set up, setting up, wasn't set up, a plan needed with
   Choose a plan, or the button that opens the taf once it's on the list; an improvement's new
   version); a drive's ask; a dial card's title. An answered card folds to one line
-  (`OutcomeLine`); an approval's opens again on a click, and Fold puts it back.
+  (`OutcomeLine`); an approval's opens again on a click, and Fold puts it back. An approval whose
+  Card KIFF took the signature for (`signed`: confirmed or claimed) names that Card on its line,
+  with the Card's lines under it.
 - **Approvals and sign-ins:** the eyebrow in the card's state, the card's words (tafs cloud's
   line when the connection is already done, else Coach's title and words for it, since this
-  computer reads no grant from planque), tafs cloud's line for a Card approved next, then
+  computer reads no grant from planque), the taf's Card as KIFF drafted it (its title, or tafs
+  cloud's words when it's the one approved next, then its lines in monospace: KIFF's own, else
+  `DraftCard.lines` in the app's words, two grants that read alike each adding their action),
+  or, while it isn't read, "Reading KIFF's words…", or KIFF's reason with Try again, which reads
+  it again; tafs cloud's line for a Card approved next on a card with no draft, then
   **tafs cloud's `wider.words`** in the amber (14 medium, as `WiderLine`), above where the buttons
   go, then why this computer can't approve (`ApprovalGate`'s line) in the buttons' place.
 - **After the thread:** "While you were away" and how the tasks Coach handed out went, the dots
@@ -162,8 +174,7 @@ For an approval, a sign-in or a drive it gives none, whatever the text, so nothi
   (`startSwitch`, `improveTaf`).
 - The microphone and attachments; the recipes on an empty chat; Copy and Delete on a message not
   sent (the iPad's context menu); an improvement's first message (`improve`).
-- What the iPad reads beside the thread: planque's grant (its words, terms and profile) and KIFF's
-  draft of a Card on an approval.
+- What the iPad reads beside the thread: planque's grant (its words, terms and profile).
 - The live stream (`LiveWork`, revealing, pinning a sent message, a run that failed part-way with
   Retry), the Needs you bar and ↓, landing on the waiting card (it lands at the latest), New
   Coach's tools row, "Taking shape"
@@ -182,4 +193,7 @@ questions card waiting, a message its run never read as Not sent, and one tafs c
 `coach-empty` (`crates/tafs-app/fixtures/coach-empty.json` with no taf: board 7 over the empty
 chat), `coach-start` (`shared/contracts/setup-start.json`: no Coach yet, board 9) and
 `coach-chats` (`--coach-chats shared/contracts/coach-chats.json`: Previous conversations open over
-the contract's conversation).
+the contract's conversation). `--coach-drafts <answers.json>` gives KIFF's answers to the drafts
+by id (`{"status", "answer"}`), never read: `coach-draft`
+(`crates/tafs-app/fixtures/coach-card.json` with `coach-drafts.json`: an approval with its Card
+read) and `coach-draft-refused` (`coach-drafts-refused.json`: KIFF's refusal, with Try again).

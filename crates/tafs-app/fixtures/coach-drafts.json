@@ -1,0 +1,48 @@
+{
+  "drf_refunds": {
+    "status": 200,
+    "answer": {
+      "id": "drf_refunds",
+      "agent_id": "refunds-acme",
+      "status": "draft",
+      "version": "v1",
+      "label": "Refunds",
+      "cards": [
+        {
+          "grants": [
+            {
+              "action": "stripe__create_refund",
+              "title": "Refund a payment",
+              "per_action_max": [
+                {
+                  "quantity": "sum(amount)",
+                  "max": 5000,
+                  "unit": "EUR",
+                  "scale": 2
+                }
+              ]
+            },
+            {
+              "action": "stripe__list_charges",
+              "title": "Read payments"
+            }
+          ],
+          "aggregates": [
+            {
+              "quantity": "sum(amount)",
+              "limit": 50000,
+              "window": "calendar_day",
+              "unit": "EUR",
+              "scale": 2
+            },
+            {
+              "quantity": "count",
+              "limit": 20,
+              "window": "calendar_day"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

@@ -16,8 +16,8 @@ use adw::prelude::*;
 use gtk::glib;
 use tafs_core::coach::{self, Kind, SetupThread};
 use tafs_core::coach_lines::{
-    ApprovalLines, Card, CoachLines, ComposerLines, Line, Listed, Mark, Outcome, PlanLines,
-    PlanStep, ResultLines, SignInLines, Tone, UnsentLines,
+    ApprovalLines, Card, CoachLines, ComposerLines, DraftShown, Line, Listed, Mark, Outcome,
+    PlanLines, PlanStep, ResultLines, SignInLines, Tone, UnsentLines,
 };
 use tafs_core::coach_send::{
     self, CardSend, Conversation, Delivery, Polls, QuestionSelection, Refusal, Steered, Submit,
@@ -38,6 +38,8 @@ pub enum CoachSource {
     File {
         thread: std::path::PathBuf,
         chats: Option<std::path::PathBuf>,
+        /// KIFF's answers to the drafts the approvals name, by id (`{"status", "answer"}`).
+        drafts: Option<std::path::PathBuf>,
     },
     /// tafs cloud, as the session, with this device's proof when it has a key and KIFF names
     /// this computer. `signed_out` is called when tafs cloud says the session is over.
@@ -237,6 +239,7 @@ pub fn page(
         CoachSource::File {
             thread: path,
             chats,
+            drafts,
         } => {
             let read = std::fs::read(&path)
                 .ok()
@@ -250,6 +253,9 @@ pub fn page(
                         c.setup = Some(String::new());
                         c.chat = t.session();
                         c.took(t, chrono::Utc::now());
+                    }
+                    if let Some(drafts) = drafts {
+                        page.drafts_from(&drafts);
                     }
                     page.draw();
                     if let Some(chats) = chats {
@@ -454,6 +460,65 @@ impl Page {
             }
         }
         self.draw();
+        // What an approval needs to be shown: KIFF's draft, read again until it's confirmed.
+        let wanted = self.conv.borrow().drafts_to_read();
+        if !wanted.is_empty() {
+            self.read_drafts(wanted).await;
+            self.draw();
+        }
+    }
+
+    /// A screenshot's drafts, from its file: each KIFF's answer, as a read would take it.
+    fn drafts_from(&self, path: &std::path::Path) {
+        let Some(map) = std::fs::read(path)
+            .ok()
+            .and_then(|b| serde_json::from_slice::<serde_json::Value>(&b).ok())
+            .and_then(|v| v.as_object().cloned())
+        else {
+            eprintln!("{} isn't KIFF's drafts by id", path.display());
+            std::process::exit(2);
+        };
+        for (id, a) in map {
+            let answer = Answer {
+                status: a.get("status").and_then(|s| s.as_u64()).unwrap_or(200) as u16,
+                body: serde_json::to_vec(a.get("answer").unwrap_or(&a)).unwrap_or_default(),
+            };
+            let read = if (200..300).contains(&answer.status) {
+                tafs_core::drafts::AgentDraft::read(&answer.body)
+                    .ok_or_else(|| tafs_core::signin::plain_words(&self.w, 200).unwrap_or_default())
+            } else {
+                Err(refusal(&self.w, &answer))
+            };
+            self.conv.borrow_mut().took_draft(&id, read);
+        }
+    }
+
+    /// `readCardDraft`, for each: KIFF's draft as the session, or KIFF's reason kept for the card.
+    /// A screenshot's drafts come from its file, and nothing is read.
+    async fn read_drafts(self: &Rc<Self>, ids: Vec<String>) {
+        let CoachSource::Cloud {
+            kept, languages, ..
+        } = self.source.clone()
+        else {
+            return;
+        };
+        for id in ids {
+            let words = (*self.w).clone();
+            let (token, languages) = (kept.token.clone(), languages.clone());
+            let read_id = id.clone();
+            let read =
+                gtk::gio::spawn_blocking(move || read_draft(&words, &token, &languages, &read_id))
+                    .await
+                    .unwrap_or_else(|_| Err(Fail::Why(String::new())));
+            if !self.open() {
+                return;
+            }
+            match read {
+                Ok(d) => self.conv.borrow_mut().took_draft(&id, Ok(d)),
+                Err(Fail::SignedOut) => return self.signed_out(),
+                Err(Fail::Why(why)) => self.conv.borrow_mut().took_draft(&id, Err(why)),
+            }
+        }
     }
 
     /// `followSetup`: the thread read again while the page is open, every second while Coach
@@ -1053,6 +1118,27 @@ fn read_thread(
     })
 }
 
+/// `kiff.draft(id:)`: KIFF's draft as the session, unsigned. Why it wasn't read, in KIFF's words
+/// or the app's.
+fn read_draft(
+    w: &WordBook,
+    token: &str,
+    languages: &[&'static str],
+    id: &str,
+) -> Result<tafs_core::drafts::AgentDraft, Fail> {
+    let call = tafs_core::drafts::draft_read(id).ok_or(Fail::Why(String::new()))?;
+    let a = crate::kiff::kiff_get(token, languages, call.path())
+        .map_err(|e| Fail::Why(e.words(w).unwrap_or_default()))?;
+    if a.status == 401 {
+        return Err(Fail::SignedOut);
+    }
+    if !(200..300).contains(&a.status) {
+        return Err(Fail::Why(refusal(w, &a)));
+    }
+    tafs_core::drafts::AgentDraft::read(&a.body)
+        .ok_or_else(|| Fail::Why(tafs_core::signin::plain_words(w, 200).unwrap_or_default()))
+}
+
 /// tafs cloud's words for a refusal, or the app's plain words for what went wrong.
 fn refusal(w: &WordBook, a: &Answer) -> String {
     tafs_core::signin::refusal(a, Some(w))
@@ -1415,6 +1501,11 @@ fn plan_panel(plan: &PlanLines) -> gtk::Box {
 
 /// `OutcomeLine`: an answered card in one line, its mark in its colour.
 fn outcome(o: &Outcome) -> gtk::Box {
+    outcome_with(o, &[])
+}
+
+/// `OutlineLine` with its `detail`: what was approved, the signed Card's lines under the line.
+fn outcome_with(o: &Outcome, detail: &[String]) -> gtk::Box {
     let h = gtk::Box::new(gtk::Orientation::Horizontal, 8);
     h.add_css_class("tafs-outcome");
     let (icon, class) = match o.mark {
@@ -1428,8 +1519,19 @@ fn outcome(o: &Outcome) -> gtk::Box {
     m.set_margin_top(1);
     h.append(&m);
     let l = text(&o.text, 14, 400, &["tafs-soft"]);
-    l.set_hexpand(true);
-    h.append(&l);
+    if detail.is_empty() {
+        l.set_hexpand(true);
+        h.append(&l);
+    } else {
+        let v = gtk::Box::new(gtk::Orientation::Vertical, 2);
+        v.set_hexpand(true);
+        v.append(&l);
+        for line in detail {
+            let d = text(line, 12, 400, &["tafs-dim", "tafs-mono"]);
+            v.append(&d);
+        }
+        h.append(&v);
+    }
     if o.more {
         let c = symbol("pan-down-symbolic", 11);
         c.add_css_class("tafs-dim");
@@ -1506,7 +1608,7 @@ fn card_view(page: &Rc<Page>, card_ref: &str, card: &Card) -> gtk::Widget {
             v.upcast()
         }
         Card::Questions { .. } => questions_card(page, card_ref, card),
-        Card::Approval(a) => approval(a),
+        Card::Approval(a) => approval(page, a),
         Card::SignIn(s) => sign_in(s),
         Card::Result(r) => result(r, open),
         Card::Drive {
@@ -1539,8 +1641,64 @@ fn wider_line(words: &str) -> gtk::Label {
     l
 }
 
+/// The taf's Card on an approval: KIFF's draft, its title (or tafs cloud's words for the one
+/// approved next) over its lines in monospace on the raised colour; or why it isn't drawn yet,
+/// with Try again when KIFF wouldn't give it.
+fn draft_shown(page: &Rc<Page>, d: &DraftShown) -> gtk::Widget {
+    match d {
+        DraftShown::Card {
+            title,
+            next_words,
+            lines,
+        } => {
+            let v = gtk::Box::new(gtk::Orientation::Vertical, 6);
+            v.add_css_class("tafs-card-words");
+            v.set_widget_name("approval.card");
+            if let Some(words) = next_words {
+                let l = text(words, 13, 600, &["tafs-soft"]);
+                l.set_widget_name("approval.card-next");
+                v.append(&l);
+            } else if let Some(t) = title {
+                v.append(&eyebrow(t, false));
+            }
+            let tone = if next_words.is_some() {
+                "tafs-dim"
+            } else {
+                "tafs-ink"
+            };
+            for line in lines {
+                v.append(&text(line, 12, 400, &[tone, "tafs-mono"]));
+            }
+            v.upcast()
+        }
+        DraftShown::NotRead { id, why, try_again } => {
+            let v = gtk::Box::new(gtk::Orientation::Vertical, 6);
+            v.append(&text(why, 13, 400, &["tafs-no"]));
+            let b = gtk::Button::with_label(try_again);
+            b.add_css_class("tafs-coach-link");
+            b.add_css_class("small");
+            b.set_halign(gtk::Align::Start);
+            b.set_widget_name("approval.draft-try-again");
+            let (p, id) = (Rc::downgrade(page), id.clone());
+            b.connect_clicked(move |_| {
+                if let Some(p) = p.upgrade() {
+                    let p2 = p.clone();
+                    let id = id.clone();
+                    glib::spawn_future_local(async move {
+                        p2.read_drafts(vec![id]).await;
+                        p2.draw();
+                    });
+                }
+            });
+            v.append(&b);
+            v.upcast()
+        }
+        DraftShown::Reading(words) => text(words, 13, 400, &["tafs-dim"]).upcast(),
+    }
+}
+
 /// `SetupApproval`, read only.
-fn approval(a: &ApprovalLines) -> gtk::Widget {
+fn approval(page: &Rc<Page>, a: &ApprovalLines) -> gtk::Widget {
     let p = card_panel(a.stroke);
     let head = gtk::Box::new(gtk::Orientation::Horizontal, 8);
     let e = eyebrow_in(&a.eyebrow, a.eyebrow_tone);
@@ -1568,6 +1726,9 @@ fn approval(a: &ApprovalLines) -> gtk::Widget {
     if let Some(t) = &a.text {
         p.append(&text(t, 15, 400, &["tafs-ink"]));
     }
+    if let Some(d) = &a.draft {
+        p.append(&draft_shown(page, d));
+    }
     if let Some(next) = &a.card_next {
         p.append(&text(next, 13, 600, &["tafs-soft"]));
     }
@@ -1594,7 +1755,7 @@ fn approval(a: &ApprovalLines) -> gtk::Widget {
     stack.set_transition_duration(200);
     let line = gtk::Button::new();
     line.add_css_class("tafs-outcome-button");
-    line.set_child(Some(&outcome(folded)));
+    line.set_child(Some(&outcome_with(folded, &a.signed_lines)));
     if let Some(hint) = &folded.hint {
         line.update_property(&[gtk::accessible::Property::Description(hint)]);
     }
