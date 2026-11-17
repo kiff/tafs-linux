@@ -52,11 +52,27 @@ fn home_reads_as_the_ipad_reads_it() {
     let o = overview::lines(&w, &[home::overview_taf(&rae)], &[], 0, "").unwrap();
     assert_eq!(o.rows[0].now, "Next run Fri 12:30");
     assert_eq!(o.rows[0].last_result, "Nothing yet");
-    // It changed on 15 Oct: not relevant now on 15 Nov, so not in Your tafs.
+    // tafs cloud says it isn't relevant now (`relevant_now: false`): not in Your tafs, whatever
+    // this computer's clock says, since the apps never work the rule out themselves.
+    assert_eq!(rae.relevant_now, Some(false));
     let now = Local.with_ymd_and_hms(2026, 11, 15, 12, 0, 0).unwrap();
     assert!(!home::relevant(&rae, false, now));
     let then = Local.with_ymd_and_hms(2026, 10, 15, 20, 0, 0).unwrap();
-    assert!(home::relevant(&rae, false, then));
+    assert!(!home::relevant(&rae, true, then));
+    // Only from a tafs cloud that doesn't send it: the old rule. It changed on 15 Oct, so it's
+    // relevant that evening and not a month on.
+    let older = home::Taf {
+        relevant_now: None,
+        ..rae.clone()
+    };
+    assert!(!home::relevant(&older, false, now));
+    assert!(home::relevant(&older, false, then));
+    // Its flag true: listed.
+    let flagged = home::Taf {
+        relevant_now: Some(true),
+        ..rae.clone()
+    };
+    assert!(home::relevant(&flagged, false, now));
 }
 
 #[test]
@@ -470,10 +486,12 @@ fn knocks_at_a_tafs_doors() {
     assert_eq!(doors[3].app, "");
     let key = home.tafs[0].key();
     assert_eq!(home.knocks().get(&key), Some(&3));
-    // A knock makes the taf relevant now, with nothing else.
-    let taf = home::taf(&w, &home.tafs[0]).unwrap();
+    // A knock made the taf relevant now, with nothing else, by the old rule: only for a tafs
+    // cloud that doesn't say `relevant_now` itself.
+    let mut taf = home::taf(&w, &home.tafs[0]).unwrap();
     assert_eq!(taf.knocks, 3);
     assert!(taf.knocked);
+    taf.relevant_now = None;
     let long_ago = Local.with_ymd_and_hms(2030, 1, 1, 12, 0, 0).unwrap();
     assert!(home::relevant(&taf, false, long_ago));
     // A door that isn't an object fails Home, as the iPad's keyed decoder does.

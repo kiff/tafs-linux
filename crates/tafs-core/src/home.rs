@@ -313,6 +313,10 @@ pub struct HomeTaf {
     pub last_run: Option<DateTime<Utc>>,
     #[serde(default)]
     pub last_change: Value,
+    /// Whether it matters now, by tafs cloud's rule (`relevant_now`): the sidebar's lists read
+    /// it. None from a tafs cloud that doesn't send it.
+    #[serde(default)]
+    pub relevant_now: Option<bool>,
     pub color: i64,
     /// working, paused, waiting, halted, idle (an agent tafs doesn't run) or stopped.
     pub state: String,
@@ -643,6 +647,8 @@ pub struct Taf {
     pub card: Option<Card>,
     pub last_run: Option<DateTime<Utc>>,
     pub last_change: Option<DateTime<Utc>>,
+    /// tafs cloud's `relevant_now`, when it sent it.
+    pub relevant_now: Option<bool>,
     /// tafs cloud runs it.
     pub cloud: bool,
     /// Its state (`TafState`), and whether tafs cloud flags what went wrong (`attention`).
@@ -728,6 +734,7 @@ pub fn taf(w: &WordBook, h: &HomeTaf) -> Result<Taf, WordsError> {
         card: shown_card(w, &h.card)?,
         last_run: h.last_run,
         last_change: lenient_time(&h.last_change),
+        relevant_now: h.relevant_now,
         knocks: h.doors.iter().flatten().map(|d| d.knocks).sum(),
         knocked: h.doors.iter().flatten().any(|d| d.knocks > 0),
         cloud: h.id.is_some(),
@@ -855,9 +862,14 @@ pub fn row(t: &Taf) -> TafRow {
     }
 }
 
-/// `relevantNow` for a taf from Home: a call of its waits, a knock at its doors, or it ran or
-/// changed in the last 24 hours. Steps come with their read.
+/// Whether a taf from Home is listed as relevant now: tafs cloud's `relevant_now` whenever it sent
+/// it (the apps never work the rule out themselves); only from a tafs cloud that doesn't, the
+/// old rule here (`relevantNow`): a call of its waits, a knock at its doors, or it ran or changed
+/// in the last 24 hours.
 pub fn relevant(t: &Taf, held: bool, now: DateTime<Local>) -> bool {
+    if let Some(flag) = t.relevant_now {
+        return flag;
+    }
     relevant_now(
         held,
         false,
