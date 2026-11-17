@@ -5,8 +5,10 @@ name: Verify a draft release
 # container has what every Ubuntu 24.04 desktop has and the AppImage counts on (linuxdeploy leaves
 # those base libraries out on purpose: fribidi, HarfBuzz, fontconfig, FreeType, GL/EGL, X11,
 # xkbcommon, the Wayland client), plus a virtual display and a font; never GTK 4 or libadwaita,
-# which the AppImage must bring itself. The two screenshots are kept as the run's artifact; the
-# AppImage isn't, since this repository is public.
+# which the AppImage must bring itself. Three screenshots, kept as the run's artifact: the first
+# screen, the sign-in, and the sample signed in (its sidebar draws the app's own icons); the
+# AppImage isn't kept, since this repository is public. The image loaders GTK opens at run time,
+# and any library a bundled module can't find, are printed for the record.
 on:
   workflow_dispatch:
     inputs:
@@ -84,12 +86,30 @@ jobs:
               echo "$missing" >&2
               exit 1
             fi
+            # What GTK opens at run time, for the record: the image loaders it draws icons with
+            # (an SVG icon needs the SVG one), their cache, and any library a bundled module
+            # finds in neither the AppImage nor the base.
+            echo "::group::Image loaders in the AppImage"
+            find squashfs-root -path "*gdk-pixbuf*" \( -name "*.so" -o -name "loaders.cache" \) | sort
+            for cache in $(find squashfs-root -path "*gdk-pixbuf*" -name loaders.cache); do
+              grep -v "^#" "$cache" | grep "\.so" || true
+            done
+            echo "::endgroup::"
+            echo "::group::Bundled modules with a library not found"
+            find squashfs-root/usr/lib -type f -name "*.so*" | while read -r f; do
+              gone=$(LD_LIBRARY_PATH="$libs" ldd "$f" 2>/dev/null | grep "not found" || true)
+              if [ -n "$gone" ]; then echo "$f"; echo "$gone"; fi
+            done
+            echo "::endgroup::"
             rm -rf squashfs-root
             export APPIMAGE_EXTRACT_AND_RUN=1 GSK_RENDERER=cairo NO_AT_BRIDGE=1
             timeout 120 xvfb-run -a "./$app" --screenshot /release/first-screen.png
             timeout 120 xvfb-run -a "./$app" --page sign-in --screenshot /release/sign-in.png
+            # The sample, signed in: the sidebar and the Overview, drawn with the app's own icons.
+            timeout 120 xvfb-run -a "./$app" --sample --signed-in --screenshot /release/sample.png
             test -s /release/first-screen.png
             test -s /release/sign-in.png
+            test -s /release/sample.png
           '
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -97,3 +117,4 @@ jobs:
           path: |
             release/first-screen.png
             release/sign-in.png
+            release/sample.png
