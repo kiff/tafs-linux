@@ -12,6 +12,7 @@ use std::cell::{Cell, RefCell};
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
+use crate::chat::Streamed;
 use adw::prelude::*;
 use gtk::glib;
 use tafs_core::coach::{self, Kind, SetupThread};
@@ -129,13 +130,6 @@ struct Page {
     side: gtk::Box,
     shape: gtk::Box,
     shape_drawn: RefCell<Option<tafs_core::setup_shape::ShapeLines>>,
-}
-
-/// How a message to Coach went out (`openStream`): streamed, refused, or to send plainly.
-enum Streamed {
-    Opened(async_channel::Receiver<tafs_core::stream::Event>),
-    Refused(Answer),
-    Plain,
 }
 
 /// What a draw shows, to compare with the last.
@@ -998,29 +992,12 @@ impl Page {
         taken
     }
 
-    /// `openStream`: the message to Coach with its run streamed. Plain when it can't open (no
-    /// network to it, the route missing or failing); a refusal tafs cloud means (a 4xx but 404 or
-    /// 408) is the send's answer.
+    /// `openStream` for Coach's taf; plain where nothing is sent.
     async fn open_stream(&self, setup: &str, body: Vec<u8>) -> Streamed {
-        let CoachSource::Cloud {
-            kept, languages, ..
-        } = &self.source
-        else {
-            return Streamed::Plain;
-        };
-        let (token, languages) = (kept.token.clone(), languages.clone());
-        let path = tafs_core::stream::message_path(setup);
-        let opened = gtk::gio::spawn_blocking(move || {
-            crate::kiff::cloud_stream(&token, &languages, "POST", &path, Some(&body))
-        })
-        .await;
-        match opened {
-            Ok(Ok(crate::kiff::Opened::Events(events))) => Streamed::Opened(events),
-            Ok(Ok(crate::kiff::Opened::Refused(a)))
-                if (400..500).contains(&a.status) && a.status != 404 && a.status != 408 =>
-            {
-                Streamed::Refused(a)
-            }
+        match &self.source {
+            CoachSource::Cloud {
+                kept, languages, ..
+            } => crate::chat::open_stream(&kept.token, languages, setup, body).await,
             _ => Streamed::Plain,
         }
     }

@@ -992,3 +992,149 @@ fn only_the_taf_s_answers_with_an_id_can_be_reported() {
     assert_eq!(ids, ["run4.3", "run5.2", "door1.2", "run7.4"]);
     assert_eq!(reported[1].session, "sesn_9");
 }
+
+#[test]
+fn a_streamed_answer_shows_as_written_its_steps_before_its_words() {
+    let w = en();
+    let rae = Whose {
+        name: Some("Rae"),
+        ask_coach: false,
+    };
+    let json = format!(
+        r#"{{"messages":[{}]}}"#,
+        owner("Hi", "2026-11-16T09:00:00Z", "s1")
+    );
+    let mut c = chat_of(&json);
+    let now = at("2026-11-16T10:00:00Z");
+    let d = c.deliver("Refund order 42", now).unwrap();
+    c.streaming(now);
+    assert!(c.thinking() && !c.sending);
+    let mut f = Following::default();
+    let mut take =
+        |c: &mut TafChat, e: Event| c.stream_event(&w, &e, Some(&d.local), &mut f).unwrap();
+    take(
+        &mut c,
+        Event::Session {
+            session: "s1".into(),
+            new_session: false,
+            run: Some("run1".into()),
+            message: Some("m42".into()),
+        },
+    );
+    assert!(c
+        .thread
+        .messages
+        .iter()
+        .any(|m| m.server_id.as_deref() == Some("m42")));
+    take(&mut c, Event::Text("Looking it up. ".into()));
+    // A tool call: the words so far are done, and the step shows.
+    take(
+        &mut c,
+        Event::Activity {
+            tool: "kiff__stripe_refund".into(),
+            step: None,
+            call: Some("c1".into()),
+        },
+    );
+    take(&mut c, Event::Text("Refunded.".into()));
+    let l = lines(&w, &c, &rae, &[], now).unwrap();
+    assert_eq!(l.thinking, None);
+    let texts: Vec<&str> = l
+        .lines
+        .iter()
+        .filter_map(|x| match x {
+            Line::Taf { text, .. } => Some(text.as_str()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(texts, vec!["Looking it up. ", "Refunded."]);
+    // Its work block goes before its first words, under the owner's message.
+    let (work, place) = l.live.unwrap();
+    let first = l
+        .lines
+        .iter()
+        .position(|x| matches!(x, Line::Taf { .. }))
+        .unwrap();
+    assert_eq!(place, Some(first));
+    // The step it began runs until tafs cloud says it ended: it's the line.
+    assert_eq!(
+        work.line,
+        crate::coach_lines::taf_activity_words(&w, "kiff__stripe_refund").unwrap()
+    );
+    // Its end: failed part-way, after a refund went through, said with what went through.
+    take(
+        &mut c,
+        Event::End {
+            status: "ERROR".into(),
+            stop: String::new(),
+            done: vec![DoneCall {
+                tool: "kiff__stripe_refund".into(),
+                resource: Some("ch_42".into()),
+                invocation: None,
+            }],
+            code: None,
+            words: None,
+        },
+    );
+    c.stream_over(&f, &d.text);
+    c.live_gone();
+    assert!(!c.thinking());
+    let l = lines(&w, &c, &rae, &[], now).unwrap();
+    let (failed, retry) = l.failed.unwrap();
+    assert!(
+        failed.starts_with("Rae stopped part-way, after this went through: "),
+        "{failed}"
+    );
+    assert!(failed.contains("on ch_42"), "{failed}");
+    assert_eq!(retry, w.line("chat.retry").unwrap());
+    assert_eq!(c.retry_run().as_deref(), Some("Refund order 42"));
+    assert!(c.ended.is_none());
+}
+
+#[test]
+fn a_run_stopped_at_its_cap_says_why_and_words_already_recorded_show_once() {
+    let w = en();
+    let json = format!(
+        r#"{{"messages":[{},{}]}}"#,
+        owner("Hi", "2026-11-16T09:59:00Z", "s1"),
+        taf("Done for today.", "2026-11-16T10:00:05Z", "s1")
+    );
+    let mut c = chat_of(&json);
+    let now = at("2026-11-16T10:00:00Z");
+    c.streaming(now);
+    let mut f = Following::default();
+    for e in [
+        Event::Session {
+            session: "s1".into(),
+            new_session: false,
+            run: None,
+            message: None,
+        },
+        Event::Text("Done for".into()),
+        Event::End {
+            status: "DONE".into(),
+            stop: "turn_cap".into(),
+            done: vec![],
+            code: None,
+            words: None,
+        },
+    ] {
+        c.stream_event(&w, &e, None, &mut f).unwrap();
+    }
+    // The thread holds those words already: shown there, not twice.
+    let it = items_with(&c.thread, &[], c.live.as_ref(), now);
+    assert!(!it.iter().any(|i| matches!(i, Item::Streaming { .. })));
+    c.stream_over(&f, "Hi");
+    assert_eq!(c.capped.as_deref(), Some("turn_cap"));
+    assert!(c.ended.is_none() && c.awaiting.is_none());
+    // Failed with tafs cloud's words and nothing done: its words alone; none at all: the taf's.
+    assert_eq!(
+        failed_words(&w, "Rae", &[], Some("It lost the connection.")).unwrap(),
+        "It lost the connection."
+    );
+    assert_eq!(
+        failed_words(&w, "Rae", &[], None).unwrap(),
+        w.get("work.stopped_part_way_before_finished", &[("taf", "Rae")])
+            .unwrap()
+    );
+}

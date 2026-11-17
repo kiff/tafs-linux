@@ -19,10 +19,11 @@ use crate::coach::{
 };
 use crate::coach_lines::{gap, WorkLines};
 use crate::coach_send::{
-    merge, stamp, steered_into, ChatTarget, Delivery, Ended, Refusal, Sent, Steered, Submit,
-    Unsent, CHAT_LIMIT,
+    already_recorded, merge, stamp, steered_into, ChatTarget, Delivery, Ended, Loaded, Refusal,
+    Sent, Steered, Submit, Then, Unsent, CHAT_LIMIT,
 };
 use crate::sidebar::Mode;
+use crate::stream::{DoneCall, Event, LiveAnswer, LiveState, ReplyPart, StepStatus};
 use crate::words::{WordBook, WordsError};
 
 /// `GET /v1/tafs/{id}/conversation` (`conversation`): the taf's last runs and the person's chats
@@ -169,6 +170,21 @@ pub struct TafChat {
     pub capped: Option<String>,
     /// What's said above the box (`chatErrors`).
     pub error: Option<String>,
+    /// The taf's answer as it streams (`ChatState.live`).
+    pub live: Option<LiveAnswer>,
+    /// What went through before a run that failed part-way stopped (`wentThrough`).
+    pub went_through: Vec<DoneCall>,
+    /// tafs cloud's words for why that run stopped (`failedWhy`).
+    pub failed_why: Option<String>,
+}
+
+/// A taf's stream followed (`followChatStream`'s own): how the run ended, once it says, what
+/// went through before, and tafs cloud's words for why.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Following {
+    pub ended: Option<String>,
+    pub done: Vec<DoneCall>,
+    pub why: Option<String>,
 }
 
 /// A steered message's key: its run, time and words, hashed, never kept as words.
@@ -354,6 +370,8 @@ impl TafChat {
         self.error = None;
         self.ended = None;
         self.capped = None;
+        self.went_through.clear();
+        self.failed_why = None;
         let latest = self.thread.messages.iter().map(|m| m.at).max();
         let mine = ChatMessage {
             at: stamp(latest, now),
@@ -399,6 +417,160 @@ impl TafChat {
         }
         self.awaiting = Some(now);
         self.clear_busy();
+    }
+
+    /// The stream opened for the message (`deliverChatOnce`, streamed): the taf is at work, and
+    /// its answer shows as it's written.
+    pub fn streaming(&mut self, now: DateTime<Utc>) {
+        self.sending = false;
+        self.awaiting = Some(now);
+        self.live = Some(LiveAnswer::new(now.timestamp()));
+        self.clear_busy();
+    }
+
+    /// One of the stream's events (`followChatStream`), for the message on its way `sent`: what
+    /// the app does next. The taf's words up to each tool call stay as they were written, in
+    /// the order they came; the thread is read only when it holds something new (a message the
+    /// owner wrote meanwhile, taken; a run picked back up, saying something).
+    pub fn stream_event(
+        &mut self,
+        w: &WordBook,
+        e: &Event,
+        sent: Option<&str>,
+        f: &mut Following,
+    ) -> Result<Then, WordsError> {
+        let Some(live) = self.live.as_mut() else {
+            return Ok(Then::Draw);
+        };
+        Ok(match e {
+            Event::Session {
+                session,
+                run,
+                message,
+                ..
+            } => {
+                live.session = Some(session.clone());
+                live.run = run.clone();
+                if let (Some(sent), Some(id)) = (sent, message) {
+                    for m in self.sent.iter_mut().chain(self.thread.messages.iter_mut()) {
+                        if m.id() == sent && m.server_id.is_none() {
+                            m.server_id = Some(id.clone());
+                        }
+                    }
+                }
+                Then::Draw
+            }
+            Event::Taken | Event::Said => Then::Load(Loaded::Keep),
+            Event::Text(t) => {
+                live.text.push_str(t);
+                // Writing again: the tool call it waited on is over.
+                live.activity = None;
+                live.thinking.clear();
+                Then::Draw
+            }
+            Event::Thinking(t) => {
+                live.thinking.push_str(t);
+                Then::Draw
+            }
+            Event::State { state, words } => {
+                live.state = Some(LiveState {
+                    state: state.clone(),
+                    words: words.clone(),
+                });
+                Then::Draw
+            }
+            Event::Activity { tool, step, call } => {
+                // The words so far are done; the answer goes on below them.
+                if !live.text.is_empty() {
+                    let t = std::mem::take(&mut live.text);
+                    live.parts.push(ReplyPart::Text(t));
+                }
+                let words = match step {
+                    Some(s) => s.clone(),
+                    None => crate::coach_lines::taf_activity_words(w, tool)?,
+                };
+                live.activity = Some(words.clone());
+                live.began(tool, Some(&words), call.as_deref());
+                Then::Draw
+            }
+            Event::Step { call, status } => {
+                live.ended(Some(call), StepStatus::from_stream(status));
+                Then::Draw
+            }
+            // It went on after the owner answered a held call: what it did before shows with
+            // the answer it wrote then.
+            Event::Part => {
+                live.new_part();
+                Then::Draw
+            }
+            Event::Held {
+                exception,
+                invocation,
+            } => {
+                live.ended(None, StepStatus::Held);
+                live.parts.push(ReplyPart::Held {
+                    exception: exception.clone(),
+                    invocation: invocation.clone(),
+                });
+                Then::Draw
+            }
+            Event::End {
+                status,
+                stop,
+                done,
+                words,
+                ..
+            } => {
+                f.ended = Some(status.clone());
+                f.done = done.clone();
+                f.why = words.clone();
+                live.activity = None;
+                if CAP_STOPS.contains(&stop.as_str()) {
+                    self.capped = Some(stop.clone());
+                }
+                Then::Draw
+            }
+            Event::Component | Event::Broken => Then::Draw,
+        })
+    }
+
+    /// The stream is over, ended or dropped: nothing is at work once the run ended, and how it
+    /// ended shows when the owner should know. `text` is what started it, sent again by Retry.
+    /// The live answer goes once the thread is read (`live_gone`).
+    pub fn stream_over(&mut self, f: &Following, text: &str) {
+        if let Some(live) = self.live.as_mut() {
+            live.activity = None;
+        }
+        if f.ended.is_some() {
+            self.awaiting = None;
+        }
+        match f.ended.as_deref() {
+            Some("ERROR") => {
+                self.ended = Some(Ended::Failed {
+                    retry: text.to_string(),
+                });
+                self.went_through = f.done.clone();
+                self.failed_why = f.why.clone();
+            }
+            Some("CANCELLED") => self.ended = Some(Ended::Stopped),
+            _ => {}
+        }
+    }
+
+    /// The stream's answer is the thread's now: it goes.
+    pub fn live_gone(&mut self) {
+        self.live = None;
+    }
+
+    /// `retryChatRun`: the message the run that failed part-way started with, to send again.
+    pub fn retry_run(&mut self) -> Option<String> {
+        match self.ended.take() {
+            Some(Ended::Failed { retry }) => Some(retry),
+            other => {
+                self.ended = other;
+                None
+            }
+        }
     }
 
     /// Refused for want of the consent, or because the tafs wait for credits (`why`): the message
@@ -453,7 +625,9 @@ impl TafChat {
     /// The chat Stop stops (`stopChat`): the one at work, else the thread's latest. The wait ends.
     pub fn stop(&mut self) -> Option<String> {
         self.taf.as_ref()?;
-        let session = self.thread.working.clone().or_else(|| {
+        // A streamed message's own chat first.
+        let live = self.live.as_ref().and_then(|l| l.session.clone());
+        let session = live.or_else(|| self.thread.working.clone()).or_else(|| {
             self.thread
                 .messages
                 .iter()
@@ -561,8 +735,18 @@ impl Polls {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Item<'a> {
     Message(&'a ChatMessage),
-    Held { key: &'a str, at: DateTime<Utc> },
+    Held {
+        key: &'a str,
+        at: DateTime<Utc>,
+    },
     AskCoach(&'a AskCoachCard),
+    /// The taf's words in the answer streaming now, up to a tool call or being written.
+    Streaming {
+        id: String,
+        text: String,
+        session: String,
+        at: DateTime<Utc>,
+    },
 }
 
 impl Item<'_> {
@@ -571,6 +755,7 @@ impl Item<'_> {
             Item::Message(m) => format!("m|{}", m.id()),
             Item::Held { key, .. } => format!("k|{key}"),
             Item::AskCoach(c) => format!("a|{}", c.id),
+            Item::Streaming { id, .. } => id.clone(),
         }
     }
 
@@ -579,6 +764,7 @@ impl Item<'_> {
             Item::Message(m) => m.at,
             Item::Held { at, .. } => *at,
             Item::AskCoach(c) => c.at,
+            Item::Streaming { at, .. } => *at,
         }
     }
 
@@ -588,6 +774,7 @@ impl Item<'_> {
             Item::Message(m) if m.from == From::Taf && m.kind != MessageKind::Kickoff => {
                 Some(&m.session)
             }
+            Item::Streaming { session, .. } => Some(session),
             _ => None,
         }
     }
@@ -601,14 +788,54 @@ pub fn items<'a>(
     held: &'a [(String, DateTime<Utc>)],
     now: DateTime<Utc>,
 ) -> Vec<Item<'a>> {
+    items_with(thread, held, None, now)
+}
+
+/// `chatItems` with the answer streaming now after the rest, in the order it came.
+pub fn items_with<'a>(
+    thread: &'a TafThread,
+    held: &'a [(String, DateTime<Utc>)],
+    live: Option<&LiveAnswer>,
+    now: DateTime<Utc>,
+) -> Vec<Item<'a>> {
     let mut all: Vec<Item> = thread.messages.iter().map(Item::Message).collect();
     all.extend(held.iter().map(|(key, at)| Item::Held { key, at: *at }));
     all.extend(thread.ask_coach.iter().map(Item::AskCoach));
     // A stable sort: by time, then the order they came in.
     all.sort_by_key(|i| i.at());
+    if let Some(live) = live {
+        all.extend(streaming_items(live, &thread.messages));
+    }
     let mut seen = HashSet::new();
     all.retain(|i| seen.insert(i.id()));
     withheld_until_words(held_after_its_words(all), now)
+}
+
+/// `streamingItems`: the answer streaming now, its words up to each tool call and those being
+/// written, each once: words the thread already holds show there. A call KIFF held in it shows
+/// where Needs you's list places it.
+fn streaming_items(live: &LiveAnswer, recorded: &[ChatMessage]) -> Vec<Item<'static>> {
+    let run = live.run.as_deref().unwrap_or("live");
+    let session = live.session.clone().unwrap_or_else(|| "live".into());
+    let at = DateTime::from_timestamp(live.started, 0).unwrap_or_default();
+    let texts = live
+        .parts
+        .iter()
+        .filter_map(|p| match p {
+            ReplyPart::Text(t) => Some(t.as_str()),
+            ReplyPart::Held { .. } => None,
+        })
+        .chain(Some(live.text.as_str()).filter(|t| !t.is_empty()));
+    texts
+        .enumerate()
+        .filter(|(_, t)| !already_recorded(t, live.session.as_deref(), live.started, recorded))
+        .map(|(n, t)| Item::Streaming {
+            id: format!("s|{run}|{n}"),
+            text: t.to_string(),
+            session: session.clone(),
+            at,
+        })
+        .collect()
 }
 
 /// `heldAfterItsWords`: a held call's card moves past the words of the turn right after it, those
@@ -646,9 +873,11 @@ pub fn withheld_until_words(items: Vec<Item<'_>>, now: DateTime<Utc>) -> Vec<Ite
     else {
         return items;
     };
-    let said = items[owner + 1..].iter().any(
-        |i| matches!(i, Item::Message(m) if m.from == From::Taf && m.kind != MessageKind::Kickoff),
-    );
+    let said = items[owner + 1..].iter().any(|i| match i {
+        Item::Message(m) => m.from == From::Taf && m.kind != MessageKind::Kickoff,
+        Item::Streaming { .. } => true,
+        _ => false,
+    });
     if said {
         return items;
     }
@@ -742,8 +971,13 @@ pub struct ChatLines {
     pub empty: Option<String>,
     pub lines: Vec<Line>,
     pub unsent: Vec<UnsentLines>,
-    /// The taf is at work: the dots, and what a screen reader says.
+    /// The taf is at work, and nothing streams: the dots, and what a screen reader says.
     pub thinking: Option<String>,
+    /// What the taf is doing as its answer streams (`LiveWork`), and the line it goes before:
+    /// the answer's first words, else under the rest.
+    pub live: Option<(crate::coach_lines::LiveWorkLines, Option<usize>)>,
+    /// The last run failed part-way: what went through before, and Retry.
+    pub failed: Option<(String, String)>,
     /// Written to its run, not read yet, and when it will be.
     pub steering: Vec<(String, String)>,
     /// The latest run stopped at a cap: why.
@@ -785,6 +1019,40 @@ pub fn composer(
         },
         stop: w.line("chat.stop")?,
     })
+}
+
+/// `failedWords`: a run that failed part-way, in tafs cloud's words when it gave some, then what
+/// went through before it stopped: each call by its tool's name in words, and what it acted on.
+pub fn failed_words(
+    w: &WordBook,
+    taf: &str,
+    done: &[DoneCall],
+    why: Option<&str>,
+) -> Result<String, WordsError> {
+    let calls: Vec<String> = done
+        .iter()
+        .map(|c| {
+            let words = crate::held::tool_words(&c.tool);
+            match &c.resource {
+                Some(r) => format!("{words} on {r}"),
+                None => words,
+            }
+        })
+        .collect();
+    let list = calls.join("; ");
+    match why {
+        Some(why) if calls.is_empty() => Ok(why.to_string()),
+        Some(why) => w.get(
+            "chat.failed.with_words",
+            &[("words", why.trim()), ("calls", &list)],
+        ),
+        None if calls.is_empty() => w.get("work.stopped_part_way_before_finished", &[("taf", taf)]),
+        None if calls.len() == 1 => w.get("chat.failed.after", &[("taf", taf), ("calls", &list)]),
+        None => w.get(
+            "chat.failed.after_several",
+            &[("taf", taf), ("calls", &list)],
+        ),
+    }
 }
 
 /// `capWords`: what the chat says when its latest run stopped at a cap, never "…".
@@ -847,18 +1115,32 @@ pub fn lines(
     held: &[(String, DateTime<Utc>)],
     now: DateTime<Utc>,
 ) -> Result<ChatLines, WordsError> {
-    let items = items(&c.thread, held, now);
+    let items = items_with(&c.thread, held, c.live.as_ref(), now);
     let the_taf = match whose.name {
         Some(n) => n.to_string(),
         None => w.line("chat.the_taf")?,
     };
     let mut out = Vec::new();
+    let mut live_at = None;
     for (i, item) in items.iter().enumerate() {
+        // The answer streaming now starts at its first words: its work block goes just before.
+        if live_at.is_none() && matches!(item, Item::Streaming { .. }) {
+            live_at = Some(out.len());
+        }
         let at = item.at();
         if i == 0 || (at - items[i - 1].at()).num_seconds() >= 3600 {
             out.push(Line::Gap(gap(w.language(), at, now)));
         }
         out.push(match item {
+            Item::Streaming { text, .. } => Line::Taf {
+                work: None,
+                delivered: None,
+                text: text.clone(),
+                counted: None,
+                refused: None,
+                stamp: None,
+                report: None,
+            },
             Item::Message(m) => message(w, m)?,
             Item::Held { key, .. } => Line::Held(key.to_string()),
             Item::AskCoach(card) => Line::AskCoach {
@@ -914,15 +1196,30 @@ pub fn lines(
         },
         lines: out,
         unsent,
-        thinking: if thinking {
+        thinking: if thinking && c.live.is_none() {
             Some(w.line("chat.answering")?)
         } else {
             None
         },
+        live: match &c.live {
+            Some(l) => crate::coach_lines::live_work_lines(w, l, |tool| {
+                crate::coach_lines::taf_activity_words(w, tool).map(Some)
+            })?
+            .map(|work| (work, live_at)),
+            None => None,
+        },
+        failed: match (&c.ended, thinking) {
+            (Some(Ended::Failed { .. }), false) => Some((
+                failed_words(w, &the_taf, &c.went_through, c.failed_why.as_deref())?,
+                w.line("chat.retry")?,
+            )),
+            _ => None,
+        },
         steering,
         // Stopped needs no line: the chat is simply ready again. Stopped at its own cap, it says why.
-        capped: match (&c.capped, thinking) {
-            (Some(stop), false) => cap_words(w, stop, &the_taf)?,
+        capped: match (&c.capped, thinking, &c.ended) {
+            (_, _, Some(Ended::Failed { .. })) => None,
+            (Some(stop), false, _) => cap_words(w, stop, &the_taf)?,
             _ => None,
         },
         queued: match c.thread.steering.as_ref().and_then(|s| s.held.as_ref()) {

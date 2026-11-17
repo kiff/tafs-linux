@@ -719,6 +719,8 @@ pub enum Loaded {
     ClearText,
     /// It went on after a pause: what came before is the thread's, with its work.
     NewPart,
+    /// Nothing more: the thread holds what the event said.
+    Keep,
 }
 
 /// A stream followed (`followSetupStream`'s own): how the run ended, once it says, and whether
@@ -1114,6 +1116,7 @@ impl Conversation {
                 live.new_part();
                 self.live_before = self.thread.items().iter().map(|i| i.id()).collect();
             }
+            Loaded::Keep => {}
         }
     }
 
@@ -1250,10 +1253,12 @@ impl Conversation {
 
     /// The chat Stop stops (`stopSetup`): the one at work, else the thread's. The wait ends.
     pub fn stop(&mut self) -> Option<String> {
+        // A streamed message's own chat first: a new chat isn't the thread's latest yet.
         let session = self
-            .thread
-            .working
-            .clone()
+            .live
+            .as_ref()
+            .and_then(|l| l.session.clone())
+            .or_else(|| self.thread.working.clone())
             .or_else(|| self.thread.session())?;
         self.setup.as_ref()?;
         self.awaiting = None;

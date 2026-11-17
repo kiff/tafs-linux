@@ -1,0 +1,20 @@
+event: session
+data: {"session":"sesn_9","run":"run8","message":{"id":"m8"}}
+
+event: text
+data: {"text":"I'll look at order 4416 first."}
+
+event: activity
+data: {"tool":"memory","call_id":"c1"}
+
+event: step
+data: {"call_id":"c1","status":"done"}
+
+event: activity
+data: {"tool":"kiff__shippo_label_read","call_id":"c2"}
+
+event: text
+data: {"text":"The label was printed yesterday; "}
+
+event: text
+data: {"text":"I'm checking whether it shipped."}

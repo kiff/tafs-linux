@@ -192,6 +192,8 @@ struct Options {
     coach_setup: Option<String>,
     /// With `--coach`: an answer streaming in it, from a stream's events. Nothing is read.
     coach_stream: Option<String>,
+    /// With `--chat`: an answer streaming in it, from a stream's events. Nothing is read.
+    chat_stream: Option<String>,
     /// With `--home`: a taf's chat as tafs cloud answers `GET /v1/tafs/{id}/conversation`, read
     /// from a file: nothing is sent.
     chat: Option<String>,
@@ -215,7 +217,7 @@ struct Options {
 }
 
 const USAGE: &str = "tafs [--lang en|de|fr|es|it|pt|nl|pl] [--theme light|dark] [--sample] [--signed-in] [--view-only [--paired]]
-     [--home contract.json] [--usage answers.json] [--people answers.json] [--connect answers.json] [--knob answer.json] [--setup answer.json] [--taf-activity answer.json] [--unproven answers.json] [--recipes answers.json] [--gallery answers.json] [--halt answer.json] [--record-search answers.json] [--access answer.json] [--receipts answer.json] [--activity answer.json] [--calls answer.json] [--receipt answer.json] [--work answer.json] [--doors answer.json] [--account-reads answers.json] [--me answer.json] [--attach files.json] [--held answers.json] [--versions answer.json [--trial answer.json]] [--memory answer.json] [--runs answer.json] [--request answer.json] [--balance answer.json] [--coach answer.json] [--coach-chats answer.json] [--coach-drafts answers.json] [--chat answer.json [--report]] [--brief answer.json] [--mission-log answer.json] [--coach-setup answer.json] [--coach-stream events.txt] [--unreachable network|error] [--app-event item.json] [--size WxH] [--page welcome|sign-in|pair|recipe:<id>|gallery|new-taf|halt-all|halt:<id>|halt-resume:<id>|record-search:<q>|record-export|receipt:<proposal id>|run:<taf id>|pin-sheet|share:<key>|share-step2:<key>|coach|coach-tools|coach-full|coach-read-back|coach-hand:<id>|coach-improve:<key>|overview|overview-label:<id>|needs-you|discard-setup|needs-you-set-all-aside|needs-you-dismiss|needs-you-hold:<id>|versions:<key>|trial:<key>|brief-answer:<decision id>|mission-log:<mission id>|record|calendar|calendar-week|usage|usage-ask|usage-decline|connect-apps|connect-app|connect-connection|connect-remove|connect-which-taf|connect-approve|account|kiff-account|time-zone|time-zone-use|alerts|devices|devices-sign-out|people|people-rename|people-add|taf|taf-card|taf-setup|taf-setup:<id>|starts:<id>|results:<id>|doors:<id>[:<door>]|consent|connected|sign-in-code] [--screenshot out.png]";
+     [--home contract.json] [--usage answers.json] [--people answers.json] [--connect answers.json] [--knob answer.json] [--setup answer.json] [--taf-activity answer.json] [--unproven answers.json] [--recipes answers.json] [--gallery answers.json] [--halt answer.json] [--record-search answers.json] [--access answer.json] [--receipts answer.json] [--activity answer.json] [--calls answer.json] [--receipt answer.json] [--work answer.json] [--doors answer.json] [--account-reads answers.json] [--me answer.json] [--attach files.json] [--held answers.json] [--versions answer.json [--trial answer.json]] [--memory answer.json] [--runs answer.json] [--request answer.json] [--balance answer.json] [--coach answer.json] [--coach-chats answer.json] [--coach-drafts answers.json] [--chat answer.json [--report] [--chat-stream events.txt]] [--brief answer.json] [--mission-log answer.json] [--coach-setup answer.json] [--coach-stream events.txt] [--unreachable network|error] [--app-event item.json] [--size WxH] [--page welcome|sign-in|pair|recipe:<id>|gallery|new-taf|halt-all|halt:<id>|halt-resume:<id>|record-search:<q>|record-export|receipt:<proposal id>|run:<taf id>|pin-sheet|share:<key>|share-step2:<key>|coach|coach-tools|coach-full|coach-read-back|coach-hand:<id>|coach-improve:<key>|overview|overview-label:<id>|needs-you|discard-setup|needs-you-set-all-aside|needs-you-dismiss|needs-you-hold:<id>|versions:<key>|trial:<key>|brief-answer:<decision id>|mission-log:<mission id>|record|calendar|calendar-week|usage|usage-ask|usage-decline|connect-apps|connect-app|connect-connection|connect-remove|connect-which-taf|connect-approve|account|kiff-account|time-zone|time-zone-use|alerts|devices|devices-sign-out|people|people-rename|people-add|taf|taf-card|taf-setup|taf-setup:<id>|starts:<id>|results:<id>|doors:<id>[:<door>]|consent|connected|sign-in-code] [--screenshot out.png]";
 
 fn options() -> Result<Options, String> {
     let mut o = Options::default();
@@ -262,6 +264,7 @@ fn options() -> Result<Options, String> {
             "--coach-setup" => o.coach_setup = Some(value()?),
             "--coach-stream" => o.coach_stream = Some(value()?),
             "--chat" => o.chat = Some(value()?),
+            "--chat-stream" => o.chat_stream = Some(value()?),
             "--report" => o.report = true,
             "--brief" => o.brief = Some(value()?),
             "--mission-log" => o.mission_log = Some(value()?),
@@ -512,6 +515,7 @@ fn activate(app: &adw::Application, o: &Options) {
         coach_setup: o.coach_setup.as_ref().map(std::path::PathBuf::from),
         coach_stream: o.coach_stream.as_ref().map(std::path::PathBuf::from),
         chat_file: o.chat.as_ref().map(std::path::PathBuf::from),
+        chat_stream: o.chat_stream.as_ref().map(std::path::PathBuf::from),
         open_report: o.report,
         brief_file: o.brief.as_ref().map(std::path::PathBuf::from),
         mission_log_file: o.mission_log.as_ref().map(std::path::PathBuf::from),
@@ -946,6 +950,8 @@ struct App {
     coach_stream: Option<std::path::PathBuf>,
     /// `--chat`: a taf's chat from a file, never sent.
     chat_file: Option<std::path::PathBuf>,
+    /// `--chat-stream`: an answer streaming in that chat, from a stream's events.
+    chat_stream: Option<std::path::PathBuf>,
     /// `--report`: Report this answer open over the chat.
     open_report: bool,
     /// `--brief`'s answer: the screenshots' brief, every read of it, never sent.
@@ -1456,6 +1462,7 @@ impl App {
             (Mode::Kiff, _, Some(file)) => taf_chat::ChatSource::File {
                 thread: file.clone(),
                 report: self.open_report,
+                stream: self.chat_stream.clone(),
             },
             (Mode::Kiff, Some(kept), None) => taf_chat::ChatSource::Cloud {
                 token: kept.token.clone(),
