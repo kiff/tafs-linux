@@ -1092,6 +1092,20 @@ impl App {
         let retrying = tries < RETRY_WAITS.len();
         self.unreachable
             .set(Some((why, (tries + 1).min(RETRY_WAITS.len()))));
+        // Nothing read yet: the Overview said it was loading, and now says it couldn't load,
+        // where the person was.
+        if tries == 0 && self.cloud.borrow().is_none() {
+            let open = self
+                .shell
+                .borrow()
+                .as_ref()
+                .and_then(|s| s.selection.borrow().clone());
+            if let Some(open) = open {
+                *self.first.borrow_mut() = open;
+            }
+            self.open_shell(Mode::Kiff, view_only, None);
+            return self.try_again_later(tries, kept, view_only, generation);
+        }
         if let Some(shell) = self.shell.borrow().as_ref() {
             shell.set_unreachable(
                 tafs_core::sidebar::unreachable_line(&self.words, why, retrying)
@@ -1099,11 +1113,25 @@ impl App {
                     .as_ref(),
             );
         }
-        if !retrying {
-            return;
+        if retrying {
+            self.try_again_later(tries, kept, view_only, generation);
         }
+    }
+
+    /// The app's own next try, `RETRY_WAITS[tries]` seconds from now, unless the account's reads
+    /// moved on meanwhile.
+    fn try_again_later(
+        self: &Rc<Self>,
+        tries: usize,
+        kept: KeptSession,
+        view_only: bool,
+        generation: u64,
+    ) {
+        let Some(wait) = tafs_core::sidebar::RETRY_WAITS.get(tries) else {
+            return;
+        };
         let me = Rc::downgrade(self);
-        glib::timeout_add_seconds_local_once(RETRY_WAITS[tries] as u32, move || {
+        glib::timeout_add_seconds_local_once(*wait as u32, move || {
             if let Some(me) = me.upgrade() {
                 if me.account_reads.get() == generation {
                     me.read_account(kept, view_only);
@@ -1765,8 +1793,15 @@ impl App {
             Some(words) => words,
             None => tafs_core::overview::needs_you_words(words, count).unwrap_or_else(|e| fail(e)),
         };
+        // Signed in, the list is being read until Home comes, or couldn't be read.
+        let list = match (mode, &cloud, self.unreachable.get()) {
+            (Mode::Kiff, None, Some(_)) => tafs_core::overview::ListState::Unread,
+            (Mode::Kiff, None, None) => tafs_core::overview::ListState::Loading,
+            _ => tafs_core::overview::ListState::Read,
+        };
         let overview =
             tafs_core::overview::lines(words, &tafs, &model.held, count, &needs_you_words)
+                .and_then(|o| o.with_list(words, list))
                 .unwrap_or_else(|e| fail(e));
         // Home's labels, as chips over the grid and on each taf's line (docs/labels.md); none
         // sent, none drawn. The sample's are the iPad's screenshots' only.

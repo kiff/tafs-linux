@@ -31,7 +31,7 @@ skips them. The sign-in's drawings (`connected.rs`) are made of the same pieces.
 | Board | What it shows | Where |
 | :- | :- | :- |
 | 1, first run | A card opening, sparkles round it | The welcome, above "tafs", in the mascot's place; it gets smaller in a short window rather than push the buttons off |
-| 2, no tafs yet | An empty card's outline, a plus in it | The Overview with no taf (and no recipes listed), above the grid's "No tafs yet", in board 10's place |
+| 2, no tafs yet | An empty card's outline, a plus in it | The Overview with no taf (and no recipes listed), above the grid's "No tafs yet", in board 10's place; while the list is read, or when it couldn't be, the mascot (72) in its place, over "Loading your tafs…" or "Couldn't load your tafs." |
 | 3, the brief with nothing to decide | A calm sun over a clear page | Your brief with no decision left, where the decisions go |
 | 4, every taf halted | Cards at rest under a pause | Halt all, once every part holds it, above its panel |
 | 6, nothing waiting | An empty tray under a calm check | Needs you with nothing waiting, above "Nothing is waiting." |
@@ -42,6 +42,14 @@ skips them. The sign-in's drawings (`connected.rs`) are made of the same pieces.
 
 Not drawn yet, as their screens aren't on Linux: 5 (a key's
 receipt, after connecting an app), 11 and 12 (a watch's).
+
+Every screen with an empty state on the iPad fills the pane beside the sidebar, at the window's
+full height, with its board where one exists: the Overview with no taf (board 2, or the mascot
+while the list is read or when it couldn't be), Needs you with nothing waiting (6), your brief
+with nothing to decide (3), Halt all once held (4), Coach's empty chat (7) and its start (9), and
++ New's gallery (8). Home with no taf and recipes listed takes the pane with them, at most 720
+wide. Boards 5 (a key's receipt after connecting an app, which this computer can't sign), 11 and
+12 (a watch's) have no screen here.
 
 The colours are the palette's by the iPad's own names: `Theme.amber` is `amber`, `amberText`
 `amber_text`, `amberInk` `amber_ink`, `ink`, `panel`, `onFill` `on_fill`, `ok`, `blue`, `pink`;
@@ -102,7 +110,7 @@ KIFF from synthetic answers (managing billing, and as a member), Connect apps, D
 calendar's Day and Week (and Day at an upright iPad's size, `--size 1032x1376`), a tafs cloud
 taf's page and its Card tab from the contracts (and with its Card's own lines) (and with its work and runs, and a run's own page), the sidebar over the plain sample (and with an agent not run by tafs, with a taf being set up, with the plan's line, and with the Unreachable line), and Home with no taf and a recipe's sheet, the strip and the gallery (and as + New opens it, and Coach with a job handed to it), the halt screens, a Record search, the receipts export open, a Record line's receipt, the Delete account sheet, the security key's PIN sheet,
 Coach's conversation from the contract (and with an approval waiting under tafs cloud's wider line, with a confirm and a questions card waiting and a message not sent, with Previous conversations open, empty, and before it's started), a taf's chat (and while it works, and with Report this answer open), Your brief (and with a signed answer tapped, with nothing to decide, and a mission's log), the Overview with Home's label chips (and filtered to one), the
-view-only notice (and once paired), and the boards' empty states (the Overview with no taf, Needs you with nothing waiting, Halt all once halted, the brief with nothing to decide) in en, fr and pt, light and dark: 510 pictures, as the `screenshots`
+view-only notice (and once paired), and the boards' empty states (the Overview with no taf, and before its tafs could be read, Needs you with nothing waiting, Halt all once halted, the brief with nothing to decide) in en, fr and pt, light and dark: 522 pictures, as the `screenshots`
 artifact of the run. The job fails if any is missing.
 
 ## The AppImage

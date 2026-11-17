@@ -45,13 +45,59 @@ pub struct OverviewLines {
     pub rest: Option<String>,
     pub columns: [String; 4],
     pub rows: Vec<OverviewRow>,
-    /// "No tafs yet.", with none listed.
+    /// "No tafs yet.", with none listed; while the list is read, or when it couldn't be, that
+    /// (`Words.Home.loading`, `notLoaded`).
     pub empty: Option<String>,
+    /// Where the account's list stands (`loadingList`, `listUnread`).
+    pub list: ListState,
     pub each_line_opens: String,
     /// The label chips over the grid (`listLabels`): Home's labels in order, none with no
     /// labelled taf; and the first chip's word (`labelsAllWords`).
     pub labels: Vec<crate::brief::Label>,
     pub labels_all: String,
+}
+
+/// Where the account's list stands: being read, read, or not read (`loadingList`, `listUnread`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ListState {
+    Loading,
+    #[default]
+    Read,
+    Unread,
+}
+
+/// The board over an Overview with no taf (`HomeSplitView`'s pane with nothing chosen): board 2
+/// once the list is read and empty, else the mascot (72) while it's read or when it couldn't be.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Board {
+    Overview,
+    NoTafs,
+    Mascot,
+}
+
+impl OverviewLines {
+    /// The lines as the list stands: with no taf, "Loading your tafs…" while it's read and
+    /// "Couldn't load your tafs." when it couldn't be, in place of "No tafs yet.".
+    pub fn with_list(mut self, w: &WordBook, list: ListState) -> Result<OverviewLines, WordsError> {
+        self.list = list;
+        if self.empty.is_some() {
+            self.empty = Some(w.line(match list {
+                ListState::Loading => "home.loading",
+                ListState::Read => "home.no_tafs",
+                ListState::Unread => "home.not_loaded",
+            })?);
+        }
+        Ok(self)
+    }
+
+    /// What's drawn under the title.
+    pub fn board(&self) -> Board {
+        match (self.empty.is_some(), self.list) {
+            (false, _) => Board::Overview,
+            (true, ListState::Read) => Board::NoTafs,
+            (true, _) => Board::Mascot,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -191,6 +237,7 @@ pub fn lines(
             .is_empty()
             .then(|| w.line("home.no_tafs"))
             .transpose()?,
+        list: ListState::Read,
         rows,
         each_line_opens: w.line("home.overview.each_line_opens")?,
         labels: vec![],
@@ -221,5 +268,25 @@ pub fn needs_you_words(w: &WordBook, count: i64) -> Result<String, WordsError> {
         w.line("needs_you.nothing")
     } else {
         w.count("needs_you.count", count, &[])
+    }
+}
+
+#[cfg(test)]
+mod list_tests {
+    use super::*;
+
+    #[test]
+    fn with_no_taf_the_overview_says_where_the_list_stands() {
+        let w = WordBook::load(&WordBook::default_root(), "en").unwrap();
+        let o = lines(&w, &[], &[], 0, "").unwrap();
+        assert_eq!(o.board(), Board::NoTafs);
+        let loading = o.clone().with_list(&w, ListState::Loading).unwrap();
+        assert_eq!(loading.empty.as_deref(), Some("Loading your tafs…"));
+        assert_eq!(loading.board(), Board::Mascot);
+        let unread = o.clone().with_list(&w, ListState::Unread).unwrap();
+        assert_eq!(unread.empty.as_deref(), Some("Couldn't load your tafs."));
+        assert_eq!(unread.board(), Board::Mascot);
+        let read = o.with_list(&w, ListState::Read).unwrap();
+        assert_eq!(read.empty.as_deref(), Some("No tafs yet."));
     }
 }
