@@ -52,8 +52,19 @@ for loader in $loaders; do
   echo "$loader: ${gone:-every library found}"
   if [ -n "$gone" ]; then broken="$broken$loader"$'\n'"$gone"$'\n'; fi
 done
-grep -v "^#" squashfs-root/usr/lib/gdk-pixbuf-2.0/2.10.0/loaders.cache | grep "\.so" || true
+# GTK reads the loaders from this cache (the AppImage's hook points GDK_PIXBUF_MODULE_FILE at it):
+# each one it names must be a loader in the AppImage, not a path on the machine it was built on.
+cache=squashfs-root/usr/lib/gdk-pixbuf-2.0/2.10.0/loaders.cache
+named=$(grep -v "^#" "$cache" | grep '\.so"$' | tr -d '"')
+echo "$named"
 echo "::endgroup::"
+grep -qx "libpixbufloader-svg.so" <<< "$named" || { echo "loaders.cache names no SVG loader." >&2; exit 1; }
+for module in $named; do
+  case "$module" in
+    /*) echo "loaders.cache names a path on the build machine: $module" >&2; exit 1 ;;
+  esac
+  test -f "$(dirname "$cache")/loaders/$module" || { echo "loaders.cache names $module, not in the AppImage." >&2; exit 1; }
+done
 if [ -n "$broken" ]; then
   echo "An image loader can't find its libraries by itself, so GTK can't open it:" >&2
   echo "$broken" >&2

@@ -148,7 +148,8 @@ building those two from source on 22.04, or shipping a Flatpak.
 - Before a draft is published, `.github/workflows/verify-release.yml`, run by hand with its tag,
   downloads the draft's own AppImage and `SHA256SUMS`, checks one against the other, and starts
   that file on a clean Ubuntu 24.04. Its three screenshots are the run's only artifact. Nothing
-  is created, edited or published.
+  is created, edited or published. It takes `tools/check-appimage.sh` from the branch it's run
+  on (main), so a draft is checked with today's check, not the one it was built with.
 
 **On a clean Ubuntu 24.04** (`tools/check-appimage.sh`, in an `ubuntu:24.04` container): the
 container has what every Ubuntu 24.04 desktop has and the AppImage counts on, since linuxdeploy
@@ -157,7 +158,8 @@ xkbcommon, the Wayland client), plus a virtual display (`xvfb`) and one font. It
 libadwaita: the check fails if either is installed. It then fails on:
 - a library the app finds in neither the AppImage nor that base (a bare container without the
   base stops at `libfribidi.so.0`);
-- an image loader that can't find its own libraries. GTK opens the gdk-pixbuf loaders at run
+- an image loader that can't find its own libraries, or a `loaders.cache` line naming one that
+  isn't in the AppImage. GTK opens the gdk-pixbuf loaders at run
   time, with no `LD_LIBRARY_PATH`, and the SVG one draws every icon. The GTK plugin copies them
   from the build system with no RUNPATH, so `tools/appimage.sh` points each at the AppImage's
   `usr/lib` (`patchelf`) before the AppImage is made: without that, on a system without librsvg,
