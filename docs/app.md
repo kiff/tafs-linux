@@ -153,8 +153,8 @@ building those two from source on 22.04, or shipping a Flatpak.
 
 **On a clean Ubuntu 24.04** (`tools/check-appimage.sh`, in an `ubuntu:24.04` container): the
 container has what every Ubuntu 24.04 desktop has and the AppImage counts on, since linuxdeploy
-leaves those base libraries out on purpose (fribidi, HarfBuzz, fontconfig, FreeType, GL/EGL, X11,
-xkbcommon, the Wayland client), plus a virtual display (`xvfb`) and one font. It never has GTK,
+leaves those base libraries out on purpose (fribidi, HarfBuzz, fontconfig, FreeType, GL/EGL/GL ES, X11,
+xkbcommon, the Wayland client, GL ES), plus a virtual display (`xvfb`) and one font. It never has GTK,
 libadwaita or a MIME database (`shared-mime-info`): the check fails if one is installed. It then
 fails on:
 - a library the app finds in neither the AppImage nor that base (a bare container without the
@@ -168,7 +168,12 @@ fails on:
   and the sample signed in, whose sidebar draws the app's own icons. gdk-pixbuf tells an image's
   format by the MIME database (through GIO) before it chooses a loader, so the AppImage brings
   its own compiled `usr/share/mime/mime.cache`. Without it, the v1.0.0 draft drew every SVG icon
-  as a missing-image placeholder ("Unrecognized image file format").
+  as a missing-image placeholder ("Unrecognized image file format");
+- a GL library GTK's own renderer can't open: the first screen is drawn again with GTK's default
+  renderer, not the software one the others use. The desktop base includes GL ES (`libgles2`),
+  as a desktop has: linuxdeploy leaves the GL libraries out, since they're the GPU driver's. On
+  a system without it (a server image, as WSL's Ubuntu), GTK said "Couldn't open
+  libGLESv2.so.2" and no window opened.
 
 **Signing.** The draft job signs `SHA256SUMS` with tafs for Linux's OpenPGP key
 (`tools/sign.sh`): an armored detached signature, `SHA256SUMS.asc`, attached beside it. Whoever

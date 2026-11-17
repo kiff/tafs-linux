@@ -3,14 +3,15 @@
 # root: tools/check-appimage.sh <the .AppImage> <a directory for the screenshots>.
 #
 # The container gets what every Ubuntu 24.04 desktop has and the AppImage counts on (linuxdeploy
-# leaves those base libraries out on purpose: fribidi, HarfBuzz, fontconfig, FreeType, GL/EGL,
+# leaves those base libraries out on purpose: fribidi, HarfBuzz, fontconfig, FreeType, GL/EGL/GL ES,
 # X11, xkbcommon, the Wayland client), plus a virtual display and a font; never GTK 4 or
 # libadwaita, which the AppImage must bring itself. Then it fails on:
 # - a library the app finds in neither the AppImage nor that base;
 # - an image loader that can't find its own libraries. GTK opens those at run time with no
 #   LD_LIBRARY_PATH, so each must find them by its own RUNPATH; the SVG one draws every icon;
 # - an icon GTK can't load, in any of the three screens it saves: the first screen, the sign-in,
-#   and the sample signed in, whose sidebar draws the app's own icons. The container has no MIME
+#   and the sample signed in, whose sidebar draws the app's own icons, then the first screen again
+#   with GTK's own renderer (GL), failing on a GL library it can't open. The container has no MIME
 #   database (shared-mime-info), so the AppImage's own is what lets gdk-pixbuf tell an SVG.
 set -euo pipefail
 app=$(realpath "$1")
@@ -22,7 +23,7 @@ apt-get update -qq
 DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends \
   xvfb xauth fonts-dejavu-core \
   libfribidi0 libharfbuzz0b libfontconfig1 libfreetype6 libexpat1 zlib1g \
-  libgl1 libegl1 libglx0 libgbm1 libdrm2 \
+  libgl1 libegl1 libgles2 libglx0 libgbm1 libdrm2 \
   libx11-6 libx11-xcb1 libxcb1 libxext6 libxrender1 libxi6 libxrandr2 libxfixes3 \
   libxcursor1 libxinerama1 libxdamage1 libxcomposite1 libxkbcommon0 \
   libwayland-client0 libwayland-cursor0 libwayland-egl1 > /dev/null
@@ -87,4 +88,12 @@ if grep -h "Failed to load icon" "$work"/*.log | sort -u | grep . >&2; then
   echo "GTK couldn't load those icons." >&2
   exit 1
 fi
-echo "Three screens drawn, every icon loaded."
+# The first screen again with GTK's own renderer, as a desktop opens it: GL, through libepoxy,
+# which opens the system's GL ES and falls back to drawing in software where there's no GPU. A GL
+# library it can't open is a desktop it wouldn't open on.
+(unset GSK_RENDERER; shot first-screen-gl)
+if grep -h "Couldn't open lib" "$work/first-screen-gl.log" | grep . >&2; then
+  echo "GTK's renderer couldn't open its GL library." >&2
+  exit 1
+fi
+echo "Three screens drawn, every icon loaded, and the first again with GTK's own renderer."
