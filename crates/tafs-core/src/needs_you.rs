@@ -70,6 +70,8 @@ pub struct CardLines {
     pub sentence: String,
     /// It may be approved once (`approvableOnce`): the taf's dial shows it on its face.
     pub approvable_once: bool,
+    /// KIFF's decision id (`kiffID`): a streamed answer names the call it held by it.
+    pub kiff_id: Option<String>,
 }
 
 /// A Card unit request's panel (`CardUnitExceptionPanel`): tafs cloud's title, words and history;
@@ -245,6 +247,7 @@ pub fn lines(
             .join(", ");
         cards.push(CardLines {
             approvable_once: call.approvable_once,
+            kiff_id: call.kiff_id.clone(),
             id: call.id.clone(),
             avatar: taf.map(|t| (t.initial.to_string(), t.color)),
             remaining: remaining(w, call.expires_at, now)?,

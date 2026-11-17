@@ -35,6 +35,8 @@ pub struct TafPage {
     pub revoked: bool,
     /// Its held calls' cards, from Needs you.
     pub held: Vec<CardLines>,
+    /// How its chat reads its held calls again from KIFF: a tafs cloud taf's.
+    pub held_reread: Option<crate::taf_chat::HeldReread>,
     /// The sample draws its Activity from the Record; a tafs cloud taf's is its own read.
     pub sample: bool,
     /// This person manages the taf (`manages`, KIFF's access read).
@@ -525,6 +527,7 @@ pub fn page(
             ask_coach: t.may_use_coach && t.manages,
             held: t.held.clone(),
             trial: false,
+            reread: t.held_reread.clone(),
         }));
         let panes = panes.clone();
         chat_tab.connect_toggled(move |b| {

@@ -7,7 +7,7 @@
 //! (`coach_send`): the same routes, bodies and answers, into the taf's live chat. Nothing here
 //! sends, and nothing is signed: Resume, after a send refused for a halt, is the phone's.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use chrono::{DateTime, Duration, Utc};
 use serde_json::Value;
@@ -178,6 +178,12 @@ pub struct TafChat {
     pub failed_why: Option<String>,
     /// The runs picked back up here, each once (`resumedRuns`).
     resumed: HashSet<String>,
+    /// Each held call's card key by KIFF's decision id (`heldKeys`), once KIFF was read: a call
+    /// held in a streamed answer stays placed after it's answered and no longer held.
+    pub held_keys: HashMap<String, String>,
+    /// Where each held call was made (`anchors`, kiff/tafs#206): the item it came after, by its
+    /// card's key. Its card stays there.
+    pub anchors: HashMap<String, String>,
 }
 
 /// A taf's stream followed (`followChatStream`'s own): how the run ended, once it says, what
@@ -590,6 +596,55 @@ impl TafChat {
         }
     }
 
+    /// KIFF's held calls, read: each one's card key by its decision id (`heldKeys`).
+    pub fn know_held(&mut self, calls: impl IntoIterator<Item = (String, String)>) {
+        self.held_keys.extend(calls);
+    }
+
+    /// `anchorHeld`: once a streamed answer is recorded, where each of its held calls was made,
+    /// after the recorded words that came before it, or after the owner's message when it came
+    /// first. The answer's words are the session's taf messages after the owner's last, in order.
+    pub fn anchor_held(&mut self) {
+        let Some(live) = &self.live else {
+            return;
+        };
+        if !live
+            .parts
+            .iter()
+            .any(|p| matches!(p, ReplyPart::Held { .. }))
+        {
+            return;
+        }
+        let messages: Vec<&ChatMessage> = self
+            .thread
+            .messages
+            .iter()
+            .filter(|m| live.session.as_deref() == Some(m.session.as_str()))
+            .collect();
+        let last_owner = messages.iter().rposition(|m| m.from == From::Owner);
+        let answer: Vec<&&ChatMessage> = messages[last_owner.map_or(0, |i| i + 1)..]
+            .iter()
+            .filter(|m| m.from == From::Taf)
+            .collect();
+        let mut before = last_owner.map(|i| format!("m|{}", messages[i].id()));
+        let mut said = 0;
+        for part in &live.parts {
+            match part {
+                ReplyPart::Text(_) => {
+                    if let Some(m) = answer.get(said) {
+                        before = Some(format!("m|{}", m.id()));
+                    }
+                    said += 1;
+                }
+                ReplyPart::Held { exception, .. } => {
+                    if let (Some(key), Some(before)) = (self.held_keys.get(exception), &before) {
+                        self.anchors.insert(key.clone(), before.clone());
+                    }
+                }
+            }
+        }
+    }
+
     /// The stream's answer is the thread's now: it goes.
     pub fn live_gone(&mut self) {
         self.live = None;
@@ -842,6 +897,100 @@ pub fn items_with<'a>(
     let mut seen = HashSet::new();
     all.retain(|i| seen.insert(i.id()));
     withheld_until_words(held_after_its_words(all), now)
+}
+
+/// `chatItems` as a chat holds them: as `items_with`, and the calls held in the answer streaming
+/// now placed in it, where they were made, not by time; once it's recorded, each held call after
+/// the item it came after (`placed`).
+pub fn items_of<'a>(
+    c: &'a TafChat,
+    held: &'a [(String, DateTime<Utc>)],
+    now: DateTime<Utc>,
+) -> Vec<Item<'a>> {
+    let key_of = |exception: &str| c.held_keys.get(exception).map(String::as_str);
+    let streaming: HashSet<&str> = c
+        .live
+        .iter()
+        .flat_map(|l| l.parts.iter())
+        .filter_map(|p| match p {
+            ReplyPart::Held { exception, .. } => key_of(exception),
+            ReplyPart::Text(_) => None,
+        })
+        .collect();
+    let mut all: Vec<Item> = c.thread.messages.iter().map(Item::Message).collect();
+    all.extend(
+        held.iter()
+            .filter(|(key, _)| !streaming.contains(key.as_str()))
+            .map(|(key, at)| Item::Held { key, at: *at }),
+    );
+    all.extend(c.thread.ask_coach.iter().map(Item::AskCoach));
+    all.sort_by_key(|i| i.at());
+    let mut all = placed(all, &c.anchors);
+    if let Some(live) = &c.live {
+        let run = live.run.as_deref().unwrap_or("live");
+        let session = live.session.clone().unwrap_or_else(|| "live".into());
+        let at = DateTime::from_timestamp(live.started, 0).unwrap_or_default();
+        let mut n = 0;
+        let mut words = |t: &str, all: &mut Vec<Item<'a>>| {
+            if !already_recorded(t, live.session.as_deref(), live.started, &c.thread.messages) {
+                all.push(Item::Streaming {
+                    id: format!("s|{run}|{n}"),
+                    text: t.to_string(),
+                    session: session.clone(),
+                    at,
+                });
+            }
+            n += 1;
+        };
+        for part in &live.parts {
+            match part {
+                ReplyPart::Text(t) => words(t, &mut all),
+                // Where it was made in the answer, while KIFF still holds it.
+                ReplyPart::Held { exception, .. } => {
+                    if let Some((key, at)) =
+                        key_of(exception).and_then(|k| held.iter().find(|(key, _)| key == k))
+                    {
+                        all.push(Item::Held { key, at: *at });
+                    }
+                }
+            }
+        }
+        if !live.text.is_empty() {
+            words(&live.text, &mut all);
+        }
+    }
+    let mut seen = HashSet::new();
+    all.retain(|i| seen.insert(i.id()));
+    withheld_until_words(held_after_its_words(all), now)
+}
+
+/// `placed`: each held call moved to just after the item it was made after, when that item is in
+/// the chat; the rest keep their place by time.
+pub fn placed<'a>(items: Vec<Item<'a>>, anchors: &HashMap<String, String>) -> Vec<Item<'a>> {
+    let anchor = |i: &Item| match i {
+        Item::Held { key, .. } => anchors.get(*key).cloned(),
+        _ => None,
+    };
+    let present: HashSet<String> = items.iter().map(Item::id).collect();
+    let (moving, staying): (Vec<_>, Vec<_>) = items
+        .into_iter()
+        .partition(|i| anchor(i).is_some_and(|a| present.contains(&a)));
+    if moving.is_empty() {
+        return staying;
+    }
+    let mut out = Vec::new();
+    for item in staying {
+        let mut after = item.id();
+        out.push(item);
+        // Each held call made after this item, in the order they were made.
+        for m in &moving {
+            if anchor(m).as_deref() == Some(after.as_str()) {
+                after = m.id();
+                out.push(m.clone());
+            }
+        }
+    }
+    out
 }
 
 /// `streamingItems`: the answer streaming now, its words up to each tool call and those being
@@ -1150,7 +1299,7 @@ pub fn lines(
     held: &[(String, DateTime<Utc>)],
     now: DateTime<Utc>,
 ) -> Result<ChatLines, WordsError> {
-    let items = items_with(&c.thread, held, c.live.as_ref(), now);
+    let items = items_of(c, held, now);
     let the_taf = match whose.name {
         Some(n) => n.to_string(),
         None => w.line("chat.the_taf")?,

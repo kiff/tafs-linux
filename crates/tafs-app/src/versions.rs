@@ -531,6 +531,7 @@ impl Opener {
                 ask_coach: false,
                 held: vec![],
                 trial: true,
+                reread: None,
             },
             self.taf.chat.clone(),
         );

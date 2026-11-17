@@ -1179,3 +1179,132 @@ fn a_run_at_work_is_picked_back_up_once_unless_stopped_or_followed() {
     streaming.streaming(now);
     assert_eq!(streaming.to_resume(), None);
 }
+
+/// A live answer that held two calls, at tafs cloud's times: the first held before any word was
+/// recorded, the second a minute on.
+fn two_held_calls(c: &mut TafChat, w: &WordBook) {
+    let now = at("2026-11-16T09:00:00Z");
+    c.streaming(now);
+    let mut f = Following::default();
+    let call = |tool: &str| Event::Activity {
+        tool: tool.into(),
+        step: Some("Refunding".into()),
+        call: None,
+    };
+    let held = |e: &str| Event::Held {
+        exception: e.into(),
+        invocation: format!("inv-{e}"),
+    };
+    for e in [
+        Event::Session {
+            session: "s1".into(),
+            new_session: false,
+            run: None,
+            message: None,
+        },
+        Event::Text("Checking 4410.".into()),
+        call("stripe.refund"),
+        held("exc-a"),
+        Event::Text("4410 waits for you; now 4411.".into()),
+        call("stripe.refund"),
+        held("exc-b"),
+        Event::Text("Both wait for you.".into()),
+    ] {
+        c.stream_event(w, &e, None, &mut f).unwrap();
+    }
+}
+
+#[test]
+fn a_call_held_in_a_live_answer_shows_where_it_was_made() {
+    let w = en();
+    let json = format!(
+        r#"{{"messages":[{}]}}"#,
+        owner("Refund 4410 and 4411", "2026-11-16T09:00:00Z", "s1")
+    );
+    let mut c = chat_of(&json);
+    two_held_calls(&mut c, &w);
+    let held = vec![
+        ("card-a".to_string(), at("2026-11-16T09:00:10Z")),
+        ("card-b".to_string(), at("2026-11-16T09:01:00Z")),
+    ];
+    let now = at("2026-11-16T09:02:00Z");
+    // KIFF not read yet: its calls aren't known as the answer's, and go by time.
+    let by_time: Vec<String> = items_of(&c, &held, now).iter().map(Item::id).collect();
+    assert_eq!(by_time[1], "k|card-a", "{by_time:?}");
+    // Read: each in the answer, after the words it was made after and those that ask for it.
+    c.know_held([
+        ("exc-a".to_string(), "card-a".to_string()),
+        ("exc-b".to_string(), "card-b".to_string()),
+    ]);
+    let ids: Vec<String> = items_of(&c, &held, now).iter().map(Item::id).collect();
+    let pos = |id: &str| ids.iter().position(|i| i == id).unwrap();
+    assert!(pos("k|card-a") > pos("s|live|0"), "{ids:?}");
+    assert!(pos("k|card-a") < pos("k|card-b"), "{ids:?}");
+    assert!(pos("k|card-b") > pos("s|live|1"), "{ids:?}");
+    assert_eq!(ids.iter().filter(|i| i.starts_with("k|")).count(), 2);
+    // Answered, so no longer held: its card goes, and nothing else moves.
+    let one = vec![held[1].clone()];
+    let ids: Vec<String> = items_of(&c, &one, now).iter().map(Item::id).collect();
+    assert!(!ids.contains(&"k|card-a".to_string()) && ids.contains(&"k|card-b".to_string()));
+}
+
+#[test]
+fn once_recorded_each_held_call_stays_after_what_came_before_it() {
+    let w = en();
+    let json = format!(
+        r#"{{"messages":[{}]}}"#,
+        owner("Refund 4410 and 4411", "2026-11-16T09:00:00Z", "s1")
+    );
+    let mut c = chat_of(&json);
+    two_held_calls(&mut c, &w);
+    c.know_held([
+        ("exc-a".to_string(), "card-a".to_string()),
+        ("exc-b".to_string(), "card-b".to_string()),
+    ]);
+    // tafs cloud records the answer's words at its end, after both calls were held.
+    let json = format!(
+        r#"{{"messages":[{},{},{},{}]}}"#,
+        owner("Refund 4410 and 4411", "2026-11-16T09:00:00Z", "s1"),
+        taf("Checking 4410.", "2026-11-16T09:05:00Z", "s1"),
+        taf(
+            "4410 waits for you; now 4411.",
+            "2026-11-16T09:05:01Z",
+            "s1"
+        ),
+        taf("Both wait for you.", "2026-11-16T09:05:02Z", "s1")
+    );
+    c.took(&w, thread(&json).unwrap(), at("2026-11-16T09:05:03Z"));
+    c.anchor_held();
+    c.live_gone();
+    assert_eq!(c.anchors.len(), 2);
+    let held = vec![
+        ("card-a".to_string(), at("2026-11-16T09:00:10Z")),
+        ("card-b".to_string(), at("2026-11-16T09:01:00Z")),
+    ];
+    let it = items_of(&c, &held, at("2026-11-16T09:06:00Z"));
+    let order: Vec<&str> = it
+        .iter()
+        .map(|i| match i {
+            Item::Message(m) => m.text.as_str(),
+            Item::Held { key, .. } => key,
+            _ => "?",
+        })
+        .collect();
+    // By time, both cards came straight after the owner's message; each now stays in the answer,
+    // after the words that ask for it, as while it streamed.
+    assert_eq!(
+        order,
+        [
+            "Refund 4410 and 4411",
+            "Checking 4410.",
+            "4410 waits for you; now 4411.",
+            "card-a",
+            "Both wait for you.",
+            "card-b"
+        ]
+    );
+    // Without the anchors, the first would stay right under the owner's message.
+    c.anchors.clear();
+    let it = items_of(&c, &held, at("2026-11-16T09:06:00Z"));
+    assert!(matches!(it[1], Item::Held { key: "card-a", .. }));
+}
