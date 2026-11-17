@@ -35,14 +35,10 @@ An amber-edged panel (`Panel(stroke: amber 40%)`):
     you approve." and "Someone who approves on this account answers this. Their answer shows here."
   - **A call from KIFF:** "Nothing is sent until you approve.", the iPad's line for answering in
     KIFF, and **Answer in KIFF**, which opens the call's page (`https://app.kiff.dev/needs-you/<id>?lang=…`).
-    Under it, **Allow this from now on** (outlined, `held.allow`), as the iPad offers it
-    (`offersAllow`, `HoldAllow.allowable`): KIFF's capabilities name `holds.allow` (none said,
-    it isn't offered), the person manages Cards, its taf is one tafs cloud lists, and every
-    breach KIFF sent is one a Card change can lift (`per_action_exceeded`, `limit_reached`,
-    `resource_not_on_card`). Tapped, its sheet says "Change the Card so requests like this go on
-    their own" and, in the place of the one signature, why this computer can't approve. tafs
-    cloud's offer (`POST /v1/tafs/{id}/holds/{exception}/allow`) isn't asked for: it makes KIFF a
-    draft only the approval key confirms, so nothing is sent.
+    The iPad answers a call from KIFF on the device only with the session's key (`canAnswer`), and
+    its third answer, Allow this from now on, comes with them. A session with no key, as this
+    computer's, gets the line and Answer in KIFF alone, so neither is drawn here.
+    `--held` reads KIFF's held calls beside `--home`; CI's `needs-you-kiff` draws one.
   - **The sample's:** "Nothing is sent until you approve.", Approve once (when approving once can
     pass it, else why not), its next steps and Refuse.
 

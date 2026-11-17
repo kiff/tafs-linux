@@ -206,7 +206,7 @@ struct Options {
 }
 
 const USAGE: &str = "tafs [--lang en|de|fr|es|it|pt|nl|pl] [--theme light|dark] [--sample] [--signed-in] [--view-only [--paired]]
-     [--home contract.json] [--usage answers.json] [--people answers.json] [--connect answers.json] [--knob answer.json] [--setup answer.json] [--taf-activity answer.json] [--unproven answers.json] [--recipes answers.json] [--gallery answers.json] [--halt answer.json] [--record-search answers.json] [--access answer.json] [--receipts answer.json] [--activity answer.json] [--calls answer.json] [--receipt answer.json] [--work answer.json] [--doors answer.json] [--account-reads answers.json] [--me answer.json] [--held answers.json] [--memory answer.json] [--runs answer.json] [--request answer.json] [--balance answer.json] [--coach answer.json] [--coach-chats answer.json] [--coach-drafts answers.json] [--chat answer.json [--report]] [--brief answer.json] [--mission-log answer.json] [--coach-setup answer.json] [--unreachable network|error] [--app-event item.json] [--size WxH] [--page welcome|sign-in|pair|recipe:<id>|gallery|new-taf|halt-all|halt:<id>|halt-resume:<id>|record-search:<q>|record-export|receipt:<proposal id>|run:<taf id>|pin-sheet|share:<key>|share-step2:<key>|coach|coach-tools|coach-full|coach-hand:<id>|overview|overview-label:<id>|needs-you|needs-you-allow|discard-setup|needs-you-set-all-aside|needs-you-dismiss|needs-you-hold:<id>|brief-answer:<decision id>|mission-log:<mission id>|record|calendar|calendar-week|usage|usage-ask|usage-decline|connect-apps|connect-app|connect-connection|connect-remove|connect-which-taf|connect-approve|account|kiff-account|time-zone|time-zone-use|alerts|devices|devices-sign-out|people|people-rename|people-add|taf|taf-card|taf-setup|taf-setup:<id>|starts:<id>|results:<id>|doors:<id>[:<door>]|consent|connected|sign-in-code] [--screenshot out.png]";
+     [--home contract.json] [--usage answers.json] [--people answers.json] [--connect answers.json] [--knob answer.json] [--setup answer.json] [--taf-activity answer.json] [--unproven answers.json] [--recipes answers.json] [--gallery answers.json] [--halt answer.json] [--record-search answers.json] [--access answer.json] [--receipts answer.json] [--activity answer.json] [--calls answer.json] [--receipt answer.json] [--work answer.json] [--doors answer.json] [--account-reads answers.json] [--me answer.json] [--held answers.json] [--memory answer.json] [--runs answer.json] [--request answer.json] [--balance answer.json] [--coach answer.json] [--coach-chats answer.json] [--coach-drafts answers.json] [--chat answer.json [--report]] [--brief answer.json] [--mission-log answer.json] [--coach-setup answer.json] [--unreachable network|error] [--app-event item.json] [--size WxH] [--page welcome|sign-in|pair|recipe:<id>|gallery|new-taf|halt-all|halt:<id>|halt-resume:<id>|record-search:<q>|record-export|receipt:<proposal id>|run:<taf id>|pin-sheet|share:<key>|share-step2:<key>|coach|coach-tools|coach-full|coach-hand:<id>|overview|overview-label:<id>|needs-you|discard-setup|needs-you-set-all-aside|needs-you-dismiss|needs-you-hold:<id>|brief-answer:<decision id>|mission-log:<mission id>|record|calendar|calendar-week|usage|usage-ask|usage-decline|connect-apps|connect-app|connect-connection|connect-remove|connect-which-taf|connect-approve|account|kiff-account|time-zone|time-zone-use|alerts|devices|devices-sign-out|people|people-rename|people-add|taf|taf-card|taf-setup|taf-setup:<id>|starts:<id>|results:<id>|doors:<id>[:<door>]|consent|connected|sign-in-code] [--screenshot out.png]";
 
 fn options() -> Result<Options, String> {
     let mut o = Options::default();
@@ -299,9 +299,7 @@ fn main() -> glib::ExitCode {
 /// The page a screenshot or `--page` opens beside the sidebar.
 fn selection_of(page: Option<&str>) -> Selection {
     match page {
-        Some("needs-you" | "needs-you-allow" | "needs-you-set-all-aside" | "needs-you-dismiss") => {
-            Selection::NeedsYou
-        }
+        Some("needs-you" | "needs-you-set-all-aside" | "needs-you-dismiss") => Selection::NeedsYou,
         Some(other) if other.starts_with("brief-answer:") => Selection::NeedsYou,
         Some(other) if other.starts_with("needs-you-hold:") => Selection::NeedsYou,
         Some(other) if other.starts_with("mission-log:") => Selection::NeedsYou,
@@ -596,7 +594,6 @@ fn activate(app: &adw::Application, o: &Options) {
         Some("usage-ask") => usage::OPEN.with(|u| u.set(Some("ask"))),
         Some(p) if p.starts_with("halt-resume:") => halt::RESUME.with(|r| r.set(true)),
         Some("discard-setup") => shell::DISCARD.with(|d| d.set(true)),
-        Some("needs-you-allow") => needs_you::OPEN.with(|a| a.set(Some("allow"))),
         Some("needs-you-set-all-aside") => needs_you::OPEN.with(|a| a.set(Some("set-all-aside"))),
         Some("needs-you-dismiss") => needs_you::OPEN.with(|a| a.set(Some("dismiss"))),
         Some("coach-tools") => coach::OPEN_TOOLS.with(|t| t.set(true)),
@@ -1285,7 +1282,6 @@ impl App {
                 name: &t.name,
                 initial: &t.initial,
                 color: t.color_index,
-                allow: offers_allow(cloud, &t.key),
             })
             .collect();
         // A taf's held calls, as Needs you draws them.
@@ -2011,7 +2007,6 @@ impl App {
                 name: &t.name,
                 initial: &t.initial,
                 color: t.color_index,
-                allow: offers_allow(cloud.as_deref(), &t.key),
             })
             .collect();
         let may_answer = account.as_ref().is_none_or(|a| a.allows("holds.answer"));
@@ -2570,15 +2565,6 @@ fn forget_kept() {
 fn read_contract(path: &str) -> Option<Home> {
     let file: serde_json::Value = serde_json::from_slice(&std::fs::read(path).ok()?).ok()?;
     Home::read(&serde_json::to_vec(file.get("answer")?).ok()?)
-}
-
-/// `offersAllow`: signed in with KIFF, whose capabilities say "Allow this from now on" is live,
-/// by someone who manages Cards, for a taf tafs cloud lists (`cloudTaf`).
-fn offers_allow(cloud: Option<&Cloud>, key: &str) -> bool {
-    cloud.is_some_and(|c| {
-        c.account.as_ref().is_some_and(Account::offers_allow)
-            && c.home.tafs.iter().any(|t| t.id.is_some() && t.key() == key)
-    })
 }
 
 /// The account's sidebar and Overview from Home, KIFF's held calls and its activity: the tafs a

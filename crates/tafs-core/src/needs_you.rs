@@ -66,8 +66,6 @@ pub struct CardLines {
     /// "Details", with its lines.
     pub details: Option<(String, Vec<String>)>,
     pub answers: Answers,
-    /// "Allow this from now on" (`offersAllow`), when it's offered on a call answered in KIFF.
-    pub allow: Option<String>,
     /// What a screen reader says for the card's face (`sentence`).
     pub sentence: String,
     /// It may be approved once (`approvableOnce`): the taf's dial shows it on its face.
@@ -183,10 +181,6 @@ pub struct Holder<'a> {
     pub name: &'a str,
     pub initial: &'a str,
     pub color: i64,
-    /// Its held calls may offer "Allow this from now on" (`offersAllow`): signed in with KIFF,
-    /// whose capabilities name `holds.allow`, by someone who manages Cards, for a taf tafs
-    /// cloud lists.
-    pub allow: bool,
 }
 
 pub fn lines(
@@ -236,12 +230,6 @@ pub fn lines(
                 refuse: w.line("needs_you.refuse")?,
             }
         };
-        // A third answer, beside answering in KIFF, on a hold a Card change can lift.
-        let allow = (matches!(answers, Answers::InKiff { .. })
-            && taf.is_some_and(|t| t.allow)
-            && crate::held::allowable(call))
-        .then(|| w.line("needs_you.allow_from_now_on"))
-        .transpose()?;
         let says: Vec<String> = [call.taf_about.clone(), call.taf_reason.clone()]
             .into_iter()
             .flatten()
@@ -280,7 +268,6 @@ pub fn lines(
                 .then(|| w.line("common.details").map(|t| (t, call.details.clone())))
                 .transpose()?,
             answers,
-            allow,
         });
     }
     Ok(NeedsYouLines {

@@ -49,16 +49,6 @@ impl Account {
             .as_ref()
             .is_none_or(|c| c.iter().any(|x| x == capability))
     }
-
-    /// `allowIsLive` and `canManageCards`: "Allow this from now on" is offered once KIFF's
-    /// capabilities name `holds.allow` (none said, it isn't: the app never guesses), to someone
-    /// who manages Cards.
-    pub fn offers_allow(&self) -> bool {
-        self.capabilities
-            .as_ref()
-            .is_some_and(|c| c.iter().any(|x| x == "holds.allow"))
-            && self.allows("cards.manage")
-    }
 }
 
 /// `AccountLines.signedInAs`: the email under the account's name; none when the account is
@@ -580,20 +570,6 @@ mod tests {
         );
         assert_eq!(signed_in_as(&account(Some("Acme"), Some("  "))), None);
         assert_eq!(account(Some(""), None).name(), "acme");
-    }
-
-    #[test]
-    fn allow_from_now_on_waits_for_kiff_to_name_it() {
-        let with = |caps: Option<&[&str]>| Account {
-            capabilities: caps.map(|c| c.iter().map(|x| x.to_string()).collect()),
-            ..account(None, None)
-        };
-        // None said: every other capability counts as allowed, but this one isn't guessed.
-        assert!(!with(None).offers_allow());
-        assert!(!with(Some(&["cards.manage"])).offers_allow());
-        assert!(with(Some(&["cards.manage", "holds.allow"])).offers_allow());
-        // Live, but for someone who doesn't manage Cards: not offered.
-        assert!(!with(Some(&["holds.allow", "holds.answer"])).offers_allow());
     }
 
     #[test]

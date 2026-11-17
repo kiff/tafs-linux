@@ -156,27 +156,6 @@ pub struct HeldCall {
     pub details: Vec<String>,
     pub taf_about: Option<String>,
     pub taf_reason: Option<String>,
-    /// Each breach's outcome, as KIFF sent them (`breachOutcomes`): none for the sample's.
-    pub breach_outcomes: Vec<String>,
-}
-
-/// The breaches a Card change can lift (`HoldAllow.liftable`). A "never" is refused, not held,
-/// so it never shows here.
-pub const LIFTABLE: [&str; 3] = [
-    "per_action_exceeded",
-    "limit_reached",
-    "resource_not_on_card",
-];
-
-/// `HoldAllow.allowable`: a hold from KIFF whose every breach a Card change can lift. Coach's
-/// install, which the iPad also leaves out, is never a held call here.
-pub fn allowable(call: &HeldCall) -> bool {
-    call.kiff_id.is_some()
-        && !call.breach_outcomes.is_empty()
-        && call
-            .breach_outcomes
-            .iter()
-            .all(|o| LIFTABLE.contains(&o.as_str()))
 }
 
 /// The arguments KIFF's gateway adds to every call, never listed under Details.
@@ -227,7 +206,6 @@ pub fn held(w: &WordBook, e: &CardException, taf: &str) -> Result<HeldCall, Word
         details: details(e),
         taf_about: taf_words(e.taf_about.as_str(), 120),
         taf_reason: taf_words(e.taf_reason.as_str(), 280),
-        breach_outcomes: e.breaches.iter().map(|b| b.outcome.clone()).collect(),
     })
 }
 
