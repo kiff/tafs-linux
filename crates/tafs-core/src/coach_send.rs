@@ -27,6 +27,17 @@ pub fn messages_path(taf: &str) -> String {
     format!("/v1/tafs/{}/messages", segment(taf))
 }
 
+/// `POST /v1/tafs/{id}/improve` (`improve`): an improvement's first message, on the taf it
+/// improves; tafs cloud adds the taf's context to it.
+pub fn improve_path(taf: &str) -> String {
+    format!("/v1/tafs/{}/improve", segment(taf))
+}
+
+/// An improvement's first message: its words alone.
+pub fn improve_body(text: &str) -> Vec<u8> {
+    json!({ "text": text }).to_string().into_bytes()
+}
+
 /// `POST /v1/tafs/{id}/steer` (`steer`).
 pub fn steer_path(taf: &str) -> String {
     format!("/v1/tafs/{}/steer", segment(taf))
@@ -680,6 +691,16 @@ pub struct Conversation {
     pub drafts: HashMap<String, crate::drafts::AgentDraft>,
     /// Why KIFF's draft wasn't read, by id, until a read gives it (`setupDraftErrors`).
     pub draft_errors: HashMap<String, String>,
+    /// The taf this new conversation improves, until its first message has gone
+    /// (`setupImproving`).
+    pub improving: Option<Improving>,
+}
+
+/// A taf Coach is on (`setupImproving`): its id at tafs cloud, and its name.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct Improving {
+    pub id: String,
+    pub name: String,
 }
 
 impl Conversation {
@@ -881,6 +902,18 @@ impl Conversation {
         self.thread.messages.retain(|m| m.id() != local);
     }
 
+    /// An improvement's first message taken (`improve`): the conversation goes on in the chat
+    /// tafs cloud answered with, as any other, and Coach is at work.
+    pub fn improved(&mut self, d: &Delivery, sent: &Sent, now: DateTime<Utc>) {
+        self.sending = false;
+        self.improving = None;
+        if let Some(id) = &sent.message {
+            self.mark_sent(&d.local, id);
+        }
+        self.settle_chat(&sent.session);
+        self.awaiting = Some(now);
+    }
+
     /// Sent: the chat it went into is the one shown, a new chat after a hand-over is followed,
     /// and the copy takes tafs cloud's id. Coach is awaited until it answers.
     pub fn delivered(&mut self, d: &Delivery, sent: &Sent, now: DateTime<Utc>) {
@@ -1013,6 +1046,19 @@ impl Conversation {
         self.unsent.insert(at, message);
     }
 
+    /// Delete (`discardUnsent`): out of the thread, not sent. An answer's card can be answered
+    /// again, on the card.
+    pub fn discard(&mut self, id: u64) {
+        let Some(message) = self.unsent.iter().find(|u| u.id == id).cloned() else {
+            return;
+        };
+        self.unsent.retain(|u| u.id != id);
+        if let Some(a) = Answer::parse(&message.text) {
+            let r = self.card_ref(&a.id);
+            self.answered.remove(&r);
+        }
+    }
+
     /// Edit (`editUnsent`): out of the thread, its words as the owner reads them.
     pub fn edit(&mut self, id: u64, w: &WordBook) -> Option<String> {
         let message = self.unsent.iter().find(|u| u.id == id)?.clone();
@@ -1066,7 +1112,8 @@ impl Conversation {
     /// Nothing in it yet (`coachChatIsEmpty`): no message, card or answer, sent or on its way.
     /// New conversation keeps it.
     pub fn is_empty(&self) -> bool {
-        self.thread.items().is_empty()
+        self.improving.is_none()
+            && self.thread.items().is_empty()
             && self.sent.is_empty()
             && self.unsent.is_empty()
             && self
@@ -1104,6 +1151,17 @@ impl Conversation {
         self.ended = None;
         self.error = None;
         self.sending = false;
+        self.improving = None;
+    }
+
+    /// `improveTaf`: a new conversation on the taf `id` (at tafs cloud) called `name`, whose first
+    /// message goes through tafs cloud with the taf's context.
+    pub fn improve(&mut self, id: &str, name: &str) {
+        self.new_chat();
+        self.improving = Some(Improving {
+            id: id.into(),
+            name: name.into(),
+        });
     }
 
     /// One of Coach's chats reopened (`openSetupChat`): shown alone, and messages go on in it.
@@ -1116,6 +1174,7 @@ impl Conversation {
         self.unsent.clear();
         self.sent.clear();
         self.ended = None;
+        self.improving = None;
     }
 }
 
@@ -1554,7 +1613,54 @@ mod tests {
         assert!(c.unsent.is_empty());
         c.retry_back(place, back);
         assert_eq!(c.unsent.len(), 1);
+        // Its menu: Copy copies it as written, Delete takes it out, unsent.
+        let w = WordBook::load(&WordBook::default_root(), "en").unwrap();
+        let l = crate::coach_lines::unsent(&w, &c.thread, &c.unsent).unwrap();
+        assert_eq!(
+            (l[0].copy.as_str(), l[0].text.as_str(), l[0].delete.as_str()),
+            ("Copy", "Hi", "Delete")
+        );
+        c.discard(id);
+        assert!(c.unsent.is_empty());
+        c.discard(id);
         assert!(c.submit(&"x".repeat(CHAT_LIMIT + 1), now) == Submit::Stay);
+    }
+
+    #[test]
+    fn an_improvement_first_message_goes_with_the_tafs_context() {
+        assert_eq!(improve_path("taf 1"), "/v1/tafs/taf%201/improve");
+        assert_eq!(
+            v(&improve_body("Make it faster")),
+            json!({"text": "Make it faster"})
+        );
+        // The session's, as any message: not one of the device-signed routes.
+        assert!(!crate::signed::signed_at_cloud(
+            "POST",
+            &improve_path("taf_1")
+        ));
+        let mut c = conversation();
+        c.improve("taf_1", "Refunds");
+        assert!(c.fresh && c.improving.is_some() && !c.is_empty());
+        let now = at("2026-10-16T13:00:00Z");
+        let Submit::Send(d) = c.submit("Make it faster", now) else {
+            panic!()
+        };
+        c.improved(
+            &d,
+            &Sent {
+                session: "sess7".into(),
+                new_session: true,
+                message: None,
+            },
+            now,
+        );
+        assert_eq!(c.improving, None);
+        assert_eq!(c.chat.as_deref(), Some("sess7"));
+        assert!(c.thinking() && !c.sending);
+        // Another chat reopened is on no taf.
+        c.improve("taf_1", "Refunds");
+        c.open_chat("sess2");
+        assert_eq!(c.improving, None);
     }
 
     #[test]

@@ -496,6 +496,11 @@ impl TafChat {
         }
     }
 
+    /// Delete (`discardUnsentChat`): out of the thread, not sent.
+    pub fn discard(&mut self, id: u64) {
+        self.unsent.retain(|u| u.id != id);
+    }
+
     /// Edit (`editUnsentChat`): out of the thread, its words back in the box.
     pub fn edit(&mut self, id: u64) -> Option<String> {
         let message = self.unsent.iter().find(|u| u.id == id)?.clone();
@@ -717,6 +722,9 @@ pub struct UnsentLines {
     pub cant: Option<NotReady>,
     pub edit: Option<String>,
     pub retry: Option<String>,
+    /// Its menu (`contextMenu`): Copy and Delete.
+    pub copy: String,
+    pub delete: String,
 }
 
 /// The message box's words (`composer`).
@@ -994,6 +1002,8 @@ fn unsent(w: &WordBook, u: &Unsent, name: Option<&str>) -> Result<UnsentLines, W
             cant: cant()?,
             edit: None,
             retry: Some(w.line("chat.retry")?),
+            copy: w.line("common.copy")?,
+            delete: w.line("chat.delete")?,
         });
     }
     // An older tafs cloud's halt, by its words: that it's halted, and nothing reaches it.
@@ -1007,6 +1017,8 @@ fn unsent(w: &WordBook, u: &Unsent, name: Option<&str>) -> Result<UnsentLines, W
             cant: cant()?,
             edit: None,
             retry: None,
+            copy: w.line("common.copy")?,
+            delete: w.line("chat.delete")?,
         });
     }
     Ok(UnsentLines {
@@ -1018,6 +1030,8 @@ fn unsent(w: &WordBook, u: &Unsent, name: Option<&str>) -> Result<UnsentLines, W
         cant: None,
         edit: Some(w.line("setup.edit")?),
         retry: Some(w.line("chat.retry")?),
+        copy: w.line("common.copy")?,
+        delete: w.line("chat.delete")?,
     })
 }
 

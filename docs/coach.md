@@ -72,7 +72,9 @@ out, as every other read does.
   the box and the words go back; anything else keeps the message in the thread as **Not sent** with
   why, Edit (back to the box) and Retry (`UnsentBubble`); a send refused because the account is
   halted offers Resume, which opens Halt all. tafs cloud's `steering.not_sent` shows the same way,
-  once.
+  once. A message not sent has a menu (a right click or a long press): Copy, the message as it was
+  written, and Delete, which takes it out of the thread unsent; an answer's card can then be
+  answered again (`discardUnsent`).
 - **Reporting Coach's answer:** an answer of Coach's with tafs cloud's id has Report this answer in
   its menu (a right click or a long press), which sends `POST /v1/tafs/{setup}/messages/{id}/report`
   with the answer's chat, as a taf's answer does ([chat.md](chat.md#reporting-an-answer)).
@@ -88,6 +90,20 @@ out, as every other read does.
   ("Archive this conversation?") and then `POST /v1/tafs/{id}/chats/{session}/archive`; the one
   shown gives way to a new conversation. Archived (`GET /v1/tafs/{id}/chats/archived`) opens one,
   or puts it back (`POST …/unarchive`). A refusal is said at the top of the list.
+- **Coach on a taf** (`improveTaf`, `askCoachAbout`): from a tafs cloud taf's page (Improve in
+  Coach, a next step's Ask Coach, its work's fix, Reconnect it in Coach), its chat's Ask Coach card
+  and a Card unit request's Discuss, Coach opens on a new conversation on that taf, with the words
+  in the box where there are some, nothing sent. Only for someone who may use Coach and manages
+  the taf, as the iPad's `askCoachAbout` and `canDiscuss`: anyone else reads the card or the line
+  without its button, and the page's Coach is Coach on no taf. Its first message goes to
+  `POST /v1/tafs/{taf}/improve` with `{"text"}` alone (`improve`: tafs cloud adds the taf's
+  context, so it takes no files and the files stay), the dots from the send; then the conversation
+  goes on in the chat tafs cloud answered with, as any other. A new conversation, or another
+  reopened, is on no taf. Empty, it says what it's about as a choice at its top (`startSwitch`: New
+  taf starts a new conversation; "Improve Rae" is chosen), then "Improve Rae" and "Say what should
+  change, or ask how it's going…", and three first messages that send as they are
+  (`improveExamples`: How is it going?, Why was something refused or held?, It can't find the work
+  it should do), in place of board 7 and "Ask anything about your tafs".
 - **The box** keeps what's typed while the app runs (`setupDraft`); signing out clears it. Ctrl+Enter
   sends (the iPad's ⌘↩). A screenshot's conversation (`--coach`) sends nothing: Send, Stop and the
   cards' answers do nothing there.
@@ -143,7 +159,9 @@ iPad does, and tafs cloud marks no card. The token, the key and the signature ar
   its own-answer field, Send answers once each has an answer, and Chat about this, which puts the
   card away ("Show them again"); an approval; a sign-in; a result (set up, setting up, wasn't set up, a plan needed with
   Choose a plan, or the button that opens the taf once it's on the list; an improvement's new
-  version); a drive's ask; a drive's end ("What I did": the task, each step with what it
+  version, with See version once it's made, which opens the taf it improves (`improvedTaf`: by its
+  id at tafs cloud, else its agent) on its Versions, or that it's made, in words, for a taf not
+  listed here); a drive's ask; a drive's end ("What I did": the task, each step with what it
   touched, and why it ended, in tafs cloud's words or the app's for its reason; its steps are
   read with `try?`, so one it can't read leaves them all out, as on the iPad); a dial card's title. An answered card folds to one line
   (`OutcomeLine`); an approval's opens again on a click, and Fold puts it back. An approval whose
@@ -160,6 +178,14 @@ iPad does, and tafs cloud marks no card. The token, the key and the signature ar
   go, then why this computer can't approve (`ApprovalGate`'s line) in the buttons' place.
 - **After the thread:** "While you were away" and how the tasks Coach handed out went, the dots
   while Coach is at work, and what was written to its run that it hasn't read yet.
+- **Where it opens, and ↓:** opened, the conversation lands on the card waiting for the owner
+  (`setupWaiting`), in the middle, else at the latest; it follows what arrives while its latest is
+  in view. Read back, ↓ over its foot goes to the latest, with the amber dot when something
+  arrived below ("Jump to the latest, something new"). While the card waiting is out of view, the
+  Needs you bar over the foot names it ("Needs you · approve Stripe", "Needs you · sign in at
+  Gmail", "Needs you · let Coach drive", "Needs you · a question": the app is the card's own
+  service, since planque's grants aren't read here), and shows it (`NeedsYouBar`,
+  `crates/tafs-app/src/chat.rs` › `Jump`).
 
 ## Coach mode
 
@@ -225,15 +251,12 @@ For an approval, a sign-in or a drive it gives none, whatever the text, so nothi
 
 ## Not yet
 
-- Setting a chat aside from Needs you; New conversation's choice of a taf to improve
-  (`startSwitch`, `improveTaf`).
-- The microphone and attachments; the recipes on an empty chat; Copy and Delete on a message not
-  sent (the iPad's context menu); an improvement's first message (`improve`).
+- Setting a chat aside from Needs you; `startSwitch`'s offer of the taf on screen (`tafOnScreen`):
+  the switch shows only while Coach is on a taf.
+- The microphone and attachments; the recipes on an empty chat.
 - What the iPad reads beside the thread: planque's grant (its words, terms and profile).
 - The live stream (`LiveWork`, revealing, pinning a sent message, a run that failed part-way with
-  Retry), the Needs you bar and ↓, landing on the waiting card (it lands at the latest), New
-  a dial card (`KnobDraftCard`), and a result's
-  See version.
+  Retry); and a dial card (`KnobDraftCard`).
 - A refused connection's lines are decoded but not drawn: the iPad's Coach doesn't draw them.
 
 ## Screenshots

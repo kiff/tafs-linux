@@ -401,3 +401,285 @@ pub fn menu_on(widget: &impl IsA<gtk::Widget>, items: Vec<(String, std::rc::Rc<d
     }
     widget.add_controller(press);
 }
+
+thread_local! {
+    /// For a screenshot (`--page coach-read-back`): once landed, the thread is read back to its
+    /// top, so ↓ and the bar show.
+    pub static READ_BACK: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// Over a thread, at its foot: the pill for what waits for the owner while it's out of view
+/// (`NeedsYouPill`), and ↓ back to the latest while the thread doesn't follow, with a dot when
+/// something arrived below (`unseen`). The thread follows what arrives while its latest is in
+/// view (`following`); scrolling up stops that, and reaching the foot again or ↓ starts it.
+pub struct Jump {
+    pub overlay: gtk::Overlay,
+    scroller: gtk::ScrolledWindow,
+    down: gtk::Button,
+    dot: gtk::Box,
+    pill: gtk::Button,
+    pill_words: gtk::Label,
+    /// The thread follows what arrives (`following`).
+    pub following: std::cell::Cell<bool>,
+    unseen: std::cell::Cell<bool>,
+    /// Opened, it has landed: on what waits, or at the latest.
+    landed: std::cell::Cell<bool>,
+    /// A draw is putting the thread back: the scroll it makes isn't the owner's.
+    held: std::cell::Cell<bool>,
+    waiting: std::cell::RefCell<Option<gtk::Widget>>,
+    latest: (String, String),
+}
+
+impl Jump {
+    pub fn new(w: &WordBook, scroller: &gtk::ScrolledWindow) -> std::rc::Rc<Jump> {
+        let overlay = gtk::Overlay::new();
+        overlay.set_child(Some(scroller));
+        overlay.set_vexpand(true);
+        let foot = gtk::Box::new(gtk::Orientation::Vertical, 8);
+        // As wide as what it shows, so the rest of the thread under it still takes a click.
+        foot.set_valign(gtk::Align::End);
+        foot.set_halign(gtk::Align::Center);
+        foot.set_margin_bottom(10);
+        let pill = gtk::Button::new();
+        pill.add_css_class("tafs-needs-pill");
+        pill.set_margin_start(16);
+        pill.set_margin_end(16);
+        pill.set_halign(gtk::Align::Center);
+        pill.set_widget_name("needs-you-pill");
+        let row = gtk::Box::new(gtk::Orientation::Horizontal, 10);
+        let mark = gtk::Box::new(gtk::Orientation::Horizontal, 0);
+        mark.add_css_class("tafs-dot");
+        mark.set_valign(gtk::Align::Center);
+        row.append(&mark);
+        let pill_words = text("", 14, 600, &["tafs-ink"]);
+        pill_words.set_ellipsize(gtk::pango::EllipsizeMode::End);
+        pill_words.set_hexpand(true);
+        row.append(&pill_words);
+        let up = symbol("pan-up-symbolic", 13);
+        up.add_css_class("tafs-dim");
+        row.append(&up);
+        pill.set_child(Some(&row));
+        if let Ok(hint) = w.line("coach.shows_it") {
+            pill.update_property(&[gtk::accessible::Property::Description(&hint)]);
+        }
+        pill.set_visible(false);
+        foot.append(&pill);
+        let down = gtk::Button::new();
+        down.add_css_class("tafs-jump");
+        down.set_halign(gtk::Align::Center);
+        down.set_widget_name("jump-latest");
+        let over = gtk::Overlay::new();
+        let arrow = symbol("go-down-symbolic", 15);
+        arrow.add_css_class("tafs-ink");
+        over.set_child(Some(&arrow));
+        let dot = gtk::Box::new(gtk::Orientation::Horizontal, 0);
+        dot.add_css_class("tafs-jump-dot");
+        dot.set_halign(gtk::Align::End);
+        dot.set_valign(gtk::Align::Start);
+        dot.set_visible(false);
+        over.add_overlay(&dot);
+        down.set_child(Some(&over));
+        down.set_visible(false);
+        foot.append(&down);
+        overlay.add_overlay(&foot);
+        let j = std::rc::Rc::new(Jump {
+            overlay,
+            scroller: scroller.clone(),
+            down,
+            dot,
+            pill,
+            pill_words,
+            following: std::cell::Cell::new(true),
+            unseen: std::cell::Cell::new(false),
+            landed: std::cell::Cell::new(false),
+            held: std::cell::Cell::new(false),
+            waiting: std::cell::RefCell::new(None),
+            latest: (
+                w.line("chat.jump_to_latest").unwrap_or_default(),
+                w.line("chat.jump_latest_something_new").unwrap_or_default(),
+            ),
+        });
+        {
+            let jw = std::rc::Rc::downgrade(&j);
+            j.down.connect_clicked(move |_| {
+                if let Some(j) = jw.upgrade() {
+                    j.to_latest();
+                }
+            });
+        }
+        {
+            let jw = std::rc::Rc::downgrade(&j);
+            j.pill.connect_clicked(move |_| {
+                if let Some(j) = jw.upgrade() {
+                    let target = j.waiting.borrow().clone();
+                    if let Some(t) = target {
+                        j.to(&t);
+                    }
+                }
+            });
+        }
+        // Scrolled, by the owner or by the thread: it follows while its latest is in view.
+        {
+            let jw = std::rc::Rc::downgrade(&j);
+            scroller.vadjustment().connect_value_changed(move |_| {
+                if let Some(j) = jw.upgrade() {
+                    if !j.held.get() {
+                        let bottom = j.at_bottom();
+                        j.following.set(bottom);
+                        if bottom {
+                            j.unseen.set(false);
+                        }
+                    }
+                    j.refresh();
+                }
+            });
+        }
+        {
+            let jw = std::rc::Rc::downgrade(&j);
+            scroller.vadjustment().connect_changed(move |_| {
+                if let Some(j) = jw.upgrade() {
+                    j.refresh();
+                }
+            });
+        }
+        j.refresh();
+        j
+    }
+
+    /// The thread's latest is in view.
+    pub fn at_bottom(&self) -> bool {
+        let adj = self.scroller.vadjustment();
+        adj.value() + adj.page_size() >= adj.upper() - 24.0
+    }
+
+    /// ↓: to the latest, following again.
+    pub fn to_latest(&self) {
+        self.following.set(true);
+        self.unseen.set(false);
+        let adj = self.scroller.vadjustment();
+        adj.set_value(adj.upper() - adj.page_size());
+        self.refresh();
+    }
+
+    /// The pill: what waits, in the middle of the view, the thread no longer following.
+    pub fn to(&self, target: &gtk::Widget) {
+        let Some(child) = self.scroller.child() else {
+            return;
+        };
+        let Some(at) = target.compute_point(&child, &gtk::graphene::Point::new(0.0, 0.0)) else {
+            return;
+        };
+        let adj = self.scroller.vadjustment();
+        let middle = f64::from(at.y()) + f64::from(target.height()) / 2.0;
+        let value = (middle - adj.page_size() / 2.0).clamp(0.0, adj.upper() - adj.page_size());
+        adj.set_value(value);
+        self.following.set(self.at_bottom());
+        self.refresh();
+    }
+
+    /// What waits for the owner now, and the pill's words for it; none takes the pill away.
+    pub fn waiting(&self, waits: Option<(&str, gtk::Widget)>) {
+        match waits {
+            Some((words, widget)) => {
+                self.pill_words.set_label(words);
+                self.pill
+                    .update_property(&[gtk::accessible::Property::Label(words)]);
+                *self.waiting.borrow_mut() = Some(widget);
+            }
+            None => *self.waiting.borrow_mut() = None,
+        }
+        self.refresh();
+    }
+
+    /// Something new arrived below while the thread didn't follow.
+    pub fn arrived(&self) {
+        if !self.following.get() {
+            self.unseen.set(true);
+            self.refresh();
+        }
+    }
+
+    /// A draw is about to take the thread down and put it back: until `place`, a scroll isn't the
+    /// owner's.
+    pub fn hold(&self) {
+        self.held.set(true);
+    }
+
+    /// Where a draw puts the view: opened, it lands once the thread is in (`ready`) on what waits
+    /// (in the middle, unless it's among the last few items, which the latest shows) or at the
+    /// latest; then the latest while following, else where it was.
+    pub fn put(&self, keep: f64, ready: bool, near_end: bool) {
+        let value = self.place(keep, ready, near_end);
+        self.scroller.vadjustment().set_value(value);
+        self.refresh();
+    }
+
+    fn place(&self, keep: f64, ready: bool, near_end: bool) -> f64 {
+        self.held.set(false);
+        let adj = self.scroller.vadjustment();
+        let latest = adj.upper() - adj.page_size();
+        if !self.landed.get() && !ready {
+            self.following.set(true);
+            return latest;
+        }
+        if !self.landed.replace(true) {
+            if READ_BACK.with(|r| r.replace(false)) {
+                self.following.set(false);
+                return 0.0;
+            }
+            if let (Some(target), false) = (self.waiting.borrow().clone(), near_end) {
+                if let Some(child) = self.scroller.child() {
+                    if let Some(at) =
+                        target.compute_point(&child, &gtk::graphene::Point::new(0.0, 0.0))
+                    {
+                        let middle = f64::from(at.y()) + f64::from(target.height()) / 2.0;
+                        self.following.set(false);
+                        return (middle - adj.page_size() / 2.0).clamp(0.0, latest.max(0.0));
+                    }
+                }
+            }
+            self.following.set(true);
+            return latest;
+        }
+        if self.following.get() {
+            latest
+        } else {
+            keep
+        }
+    }
+
+    /// Opened again (another conversation): it lands again.
+    pub fn reland(&self) {
+        self.landed.set(false);
+        self.following.set(true);
+        self.unseen.set(false);
+    }
+
+    /// The pill while what waits is out of view; ↓ while the latest is out of view and the thread
+    /// doesn't follow, with its dot for something new.
+    fn refresh(&self) {
+        let adj = self.scroller.vadjustment();
+        let waits_out_of_view = self.waiting.borrow().as_ref().is_some_and(|t| {
+            let Some(child) = self.scroller.child() else {
+                return false;
+            };
+            let Some(at) = t.compute_point(&child, &gtk::graphene::Point::new(0.0, 0.0)) else {
+                return false;
+            };
+            let (top, h) = (f64::from(at.y()), f64::from(t.height()));
+            h > 0.0 && (top + h <= adj.value() || top >= adj.value() + adj.page_size())
+        });
+        self.pill.set_visible(waits_out_of_view);
+        let down = !self.at_bottom() && !self.following.get();
+        self.down.set_visible(down);
+        self.dot.set_visible(down && self.unseen.get());
+        let label = if self.unseen.get() {
+            &self.latest.1
+        } else {
+            &self.latest.0
+        };
+        self.down
+            .update_property(&[gtk::accessible::Property::Label(label)]);
+        self.down.set_tooltip_text(Some(label));
+    }
+}

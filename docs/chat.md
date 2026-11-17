@@ -64,6 +64,8 @@ All at tafs cloud, as the session, unsigned; a 401 on any of them signs this com
   once as Not sent. A Retry kept again still owes it. This computer keeps which were dealt with in
   memory only, so a restart shows them again.
 - **An owner's message's menu** (a right click or a long press): Send again, Edit and send, Copy.
+  A message not sent has its own: Copy, and Delete, which takes it out of the thread unsent
+  (`discardUnsentChat`).
 - `--chat <answer.json>` (with `--home`) draws a chat from a file: nothing is read or sent.
 
 ## What's drawn
@@ -91,13 +93,18 @@ In the iPad's order, in a column at most 720 wide:
   - **its held calls,** as Needs you draws them, placed after the words of the turn that asks for
     them (`heldAfterItsWords`), and waiting for those words at most 45 s after they were held
     (`withheldUntilWords`);
-  - **a setting it hands to Coach** (`AskCoachCardView`): its words, and Ask Coach, dimmed, for
-    someone who may use Coach and manages the taf: Coach on a taf (`improveTaf`) isn't on this
-    computer yet.
+  - **a setting it hands to Coach** (`AskCoachCardView`): its words, and Ask Coach for someone who
+    may use Coach and manages the taf, which opens Coach on this taf with the card's words in the
+    box, nothing sent (`askCoachAbout`, [Coach on a taf](coach.md)).
 - Then the messages not sent, the dots while the taf works, what was written to its run and not
   read yet, why the latest run stopped at a cap ("Rae stopped: this task would cost more than its
   limit…", on the amber at 10%, `capWords`: `cost_cap`, `turn_cap`, `max_token`, `refused`) once
   nothing is at work, and what tafs cloud holds to go next.
+- **Where it opens, and ↓:** opened, the chat lands on the taf's latest held call (`chatWaiting`), in
+  the middle, unless it's among the last three items, which the newest shows; else at the newest.
+  It follows what arrives while its newest is in view. Read back, ↓ over its foot goes to the
+  newest, with the amber dot when something arrived below. While the held call is out of view, the
+  Needs you pill names it ("Needs you · " and its summary) and shows it (`NeedsYouPill`).
 - **The box:** "Message Rae", or "Write the next message" while it works; Send on the brand sweep, its
   label "Send to Rae while it works" then; Stop in the ink. Ctrl+Enter sends.
 
@@ -166,12 +173,11 @@ answer that can be reported; its Send sends nothing.
 - **The stream** (`streamMessage`, `resumeChat`): the live answer and its work block (`LiveWork`),
   `SteadyMarkdown`, a run that failed part-way with Retry (`failedWords`: it comes on the stream's
   `end`), and picking a run back up. Linux reads the thread instead, every 4 s.
-- **Pinning a sent message** to the top, the ↓ button and the Needs you pill, landing on the waiting
-  held call (the chat opens at its newest).
+- **Pinning a sent message** to the top (a sent message brings the chat to its newest).
 - What became of a held call the owner answered (`OutcomeLine` from the Record: KIFF's answer time
   isn't read here), and a held call's place from the stream (`anchors`).
-- A door's knocks among the messages (they're on the Activity tab), Copy
-  and Delete on a message not sent, and keeping across launches which unread rows were dealt with.
+- A door's knocks among the messages (they're on the Activity tab), and keeping across launches
+  which unread rows were dealt with.
 - The sample's chat (`sampleReply`).
 
 ## Screenshots

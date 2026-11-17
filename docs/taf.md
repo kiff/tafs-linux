@@ -64,8 +64,8 @@ in tafs cloud's words (`tafs-core/src/activity.rs`):
   cloud's kind, title and detail: `activity::evidence`). Under it its next step (`NextStepRow`):
   for whoever manages the taf, signed in, a button in tafs cloud's words: Connect it again opens
   Connect apps (signing that connection in again where its vendor signed it out needs planque's
-  grants, which this computer doesn't read), Ask Coach opens Coach with tafs cloud's message, else
-  the row's own words, in the box, nothing sent (for whoever may use Coach); anyone else, and a
+  grants, which this computer doesn't read), Ask Coach opens Coach on this taf with tafs cloud's
+  message, else the row's own words, in the box, nothing sent (for whoever may use Coach); anyone else, and a
   kind the app doesn't know, reads the words alone (`activity::next_action`);
 - at the foot: the next page as the list reaches its end (`next_cursor`), tafs cloud's end words,
   "Nothing here." when no page has an entry, or what went wrong and Try again.
@@ -299,7 +299,8 @@ the iPad's order:
   and its button in tafs cloud's words. Signing that connection in again is approved at planque,
   signed by the device: the tap shows the can't-approve line and sends nothing ([approval](approval.md)).
 - **The job:** THE JOB, and its job as tafs cloud says it (`job_summary`), else "Works under {n}
-  Cards"; **Improve in Coach** for whoever manages it and may use Coach, which opens Coach.
+  Cards"; **Improve in Coach** for whoever manages it and may use Coach, which opens Coach on a new
+  conversation on this taf ([Coach on a taf](coach.md)).
 - **Starts when** and, after the connected apps, **Results go to**: rows that open their screens
   (below).
 - **Connected apps** (`ConnectedToolsRing`): why tafs cloud left the connections out (this

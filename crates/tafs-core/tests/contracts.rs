@@ -428,13 +428,20 @@ fn card_unit_requests_from_home() {
     assert_eq!(unit.words, "Its Card only allows EUR.");
     assert_eq!(unit.history, "Tried 4 times");
     assert_eq!(unit.discuss.as_deref(), Some("Add a USD limit"));
+    // Discuss opens Coach on the request's taf.
+    assert_eq!(
+        unit.coach,
+        Some(("taf-aaaa0000000000000000".into(), "Rae".into()))
+    );
     assert_eq!(unit.dismiss, "Dismiss");
     assert_eq!(lines.empty, None);
-    // Not managing it, or not using Coach: no Coach button.
+    // Not managing it, or not using Coach: no Coach button, and no taf for Coach to open on.
     let lines = with_waits(empty(), &home, true, &|_| false);
     assert_eq!(lines.card_units[0].discuss, None);
+    assert_eq!(lines.card_units[0].coach, None);
     let lines = with_waits(empty(), &home, false, &|_| true);
     assert_eq!(lines.card_units[0].discuss, None);
+    assert_eq!(lines.card_units[0].coach, None);
     // Each field is the iPad's `let`: one missing fails Home, as its synthesized decoder does.
     let mut broken = ask.clone();
     broken.as_object_mut().unwrap().remove("history");

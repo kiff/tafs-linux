@@ -108,6 +108,8 @@ struct Page {
     column: gtk::Box,
     plan_slot: gtk::Box,
     scroller: gtk::ScrolledWindow,
+    /// ↓ and the Needs you bar over the conversation.
+    jump: Rc<crate::chat::Jump>,
     error: gtk::Label,
     composer: Composer,
     /// The window is wide enough for the panel beside the conversation.
@@ -214,7 +216,8 @@ pub fn page(
     scroller.set_vexpand(true);
     scroller.set_child(Some(&column));
     scroller.add_css_class("tafs-coach-wash");
-    chat.append(&scroller);
+    let jump = crate::chat::Jump::new(&w, &scroller);
+    chat.append(&jump.overlay);
     let error = text("", 13, 400, &["tafs-no"]);
     error.set_margin_start(16);
     error.set_margin_end(16);
@@ -271,6 +274,7 @@ pub fn page(
         column,
         plan_slot,
         scroller,
+        jump,
         error,
         composer,
         wide: Cell::new(false),
@@ -737,6 +741,23 @@ impl Page {
         );
     }
 
+    /// One of an improvement's first messages (`improveExamples`): sent as it is, the box left as
+    /// it was (`submitSetup(example)`).
+    fn send_now(self: &Rc<Self>, words: &str) {
+        if matches!(self.source, CoachSource::File { .. }) || self.conv.borrow().sending {
+            return;
+        }
+        let submit = self.conv.borrow_mut().submit(words, chrono::Utc::now());
+        if let Submit::Send(d) = submit {
+            self.follow.set(true);
+            self.draw();
+            let p = self.clone();
+            glib::spawn_future_local(async move {
+                p.deliver(d).await;
+            });
+        }
+    }
+
     /// Send (`send`, `submitSetup`): the words leave the box; a message goes now, or, while Coach
     /// works, to its run. Words that weren't taken go back in the box.
     fn send(self: &Rc<Self>) {
@@ -804,8 +825,36 @@ impl Page {
         let Some(setup) = self.conv.borrow().setup.clone() else {
             return false;
         };
-        let body = coach_send::message_body(&d.text, &d.target, &d.files);
-        let Some(answer) = self.post(coach_send::messages_path(&setup), body).await else {
+        // An improvement's first message goes through tafs cloud, which adds the taf's context
+        // (`improve`), with no files; Coach is at work from the send.
+        let improving = self.conv.borrow().improving.clone();
+        if improving.is_some() && !d.files.is_empty() {
+            self.conv.borrow_mut().not_tried(&d, None);
+            self.draw();
+            return false;
+        }
+        let (path, body) = match improving.as_ref().map(|i| &i.id) {
+            Some(taf) => {
+                self.conv.borrow_mut().awaiting = Some(chrono::Utc::now());
+                self.draw();
+                (
+                    coach_send::improve_path(taf),
+                    coach_send::improve_body(&d.text),
+                )
+            }
+            None => (
+                coach_send::messages_path(&setup),
+                coach_send::message_body(&d.text, &d.target, &d.files),
+            ),
+        };
+        let answer = self.post(path, body).await;
+        if improving.is_some()
+            && !matches!(&answer, Some(Ok(a)) if (200..300).contains(&a.status))
+            && self.conv.borrow().generation == d.generation
+        {
+            self.conv.borrow_mut().awaiting = None;
+        }
+        let Some(answer) = answer else {
             return false;
         };
         if self.conv.borrow().generation != d.generation {
@@ -818,6 +867,12 @@ impl Page {
                 return false;
             }
             Ok(a) if (200..300).contains(&a.status) => match coach_send::sent(&a.body) {
+                Some(sent) if improving.is_some() => {
+                    self.conv.borrow_mut().improved(&d, &sent, now);
+                    self.draw();
+                    self.load_thread().await;
+                    return true;
+                }
                 Some(sent) => {
                     self.conv.borrow_mut().delivered(&d, &sent, now);
                     self.draw();
@@ -1070,6 +1125,12 @@ impl Page {
         });
     }
 
+    /// Delete (`discardUnsent`): out of the thread, not sent.
+    fn discard(self: &Rc<Self>, id: u64) {
+        self.conv.borrow_mut().discard(id);
+        self.draw();
+    }
+
     /// Edit (`editUnsent`): out of the thread, its words back in the box.
     fn edit(self: &Rc<Self>, id: u64) {
         let words = self.conv.borrow_mut().edit(id, &self.w);
@@ -1308,16 +1369,26 @@ impl Page {
             chatting,
             selections,
         };
+        // The card waiting for the owner (`setupWaiting`), for its bar.
+        let waiting = tafs_core::setup_shape::waiting(&c).and_then(|s| {
+            tafs_core::coach_lines::needs_you_bar(w, &s.component)
+                .ok()
+                .map(|words| (s.card_ref(), words))
+        });
+        let ready = !c.thread.items().is_empty();
         drop(c);
         self.draw_tools_row();
         let shaping = self.draw_shape();
         if self.drawn.borrow().as_ref() == Some(&now) {
             return;
         }
-        let adj = self.scroller.vadjustment();
-        let first = self.drawn.borrow().is_none();
-        let at_bottom = adj.value() + adj.page_size() >= adj.upper() - 24.0;
-        let keep = adj.value();
+        let keep = self.scroller.vadjustment().value();
+        let before = self
+            .drawn
+            .borrow()
+            .as_ref()
+            .and_then(|d| d.lines.as_ref().ok().map(|l| l.order.len()));
+        self.jump.hold();
         while let Some(child) = self.column.first_child() {
             self.column.remove(&child);
         }
@@ -1345,19 +1416,40 @@ impl Page {
         if let Ok(lines) = &now.lines {
             self.conv.borrow_mut().drawn = lines.order.clone();
         }
+        let grew = matches!(
+            (before, now.lines.as_ref().ok().map(|l| l.order.len())),
+            (Some(b), Some(n)) if n > b
+        );
         *self.drawn.borrow_mut() = Some(now);
-        // The thread follows what arrives while its latest is in view, and lands there first.
-        let follow = first || at_bottom || self.follow.replace(false);
-        let scroller = self.scroller.clone();
-        glib::idle_add_local_once(move || {
-            let adj = scroller.vadjustment();
-            adj.set_value(if follow {
-                adj.upper() - adj.page_size()
-            } else {
-                keep
-            });
+        // The bar for the card that waits, while it's out of view (`NeedsYouBar`).
+        let card = waiting.as_ref().and_then(|(r, words)| {
+            named(self.column.upcast_ref(), &format!("card.{r}")).map(|c| (words.as_str(), c))
         });
+        self.jump.waiting(card);
+        // Something new below while the owner reads back: ↓'s dot.
+        if grew {
+            self.jump.arrived();
+        }
+        // The thread follows what arrives while its latest is in view (a message sent brings it
+        // there), and lands first on the card waiting, or at the latest.
+        if self.follow.replace(false) {
+            self.jump.following.set(true);
+        }
+        let jump = self.jump.clone();
+        glib::idle_add_local_once(move || jump.put(keep, ready, false));
     }
+}
+
+/// The widget named `name` under `root`, if it's drawn.
+pub(crate) fn named(root: &gtk::Widget, name: &str) -> Option<gtk::Widget> {
+    let mut stack = vec![root.clone()];
+    while let Some(w) = stack.pop() {
+        if w.widget_name() == name {
+            return Some(w);
+        }
+        stack.extend(std::iter::successors(w.first_child(), |c| c.next_sibling()));
+    }
+    None
 }
 
 /// `setupRead`'s Coach: its id at tafs cloud, or none before it's started.
@@ -1526,6 +1618,56 @@ fn eyebrow_in(s: &str, tone: Tone) -> gtk::Label {
     l
 }
 
+/// The empty chat of a conversation on a taf: what it's about as a choice (`startSwitch`: a new
+/// taf starts a new conversation; this taf is chosen), "Improve {taf}" and its line, and three
+/// first messages, each sent as it is.
+fn improving(page: &Rc<Page>, i: &tafs_core::coach_lines::ImproveLines) -> gtk::Widget {
+    let v = gtk::Box::new(gtk::Orientation::Vertical, 12);
+    v.set_margin_top(16);
+    v.set_margin_bottom(16);
+    let switch = gtk::Box::new(gtk::Orientation::Horizontal, 0);
+    switch.add_css_class("tafs-start-switch");
+    switch.set_halign(gtk::Align::Start);
+    switch.update_property(&[gtk::accessible::Property::Label(&i.about)]);
+    let new_taf = gtk::Button::with_label(&i.new_taf);
+    new_taf.add_css_class("tafs-start-choice");
+    new_taf.set_widget_name("coach.start.new-taf");
+    {
+        let p = Rc::downgrade(page);
+        new_taf.connect_clicked(move |_| {
+            if let Some(p) = p.upgrade() {
+                p.new_conversation();
+            }
+        });
+    }
+    switch.append(&new_taf);
+    let this = gtk::Button::with_label(&i.improve);
+    this.add_css_class("tafs-start-choice");
+    this.add_css_class("selected");
+    switch.append(&this);
+    v.append(&switch);
+    let title = text(&i.improve, 26, 700, &["tafs-ink"]);
+    title.set_accessible_role(gtk::AccessibleRole::Heading);
+    v.append(&title);
+    v.append(&text(&i.line, 15, 400, &["tafs-soft"]));
+    let busy = page.conv.borrow().sending;
+    for example in &i.examples {
+        let b = gtk::Button::new();
+        b.add_css_class("tafs-example");
+        let l = text(example, 15, 400, &["tafs-ink"]);
+        b.set_child(Some(&l));
+        b.set_sensitive(!busy);
+        let (p, words) = (Rc::downgrade(page), example.clone());
+        b.connect_clicked(move |_| {
+            if let Some(p) = p.upgrade() {
+                p.send_now(&words);
+            }
+        });
+        v.append(&b);
+    }
+    v.upcast()
+}
+
 fn draw_thread(page: &Rc<Page>, lines: &CoachLines, drawn: &Drawn) {
     let column = &page.column;
     if page.no_coach.get() {
@@ -1542,6 +1684,9 @@ fn draw_thread(page: &Rc<Page>, lines: &CoachLines, drawn: &Drawn) {
         v.append(&text(title, 26, 700, &["tafs-ink"]));
         v.append(&text(line, 15, 400, &["tafs-soft"]));
         column.append(&v);
+    }
+    if let Some(i) = &lines.improve {
+        column.append(&improving(page, i));
     }
     for line in &lines.lines {
         column.append(&match line {
@@ -1693,6 +1838,28 @@ fn intro(w: &WordBook) -> gtk::Widget {
     v.upcast()
 }
 
+/// An unsent message's menu (`contextMenu`), on a right click or a long press: Copy, the message
+/// as it was written, and Delete, out of the thread.
+pub(crate) fn unsent_menu(
+    at: &gtk::Box,
+    copy: &str,
+    text: &str,
+    delete: &str,
+    discard: impl Fn() + 'static,
+) {
+    let (widget, words) = (at.clone(), text.to_owned());
+    crate::chat::menu_on(
+        at,
+        vec![
+            (
+                copy.to_owned(),
+                Rc::new(move || widget.clipboard().set_text(&words)) as Rc<dyn Fn()>,
+            ),
+            (delete.to_owned(), Rc::new(discard)),
+        ],
+    );
+}
+
 /// `UnsentBubble`: the words dimmed, "Not sent · why", then Edit and Retry; for a send refused
 /// because the account is halted, Resume (its Halt screen) and Retry.
 fn unsent(page: &Rc<Page>, u: &UnsentLines, busy: bool) -> gtk::Widget {
@@ -1700,6 +1867,14 @@ fn unsent(page: &Rc<Page>, u: &UnsentLines, busy: bool) -> gtk::Widget {
     let b = owner(&u.words, None, false);
     b.add_css_class("tafs-unsent");
     v.append(&b);
+    unsent_menu(&v, &u.copy, &u.text, &u.delete, {
+        let (p, id) = (Rc::downgrade(page), u.id);
+        move || {
+            if let Some(p) = p.upgrade() {
+                p.discard(id);
+            }
+        }
+    });
     let h = gtk::Box::new(gtk::Orientation::Horizontal, 6);
     h.set_halign(gtk::Align::End);
     let m = symbol(
@@ -2242,8 +2417,19 @@ fn result(r: &ResultLines, open: &Rc<dyn Fn(Selection)>) -> gtk::Widget {
     for (words, tone) in &r.lines {
         p.append(&text(words, 13, 400, &[tone_class(*tone)]));
     }
+    if let Some((words, key)) = &r.see_version {
+        // The taf's page, its Versions open.
+        let b = primary(words);
+        b.set_widget_name("coach.see-version");
+        let (open, key) = (open.clone(), key.clone());
+        b.connect_clicked(move |_| {
+            crate::versions::OPEN.with(|o| *o.borrow_mut() = Some("versions"));
+            open(Selection::Taf(key.clone()));
+        });
+        p.append(&b);
+    }
     if let Some(preparing) = &r.preparing {
-        // Its versions aren't on this computer: the button is there, dimmed.
+        // While the version is made: the button is there, dimmed.
         let b = primary(preparing);
         b.set_sensitive(false);
         p.append(&b);
@@ -2564,6 +2750,7 @@ impl Page {
 
     /// Forgets what was drawn and picked: another conversation is drawn from nothing.
     fn redraw_from_nothing(self: &Rc<Self>) {
+        self.jump.reland();
         self.selections.borrow_mut().clear();
         self.chatting.borrow_mut().clear();
         *self.typing.borrow_mut() = None;

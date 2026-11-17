@@ -205,6 +205,9 @@ pub struct ResultLines {
     pub lines: Vec<(String, Tone)>,
     /// The new version is being made: its button, dimmed.
     pub preparing: Option<String>,
+    /// The new version, made, of a taf listed here: its button's words ("See version 3") and the
+    /// taf's key, whose Versions it opens.
+    pub see_version: Option<(String, String)>,
 }
 
 /// A card, by its kind.
@@ -287,6 +290,18 @@ pub enum Line {
     },
 }
 
+/// The empty chat of a conversation on a taf (`starts` with `setupImproving`): what it's about, as
+/// a choice (`startSwitch`: a new taf, or this taf, chosen), "Improve {taf}" and what Coach does
+/// with it, and three first messages that send as they are (`improveExamples`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ImproveLines {
+    pub about: String,
+    pub new_taf: String,
+    pub improve: String,
+    pub line: String,
+    pub examples: Vec<String>,
+}
+
 /// Coach's screen.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CoachLines {
@@ -294,6 +309,8 @@ pub struct CoachLines {
     pub plan: Option<PlanLines>,
     /// The empty chat: the question it answers, and what Coach does.
     pub starts: Option<(String, String)>,
+    /// The empty chat of a conversation on a taf, in `starts`' place.
+    pub improve: Option<ImproveLines>,
     pub lines: Vec<Line>,
     /// What ended while the owner was away, in one message.
     pub away: Option<(String, Vec<String>)>,
@@ -337,6 +354,31 @@ pub fn composer(w: &WordBook, thinking: bool) -> Result<ComposerLines, WordsErro
     })
 }
 
+/// `NeedsYouBar`'s words for the card waiting while it's out of view: an approval with its app,
+/// a sign-in at its app, a drive, or a question. The app is the card's own service: planque's
+/// grants, which name it first on the iPad, aren't read here.
+pub fn needs_you_bar(w: &WordBook, c: &crate::coach::Component) -> Result<String, WordsError> {
+    let vendor = c.service.as_deref().filter(|s| !s.is_empty());
+    Ok(match c.kind {
+        Kind::Approval => {
+            let words = w.line("coach.needs_you_approve")?;
+            match vendor {
+                Some(v) => format!("{words} {v}"),
+                None => words,
+            }
+        }
+        Kind::SignIn => {
+            let words = w.line("coach.sign_in.eyebrow")?;
+            match vendor {
+                Some(v) => format!("{words} at {v}"),
+                None => words,
+            }
+        }
+        Kind::Drive => w.line("drive.needs_you_let_coach_drive")?,
+        _ => w.line("coach.needs_you_question")?,
+    })
+}
+
 /// A message that didn't go through (`UnsentBubble`): the owner's words, dimmed, "Not sent · why",
 /// then Edit and Retry, or Resume and Retry for a send refused because the account is halted.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -348,6 +390,10 @@ pub struct UnsentLines {
     pub retry: String,
     /// Opens the account's halt, where it's resumed.
     pub resume: Option<String>,
+    /// Its menu (`contextMenu`): Copy, which copies the message as it was written, and Delete.
+    pub copy: String,
+    pub text: String,
+    pub delete: String,
 }
 
 /// Coach's messages that didn't go through, in order.
@@ -376,6 +422,9 @@ pub fn unsent(
                 } else {
                     None
                 },
+                copy: w.line("common.copy")?,
+                text: u.text.clone(),
+                delete: w.line("chat.delete")?,
             })
         })
         .collect()
@@ -1051,13 +1100,31 @@ fn result(
             open: None,
             lines: vec![],
             preparing: None,
+            see_version: None,
         };
+        // The taf it improves (`improvedTaf`): by its id at tafs cloud, else by its agent.
+        let improved = c.taf.as_ref().and_then(|t| {
+            let improves = t.improves.as_deref();
+            listed
+                .iter()
+                .find(|l| Some(l.key.as_str()) == improves)
+                .or_else(|| listed.iter().find(|l| Some(l.agent.as_str()) == improves))
+                .or_else(|| listed.iter().find(|l| l.agent == t.agent))
+        });
         match thread.improvement(&card) {
-            // Its versions aren't on this computer yet: that it's made, in words.
-            Improvement::Made(n) => out.lines.push((
-                w.get("coach.result.version_made", &[("version", &n.to_string())])?,
-                Tone::Dim,
-            )),
+            // Its Versions, where it's tried and switched to; a taf not listed here, in words.
+            Improvement::Made(n) => match improved {
+                Some(l) => {
+                    out.see_version = Some((
+                        w.get("coach.result.see_version", &[("version", &n.to_string())])?,
+                        l.key.clone(),
+                    ))
+                }
+                None => out.lines.push((
+                    w.get("coach.result.version_made", &[("version", &n.to_string())])?,
+                    Tone::Dim,
+                )),
+            },
             Improvement::Failed(why) => {
                 out.lines.push((
                     w.get(
@@ -1102,6 +1169,7 @@ fn result(
         open: None,
         lines: vec![],
         preparing: None,
+        see_version: None,
     };
     match thread.hand_over(&card, started.is_some()) {
         HandOver::SetUp => {
@@ -1373,7 +1441,7 @@ pub fn conversation_lines(
     mode: Mode,
     now: DateTime<Utc>,
 ) -> Result<CoachLines, WordsError> {
-    lines_while(
+    let mut lines = lines_while(
         w,
         &c.thread,
         listed,
@@ -1388,7 +1456,27 @@ pub fn conversation_lines(
                 errors: &c.draft_errors,
             },
         },
-    )
+    )?;
+    // A conversation on a taf, empty: what it's about, and ways to start on it.
+    if let (Some(i), true) = (&c.improving, lines.starts.is_some()) {
+        let improve = w.get("coach.improve_taf", &[("taf", &i.name)])?;
+        lines.starts = None;
+        lines.improve = Some(ImproveLines {
+            about: w.line("coach.what_conversation_about")?,
+            new_taf: w.line("home.new_taf")?,
+            improve,
+            line: w.get("coach.improve_line", &[("name", &i.name)])?,
+            examples: [
+                "coach.improve.how_is_it_going",
+                "coach.improve.why_refused",
+                "coach.improve.cant_find_work",
+            ]
+            .into_iter()
+            .map(|k| w.line(k))
+            .collect::<Result<_, _>>()?,
+        });
+    }
+    Ok(lines)
 }
 
 /// What the conversation holds here beside the thread: Coach at work or awaited, a message not
@@ -1490,6 +1578,7 @@ fn lines_while(
         } else {
             None
         },
+        improve: None,
         lines: out,
         away: if away.is_empty() {
             None
@@ -1646,6 +1735,62 @@ mod tests {
 
     fn book() -> WordBook {
         WordBook::load(&WordBook::default_root(), "en").unwrap()
+    }
+
+    #[test]
+    fn an_empty_conversation_on_a_taf_says_so_and_offers_first_messages() {
+        let w = book();
+        let mut c = crate::coach_send::Conversation::default();
+        c.improve("taf_1", "Rae");
+        let l = conversation_lines(&w, &c, &[], Mode::Kiff, now()).unwrap();
+        assert_eq!(l.starts, None);
+        let i = l.improve.unwrap();
+        assert_eq!(
+            (i.new_taf.as_str(), i.improve.as_str()),
+            ("New taf", "Improve Rae")
+        );
+        assert!(i.line.contains("what Rae did"));
+        assert_eq!(
+            i.examples,
+            [
+                "How is it going?",
+                "Why was something refused or held?",
+                "It can't find the work it should do"
+            ]
+        );
+        // On no taf: Coach's own empty chat.
+        c.new_chat();
+        let l = conversation_lines(&w, &c, &[], Mode::Kiff, now()).unwrap();
+        assert!(l.improve.is_none() && l.starts.is_some());
+    }
+
+    #[test]
+    fn the_needs_you_bar_says_what_waits() {
+        let w = book();
+        let bar = |v: Value| {
+            let c = crate::coach::Component::read(&v).unwrap();
+            needs_you_bar(&w, &c).unwrap()
+        };
+        assert_eq!(
+            bar(json!({"type": "approval", "id": "a", "service": "Stripe"})),
+            "Needs you · approve Stripe"
+        );
+        assert_eq!(
+            bar(json!({"type": "approval", "id": "a"})),
+            "Needs you · approve"
+        );
+        assert_eq!(
+            bar(json!({"type": "sign_in", "id": "s", "service": "Gmail"})),
+            "Needs you · sign in at Gmail"
+        );
+        assert_eq!(
+            bar(json!({"type": "drive", "id": "d"})),
+            "Needs you · let Coach drive"
+        );
+        assert_eq!(
+            bar(json!({"type": "questions", "id": "q"})),
+            "Needs you · a question"
+        );
     }
 
     fn contract() -> Value {
@@ -1939,6 +2084,48 @@ mod tests {
             panic!()
         };
         assert_eq!(r.open, Some(("See it on Refunds".into(), "taf-1".into())));
+    }
+
+    #[test]
+    fn an_improvement_made_opens_its_tafs_versions_where_it_is_listed() {
+        let w = book();
+        let mut v = contract();
+        for c in v["components"].as_array_mut().unwrap() {
+            if c["component"]["type"] == "result" {
+                c["component"]["taf"]["improves"] = json!("taf-1");
+                c["answer"]["outcome"] = json!({"version": 3});
+            }
+        }
+        let t = read(&v);
+        let result = |listed: &[Listed]| {
+            let l = lines(&w, &t, listed, Mode::Kiff, now()).unwrap();
+            l.lines
+                .into_iter()
+                .find_map(|line| match line {
+                    Line::Card {
+                        card: Card::Result(r),
+                        ..
+                    } => Some(r),
+                    _ => None,
+                })
+                .unwrap()
+        };
+        // Listed by its id at tafs cloud: See version, opening that taf's Versions.
+        let listed = [Listed {
+            agent: "refunds-x".into(),
+            key: "taf-1".into(),
+            name: "Refunds".into(),
+        }];
+        let r = result(&listed);
+        assert_eq!(
+            r.see_version,
+            Some(("See version 3".into(), "taf-1".into()))
+        );
+        assert!(r.lines.is_empty());
+        // Not listed here: that it's made, in words.
+        let r = result(&[]);
+        assert_eq!(r.see_version, None);
+        assert_eq!(r.lines.len(), 1);
     }
 
     #[test]
