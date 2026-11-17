@@ -1,7 +1,9 @@
 //! How Coach opens from elsewhere in the app, as the iPad's `AppModel` opens it: a new taf
 //! (`startNewTaf`: a new conversation, the box as it was), a job handed to Coach
 //! (`handRecipeToCoach`: a new conversation with the job's words in the box, nothing sent), and
-//! Finish setting up (`finishSetup`: the chat where the setup stopped). Coach's page takes what was
+//! Finish setting up (`finishSetup`: the chat where the setup stopped), and a taf improved
+//! (`improveTaf`: a new conversation on it, its first message through tafs cloud with the taf's
+//! context, `askCoachAbout`'s words in the box). Coach's page takes what was
 //! asked as it opens (`apply`), and the window opens Coach beside the sidebar (`set_opener`).
 
 use std::cell::RefCell;
@@ -16,6 +18,8 @@ pub enum Start {
     New,
     /// One of Coach's chats, by its session (`openSetupChat`).
     Chat(String),
+    /// A new conversation on a taf, by its id at tafs cloud (`improveTaf`).
+    Improve(String),
 }
 
 thread_local! {
@@ -54,6 +58,12 @@ pub fn hand(say: &str) {
     open(Start::New, Some(say));
 }
 
+/// `improveTaf`, and `askCoachAbout` with `say`: Coach in a new conversation on the taf `taf`
+/// (its id at tafs cloud), `say` in its box where given. Nothing is sent.
+pub fn improve(taf: &str, say: Option<&str>) {
+    open(Start::Improve(taf.to_string()), say);
+}
+
 /// `finishSetup`: Coach on the chat where the setup stopped.
 pub fn finish(session: &str) {
     open(Start::Chat(session.to_string()), None);
@@ -69,6 +79,7 @@ pub fn apply(conv: &mut Conversation) {
     match take() {
         Some(Start::New) => conv.new_chat(),
         Some(Start::Chat(session)) => conv.open_chat(&session),
+        Some(Start::Improve(taf)) => conv.improve(&taf),
         None => {}
     }
 }
@@ -103,9 +114,22 @@ mod tests {
         apply(&mut conv);
         assert_eq!(conv.chat.as_deref(), Some("chat_1"));
         assert!(!conv.fresh);
+        // A taf improved: a new conversation on it, its first message through tafs cloud.
+        improve("taf_9", None);
+        assert_eq!(opened.get(), 3);
+        apply(&mut conv);
+        assert!(conv.fresh && conv.chat.is_none());
+        assert_eq!(conv.improving.as_deref(), Some("taf_9"));
+        assert!(
+            !conv.is_empty(),
+            "a conversation on a taf isn't an empty one"
+        );
+        // Another conversation is on no taf.
+        conv.new_chat();
+        assert_eq!(conv.improving, None);
         forget();
         new_taf();
-        assert_eq!(opened.get(), 2, "signed out, nothing opens");
+        assert_eq!(opened.get(), 3, "signed out, nothing opens");
         assert_eq!(take(), None, "and nothing waits for the next Coach");
     }
 }

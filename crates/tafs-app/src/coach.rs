@@ -808,8 +808,36 @@ impl Page {
         let Some(setup) = self.conv.borrow().setup.clone() else {
             return false;
         };
-        let body = coach_send::message_body(&d.text, &d.target, &d.files);
-        let Some(answer) = self.post(coach_send::messages_path(&setup), body).await else {
+        // An improvement's first message goes through tafs cloud, which adds the taf's context
+        // (`improve`), with no files; Coach is at work from the send.
+        let improving = self.conv.borrow().improving.clone();
+        if improving.is_some() && !d.files.is_empty() {
+            self.conv.borrow_mut().not_tried(&d, None);
+            self.draw();
+            return false;
+        }
+        let (path, body) = match &improving {
+            Some(taf) => {
+                self.conv.borrow_mut().awaiting = Some(chrono::Utc::now());
+                self.draw();
+                (
+                    coach_send::improve_path(taf),
+                    coach_send::improve_body(&d.text),
+                )
+            }
+            None => (
+                coach_send::messages_path(&setup),
+                coach_send::message_body(&d.text, &d.target, &d.files),
+            ),
+        };
+        let answer = self.post(path, body).await;
+        if improving.is_some()
+            && !matches!(&answer, Some(Ok(a)) if (200..300).contains(&a.status))
+            && self.conv.borrow().generation == d.generation
+        {
+            self.conv.borrow_mut().awaiting = None;
+        }
+        let Some(answer) = answer else {
             return false;
         };
         if self.conv.borrow().generation != d.generation {
@@ -822,6 +850,12 @@ impl Page {
                 return false;
             }
             Ok(a) if (200..300).contains(&a.status) => match coach_send::sent(&a.body) {
+                Some(sent) if improving.is_some() => {
+                    self.conv.borrow_mut().improved(&d, &sent, now);
+                    self.draw();
+                    self.load_thread().await;
+                    return true;
+                }
                 Some(sent) => {
                     self.conv.borrow_mut().delivered(&d, &sent, now);
                     self.draw();

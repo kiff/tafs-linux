@@ -124,9 +124,8 @@ waiting." shows only when none waits either.
 Each is a panel: tafs cloud's title (16 semibold), words (14, soft) and history (12, dim); its
 Coach button (`action_title`) only for someone who may use Coach and manages the taf (`canDiscuss`:
 the access read's `manage` for the taf's KIFF agent); then Dismiss in red. The Coach button opens Coach in a new
-conversation with tafs cloud's `coach_text` in its box, for the person to edit and send; nothing
-is sent (`discussCardUnit`; the taf Coach would improve isn't carried, as Linux's Coach opens on
-none). Dismiss is signed like a refusal (`dismissCardUnit`, KIFF's `reject`), so its tap shows
+conversation on the request's taf with tafs cloud's `coach_text` in its box, for the person to
+edit and send; nothing is sent (`discussCardUnit`, [Coach on a taf](coach.md)). Dismiss is signed like a refusal (`dismissCardUnit`, KIFF's `reject`), so its tap shows
 the can't-approve line under it and sends nothing. The same panel stands on a taf's Activity and
 Setup. `--home crates/tafs-app/fixtures/home-waits.json` (synthetic) draws one, CI's
 `needs-you-waits`; `needs-you-set-all-aside` and `needs-you-dismiss` tap Set all aside and

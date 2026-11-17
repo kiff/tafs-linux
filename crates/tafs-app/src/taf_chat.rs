@@ -932,9 +932,11 @@ impl Page {
                     let l = text(words, 15, 400, &["tafs-ink"]);
                     p.append(&l);
                     if let Some(ask) = ask {
-                        // Coach on this taf (`improveTaf`) isn't on this computer yet: there, dimmed.
+                        // Coach on this taf, the card's words in its box (`askCoachAbout`).
                         let b = outline(ask);
-                        b.set_sensitive(false);
+                        b.set_widget_name("taf-chat.ask-coach");
+                        let (taf, say) = (self.taf.id.clone(), words.clone());
+                        b.connect_clicked(move |_| crate::coach_start::improve(&taf, Some(&say)));
                         p.append(&b);
                     }
                     p.upcast()

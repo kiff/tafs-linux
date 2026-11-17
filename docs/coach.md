@@ -90,6 +90,14 @@ out, as every other read does.
   ("Archive this conversation?") and then `POST /v1/tafs/{id}/chats/{session}/archive`; the one
   shown gives way to a new conversation. Archived (`GET /v1/tafs/{id}/chats/archived`) opens one,
   or puts it back (`POST …/unarchive`). A refusal is said at the top of the list.
+- **Coach on a taf** (`improveTaf`, `askCoachAbout`): from a tafs cloud taf's page (Improve in
+  Coach, a next step's Ask Coach, its work's fix, Reconnect it in Coach), its chat's Ask Coach card
+  and a Card unit request's Discuss, Coach opens on a new conversation on that taf, with the words
+  in the box where there are some, nothing sent. Its first message goes to
+  `POST /v1/tafs/{taf}/improve` with `{"text"}` alone (`improve`: tafs cloud adds the taf's
+  context, so it takes no files and the files stay), the dots from the send; then the conversation
+  goes on in the chat tafs cloud answered with, as any other. A new conversation, or another
+  reopened, is on no taf.
 - **The box** keeps what's typed while the app runs (`setupDraft`); signing out clears it. Ctrl+Enter
   sends (the iPad's ⌘↩). A screenshot's conversation (`--coach`) sends nothing: Send, Stop and the
   cards' answers do nothing there.
@@ -238,9 +246,8 @@ For an approval, a sign-in or a drive it gives none, whatever the text, so nothi
 ## Not yet
 
 - Setting a chat aside from Needs you; New conversation's choice of a taf to improve
-  (`startSwitch`, `improveTaf`).
-- The microphone and attachments; the recipes on an empty chat; an improvement's first message
-  (`improve`).
+  (`startSwitch`).
+- The microphone and attachments; the recipes on an empty chat.
 - What the iPad reads beside the thread: planque's grant (its words, terms and profile).
 - The live stream (`LiveWork`, revealing, pinning a sent message, a run that failed part-way with
   Retry); and a dial card (`KnobDraftCard`).

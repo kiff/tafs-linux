@@ -115,6 +115,15 @@ pub fn page(
     open_coach: Rc<dyn Fn()>,
     open_connect: Rc<dyn Fn()>,
 ) -> gtk::Widget {
+    // Coach from a tafs cloud taf's page is Coach on this taf (`improveTaf`, `askCoachAbout`): a
+    // new conversation whose first message goes with the taf's context, the words in the box.
+    let open_coach: Rc<dyn Fn()> = match (&t.cloud_id, t.sample) {
+        (Some(id), false) => {
+            let id = id.clone();
+            Rc::new(move || crate::coach_start::improve(&id, None))
+        }
+        _ => open_coach,
+    };
     let outer = gtk::Box::new(gtk::Orientation::Vertical, 12);
     outer.set_margin_start(16);
     outer.set_margin_end(16);

@@ -93,9 +93,9 @@ In the iPad's order, in a column at most 720 wide:
   - **its held calls,** as Needs you draws them, placed after the words of the turn that asks for
     them (`heldAfterItsWords`), and waiting for those words at most 45 s after they were held
     (`withheldUntilWords`);
-  - **a setting it hands to Coach** (`AskCoachCardView`): its words, and Ask Coach, dimmed, for
-    someone who may use Coach and manages the taf: Coach on a taf (`improveTaf`) isn't on this
-    computer yet.
+  - **a setting it hands to Coach** (`AskCoachCardView`): its words, and Ask Coach for someone who
+    may use Coach and manages the taf, which opens Coach on this taf with the card's words in the
+    box, nothing sent (`askCoachAbout`, [Coach on a taf](coach.md)).
 - Then the messages not sent, the dots while the taf works, what was written to its run and not
   read yet, why the latest run stopped at a cap ("Rae stopped: this task would cost more than its
   limit…", on the amber at 10%, `capWords`: `cost_cap`, `turn_cap`, `max_token`, `refused`) once

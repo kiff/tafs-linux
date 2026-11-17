@@ -407,8 +407,9 @@ pub fn card_unit_panel(w: &Rc<WordBook>, ask: &tafs_core::needs_you::CardUnitLin
         let b = gtk::Button::with_label(discuss);
         b.add_css_class("tafs-link");
         b.set_halign(gtk::Align::Start);
-        let say = ask.coach_text.clone();
-        b.connect_clicked(move |_| crate::coach_start::hand(&say));
+        // `discussCardUnit`: Coach on its taf, its words in the box.
+        let (taf, say) = (ask.taf.clone(), ask.coach_text.clone());
+        b.connect_clicked(move |_| crate::coach_start::improve(&taf, Some(&say)));
         p.append(&b);
     }
     let slot = crate::approval::refusal_slot();
