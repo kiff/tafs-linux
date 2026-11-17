@@ -579,12 +579,22 @@ fn not_sent_rows_and_a_halt_this_computer_cant_resume() {
         (Some("Edit"), Some("Retry"))
     );
     assert!(plain.cant.is_none());
+    // Each has its menu, Copy and Delete.
+    assert!(l
+        .unsent
+        .iter()
+        .all(|u| (u.copy.as_str(), u.delete.as_str()) == ("Copy", "Delete")));
     // Edit takes it out, its words back in the box.
     assert_eq!(c.edit(c.unsent[2].id).as_deref(), Some("Refund 4412"));
     assert_eq!(c.unsent.len(), 2);
+    // Delete takes one out, not sent; the others stay in their order.
+    let gone = c.unsent[1].id;
+    c.discard(gone);
+    assert_eq!(c.unsent.len(), 1);
+    assert_eq!(c.unsent[0].text, "Refund 4410");
     // Retry takes it out of its place; not taken, it goes back there.
     let (i, u) = c.retry(c.unsent[0].id).unwrap();
-    assert_eq!(c.unsent.len(), 1);
+    assert!(c.unsent.is_empty());
     c.retry_back(i, u);
     assert_eq!(c.unsent[0].text, "Refund 4410");
 }

@@ -72,7 +72,9 @@ out, as every other read does.
   the box and the words go back; anything else keeps the message in the thread as **Not sent** with
   why, Edit (back to the box) and Retry (`UnsentBubble`); a send refused because the account is
   halted offers Resume, which opens Halt all. tafs cloud's `steering.not_sent` shows the same way,
-  once.
+  once. A message not sent has a menu (a right click or a long press): Copy, the message as it was
+  written, and Delete, which takes it out of the thread unsent; an answer's card can then be
+  answered again (`discardUnsent`).
 - **Reporting Coach's answer:** an answer of Coach's with tafs cloud's id has Report this answer in
   its menu (a right click or a long press), which sends `POST /v1/tafs/{setup}/messages/{id}/report`
   with the answer's chat, as a taf's answer does ([chat.md](chat.md#reporting-an-answer)).
@@ -227,8 +229,8 @@ For an approval, a sign-in or a drive it gives none, whatever the text, so nothi
 
 - Setting a chat aside from Needs you; New conversation's choice of a taf to improve
   (`startSwitch`, `improveTaf`).
-- The microphone and attachments; the recipes on an empty chat; Copy and Delete on a message not
-  sent (the iPad's context menu); an improvement's first message (`improve`).
+- The microphone and attachments; the recipes on an empty chat; an improvement's first message
+  (`improve`).
 - What the iPad reads beside the thread: planque's grant (its words, terms and profile).
 - The live stream (`LiveWork`, revealing, pinning a sent message, a run that failed part-way with
   Retry), the Needs you bar and ↓, landing on the waiting card (it lands at the latest), New

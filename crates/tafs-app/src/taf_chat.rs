@@ -724,6 +724,12 @@ impl Page {
         });
     }
 
+    /// Delete (`discardUnsentChat`): out of the thread, not sent.
+    fn discard(self: &Rc<Self>, id: u64) {
+        self.chat.borrow_mut().discard(id);
+        self.draw();
+    }
+
     /// Edit: out of the thread, its words back in the box.
     fn edit(self: &Rc<Self>, id: u64) {
         let words = self.chat.borrow_mut().edit(id);
@@ -1045,6 +1051,14 @@ impl Page {
         let b = owner(&u.words, None, false);
         b.add_css_class("tafs-unsent");
         v.append(&b);
+        crate::coach::unsent_menu(&v, &u.copy, &u.words, &u.delete, {
+            let (p, id) = (Rc::downgrade(self), u.id);
+            move || {
+                if let Some(p) = p.upgrade() {
+                    p.discard(id);
+                }
+            }
+        });
         let h = gtk::Box::new(gtk::Orientation::Horizontal, 6);
         h.set_halign(gtk::Align::End);
         let m = symbol(

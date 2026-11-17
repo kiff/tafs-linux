@@ -348,6 +348,10 @@ pub struct UnsentLines {
     pub retry: String,
     /// Opens the account's halt, where it's resumed.
     pub resume: Option<String>,
+    /// Its menu (`contextMenu`): Copy, which copies the message as it was written, and Delete.
+    pub copy: String,
+    pub text: String,
+    pub delete: String,
 }
 
 /// Coach's messages that didn't go through, in order.
@@ -376,6 +380,9 @@ pub fn unsent(
                 } else {
                     None
                 },
+                copy: w.line("common.copy")?,
+                text: u.text.clone(),
+                delete: w.line("chat.delete")?,
             })
         })
         .collect()

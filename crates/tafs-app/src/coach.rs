@@ -1070,6 +1070,12 @@ impl Page {
         });
     }
 
+    /// Delete (`discardUnsent`): out of the thread, not sent.
+    fn discard(self: &Rc<Self>, id: u64) {
+        self.conv.borrow_mut().discard(id);
+        self.draw();
+    }
+
     /// Edit (`editUnsent`): out of the thread, its words back in the box.
     fn edit(self: &Rc<Self>, id: u64) {
         let words = self.conv.borrow_mut().edit(id, &self.w);
@@ -1693,6 +1699,28 @@ fn intro(w: &WordBook) -> gtk::Widget {
     v.upcast()
 }
 
+/// An unsent message's menu (`contextMenu`), on a right click or a long press: Copy, the message
+/// as it was written, and Delete, out of the thread.
+pub(crate) fn unsent_menu(
+    at: &gtk::Box,
+    copy: &str,
+    text: &str,
+    delete: &str,
+    discard: impl Fn() + 'static,
+) {
+    let (widget, words) = (at.clone(), text.to_owned());
+    crate::chat::menu_on(
+        at,
+        vec![
+            (
+                copy.to_owned(),
+                Rc::new(move || widget.clipboard().set_text(&words)) as Rc<dyn Fn()>,
+            ),
+            (delete.to_owned(), Rc::new(discard)),
+        ],
+    );
+}
+
 /// `UnsentBubble`: the words dimmed, "Not sent · why", then Edit and Retry; for a send refused
 /// because the account is halted, Resume (its Halt screen) and Retry.
 fn unsent(page: &Rc<Page>, u: &UnsentLines, busy: bool) -> gtk::Widget {
@@ -1700,6 +1728,14 @@ fn unsent(page: &Rc<Page>, u: &UnsentLines, busy: bool) -> gtk::Widget {
     let b = owner(&u.words, None, false);
     b.add_css_class("tafs-unsent");
     v.append(&b);
+    unsent_menu(&v, &u.copy, &u.text, &u.delete, {
+        let (p, id) = (Rc::downgrade(page), u.id);
+        move || {
+            if let Some(p) = p.upgrade() {
+                p.discard(id);
+            }
+        }
+    });
     let h = gtk::Box::new(gtk::Orientation::Horizontal, 6);
     h.set_halign(gtk::Align::End);
     let m = symbol(

@@ -64,6 +64,8 @@ All at tafs cloud, as the session, unsigned; a 401 on any of them signs this com
   once as Not sent. A Retry kept again still owes it. This computer keeps which were dealt with in
   memory only, so a restart shows them again.
 - **An owner's message's menu** (a right click or a long press): Send again, Edit and send, Copy.
+  A message not sent has its own: Copy, and Delete, which takes it out of the thread unsent
+  (`discardUnsentChat`).
 - `--chat <answer.json>` (with `--home`) draws a chat from a file: nothing is read or sent.
 
 ## What's drawn
@@ -170,8 +172,8 @@ answer that can be reported; its Send sends nothing.
   held call (the chat opens at its newest).
 - What became of a held call the owner answered (`OutcomeLine` from the Record: KIFF's answer time
   isn't read here), and a held call's place from the stream (`anchors`).
-- A door's knocks among the messages (they're on the Activity tab), Copy
-  and Delete on a message not sent, and keeping across launches which unread rows were dealt with.
+- A door's knocks among the messages (they're on the Activity tab), and keeping across launches
+  which unread rows were dealt with.
 - The sample's chat (`sampleReply`).
 
 ## Screenshots

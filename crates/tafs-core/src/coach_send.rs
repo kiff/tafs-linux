@@ -1013,6 +1013,19 @@ impl Conversation {
         self.unsent.insert(at, message);
     }
 
+    /// Delete (`discardUnsent`): out of the thread, not sent. An answer's card can be answered
+    /// again, on the card.
+    pub fn discard(&mut self, id: u64) {
+        let Some(message) = self.unsent.iter().find(|u| u.id == id).cloned() else {
+            return;
+        };
+        self.unsent.retain(|u| u.id != id);
+        if let Some(a) = Answer::parse(&message.text) {
+            let r = self.card_ref(&a.id);
+            self.answered.remove(&r);
+        }
+    }
+
     /// Edit (`editUnsent`): out of the thread, its words as the owner reads them.
     pub fn edit(&mut self, id: u64, w: &WordBook) -> Option<String> {
         let message = self.unsent.iter().find(|u| u.id == id)?.clone();
@@ -1554,6 +1567,16 @@ mod tests {
         assert!(c.unsent.is_empty());
         c.retry_back(place, back);
         assert_eq!(c.unsent.len(), 1);
+        // Its menu: Copy copies it as written, Delete takes it out, unsent.
+        let w = WordBook::load(&WordBook::default_root(), "en").unwrap();
+        let l = crate::coach_lines::unsent(&w, &c.thread, &c.unsent).unwrap();
+        assert_eq!(
+            (l[0].copy.as_str(), l[0].text.as_str(), l[0].delete.as_str()),
+            ("Copy", "Hi", "Delete")
+        );
+        c.discard(id);
+        assert!(c.unsent.is_empty());
+        c.discard(id);
         assert!(c.submit(&"x".repeat(CHAT_LIMIT + 1), now) == Submit::Stay);
     }
 
