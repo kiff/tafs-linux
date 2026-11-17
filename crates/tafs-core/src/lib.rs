@@ -39,6 +39,7 @@ pub mod overview;
 pub mod pairing;
 pub mod passkey;
 pub mod people;
+pub mod pin;
 pub mod planque;
 pub mod receipt_check;
 pub mod receipt_view;

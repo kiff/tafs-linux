@@ -99,7 +99,9 @@ out, as every other read does.
   A stream that drops leaves Coach at work, and the reads every second show the rest. A new or
   another conversation, or leaving the page, stops following it (the run goes on at tafs cloud).
   Not ported: the reveal of an answer letter by letter, which the iPad does only with no stream,
-  the pin of a sent message, and Home's read at the stream's end (Linux reads Home when it opens).
+  and Home's read at the stream's end (Linux reads Home when it opens).
+- **The pin**: a message sent to Coach goes to the top and stays while its answer grows below,
+  as in a taf's chat ([chat.md](chat.md), `tafs-core/src/pin.rs`, `tools/pin-check.sh`).
 - **New conversation** (the pencil in the bar, `newSetupChat`): an empty chat, and the next
   message starts it (`new_chat: true`); the chat tafs cloud answers is the one shown from then on.
   One that's empty already stays, and shows its top.
@@ -276,7 +278,7 @@ For an approval, a sign-in or a drive it gives none, whatever the text, so nothi
   the switch shows only while Coach is on a taf.
 - The microphone and attachments; the recipes on an empty chat.
 - What the iPad reads beside the thread: planque's grant (its words, terms and profile).
-- Revealing an answer with no stream, pinning a sent message, and Home's read at the stream's end;
+- Revealing an answer with no stream, and Home's read at the stream's end;
   and a dial card (`KnobDraftCard`).
 - A refused connection's lines are decoded but not drawn: the iPad's Coach doesn't draw them.
 
