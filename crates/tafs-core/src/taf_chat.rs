@@ -722,18 +722,19 @@ impl TafChat {
     }
 
     /// A steer that didn't reach tafs cloud stays in the thread as not sent. The app never
-    /// resends it on its own.
+    /// resends it on its own. `sent`: the steer's id, and tafs cloud's status, none when nothing
+    /// answered (`retry_keeps_id`).
     pub fn steer_not_sent(
         &mut self,
         text: &str,
-        id: &str,
+        sent: (&str, Option<u16>),
         why: &str,
         halted: Option<String>,
         busy: bool,
-        answered: Option<u16>,
         now: DateTime<Utc>,
     ) {
         self.keep_unsent(text, why, halted, None, busy, now);
+        let (id, answered) = sent;
         if crate::coach_send::retry_keeps_id(answered) {
             self.unsent_id(id);
         }

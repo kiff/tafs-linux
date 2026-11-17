@@ -618,7 +618,7 @@ fn a_message_that_goes_takes_a_too_fast_one_away() {
     let mut c = chat_of(std::str::from_utf8(&fixture("taf-chat.json")).unwrap());
     let (_, u) = c.retry(c.unsent[0].id).unwrap();
     let left = c.unsent.len();
-    c.steer_not_sent(&u.text, "id", "again", None, false, None, now);
+    c.steer_not_sent(&u.text, ("id", None), "again", None, false, now);
     c.retry_kept(left, &u);
     assert_eq!(c.unsent[0].settle, u.settle);
 }
@@ -1376,7 +1376,7 @@ fn a_steer_goes_under_its_id_and_its_retry_too() {
     };
     let body: Value = serde_json::from_slice(&steer_body(&run, &text, Some(&client_id))).unwrap();
     assert_eq!(body["client_message_id"], serde_json::json!(client_id));
-    c.steer_not_sent(&text, &client_id, "It didn't go.", None, false, None, now);
+    c.steer_not_sent(&text, (&client_id, None), "It didn't go.", None, false, now);
     let row = c.unsent.last().unwrap().id;
     c.retry(row).unwrap();
     let Submit::Steer {
@@ -1457,11 +1457,10 @@ fn retry_keeps_the_id_only_where_tafs_cloud_may_have_taken_the_message() {
     };
     c.steer_not_sent(
         &text,
-        &client_id,
+        (&client_id, Some(409)),
         "Sent with other text",
         None,
         false,
-        Some(409),
         now,
     );
     let row = c.unsent.last().unwrap().id;
