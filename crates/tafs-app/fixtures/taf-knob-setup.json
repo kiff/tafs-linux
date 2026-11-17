@@ -1,0 +1,35 @@
+{
+  "version": 7,
+  "pending": {"version": 8, "changes": 2},
+  "draft": {"version": 8, "words": ["Runs every 2 hours, not every 4", "Stops emailing you its answers"]},
+  "does": {"label": "Refund", "line": "Checks the charge, refunds duplicates and keeps a log."},
+  "wakes": [
+    {"id": "schedule_1", "kind": "schedule", "label": "Every 4 hours", "words": "Every 4 hours, 9:00–17:00",
+     "size": {"label": "Every 4 hours", "index": 2, "choices": [
+       {"label": "Every hour", "setting": {"wakes": [], "when": {"busy": "skip"}, "results": ["door_reply", "app"]}},
+       {"label": "Every 2 hours", "setting": {"wakes": [], "when": {"busy": "skip"}, "results": ["door_reply", "app"]}},
+       {"label": "Every 4 hours", "setting": {"wakes": [], "when": {"busy": "skip"}, "results": ["door_reply", "app"]}},
+       {"label": "Every 8 hours", "setting": {"wakes": [], "when": {"busy": "skip"}, "results": ["door_reply", "app"]}}]}},
+    {"id": "event_1", "kind": "app_event", "label": "Stripe · new dispute", "words": "A dispute opened on a charge over €50",
+     "on": false, "ok": "approve",
+     "approval": {"state": "needed", "grant": "sample_1", "event": "DISPUTE_CREATED", "config": {"amount_over": 50}}},
+    {"id": "event_2", "kind": "app_event", "label": "Gmail · new email", "words": "An email to refunds@ with \"refund\" in its subject",
+     "trigger": {"kind": "app_event", "grant": "sample_2"},
+     "approval": {"state": "approved", "grant": "sample_2", "event": "NEW_EMAIL", "config": {}, "subscription": "sub_1"}},
+    {"id": "door_email", "kind": "door", "label": "Email", "words": "Email to refunds@tafs.example", "state": "Open", "door": "door_email"},
+    {"id": "fu_1", "kind": "follow_up", "label": "Follow-up", "words": "Check dispute #4825 again",
+     "expires": "2026-11-04T10:00:00Z", "follow_up": "fu-1"}
+  ],
+  "results": [
+    {"id": "result_reply", "place": "door_reply", "label": "Reply to the sender", "words": "", "on": true,
+     "size": {"label": "On", "index": 0, "choices": [{"label": "On", "setting": {"wakes": [], "busy": "skip", "results": ["door_reply", "app"]}}, {"label": "Off", "setting": {"wakes": [], "busy": "skip", "results": ["app"]}}]}},
+    {"id": "result_app", "place": "app", "label": "Alert our phones", "words": "", "on": true},
+    {"id": "result_email", "place": "owner_email", "label": "Email me", "words": "", "on": false},
+    {"id": "result_notion", "place": "action", "label": "Notion · Support log", "words": "A line for each refund, in the Support log page", "on": true,
+     "size": {"label": "On", "index": 0, "choices": [
+       {"label": "On", "setting": {"wakes": [], "busy": "skip", "results": ["door_reply", "app", {"place": "notion", "page": "p1"}]}},
+       {"label": "Off", "setting": {"wakes": [], "busy": "skip", "results": ["door_reply", "app"]}}]}}
+  ],
+  "rim": {"done": 12, "working": 1, "line": "12 done today · 1 working"},
+  "setting": {"wakes": [{"kind": "schedule", "every": "4h"}, {"kind": "app_event", "grant": "sample_2"}], "when": {"busy": "skip"}, "results": ["door_reply", "app", {"place": "notion", "page": "p1"}]}
+}

@@ -358,13 +358,15 @@ pub fn build(
                                 }
                                 _ => None,
                             };
-                            let open = open.clone();
+                            let (o1, o2, o3) = (open.clone(), open.clone(), open.clone());
                             crate::taf::page(
                                 w.clone(),
                                 t,
                                 entries.clone(),
                                 halt_row,
-                                Rc::new(move || open(Selection::Usage)),
+                                Rc::new(move || o1(Selection::Usage)),
+                                Rc::new(move || o2(Selection::Coach)),
+                                Rc::new(move || o3(Selection::ConnectApps)),
                             )
                         }
                         None => screen_page(&title).upcast::<gtk::Widget>(),

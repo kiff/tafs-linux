@@ -147,6 +147,15 @@ pub enum Act {
     /// `removeSlackDoor`: a Slack door's subscription stopped at planque, signed by the device,
     /// before the door goes.
     StopSlackSubscription { grant: String, trigger: String },
+    /// `connectAgain`, `reconnect`: a connection signed in again, its approval at planque signed
+    /// by the device before the vendor's page.
+    ConnectAgain { grant: String },
+    /// `disconnect(grantID:)`: a connection ended at planque, signed by the device.
+    Disconnect { grant: String },
+    /// `useVersion`: a version made live, behind the device's own check before tafs cloud's
+    /// switch begins (and the Card's confirmation when it brings one). The switch stops the taf
+    /// until it's finished, so this computer doesn't begin it.
+    MakeLive { taf: String, version: i64 },
 }
 
 impl Act {
@@ -181,13 +190,30 @@ impl Act {
                     escaped(trigger)
                 ),
             ),
+            Act::ConnectAgain { grant } => {
+                ("POST", format!("/v1/grants/{}/approve", escaped(grant)))
+            }
+            Act::Disconnect { grant } => ("DELETE", format!("/v1/grants/{}", escaped(grant))),
+            Act::MakeLive { taf, version } => (
+                "POST",
+                format!("/v1/tafs/{}/versions/{version}/switch", escaped(taf)),
+            ),
         }
+    }
+
+    /// Whether the device checks the person before a tafs cloud call it makes as the session
+    /// (`useVersion`): this computer never begins it.
+    pub fn at_device(&self) -> bool {
+        matches!(self, Act::MakeLive { .. })
     }
 
     /// Whether the call goes to planque (`PlanqueClient`), which takes every change signed by the
     /// device. This computer has no planque client but its grants read (`planque.rs`).
     pub fn at_planque(&self) -> bool {
-        matches!(self, Act::StopSlackSubscription { .. })
+        matches!(
+            self,
+            Act::StopSlackSubscription { .. } | Act::ConnectAgain { .. } | Act::Disconnect { .. }
+        )
     }
 }
 
@@ -267,6 +293,12 @@ mod tests {
                 grant: "g1".into(),
                 trigger: "tr_1".into(),
             },
+            Act::ConnectAgain { grant: "g1".into() },
+            Act::Disconnect { grant: "g1".into() },
+            Act::MakeLive {
+                taf: "t1".into(),
+                version: 8,
+            },
         ]
     }
 
@@ -276,9 +308,14 @@ mod tests {
             let (method, path) = act.route();
             if act.at_planque() {
                 // planque's: signed by the device, and this computer can't call it.
+                assert!(path.starts_with("/v1/grants/g1"), "{act:?}");
+                continue;
+            }
+            if act.at_device() {
+                // The device's own check comes first; the app never begins the switch.
                 assert_eq!(
                     (method, path.as_str()),
-                    ("DELETE", "/v1/grants/g1/triggers/tr_1")
+                    ("POST", "/v1/tafs/t1/versions/8/switch")
                 );
                 continue;
             }

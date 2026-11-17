@@ -204,6 +204,44 @@ pub fn forget_path(taf: &str, note: &str) -> String {
     )
 }
 
+/// One node of `ConnectedToolsRing` per app: the connection that does the work, with any other
+/// sign-in to the same app inside its sheet (`ConnectedToolsRing.Node`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Node {
+    pub app: ConnectedApp,
+    pub others: Vec<ConnectedApp>,
+}
+
+/// `ConnectedToolsRing.nodes`: in tafs cloud's order of each app's first connection; the one shown
+/// is the first with actions, else one to sign in again, else the first.
+pub fn nodes(apps: &[ConnectedApp]) -> Vec<Node> {
+    let mut order: Vec<&str> = Vec::new();
+    for a in apps {
+        if !order.contains(&a.name.as_str()) {
+            order.push(&a.name);
+        }
+    }
+    order
+        .into_iter()
+        .map(|name| {
+            let all: Vec<&ConnectedApp> = apps.iter().filter(|a| a.name == name).collect();
+            let main = all
+                .iter()
+                .find(|a| a.action_count > 0)
+                .or_else(|| all.iter().find(|a| a.reconnect))
+                .unwrap_or(&all[0]);
+            Node {
+                app: (*main).clone(),
+                others: all
+                    .iter()
+                    .filter(|a| a.id != main.id)
+                    .map(|a| (*a).clone())
+                    .collect(),
+            }
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -237,5 +275,41 @@ mod tests {
             serde_json::from_str(r#"{"grant":" g ","title":"T","words":7}"#).unwrap();
         assert_eq!(a.grant, "g");
         assert!(!a.usable());
+    }
+
+    #[test]
+    fn one_node_per_app() {
+        let base: ConnectedApp = serde_json::from_value(
+            serde_json::from_str::<serde_json::Value>(include_str!(
+                "../../../shared/contracts/taf-setup-connected.json"
+            ))
+            .unwrap()["answer"]["connections"][0]
+                .clone(),
+        )
+        .unwrap();
+        let mut idle = base.clone();
+        idle.id = "grt_2".into();
+        idle.action_count = 0;
+        let mut again = base.clone();
+        again.id = "grt_3".into();
+        again.action_count = 0;
+        again.reconnect = true;
+        let mut other = base.clone();
+        other.id = "grt_stripe".into();
+        other.name = "Stripe".into();
+        let n = nodes(&[idle.clone(), other.clone(), again.clone(), base.clone()]);
+        assert_eq!(n.len(), 2);
+        assert_eq!(n[0].app.id, "grt_gmail", "the one with actions");
+        assert_eq!(
+            n[0].others
+                .iter()
+                .map(|a| a.id.as_str())
+                .collect::<Vec<_>>(),
+            ["grt_2", "grt_3"]
+        );
+        assert_eq!(n[1].app.id, "grt_stripe");
+        let n = nodes(&[idle.clone(), again.clone()]);
+        assert_eq!(n[0].app.id, "grt_3", "else one to sign in again");
+        assert_eq!(nodes(&[idle]).len(), 1);
     }
 }

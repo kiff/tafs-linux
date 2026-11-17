@@ -336,6 +336,9 @@ pub struct HomeTaf {
     /// Its doors, for its avatar's rim and Needs you's knocks; absent when it has none.
     #[serde(default)]
     pub doors: Option<Vec<DoorLight>>,
+    /// Where tafs cloud delivers its results itself (`door_reply`, `app`, `owner_email`), live.
+    #[serde(default)]
+    pub results: Option<Vec<Value>>,
     /// Its labels by id (docs/labels.md), only on a taf that has any; another shape is none
     /// (`LabelIDs`).
     #[serde(default)]

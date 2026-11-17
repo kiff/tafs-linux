@@ -236,8 +236,23 @@ place of the connections. Until it's read, a spinner; when it can't be, why and 
 the iPad's order:
 
 - **Its Card unit requests** (`card_unit_exceptions`), as Needs you draws them.
+- **Its own Connect again** (`connect_again`, for whoever manages it): tafs cloud's words in amber,
+  and its button in tafs cloud's words. Signing that connection in again is approved at planque,
+  signed by the device: the tap shows the can't-approve line and sends nothing ([approval](approval.md)).
 - **The job:** THE JOB, and its job as tafs cloud says it (`job_summary`), else "Works under {n}
-  Cards". Improve in Coach is Coach's, which isn't on this computer.
+  Cards"; **Improve in Coach** for whoever manages it and may use Coach, which opens Coach.
+- **Starts when** and, after the connected apps, **Results go to**: rows that open their screens
+  (below).
+- **Connected apps** (`ConnectedToolsRing`): why tafs cloud left the connections out (this
+  computer reads Setup without planque's grants proof, so it says so), with Try again; the taf in
+  the middle (its job in an alert), one node per app around it (`setup::nodes`: the connection with
+  actions, else one to sign in again, else the first; its name and actions, green while it runs),
+  dashed lines to it and a green arc while it runs, and + for whoever manages it, opening Connect
+  apps. Under it the workflow, folded: its title and summary, each step (green while it runs) and
+  Change the workflow with Coach. A node opens its sheet (`ConnectedAppSheet`): where it stands
+  (Sign in again: signed, refused here), what it may do, its workflow, its calls (opening the
+  Activity), other connections, Add actions with Coach, and Remove access, whose question's yes is
+  signed at planque and refused here.
 - **What it remembers** (`MemorySummaryPanel`): tafs cloud's line for its notes (15 semibold), its
   latest (14, soft, two lines), and See all.
   - **See all** opens every note (`MemoryPanel`, `GET /v1/tafs/{id}/memory?all=true`), newest
@@ -251,14 +266,52 @@ the iPad's order:
 - **Remove for good**, for whoever manages it: signed, so it's there, dimmed.
 
 `--page taf-setup:<id>` with `--home shared/contracts/home.json` reads the contract's
-`taf-setup.json` beside it, and `--memory crates/tafs-app/fixtures/taf-memory.json` (synthetic)
-for See all; Forget sends nothing. CI's `taf-setup`.
+`taf-setup.json` beside it (`--setup` another, such as `taf-setup-reconnect.json`), and `--memory
+crates/tafs-app/fixtures/taf-memory.json` (synthetic) for See all; Forget sends nothing. CI's
+`taf-setup` and `taf-setup-apps`.
+
+### Starts when and Results go to
+
+`TafSetupViews.swift` (`crates/tafs-app/src/starts_when.rs`, `tafs-core/src/knob.rs`), each a sheet
+with its own navigation, over the dial as tafs cloud sends it (`GET /v1/tafs/{id}/knob`, and when a
+version waits, `?version=` that one; a 404 then reads it again as it is now). Read as strictly as
+the iPad's `Knob`: a field in the wrong shape and the dial isn't read ("The dial couldn't be read:
+…"); one missing takes the iPad's default. Until it's read, "Reading what starts it…" or "Reading
+where its results go…".
+
+- **The waiting version** (`KnobPendingPanel`, for whoever manages it): DRAFT · V8 · NOT LIVE in
+  amber, tafs cloud's lines for it, and Make 2 changes live with your passcode (what the iPad names
+  on a device with no Face ID or Touch ID). Making it live begins tafs cloud's switch, which stops
+  the taf until it's finished, after the device's own check: this computer begins nothing, and the
+  tap shows the can't-approve line.
+- **Starts when** (`StartsWhenView`): its schedule (each line, − and + through tafs cloud's sizes,
+  held while a newer version than the one shown waits, `acceptsChoices`; the next run and the
+  account's zone; Skip it or Run after while still working); app events (Approve, disabled as the
+  iPad disables it where the device can't approve; or Listening and Stop); its doors (each with
+  Edit, opening the door's screen on top, [its doors](#its-doors), and Add a door…, whose Slack door
+  opens Slack's sheet: planque's Slack connections aren't read here, so it says to connect the bot
+  first); follow-ups it set itself, with their end and Remove; Change when it starts with Coach;
+  Pause every start, or Resume ("Not every start could be paused. Try again." on a 502).
+- **Results go to** (`ResultsGoToView`): at least one place stays on; tafs' own places (Reply to
+  the sender, Alert our phones, Email me with the person's email), switched from the live taf's
+  `results` and never a waiting version's, the last one on disabled (`liveBuiltIns`, `places`);
+  each place in a connected app, through its other choice; Add a place from a connected app… with
+  Coach; replies not sent, with Send again.
+- **As the session, unsigned:** a dial change (`PUT …/knob`, the live `setting` copied, changed and
+  sent whole, `when: {busy}`; it waits as the next version), tafs' own places (`PUT …/results
+  {"places"}`, live at once), a follow-up removed (`DELETE …/follow-ups/{id}`), every start paused
+  or resumed (`POST …/pause`, `…/resume`), a reply sent again. Each failure says why in red.
+
+`--page starts:<id>` and `--page results:<id>` (the iPad's `-screen starts`, `-screen results`) open
+them over Setup, with `--knob crates/tafs-app/fixtures/taf-knob-setup.json` (synthetic, the iPad's
+`Screenshots.setupKnob` with a version waiting), `--doors` and `--work`; nothing is sent. CI's
+`taf-starts` and `taf-results`.
 
 ## Not yet
 
 - **The sample's Chat**, there, dimmed. A tafs cloud taf's page opens on its chat ([chat.md](chat.md)).
-- **On the Setup tab:** Starts when, Results go to, the connected apps' ring, its own Connect
-  again (signed), Improve in Coach, and the sample's Setup (there, dimmed).
+- **On the Setup tab:** the sample's Setup (there, dimmed); pulling Starts when or Results go to
+  to read them again.
 - **On the Card tab:** Connect again (Coach), the halt row,
   Versions, Usage; Revoke itself (dimmed).
 - **Above a tafs cloud taf's Activity:** the next step's buttons (Connect it

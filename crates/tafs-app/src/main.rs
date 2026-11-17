@@ -35,6 +35,7 @@ mod setup_pane;
 mod sheet;
 mod shell;
 mod sign_in;
+mod starts_when;
 mod store;
 mod style;
 mod taf;
@@ -137,6 +138,8 @@ struct Options {
     /// With `--home`: a taf's doors as tafs cloud answers `GET /v1/tafs/{id}/doors`; its knocks'
     /// answers send nothing.
     doors: Option<String>,
+    knob: Option<String>,
+    setup: Option<String>,
     /// With `--home`: Account's reads, `{"suggestions": …, "consent": …}`, each as tafs cloud
     /// answers it; its changes send nothing.
     account_reads: Option<String>,
@@ -200,6 +203,8 @@ fn options() -> Result<Options, String> {
             "--receipt" => o.receipt = Some(value()?),
             "--work" => o.work = Some(value()?),
             "--doors" => o.doors = Some(value()?),
+            "--knob" => o.knob = Some(value()?),
+            "--setup" => o.setup = Some(value()?),
             "--account-reads" => o.account_reads = Some(value()?),
             "--me" => o.me = Some(value()?),
             "--memory" => o.memory = Some(value()?),
@@ -287,6 +292,12 @@ fn selection_of(page: Option<&str>) -> Selection {
         }
         Some(other) if other.starts_with("taf-setup:") => {
             Selection::Taf(other["taf-setup:".len()..].into())
+        }
+        Some(other) if other.starts_with("starts:") => {
+            Selection::Taf(other["starts:".len()..].into())
+        }
+        Some(other) if other.starts_with("results:") => {
+            Selection::Taf(other["results:".len()..].into())
         }
         Some(other) if other.starts_with("doors:") => {
             let rest = &other["doors:".len()..];
@@ -376,6 +387,8 @@ fn activate(app: &adw::Application, o: &Options) {
         home_file: o.home.as_ref().map(std::path::PathBuf::from),
         work_file: o.work.as_ref().map(std::path::PathBuf::from),
         doors_file: o.doors.as_ref().map(std::path::PathBuf::from),
+        knob_file: o.knob.as_ref().map(std::path::PathBuf::from),
+        setup_file: o.setup.as_ref().map(std::path::PathBuf::from),
         account_reads_file: o.account_reads.as_ref().map(std::path::PathBuf::from),
         memory_file: o.memory.as_ref().map(std::path::PathBuf::from),
         runs_file: o.runs.as_ref().map(std::path::PathBuf::from),
@@ -422,10 +435,14 @@ fn activate(app: &adw::Application, o: &Options) {
             .page
             .as_deref()
             .is_some_and(|p| p == "taf-card" || p.starts_with("taf-card:")),
-        on_setup: o
-            .page
-            .as_deref()
-            .is_some_and(|p| p.starts_with("taf-setup:")),
+        on_setup: o.page.as_deref().is_some_and(|p| {
+            p.starts_with("taf-setup:") || p.starts_with("starts:") || p.starts_with("results:")
+        }),
+        on_setup_screen: match o.page.as_deref() {
+            Some(p) if p.starts_with("starts:") => Some(starts_when::Screen::StartsWhen),
+            Some(p) if p.starts_with("results:") => Some(starts_when::Screen::ResultsGoTo),
+            _ => None,
+        },
         on_doors: o
             .page
             .as_deref()
@@ -669,6 +686,10 @@ struct App {
     work_file: Option<std::path::PathBuf>,
     /// `--doors`: a taf's doors as tafs cloud answers them, for its knocks' screenshot.
     doors_file: Option<std::path::PathBuf>,
+    /// `--knob`'s dial: Setup's screens read it, and their changes send nothing.
+    knob_file: Option<std::path::PathBuf>,
+    /// `--setup`'s Setup read, in the contract's place beside `--home`.
+    setup_file: Option<std::path::PathBuf>,
     /// `--account-reads`: Account's reads for its screenshots.
     account_reads_file: Option<std::path::PathBuf>,
     /// `--memory`: a taf's notes for its Setup screenshots.
@@ -718,6 +739,8 @@ struct App {
     on_card: bool,
     /// `--page taf-setup:<id>`: a taf's page opens on Setup.
     on_setup: bool,
+    /// `--page starts:<id>` or `results:<id>`: Setup's screen open over its tab.
+    on_setup_screen: Option<starts_when::Screen>,
     /// `--page doors:<id>[:<door>]`: a taf's doors open over its page (`DoorsView`), or one door's
     /// screen, for a screenshot.
     on_doors: Option<Option<String>>,
@@ -1015,7 +1038,10 @@ impl App {
                 languages: self.languages.clone(),
             },
             (None, Some(home)) => setup_pane::SetupSource::File {
-                setup: home.with_file_name("taf-setup.json"),
+                setup: self
+                    .setup_file
+                    .clone()
+                    .unwrap_or_else(|| home.with_file_name("taf-setup.json")),
                 notes: self.memory_file.clone(),
             },
             _ => setup_pane::SetupSource::None,
@@ -1029,6 +1055,16 @@ impl App {
                 languages: self.languages.clone(),
             },
             _ => knocks::DoorsSource::None,
+        };
+        // Where Setup's screens read and change its dial: tafs cloud as the session; a
+        // screenshot's from `--knob`, whose changes send nothing.
+        let knob = match (self.kept.borrow().as_ref(), &self.knob_file) {
+            (_, Some(file)) => starts_when::KnobSource::File(file.clone()),
+            (Some(kept), None) => starts_when::KnobSource::Cloud {
+                token: kept.token.clone(),
+                languages: self.languages.clone(),
+            },
+            _ => starts_when::KnobSource::None,
         };
         // Where its runs are read and Run now sent: tafs cloud as the session; a screenshot's
         // first page from `--runs`, and its Run now sends nothing.
@@ -1096,7 +1132,13 @@ impl App {
                         opens_on_card: self.on_card,
                         opens_on_setup: self.on_setup,
                         opens_doors: None,
+                        opens_setup_screen: None,
                         my_email: None,
+                        knob: starts_when::KnobSource::None,
+                        works_from_chat: false,
+                        next_run_line: None,
+                        paused: false,
+                        results: None,
                         cloud_id: None,
                         source: taf::ActivitySource::None,
                         work: work_panel::WorkSource::None,
@@ -1134,6 +1176,18 @@ impl App {
                         h.time_zone_words.clone(),
                         h.schedule_time_zone_words.clone(),
                         job,
+                        (
+                            h.unscheduled == Some(true),
+                            tafs_core::knob::next_run_line(
+                                w,
+                                h,
+                                c.account.as_ref().and_then(|a| a.time_zone.as_deref()),
+                            )
+                            .ok()
+                            .flatten(),
+                            h.status.as_deref() == Some("paused"),
+                            h.results.clone(),
+                        ),
                     );
                     Some((
                         tafs_core::home::taf(w, h).ok()?,
@@ -1154,6 +1208,11 @@ impl App {
                         time_zone_words: zones.0,
                         schedule_time_zone_words: zones.1,
                         job: zones.2,
+                        knob: knob.clone(),
+                        works_from_chat: zones.3 .0,
+                        next_run_line: zones.3 .1,
+                        paused: zones.3 .2,
+                        results: zones.3 .3,
                         setup: setup.clone(),
                         work: work.clone(),
                         // Its knocks, where tafs cloud offers doors (`doorsOffered`); a
@@ -1205,6 +1264,7 @@ impl App {
                         opens_on_card: self.on_card,
                         opens_on_setup: self.on_setup,
                         opens_doors: self.on_doors.clone(),
+                        opens_setup_screen: self.on_setup_screen,
                         my_email: c.account.as_ref().and_then(|a| a.email.clone()),
                         source: source.clone(),
                         chat: chat.clone(),

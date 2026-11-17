@@ -49,8 +49,18 @@ pub struct TafPage {
     /// Its doors open over the page (`DoorsView`, `--page doors:<id>`), or one door's screen
     /// (`--page doors:<id>:<door>`), for a screenshot.
     pub opens_doors: Option<Option<String>>,
-    /// This person's sign-in email: their own key at a door reads "You".
+    /// Setup's screen open over its tab (`-screen starts`, `-screen results`), for a screenshot.
+    pub opens_setup_screen: Option<crate::starts_when::Screen>,
+    /// This person's sign-in email: their own key at a door reads "You", and Email me's line.
     pub my_email: Option<String>,
+    /// Where Setup's screens read and change its dial (`GET …/knob`), and what they say of it
+    /// from Home: no schedule (`worksFromChat`), its next run, paused, and where tafs cloud
+    /// delivers its results itself.
+    pub knob: crate::starts_when::KnobSource,
+    pub works_from_chat: bool,
+    pub next_run_line: Option<String>,
+    pub paused: bool,
+    pub results: Option<Vec<serde_json::Value>>,
     /// tafs cloud's id for it, and where its Activity is read from.
     pub cloud_id: Option<String>,
     pub source: ActivitySource,
@@ -98,6 +108,8 @@ pub fn page(
     entries: Rc<Vec<Entry>>,
     halt_row: Option<gtk::Button>,
     open_usage: Rc<dyn Fn()>,
+    open_coach: Rc<dyn Fn()>,
+    open_connect: Rc<dyn Fn()>,
 ) -> gtk::Widget {
     let outer = gtk::Box::new(gtk::Orientation::Vertical, 12);
     outer.set_margin_start(16);
@@ -348,16 +360,62 @@ pub fn page(
         setup_scroller.set_child(Some(&column));
         panes.add_named(&setup_scroller, Some("setup"));
         let made = std::cell::Cell::new(false);
+        let knobs = (!matches!(t.knob, crate::starts_when::KnobSource::None)).then(|| {
+            crate::starts_when::Knobs::new(
+                w.clone(),
+                crate::starts_when::KnobTaf {
+                    id: id.clone(),
+                    name: t.name.clone(),
+                    initial: t.initial.clone(),
+                    color: t.color,
+                    manages: t.manages,
+                    may_use_coach: t.may_use_coach,
+                    works_from_chat: t.works_from_chat,
+                    next_run: t.next_run_line.clone(),
+                    paused: t.paused,
+                    results: t.results.clone(),
+                    email: t.my_email.clone(),
+                    doors: t.doors.clone(),
+                    work: t.work.clone(),
+                    open_coach: open_coach.clone(),
+                },
+                t.knob.clone(),
+            )
+        });
+        let open_activity: Rc<dyn Fn()> = {
+            let tab = activity_tab.downgrade();
+            Rc::new(move || {
+                if let Some(t) = tab.upgrade() {
+                    t.set_active(true);
+                }
+            })
+        };
         let (w, taf, source) = (
             w.clone(),
             Rc::new(crate::setup_pane::SetupTaf {
                 id: id.clone(),
+                name: t.name.clone(),
+                initial: t.initial.clone(),
+                color: t.color,
                 job: t.job.clone(),
                 manages: t.manages,
                 discuss: t.may_use_coach && t.manages,
+                may_use_coach: t.may_use_coach,
+                knobs,
+                open_coach: open_coach.clone(),
+                open_connect: open_connect.clone(),
+                open_activity,
             }),
             t.setup.clone(),
         );
+        if let (Some(screen), Some(knobs)) = (t.opens_setup_screen, taf.knobs.clone()) {
+            let once = std::cell::Cell::new(Some(knobs));
+            outer.connect_map(move |o| {
+                if let Some(knobs) = once.take() {
+                    crate::starts_when::open(knobs, screen, o);
+                }
+            });
+        }
         let panes = panes.clone();
         setup_tab.connect_toggled(move |b| {
             if b.is_active() {

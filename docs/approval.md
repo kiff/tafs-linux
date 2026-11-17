@@ -45,8 +45,15 @@ that none of them can be made.
 
 The acts drawn this way: People & groups' changes, signing another device out, and the
 account's time zone (`docs/account.md`); declining a request (`docs/usage.md`); removing a Slack
-door, whose subscription at planque the device signs first (`docs/taf.md`). planque's acts
+door, whose subscription at planque the device signs first, signing a connection in again and
+removing its access, and making a taf's waiting version live, which the device checks before
+tafs cloud's switch begins (`docs/taf.md`). planque's acts
 (`Act::at_planque`) have no route here at all: this computer's only planque call is its grants read.
+Making a version live (`Act::at_device`) is checked by the device before a call it makes as the
+session; this computer never begins it, since the switch stops the taf until it's finished.
+
+Approving an app event's subscription in Starts when is one the iPad disables itself where the
+device can't approve (`approvalBlocked`): disabled here too.
 
 A button the iPad itself wraps in `ApprovalGate` is the exception: there, as on the iPad, the
 gate's line is drawn in the button's place (`approval::gate`), not the button. Raise the limit is
