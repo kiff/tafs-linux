@@ -55,10 +55,18 @@ in tafs cloud's words (`tafs-core/src/activity.rs`):
 - tafs cloud's filters, from its first page, as bordered buttons (the chosen one in the amber as
   text); choosing one reads its first page again;
 - each day group's title (12 semibold, dim), then each call (`SourceActivityRow`): its title (15
-  semibold) and detail (13, soft), its time (12, dim) and amount (13 semibold) at its end, and
-  under it its next step in tafs cloud's words;
+  semibold) and detail (13, soft), its time (12, dim) and amount (13 semibold) at its end. The row
+  opens its receipt (`ReceiptView`, the Record's, on the call as the Record's line with tafs
+  cloud's kind, title and detail: `activity::evidence`). Under it its next step (`NextStepRow`):
+  for whoever manages the taf, signed in, a button in tafs cloud's words: Connect it again opens
+  Connect apps (signing that connection in again where its vendor signed it out needs planque's
+  grants, which this computer doesn't read), Ask Coach opens Coach with tafs cloud's message, else
+  the row's own words, in the box, nothing sent (for whoever may use Coach); anyone else, and a
+  kind the app doesn't know, reads the words alone (`activity::next_action`);
 - at the foot: the next page as the list reaches its end (`next_cursor`), tafs cloud's end words,
   "Nothing here." when no page has an entry, or what went wrong and Try again.
+- `--taf-activity crates/tafs-app/fixtures/taf-activity-next.json` (synthetic: the contract's page
+  with two not-done calls and their next steps) in the contract's place: CI's `taf-next`.
 
 Read as strictly as the iPad's decoder, with one exception: a call's `held`, which the iPad's
 `ActivityCall` requires and tafs cloud's `taf-activity.json` doesn't send, reads as not held when
@@ -331,8 +339,8 @@ them over Setup, with `--knob crates/tafs-app/fixtures/taf-knob-setup.json` (syn
   to read them again.
 - **On the Card tab:** Usage (`TafCreditsView` is Plan & usage's own, not reachable from here yet);
   Versions (with trials).
-- **Above a tafs cloud taf's Activity:** the next step's buttons (Connect it
-  again, Ask Coach), shown as their words for now; a call's receipt; "All apps" for a selection.
+- **On a tafs cloud taf's Activity:** "All apps" for a selection (an app's calls open the
+  Activity unfiltered).
 - **The line under the head:** its version and who it's shared with (`headerLine`, `ShareLine`).
 - **In its work:** a step it handed you as its card (`YourStepCard`): its line for now.
 - **The side column** on a wide window, Remove, and folding the head while scrolling.

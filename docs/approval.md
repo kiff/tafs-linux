@@ -48,7 +48,8 @@ account's time zone (`docs/account.md`); declining a request (`docs/usage.md`); 
 door, whose subscription at planque the device signs first, signing a connection in again and
 removing its access, making a taf's waiting version live, which the device checks before
 tafs cloud's switch begins, and removing a taf for good, whose `DELETE` the approval key signs
-(`docs/taf.md`). Revoking a Card isn't signed (it only takes authority away): it really goes, as
+(`docs/taf.md`); Done and Skip it on a step a taf handed its owner, whose answer carries the
+device key's signature (`docs/needs-you.md`; `signed` lists `POST /v1/me/handoffs/{id}/answer`). Revoking a Card isn't signed (it only takes authority away): it really goes, as
 the session, unless KIFF keeps the session view-only. planque's acts
 (`Act::at_planque`) have no route here at all: this computer's only planque call is its grants read.
 Making a version live and removing a taf (`Act::at_device`) are checked or signed by the device before a call it makes as the

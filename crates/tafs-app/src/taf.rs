@@ -266,11 +266,30 @@ pub fn page(
                 }
             }
             body.append(&kept);
+            let rows = Rc::new(RowOpens {
+                taf: t.key.clone(),
+                manages: t.manages,
+                may_use_coach: t.may_use_coach,
+                coach: open_coach.clone(),
+                connect: open_connect.clone(),
+                receipt: match &t.source {
+                    ActivitySource::Cloud { token, languages } => {
+                        Some(Rc::new(crate::receipt_sheet::ReceiptSource {
+                            token: token.clone(),
+                            languages: languages.clone(),
+                            canned: None,
+                            open: None,
+                        }))
+                    }
+                    _ => None,
+                },
+            });
             body.append(&cloud_activity(
                 w.clone(),
                 id.clone(),
                 t.source.clone(),
                 units_of,
+                rows,
             ));
         }
     }
@@ -1085,7 +1104,13 @@ impl Units {
     }
 }
 
-fn cloud_activity(w: Rc<WordBook>, id: String, source: ActivitySource, units: Units) -> gtk::Box {
+fn cloud_activity(
+    w: Rc<WordBook>,
+    id: String,
+    source: ActivitySource,
+    units: Units,
+    rows: Rc<RowOpens>,
+) -> gtk::Box {
     use tafs_core::activity::{foot, path, ActivityPage, Foot};
     struct State {
         filter: String,
@@ -1226,7 +1251,7 @@ fn cloud_activity(w: Rc<WordBook>, id: String, source: ActivitySource, units: Un
                         root.append(&text(&group.title, 12, 600, &["tafs-dim"]));
                     }
                     for e in &group.entries {
-                        root.append(&source_row(e));
+                        root.append(&activity_row(&w, e, &rows));
                     }
                 }
             }
@@ -1272,6 +1297,77 @@ fn cloud_activity(w: Rc<WordBook>, id: String, source: ActivitySource, units: Un
     redraw();
     load(false);
     root
+}
+
+/// What a row on a tafs cloud taf's Activity opens: its receipt, and its next step's button.
+pub struct RowOpens {
+    /// The taf's key, the Record line's taf.
+    pub taf: String,
+    pub manages: bool,
+    pub may_use_coach: bool,
+    /// Coach on the taf (its words in the box), and Connect apps.
+    pub coach: Rc<dyn Fn()>,
+    pub connect: Rc<dyn Fn()>,
+    /// Where its receipt is read, signed in with KIFF; none for a screenshot's.
+    pub receipt: Option<Rc<crate::receipt_sheet::ReceiptSource>>,
+}
+
+/// `SourceActivityRow` on a taf's Activity: the row opens its receipt (`ReceiptView`), and its next
+/// step is a button for whoever manages the taf (`NextStepRow`): Connect it again opens Connect
+/// apps, Ask Coach opens Coach with its words in the box, nothing sent; anyone else, and a kind
+/// the app doesn't know, reads its words.
+fn activity_row(
+    w: &Rc<WordBook>,
+    e: &tafs_core::activity::ActivityEntry,
+    opens: &Rc<RowOpens>,
+) -> gtk::Box {
+    use tafs_core::activity::{next_action, next_has_button, NextAction};
+    let v = gtk::Box::new(gtk::Orientation::Vertical, 6);
+    let head = source_row(&tafs_core::activity::ActivityEntry {
+        next: None,
+        ..e.clone()
+    });
+    let b = gtk::Button::new();
+    b.set_child(Some(&head));
+    b.add_css_class("tafs-plain");
+    b.update_property(&[gtk::accessible::Property::Description(
+        &w.line("record.shows_receipt").unwrap_or_default(),
+    )]);
+    {
+        let (w, e, opens) = (w.clone(), e.clone(), opens.clone());
+        b.connect_clicked(move |b| {
+            if let Some(entry) = tafs_core::activity::evidence(&w, &e, &opens.taf) {
+                crate::receipt_sheet::present(
+                    w.clone(),
+                    opens.receipt.clone(),
+                    entry,
+                    None,
+                    Rc::new(|_| {}),
+                    b,
+                );
+            }
+        });
+    }
+    v.append(&b);
+    if let Some(next) = &e.next {
+        let action = next_action(next, &format!("{}: {}", e.title, e.detail));
+        if next_has_button(&action, opens.manages, opens.may_use_coach) {
+            let button = crate::widgets::outline(&next.words);
+            let opens = opens.clone();
+            button.connect_clicked(move |_| match &action {
+                NextAction::AskCoach(words) => {
+                    crate::coach::set_draft(words);
+                    (opens.coach)();
+                }
+                NextAction::ConnectApps => (opens.connect)(),
+                NextAction::Line => {}
+            });
+            v.append(&button);
+        } else {
+            v.append(&text(&next.words, 13, 400, &["tafs-soft"]));
+        }
+    }
+    v
 }
 
 /// `SourceActivityRow`: its title and detail, its time and amount at its end, and its next step.

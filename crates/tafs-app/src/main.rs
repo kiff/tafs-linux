@@ -140,6 +140,7 @@ struct Options {
     doors: Option<String>,
     knob: Option<String>,
     setup: Option<String>,
+    taf_activity: Option<String>,
     /// With `--home`: Account's reads, `{"suggestions": …, "consent": …}`, each as tafs cloud
     /// answers it; its changes send nothing.
     account_reads: Option<String>,
@@ -176,7 +177,7 @@ struct Options {
 }
 
 const USAGE: &str = "tafs [--lang en|de|fr|es|it|pt|nl|pl] [--theme light|dark] [--sample] [--signed-in] [--view-only [--paired]]
-     [--home contract.json] [--usage answers.json] [--people answers.json] [--unproven answers.json] [--recipes answers.json] [--gallery answers.json] [--halt answer.json] [--record-search answers.json] [--access answer.json] [--receipts answer.json] [--activity answer.json] [--calls answer.json] [--receipt answer.json] [--work answer.json] [--doors answer.json] [--account-reads answers.json] [--me answer.json] [--memory answer.json] [--runs answer.json] [--request answer.json] [--balance answer.json] [--coach answer.json] [--coach-chats answer.json] [--chat answer.json [--report]] [--brief answer.json] [--mission-log answer.json] [--size WxH] [--page welcome|sign-in|pair|recipe:<id>|gallery|halt-all|halt:<id>|record-search:<q>|record-export|receipt:<proposal id>|run:<taf id>|pin-sheet|coach|overview|overview-label:<id>|needs-you|brief-answer:<decision id>|mission-log:<mission id>|record|calendar|calendar-week|usage|usage-ask|usage-decline|connect-apps|account|kiff-account|time-zone|time-zone-use|alerts|devices|devices-sign-out|people|people-rename|people-add|taf|taf-card|taf-setup|consent|connected|sign-in-code] [--screenshot out.png]";
+     [--home contract.json] [--usage answers.json] [--people answers.json] [--unproven answers.json] [--recipes answers.json] [--gallery answers.json] [--halt answer.json] [--record-search answers.json] [--access answer.json] [--receipts answer.json] [--activity answer.json] [--calls answer.json] [--receipt answer.json] [--work answer.json] [--doors answer.json] [--account-reads answers.json] [--me answer.json] [--memory answer.json] [--runs answer.json] [--request answer.json] [--balance answer.json] [--coach answer.json] [--coach-chats answer.json] [--chat answer.json [--report]] [--brief answer.json] [--mission-log answer.json] [--knob answer.json] [--setup answer.json] [--taf-activity answer.json] [--size WxH] [--page welcome|sign-in|pair|recipe:<id>|gallery|halt-all|halt:<id>|record-search:<q>|record-export|receipt:<proposal id>|run:<taf id>|pin-sheet|coach|overview|overview-label:<id>|needs-you|brief-answer:<decision id>|mission-log:<mission id>|record|calendar|calendar-week|usage|usage-ask|usage-decline|connect-apps|account|kiff-account|time-zone|time-zone-use|alerts|devices|devices-sign-out|people|people-rename|people-add|taf|taf-card|taf-setup|taf-setup:<id>|starts:<id>|results:<id>|doors:<id>[:<door>]|consent|connected|sign-in-code] [--screenshot out.png]";
 
 fn options() -> Result<Options, String> {
     let mut o = Options::default();
@@ -205,6 +206,7 @@ fn options() -> Result<Options, String> {
             "--doors" => o.doors = Some(value()?),
             "--knob" => o.knob = Some(value()?),
             "--setup" => o.setup = Some(value()?),
+            "--taf-activity" => o.taf_activity = Some(value()?),
             "--account-reads" => o.account_reads = Some(value()?),
             "--me" => o.me = Some(value()?),
             "--memory" => o.memory = Some(value()?),
@@ -389,6 +391,7 @@ fn activate(app: &adw::Application, o: &Options) {
         doors_file: o.doors.as_ref().map(std::path::PathBuf::from),
         knob_file: o.knob.as_ref().map(std::path::PathBuf::from),
         setup_file: o.setup.as_ref().map(std::path::PathBuf::from),
+        taf_activity_file: o.taf_activity.as_ref().map(std::path::PathBuf::from),
         account_reads_file: o.account_reads.as_ref().map(std::path::PathBuf::from),
         memory_file: o.memory.as_ref().map(std::path::PathBuf::from),
         runs_file: o.runs.as_ref().map(std::path::PathBuf::from),
@@ -690,6 +693,8 @@ struct App {
     knob_file: Option<std::path::PathBuf>,
     /// `--setup`'s Setup read, in the contract's place beside `--home`.
     setup_file: Option<std::path::PathBuf>,
+    /// `--taf-activity`'s page, in the contract's place beside `--home`.
+    taf_activity_file: Option<std::path::PathBuf>,
     /// `--account-reads`: Account's reads for its screenshots.
     account_reads_file: Option<std::path::PathBuf>,
     /// `--memory`: a taf's notes for its Setup screenshots.
@@ -1015,9 +1020,11 @@ impl App {
                 token: kept.token.clone(),
                 languages: self.languages.clone(),
             },
-            (None, Some(home)) => {
-                taf::ActivitySource::File(home.with_file_name("taf-activity.json"))
-            }
+            (None, Some(home)) => taf::ActivitySource::File(
+                self.taf_activity_file
+                    .clone()
+                    .unwrap_or_else(|| home.with_file_name("taf-activity.json")),
+            ),
             _ => taf::ActivitySource::None,
         };
         // Where a tafs cloud taf's work is read: tafs cloud as the session; a screenshot's from

@@ -100,9 +100,21 @@ pub fn grants_authority(method: &str, path: &str) -> bool {
         && !p[4].is_empty()
 }
 
+/// `answerHandoff`: a step a taf handed its owner, answered with the device key's signature in its
+/// body (`handoffMessage`).
+fn answers_handoff(method: &str, path: &str) -> bool {
+    let p = parts(path);
+    method == "POST"
+        && p.len() == 6
+        && path.starts_with("/v1/me/handoffs/")
+        && p[5] == "answer"
+        && !p[4].is_empty()
+}
+
 /// Whether KIFF takes `method` on `path` only signed: a signed setup call, one that grants
 /// authority, the session's approval key and its relink, or one the iPad builds and signs
-/// beforehand (a device signed out, a computer's pairing, a passkey added or removed).
+/// beforehand (a device signed out, a computer's pairing, a passkey added or removed, a step's
+/// answer).
 pub fn signed(method: &str, path: &str) -> bool {
     let path = path.split('#').next().unwrap_or(path);
     signs_setup(path)
@@ -112,6 +124,7 @@ pub fn signed(method: &str, path: &str) -> bool {
         || (method == "DELETE" && path.starts_with("/v1/me/devices/"))
         || (method == "POST" && path == "/v1/me/pairings")
         || (method != "GET" && path.starts_with("/v1/me/passkeys"))
+        || answers_handoff(method, path)
 }
 
 /// A path part, escaped (`KIFFClient.escaped`).
@@ -164,6 +177,8 @@ pub enum Act {
     MakeLive { taf: String, version: i64 },
     /// `removeTaf`: Remove for good, the `DELETE` to tafs cloud signed by the approval key.
     RemoveTaf { taf: String },
+    /// `answerYourStep`: Done or Skip it on a step a taf handed its owner.
+    AnswerStep { handoff: String },
 }
 
 impl Act {
@@ -203,6 +218,10 @@ impl Act {
             }
             Act::Disconnect { grant } => ("DELETE", format!("/v1/grants/{}", escaped(grant))),
             Act::RemoveTaf { taf } => ("DELETE", format!("/v1/tafs/{}", escaped(taf))),
+            Act::AnswerStep { handoff } => (
+                "POST",
+                format!("/v1/me/handoffs/{}/answer", escaped(handoff)),
+            ),
             Act::MakeLive { taf, version } => (
                 "POST",
                 format!("/v1/tafs/{}/versions/{version}/switch", escaped(taf)),
@@ -309,6 +328,9 @@ mod tests {
                 version: 8,
             },
             Act::RemoveTaf { taf: "t1".into() },
+            Act::AnswerStep {
+                handoff: "h1".into(),
+            },
         ]
     }
 
@@ -419,6 +441,9 @@ mod tests {
         assert!(signed("DELETE", "/v1/me/passkeys/pk1"));
         assert!(!signed("GET", "/v1/me/passkeys"));
         assert!(signed("POST", "/v1/me/device/approval-key"));
+        // A step's answer carries the device's signature; reading the step doesn't.
+        assert!(signed("POST", "/v1/me/handoffs/h1/answer"));
+        assert!(!signed("GET", "/v1/me/handoffs/h1"));
     }
 
     #[test]
