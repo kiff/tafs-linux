@@ -96,8 +96,9 @@ All at tafs cloud, as the session, unsigned; a 401 on any of them signs this com
   the next message is pinned. What's pinned is the message just sent, matched by its words
   (`matchesSent`) among what's new since Send: never a reply that came first, nor an older copy of
   the same words. When tafs cloud's copy takes its place under another id, the pin moves to it
-  without the view moving (the 859 test); gone with no copy, the view goes to the latest. A
-  message not sent, one written to the run and one tafs cloud holds are pinned the same way. The
+  without the view moving (the 859 test); gone with no copy, the view goes to the latest. One
+  written to the run and one tafs cloud holds are pinned the same way. A message that couldn't go
+  lets the pin go, and the chat goes to its end, as Android's does (the iPad is to follow). The
   owner scrolling (wheel, touchpad, the scrollbar) hands the view back; ↓ lets the pin go and
   follows again. `tools/pin-check.sh` checks it in the window, as the iPad's `ChatPinUITests`:
   at the top within a second of Send, still there while it works (the work block under it) and

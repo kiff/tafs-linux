@@ -12,14 +12,17 @@ pub fn matches_sent(stored: &str, sent: &str) -> bool {
     stored == sent || stored.ends_with(&format!("\n\n{sent}"))
 }
 
-/// Something in the thread the pin can hold: the owner's message, a message not sent, one written
-/// to the run, or one tafs cloud holds; by its id, with its words.
+/// Something in the thread the pin can hold: the owner's message, one written to the run, or one
+/// tafs cloud holds; by its id, with its words. A message not sent is one too, to know it: it lets
+/// the pin go.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Candidate {
     pub id: String,
     pub words: String,
     /// The owner's message in the thread (`m|`): its copy can take its place under another id.
     pub message: bool,
+    /// A message that couldn't go (Not sent, with Retry).
+    pub unsent: bool,
 }
 
 /// What the view does after a draw.
@@ -108,6 +111,13 @@ impl Pin {
                 .rev()
                 .find(|c| !before.contains(&c.id) && matches_sent(&c.words, words))
             {
+                // It couldn't go: the pin goes, and the chat to its end, as Android's does (and
+                // the iPad is to).
+                if c.unsent {
+                    self.next = None;
+                    self.release();
+                    return Move::ToLatest;
+                }
                 let id = c.id.clone();
                 self.words = c.message.then(|| words.clone());
                 self.next = None;
@@ -141,6 +151,7 @@ mod tests {
             id: id.into(),
             words: words.into(),
             message: true,
+            unsent: false,
         }
     }
 
@@ -221,23 +232,46 @@ mod tests {
     }
 
     #[test]
-    fn a_message_not_sent_or_written_to_the_run_is_what_goes_to_the_top() {
+    fn a_message_written_to_the_run_is_what_goes_to_the_top() {
         let mut pin = Pin::default();
         pin.sent("Skip 4412", vec!["m|1".into()]);
+        let steer = Candidate {
+            id: "steer|0".into(),
+            words: "Skip 4412".into(),
+            message: false,
+            unsent: false,
+        };
+        assert_eq!(
+            pin.drawn(&[m("m|1", "Hi"), steer.clone()]),
+            Move::Pin {
+                id: "steer|0".into(),
+                animated: true
+            }
+        );
+        // It has no copy: gone, the view goes to the latest.
+        assert_eq!(pin.drawn(&[m("m|1", "Hi")]), Move::ToLatest);
+    }
+
+    #[test]
+    fn a_message_that_couldnt_go_lets_the_pin_go() {
         let unsent = Candidate {
             id: "u|7".into(),
             words: "Skip 4412".into(),
             message: false,
+            unsent: true,
         };
-        assert_eq!(
-            pin.drawn(&[m("m|1", "Hi"), unsent.clone()]),
-            Move::Pin {
-                id: "u|7".into(),
-                animated: true
-            }
-        );
-        // It has no copy: gone (sent on Retry), the view goes to the latest.
-        assert_eq!(pin.drawn(&[m("m|1", "Hi")]), Move::ToLatest);
+        // Refused before any row showed: nothing is pinned, and the chat goes to its end.
+        let mut pin = Pin::default();
+        pin.sent("Skip 4412", vec!["m|1".into()]);
+        assert_eq!(pin.drawn(&[m("m|1", "Hi"), unsent.clone()]), Move::ToLatest);
+        assert_eq!(pin.pinned(), None);
+        assert_eq!(pin.drawn(&[m("m|1", "Hi"), unsent.clone()]), Move::None);
+        // Shown first, then not sent: its row gives way to Not sent, which doesn't take the pin.
+        let mut pin = Pin::default();
+        pin.sent("Skip 4412", vec!["m|1".into()]);
+        pin.drawn(&[m("m|1", "Hi"), m("m|local", "Skip 4412")]);
+        assert_eq!(pin.drawn(&[m("m|1", "Hi"), unsent]), Move::ToLatest);
+        assert_eq!(pin.pinned(), None);
     }
 
     #[test]

@@ -176,8 +176,8 @@ pub fn events_from(path: &std::path::Path) -> Vec<tafs_core::stream::Event> {
 }
 
 /// What the pin can hold in a chat's draw, in its order: the owner's messages in the thread, then
-/// what wasn't sent (`u|`), what was written to the run (`steer|`), and what tafs cloud holds
-/// (`queued`), each with the words as sent.
+/// what was written to the run (`steer|`) and what tafs cloud holds (`queued`), each with the words
+/// as sent; and what wasn't sent (`u|`), which lets the pin go.
 pub fn pin_candidates(
     pins: &[(usize, tafs_core::pin::Candidate)],
     unsent: impl IntoIterator<Item = (u64, String)>,
@@ -186,6 +186,7 @@ pub fn pin_candidates(
 ) -> Vec<tafs_core::pin::Candidate> {
     use tafs_core::pin::Candidate;
     let bubble = |id: String, words: &str| Candidate {
+        unsent: id.starts_with("u|"),
         id,
         words: words.to_string(),
         message: false,

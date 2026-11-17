@@ -1664,6 +1664,7 @@ fn lines_while(
                             id: item.id(),
                             words: m.text.clone(),
                             message: true,
+                            unsent: false,
                         },
                     ));
                 }

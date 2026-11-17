@@ -1175,6 +1175,7 @@ pub fn lines(
                         id: item.id(),
                         words: m.text.clone(),
                         message: true,
+                        unsent: false,
                     },
                 ));
             }
