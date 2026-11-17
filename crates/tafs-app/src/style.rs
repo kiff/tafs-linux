@@ -340,6 +340,7 @@ button.tafs-list-button label { margin: 0; }
 /* Devices: the round back button, a text button in red. */
 /* Account: the chevron at the foot while there's more below, over a fade to the background. */
 .tafs-more-below { background-image: linear-gradient(to bottom, alpha(@tafs_background, 0), @tafs_background); }
+menubutton.tafs-attach > button { min-width: 40px; min-height: 40px; padding: 0; border-radius: 999px; background: @tafs_panel; border: 1px solid @tafs_line; box-shadow: none; color: @tafs_ink; }
 button.tafs-round-back { background-color: @tafs_panel; border-radius: 999px; min-width: 44px; min-height: 44px; padding: 0; box-shadow: none; border: none; color: @tafs_ink; }
 .tafs-pushed headerbar button.back { background-color: @tafs_panel; border-radius: 999px; min-width: 44px; min-height: 44px; padding: 0; box-shadow: none; border: none; color: @tafs_ink; }
 .tafs-pushed headerbar { min-height: 60px; }

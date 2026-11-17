@@ -314,7 +314,8 @@ pub fn composer(whose: Whose) -> Composer {
     if whose == Whose::Taf {
         send.add_css_class("brand");
     }
-    send.set_child(Some(&symbol("go-up-symbolic", 16)));
+    // `arrow.up`, as the iPad's send.
+    send.set_child(Some(&symbol("tafs-arrow-up-symbolic", 16)));
     send.set_widget_name(&format!("{name}.send"));
     let stop = gtk::Button::new();
     stop.add_css_class("tafs-stop");
