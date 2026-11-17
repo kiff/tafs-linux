@@ -206,7 +206,7 @@ struct Options {
 }
 
 const USAGE: &str = "tafs [--lang en|de|fr|es|it|pt|nl|pl] [--theme light|dark] [--sample] [--signed-in] [--view-only [--paired]]
-     [--home contract.json] [--usage answers.json] [--people answers.json] [--connect answers.json] [--knob answer.json] [--setup answer.json] [--taf-activity answer.json] [--unproven answers.json] [--recipes answers.json] [--gallery answers.json] [--halt answer.json] [--record-search answers.json] [--access answer.json] [--receipts answer.json] [--activity answer.json] [--calls answer.json] [--receipt answer.json] [--work answer.json] [--doors answer.json] [--account-reads answers.json] [--me answer.json] [--held answers.json] [--memory answer.json] [--runs answer.json] [--request answer.json] [--balance answer.json] [--coach answer.json] [--coach-chats answer.json] [--coach-drafts answers.json] [--chat answer.json [--report]] [--brief answer.json] [--mission-log answer.json] [--coach-setup answer.json] [--unreachable network|error] [--app-event item.json] [--size WxH] [--page welcome|sign-in|pair|recipe:<id>|gallery|new-taf|halt-all|halt:<id>|record-search:<q>|record-export|receipt:<proposal id>|run:<taf id>|pin-sheet|share:<key>|share-step2:<key>|coach|coach-tools|coach-full|coach-hand:<id>|overview|overview-label:<id>|needs-you|needs-you-allow|brief-answer:<decision id>|mission-log:<mission id>|record|calendar|calendar-week|usage|usage-ask|usage-decline|connect-apps|connect-app|connect-connection|connect-remove|connect-which-taf|connect-approve|account|kiff-account|time-zone|time-zone-use|alerts|devices|devices-sign-out|people|people-rename|people-add|taf|taf-card|taf-setup|taf-setup:<id>|starts:<id>|results:<id>|doors:<id>[:<door>]|consent|connected|sign-in-code] [--screenshot out.png]";
+     [--home contract.json] [--usage answers.json] [--people answers.json] [--connect answers.json] [--knob answer.json] [--setup answer.json] [--taf-activity answer.json] [--unproven answers.json] [--recipes answers.json] [--gallery answers.json] [--halt answer.json] [--record-search answers.json] [--access answer.json] [--receipts answer.json] [--activity answer.json] [--calls answer.json] [--receipt answer.json] [--work answer.json] [--doors answer.json] [--account-reads answers.json] [--me answer.json] [--held answers.json] [--memory answer.json] [--runs answer.json] [--request answer.json] [--balance answer.json] [--coach answer.json] [--coach-chats answer.json] [--coach-drafts answers.json] [--chat answer.json [--report]] [--brief answer.json] [--mission-log answer.json] [--coach-setup answer.json] [--unreachable network|error] [--app-event item.json] [--size WxH] [--page welcome|sign-in|pair|recipe:<id>|gallery|new-taf|halt-all|halt:<id>|record-search:<q>|record-export|receipt:<proposal id>|run:<taf id>|pin-sheet|share:<key>|share-step2:<key>|coach|coach-tools|coach-full|coach-hand:<id>|overview|overview-label:<id>|needs-you|needs-you-allow|needs-you-set-all-aside|needs-you-dismiss|brief-answer:<decision id>|mission-log:<mission id>|record|calendar|calendar-week|usage|usage-ask|usage-decline|connect-apps|connect-app|connect-connection|connect-remove|connect-which-taf|connect-approve|account|kiff-account|time-zone|time-zone-use|alerts|devices|devices-sign-out|people|people-rename|people-add|taf|taf-card|taf-setup|taf-setup:<id>|starts:<id>|results:<id>|doors:<id>[:<door>]|consent|connected|sign-in-code] [--screenshot out.png]";
 
 fn options() -> Result<Options, String> {
     let mut o = Options::default();
@@ -299,7 +299,9 @@ fn main() -> glib::ExitCode {
 /// The page a screenshot or `--page` opens beside the sidebar.
 fn selection_of(page: Option<&str>) -> Selection {
     match page {
-        Some("needs-you" | "needs-you-allow") => Selection::NeedsYou,
+        Some("needs-you" | "needs-you-allow" | "needs-you-set-all-aside" | "needs-you-dismiss") => {
+            Selection::NeedsYou
+        }
         Some(other) if other.starts_with("brief-answer:") => Selection::NeedsYou,
         Some(other) if other.starts_with("mission-log:") => Selection::NeedsYou,
         Some("record") => Selection::Record,
@@ -580,7 +582,9 @@ fn activate(app: &adw::Application, o: &Options) {
         Some("devices-sign-out") => devices::OPEN_SIGN_OUT.with(|d| d.set(true)),
         Some("time-zone-use") => zones::TAP_USE_HERE.with(|t| t.set(true)),
         Some("usage-ask") => usage::OPEN.with(|u| u.set(Some("ask"))),
-        Some("needs-you-allow") => needs_you::OPEN_ALLOW.with(|a| a.set(true)),
+        Some("needs-you-allow") => needs_you::OPEN.with(|a| a.set(Some("allow"))),
+        Some("needs-you-set-all-aside") => needs_you::OPEN.with(|a| a.set(Some("set-all-aside"))),
+        Some("needs-you-dismiss") => needs_you::OPEN.with(|a| a.set(Some("dismiss"))),
         Some("coach-tools") => coach::OPEN_TOOLS.with(|t| t.set(true)),
         Some("coach-full") => coach_mode::START_FULL.with(|f| f.set(true)),
         Some("usage-decline") => usage::OPEN.with(|u| u.set(Some("decline-tapped"))),
@@ -2071,6 +2075,23 @@ impl App {
                 }
             })
         };
+        // Coach's waiting chats set aside at tafs cloud, from a kept session; then Home again.
+        let set_aside = match (mode, self.kept.borrow().as_ref()) {
+            (Mode::Kiff, Some(kept)) => Some(Rc::new(needs_you::SetAsideSource {
+                kept: kept.clone(),
+                languages: self.languages.clone(),
+                refresh: {
+                    let (me, kept) = (Rc::downgrade(self), kept.clone());
+                    Rc::new(move || {
+                        if let Some(me) = me.upgrade() {
+                            me.read_account(kept.clone(), view_only);
+                        }
+                    })
+                },
+                signed_out: signed_out.clone(),
+            })),
+            _ => None,
+        };
         let tafs =
             Rc::new(self.taf_pages(mode, &model, cloud.as_deref(), may_answer, at, signed_out));
         // Your brief, signed in with KIFF once tafs cloud sends one: read again for a label at
@@ -2154,6 +2175,7 @@ impl App {
                 .unwrap_or_default(),
         );
         let screens = shell::Screens {
+            set_aside,
             share,
             share_agents,
             account_email: account.as_ref().and_then(|a| a.email.clone()),

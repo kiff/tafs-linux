@@ -2,12 +2,16 @@
 //! happen?" (`DidThisHappenCard`), and each held call's card (`HeldCallCard`), or "Nothing is
 //! waiting." with its hint.
 
+use std::cell::RefCell;
 use std::rc::Rc;
 
+use adw::prelude::{AdwDialogExt, AlertDialogExt};
 use gtk::prelude::*;
+use gtk::{gio, glib};
 use tafs_core::approval::{self, Gate};
 use tafs_core::held::remaining;
 use tafs_core::needs_you::{Answers, CardLines, NeedsYouLines};
+use tafs_core::session::KeptSession;
 use tafs_core::sidebar::Mode;
 use tafs_core::signin::is_kiff_link;
 use tafs_core::words::WordBook;
@@ -18,6 +22,7 @@ pub fn page(
     w: Rc<WordBook>,
     n: &NeedsYouLines,
     open: Rc<dyn Fn(tafs_core::sidebar::Selection)>,
+    aside: Option<Rc<SetAsideSource>>,
 ) -> gtk::Widget {
     let column = gtk::Box::new(gtk::Orientation::Vertical, 14);
     column.set_margin_start(16);
@@ -31,22 +36,29 @@ pub fn page(
     for step in &n.steps {
         column.append(&step_card(&w, step));
     }
+    // "Set all aside" above them, then each chat: what's set aside goes once tafs cloud says so.
+    let rows: Rc<RefCell<Vec<(String, gtk::Box)>>> = Rc::default();
     if let Some(clear) = &n.set_all_aside {
-        // Setting chats aside is the person's act: there, dimmed, until it's ported.
         let b = outline(&clear.button);
         b.add_css_class("tafs-amber-text");
-        b.set_sensitive(false);
+        b.set_widget_name("needs-you.coach-waiting.set-all-aside");
+        let (w, clear, aside, rows) = (w.clone(), clear.clone(), aside.clone(), rows.clone());
+        b.connect_clicked(move |b| ask_set_all_aside(&w, &clear, aside.clone(), rows.clone(), b));
         column.append(&b);
+        tap_for_screenshot("set-all-aside", &b);
     }
     for waiting in &n.coach {
-        column.append(&coach_card(waiting, n.opens_coach));
+        let card = coach_card(&w, waiting, n.opens_coach, aside.clone());
+        rows.borrow_mut()
+            .push((waiting.session.clone(), card.clone()));
+        column.append(&card);
     }
     // Money calls KIFF can't prove: the person says on the phone whether they happened.
     for happened in &n.happened {
         column.append(&happened_card(happened));
     }
     for ask in &n.card_units {
-        column.append(&card_unit_panel(ask));
+        column.append(&card_unit_panel(&w, ask));
     }
     if let Some((nothing, hint)) = &n.empty {
         // Board 6, nothing waiting (`Illustration.nothingWaiting`), above its words.
@@ -128,10 +140,120 @@ fn step_card(w: &Rc<WordBook>, step: &tafs_core::waits::YourStep) -> gtk::Box {
     p
 }
 
-/// `CoachWaitingCard`: tafs cloud's line with Coach's mark, then Open Coach and Set aside, both
-/// there, dimmed, until Coach and setting aside are ported.
-fn coach_card(waiting: &tafs_core::waits::CoachWaiting, opens_coach: bool) -> gtk::Box {
+/// Where Coach's waiting chats are set aside, signed in with KIFF: the session, and Home read
+/// again once tafs cloud took it.
+pub struct SetAsideSource {
+    pub kept: KeptSession,
+    pub languages: Vec<&'static str>,
+    pub refresh: Rc<dyn Fn()>,
+    /// tafs cloud ended the session: signed out, as every read does.
+    pub signed_out: Rc<dyn Fn()>,
+}
+
+/// `setAsideCoach`: one waiting chat, or every one with none, set aside at tafs cloud. Nothing is
+/// signed; this device's signed read of its connections goes with it when it has one. `done` has
+/// the chats tafs cloud ended, or why not in its words; Home is read again once it took it.
+fn set_aside(
+    w: &Rc<WordBook>,
+    source: &Rc<SetAsideSource>,
+    session: Option<String>,
+    done: impl FnOnce(Result<Vec<String>, String>) + 'static,
+) {
+    let (words, source) = ((**w).clone(), source.clone());
+    let (kept, languages) = (source.kept.clone(), source.languages.clone());
+    glib::spawn_future_local(async move {
+        let sent = gio::spawn_blocking(move || -> Result<Vec<String>, Option<String>> {
+            let proof = crate::coach::this_device(&kept, &languages)
+                .and_then(|d| crate::coach::proof(&kept, &d));
+            let path = tafs_core::waits::set_aside_path(session.as_deref());
+            let a = crate::kiff::set_aside(&kept.token, &languages, &path, proof.as_deref())
+                .map_err(|e| Some(e.words(&words).unwrap_or_default()))?;
+            match a.status {
+                401 => Err(None),
+                200..=299 => tafs_core::waits::read_set_aside(&a.body)
+                    .ok_or_else(|| tafs_core::signin::plain_words(&words, 200).ok()),
+                _ => Err(Some(
+                    tafs_core::signin::refusal(&a, Some(&words))
+                        .words(&words)
+                        .unwrap_or_default(),
+                )),
+            }
+        })
+        .await
+        .unwrap_or(Err(Some(String::new())));
+        match sent {
+            Err(None) => (source.signed_out)(),
+            Err(Some(why)) => done(Err(why)),
+            Ok(ended) => {
+                done(Ok(ended));
+                (source.refresh)();
+            }
+        }
+    });
+}
+
+/// "Set all aside"'s one ask (`SetAllAsideButton`): tafs cloud's title, its words, and its yes
+/// (destructive) and no, else Cancel. Yes sets every listed chat aside.
+fn ask_set_all_aside(
+    w: &Rc<WordBook>,
+    clear: &tafs_core::waits::CoachWaitingClear,
+    aside: Option<Rc<SetAsideSource>>,
+    rows: Rc<RefCell<Vec<(String, gtk::Box)>>>,
+    button: &gtk::Button,
+) {
+    let ask = adw::AlertDialog::new(Some(&clear.title), None);
+    if !clear.text.is_empty() {
+        ask.set_body(&clear.text);
+    }
+    let no = if clear.no.is_empty() {
+        w.line("common.cancel").unwrap_or_default()
+    } else {
+        clear.no.clone()
+    };
+    ask.add_response("no", &no);
+    ask.add_response("yes", &clear.yes);
+    ask.set_response_appearance("yes", adw::ResponseAppearance::Destructive);
+    ask.set_default_response(Some("no"));
+    ask.set_close_response("no");
+    let (w, b) = (w.clone(), button.clone());
+    ask.connect_response(None, move |_, answer| {
+        // A screenshot's chats: nothing is sent.
+        let (true, Some(source)) = (answer == "yes", aside.clone()) else {
+            return;
+        };
+        b.set_sensitive(false);
+        for (_, row) in rows.borrow().iter() {
+            row.set_sensitive(false);
+        }
+        let (b, rows) = (b.clone(), rows.clone());
+        set_aside(&w, &source, None, move |r| {
+            b.set_sensitive(true);
+            for (session, row) in rows.borrow().iter() {
+                row.set_sensitive(true);
+                if r.as_ref().is_ok_and(|ended| ended.contains(session)) {
+                    row.set_visible(false);
+                }
+            }
+            match r {
+                Ok(_) => b.set_visible(false),
+                Err(why) => b.set_tooltip_text(Some(&why)),
+            }
+        });
+    });
+    ask.present(Some(button));
+}
+
+/// `CoachWaitingCard`: tafs cloud's line with Coach's mark, then Open Coach, which opens Coach on
+/// that chat, for someone who may use Coach; and Set aside, when tafs cloud sent its words, which
+/// sets the chat aside at tafs cloud: the row goes once tafs cloud says so, or says why it stays.
+fn coach_card(
+    w: &Rc<WordBook>,
+    waiting: &tafs_core::waits::CoachWaiting,
+    opens_coach: bool,
+    aside: Option<Rc<SetAsideSource>>,
+) -> gtk::Box {
     let p = panel(true);
+    p.set_widget_name(&format!("needs-you.coach-waiting.{}", waiting.session));
     let line = gtk::Box::new(gtk::Orientation::Horizontal, 10);
     let mark = crate::widgets::symbol("tafs-sparkle-symbolic", 15);
     mark.add_css_class("tafs-amber-text");
@@ -143,13 +265,37 @@ fn coach_card(waiting: &tafs_core::waits::CoachWaiting, opens_coach: bool) -> gt
     // Its way in only for someone who may use Coach: else the line alone.
     if opens_coach {
         let open = crate::widgets::primary(&waiting.open);
-        open.set_sensitive(false);
+        let session = waiting.session.clone();
+        open.connect_clicked(move |_| crate::coach_start::finish(&session));
         p.append(&open);
     }
-    if !waiting.set_aside.is_empty() {
-        let aside = outline(&waiting.set_aside);
-        aside.set_sensitive(false);
-        p.append(&aside);
+    if !waiting.set_aside.is_empty() && !waiting.session.is_empty() {
+        let why = text("", 13, 400, &["tafs-no"]);
+        why.set_visible(false);
+        let b = outline(&waiting.set_aside);
+        b.add_css_class("tafs-soft");
+        let (w, session, card, why2) = (w.clone(), waiting.session.clone(), p.clone(), why.clone());
+        b.connect_clicked(move |b| {
+            // A screenshot's chat: nothing is sent.
+            let Some(source) = aside.clone() else {
+                return;
+            };
+            b.set_sensitive(false);
+            let (b, card, why, session2) = (b.clone(), card.clone(), why2.clone(), session.clone());
+            set_aside(&w, &source, Some(session.clone()), move |r| {
+                b.set_sensitive(true);
+                match r {
+                    Ok(ended) if ended.contains(&session2) => card.set_visible(false),
+                    Ok(_) => {}
+                    Err(words) => {
+                        why.set_label(&words);
+                        why.set_visible(!words.is_empty());
+                    }
+                }
+            });
+        });
+        p.append(&b);
+        p.append(&why);
     }
     p
 }
@@ -203,10 +349,10 @@ fn knock_row(
 }
 
 /// `CardUnitExceptionPanel`: tafs cloud's title (16 semibold), words (14, soft) and history (12,
-/// dim); its Coach button for someone who may use Coach and manages the taf; and Dismiss in red,
-/// which is signed like a refusal. Both there, dimmed: Coach isn't ported, and this computer can't
-/// sign.
-pub fn card_unit_panel(ask: &tafs_core::needs_you::CardUnitLines) -> gtk::Box {
+/// dim); its Coach button for someone who may use Coach and manages the taf, which opens Coach in
+/// a new conversation with tafs cloud's words in its box, nothing sent; and Dismiss in red, signed
+/// like a refusal, so its tap says this computer can't approve, under it, and sends nothing.
+pub fn card_unit_panel(w: &Rc<WordBook>, ask: &tafs_core::needs_you::CardUnitLines) -> gtk::Box {
     let p = panel(false);
     p.set_widget_name(&format!("card-unit.{}", ask.id));
     p.append(&text(&ask.title, 16, 600, &["tafs-ink"]));
@@ -216,15 +362,32 @@ pub fn card_unit_panel(ask: &tafs_core::needs_you::CardUnitLines) -> gtk::Box {
         let b = gtk::Button::with_label(discuss);
         b.add_css_class("tafs-link");
         b.set_halign(gtk::Align::Start);
-        b.set_sensitive(false);
+        let say = ask.coach_text.clone();
+        b.connect_clicked(move |_| crate::coach_start::hand(&say));
         p.append(&b);
     }
+    let slot = crate::approval::refusal_slot();
     let dismiss = gtk::Button::with_label(&ask.dismiss);
     dismiss.add_css_class("tafs-link");
     dismiss.add_css_class("tafs-no");
     dismiss.set_halign(gtk::Align::Start);
-    dismiss.set_sensitive(false);
+    dismiss.set_widget_name(&format!("card-unit.dismiss.{}", ask.id));
+    {
+        let (w, slot, exception) = (w.clone(), slot.clone(), ask.id.clone());
+        dismiss.connect_clicked(move |_| {
+            crate::approval::refuse(
+                &w,
+                Mode::Kiff,
+                &tafs_core::signed::Act::DismissCardUnit {
+                    exception: exception.clone(),
+                },
+                &slot,
+            )
+        });
+    }
     p.append(&dismiss);
+    p.append(&slot);
+    tap_for_screenshot("dismiss", &dismiss);
     p
 }
 
@@ -375,16 +538,57 @@ pub fn held_card(w: &Rc<WordBook>, c: &CardLines) -> gtk::Box {
         let w2 = w.clone();
         b.connect_clicked(move |b| open_allow(&w2, b));
         p.append(&b);
-        if OPEN_ALLOW.with(|o| o.replace(false)) {
-            gtk::glib::idle_add_local_once(move || b.emit_clicked());
-        }
+        tap_for_screenshot("allow", &b);
     }
     p
 }
 
 thread_local! {
-    /// `--page needs-you-allow`: the first card's "Allow this from now on", tapped.
-    pub static OPEN_ALLOW: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    /// What a screenshot taps once Needs you is drawn: the first card's "Allow this from now on"
+    /// (`allow`), "Set all aside" (`set-all-aside`), or the first Card unit request's Dismiss
+    /// (`dismiss`).
+    pub static OPEN: std::cell::Cell<Option<&'static str>> = const { std::cell::Cell::new(None) };
+}
+
+/// Taps `b` once it's drawn, when a screenshot asked for `which`: the one on screen, since the
+/// page can be drawn again before then.
+fn tap_for_screenshot(which: &'static str, b: &gtk::Button) {
+    if OPEN.with(|o| o.get()) == Some(which) {
+        let b = b.clone();
+        // Brought into view first, as the person would scroll to it.
+        glib::timeout_add_local(std::time::Duration::from_millis(150), move || {
+            if OPEN.with(|o| o.get()) != Some(which) || b.root().is_none() {
+                return glib::ControlFlow::Break;
+            }
+            if !b.is_mapped() {
+                return glib::ControlFlow::Continue;
+            }
+            OPEN.with(|o| o.set(None));
+            b.grab_focus();
+            b.emit_clicked();
+            // What the tap drew under it, in view too: the card's foot at the screen's foot.
+            let b = b.clone();
+            glib::timeout_add_local_once(std::time::Duration::from_millis(450), move || {
+                let (Some(card), Some(sw)) =
+                    (b.parent(), b.ancestor(gtk::ScrolledWindow::static_type()))
+                else {
+                    return;
+                };
+                let sw = sw
+                    .downcast::<gtk::ScrolledWindow>()
+                    .expect("a scrolled window");
+                // Measured on what scrolls (the column in the viewport), not on the viewport.
+                let content = sw.child().and_then(|v| v.first_child());
+                let Some(bounds) = content.and_then(|c| card.compute_bounds(&c)) else {
+                    return;
+                };
+                let adj = sw.vadjustment();
+                let foot = f64::from(bounds.y() + bounds.height()) + 16.0;
+                adj.set_value((foot - adj.page_size()).max(adj.value()));
+            });
+            glib::ControlFlow::Break
+        });
+    }
 }
 
 /// "Allow this from now on" (`AllowSheetView`): its title, then why this computer can't approve
@@ -400,5 +604,5 @@ fn open_allow(w: &WordBook, over: &gtk::Button) {
     if let Ok(Gate::NotReady(n)) = approval::gate(w, Mode::Kiff, approval::THIS_COMPUTER) {
         sheet.column.append(&crate::approval::not_ready(&n));
     }
-    adw::prelude::AdwDialogExt::present(&sheet.dialog, Some(over));
+    sheet.dialog.present(Some(over));
 }

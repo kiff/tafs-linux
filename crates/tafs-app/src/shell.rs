@@ -108,6 +108,8 @@ pub struct Screens {
     pub share: Option<crate::share::ShareSource>,
     pub share_agents: Rc<std::collections::BTreeMap<String, String>>,
     pub account_email: Option<String>,
+    /// Signed in with KIFF from a kept session: where Coach's waiting chats are set aside.
+    pub set_aside: Option<Rc<crate::needs_you::SetAsideSource>>,
 }
 
 /// Builds the shell. `view_only` shows the notice that this computer can't approve yet.
@@ -146,6 +148,7 @@ pub fn build(
         share,
         share_agents,
         account_email,
+        set_aside,
     } = screens;
     let has_coach = !matches!(coach, crate::coach::CoachSource::None);
     let entries = Rc::new(record.entries.clone());
@@ -226,6 +229,7 @@ pub fn build(
             record.clone(),
         );
         let (tafs, entries) = (tafs.clone(), entries.clone());
+        let set_aside = set_aside.clone();
         let (w, stack, selection, rows, list, account_icon, lines) = (
             w.clone(),
             stack.clone(),
@@ -280,8 +284,20 @@ pub fn build(
                 // "Your brief" in its place once there is one; Needs you, as today, otherwise.
                 Selection::NeedsYou => {
                     let list: Rc<dyn Fn() -> gtk::Widget> = {
-                        let (w, needs_you, open) = (w.clone(), needs_you.clone(), open.clone());
-                        Rc::new(move || crate::needs_you::page(w.clone(), &needs_you, open.clone()))
+                        let (w, needs_you, open, aside) = (
+                            w.clone(),
+                            needs_you.clone(),
+                            open.clone(),
+                            set_aside.clone(),
+                        );
+                        Rc::new(move || {
+                            crate::needs_you::page(
+                                w.clone(),
+                                &needs_you,
+                                open.clone(),
+                                aside.clone(),
+                            )
+                        })
                     };
                     match &brief {
                         Some(pane) => {

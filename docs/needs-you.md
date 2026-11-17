@@ -80,10 +80,22 @@ calls, in the iPad's order:
   host under it; then Done and Skip it. The answer is signed by the device key
   (`answerHandoff`), so their tap shows the can't-approve line under them and sends nothing
   ([approval](approval.md)).
-- **"Set all aside"** above two or more of Coach's waiting chats, when tafs cloud sends its words.
+- **"Set all aside"** above two or more of Coach's waiting chats, when tafs cloud sends its words
+  (amber, `SetAllAsideButton`). Tapped, tafs cloud's one ask: its title, its words, its yes (red)
+  and its no (else Cancel). Yes sets every listed chat aside.
 - **A Coach chat waiting on the person** (`CoachWaitingCard`): tafs cloud's line with Coach's
-  mark; Open Coach, for someone who may use Coach; Set aside, when tafs cloud sends its words.
-  One without its chat or either line isn't listed.
+  mark; Open Coach, for someone who may use Coach, which opens Coach on that chat
+  (`openCoachWaiting`); Set aside (soft), when tafs cloud sends its words. One without its chat
+  or either line isn't listed.
+
+Setting aside is tafs cloud's "not now", never an approval, and nothing is signed
+(`setAsideCoach`): `POST /v1/home/coach-waiting/{session}/set-aside`, or
+`/v1/home/coach-waiting/set-aside` for every one, as the session. This device's signed read of its
+connections goes with it as `Planque-Device-Signature` when it has one, so tafs cloud can withdraw
+a connection the chat asked for. A row goes once tafs cloud names it among the chats it ended
+(`set_aside`), and Home is read again; a refusal keeps the row and says why, in tafs cloud's
+words; a 401 signs this computer out. While it's on its way, the row's button and Set all aside
+send nothing more. The iPad's swipe on the line isn't drawn: the button does the same.
 
 "Nothing is waiting." shows only when no step, Coach chat or held call waits. Read as the iPad
 reads Home: a step without its `handoff` fails Home; a Coach wait never does.
@@ -115,10 +127,14 @@ waiting." shows only when none waits either.
 
 Each is a panel: tafs cloud's title (16 semibold), words (14, soft) and history (12, dim); its
 Coach button (`action_title`) only for someone who may use Coach and manages the taf (`canDiscuss`:
-the access read's `manage` for the taf's KIFF agent); then Dismiss in red. Both are there,
-dimmed: Coach isn't ported, and Dismiss is signed like a refusal, which this computer can't
-sign. `--home crates/tafs-app/fixtures/home-waits.json` (synthetic) draws one, CI's
-`needs-you-waits`.
+the access read's `manage` for the taf's KIFF agent); then Dismiss in red. The Coach button opens Coach in a new
+conversation with tafs cloud's `coach_text` in its box, for the person to edit and send; nothing
+is sent (`discussCardUnit`; the taf Coach would improve isn't carried, as Linux's Coach opens on
+none). Dismiss is signed like a refusal (`dismissCardUnit`, KIFF's `reject`), so its tap shows
+the can't-approve line under it and sends nothing. The same panel stands on a taf's Activity and
+Setup. `--home crates/tafs-app/fixtures/home-waits.json` (synthetic) draws one, CI's
+`needs-you-waits`; `needs-you-set-all-aside` and `needs-you-dismiss` tap Set all aside and
+Dismiss.
 
 ## Knocks
 

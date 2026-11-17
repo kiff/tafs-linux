@@ -226,6 +226,7 @@ pub fn page(
             // list. The requests are its Activity's last page's, once read.
             let units = gtk::Box::new(gtk::Orientation::Vertical, 14);
             let units_of = Units {
+                w: w.clone(),
                 home: t.card_units.clone(),
                 discuss: t.may_use_coach && t.manages,
                 into: units.clone(),
@@ -1095,6 +1096,7 @@ fn line(w: &WordBook, e: &Entry) -> gtk::Box {
 /// `TafActivityList`'s `.cardUnits`: the Activity's last page's requests (`card_unit_exceptions`),
 /// else Home's for the taf, each as Needs you draws it, then tafs cloud's notice.
 struct Units {
+    w: Rc<WordBook>,
     home: Vec<tafs_core::waits::CardUnitException>,
     discuss: bool,
     into: gtk::Box,
@@ -1107,7 +1109,8 @@ impl Units {
         }
         for ask in page.unwrap_or(&self.home) {
             let lines = tafs_core::needs_you::card_unit_lines(ask, self.discuss);
-            self.into.append(&crate::needs_you::card_unit_panel(&lines));
+            self.into
+                .append(&crate::needs_you::card_unit_panel(&self.w, &lines));
         }
         if let Some(notice) = notice {
             self.into.append(&text(notice, 13, 400, &["tafs-dim"]));

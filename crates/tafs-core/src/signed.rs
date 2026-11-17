@@ -211,6 +211,8 @@ pub enum Act {
     AnswerStep { handoff: String },
     /// `approveOnce`: a held call approved once, from the dial's face.
     ApproveOnce { call: String },
+    /// `dismissCardUnit`: a Card unit request dismissed, signed like a refusal (`reject`).
+    DismissCardUnit { exception: String },
     /// `approveKnobEvent`: an app event's subscription at planque, signed by the device.
     ApproveEvent { grant: String, event: String },
     /// `share(agent:with:)`: a taf shared with a group or a person, from Share's second step.
@@ -285,6 +287,10 @@ impl Act {
             Act::ApproveOnce { call } => (
                 "POST",
                 format!("/v1/me/card-exceptions/{}/approve-once", escaped(call)),
+            ),
+            Act::DismissCardUnit { exception } => (
+                "POST",
+                format!("/v1/me/card-exceptions/{}/reject", escaped(exception)),
             ),
             Act::ApproveEvent { grant, .. } => {
                 ("POST", format!("grants/{}/triggers", escaped(grant)))
@@ -441,6 +447,9 @@ mod tests {
                 handoff: "h1".into(),
             },
             Act::ApproveOnce { call: "ce1".into() },
+            Act::DismissCardUnit {
+                exception: "ce2".into(),
+            },
             Act::ApproveEvent {
                 grant: "g1".into(),
                 event: "NEW_TICKET".into(),

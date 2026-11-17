@@ -197,6 +197,32 @@ pub fn cloud_send(
     })
 }
 
+/// Coach's waiting chats set aside (`TafsCloud.setAsideCoach`): one, or every one, at tafs cloud
+/// as the session. It signs nothing; this device's signed read of its connections (`proof`), when
+/// it has one, goes as `Planque-Device-Signature` so tafs cloud can withdraw a connection the chat
+/// asked for. Neither the token nor the proof is ever logged.
+pub fn set_aside(
+    token: &str,
+    languages: &[&str],
+    path: &str,
+    proof: Option<&str>,
+) -> Result<Answer, KiffError> {
+    let url = format!("{}{path}", tafs_core::home::TAFS_CLOUD);
+    if !may_send_to(&url) || tafs_core::signed::signed("POST", path) {
+        return Err(KiffError::Unreadable);
+    }
+    let mut request = agent()
+        .post(&url)
+        .set("Accept", "application/json")
+        .set("Accept-Language", &accept_language(languages))
+        .set("Authorization", &format!("Bearer {token}"))
+        .set("Content-Type", "application/json");
+    if let Some(proof) = proof {
+        request = request.set(tafs_core::planque::HEADER, proof);
+    }
+    Kiff::read(request.send_bytes(b"{}"))
+}
+
 /// A knock answered (`TafsCloud.answerKnock`): "do", "pair" or "ignore", at tafs cloud as the
 /// session. It signs nothing.
 pub fn answer_knock(
