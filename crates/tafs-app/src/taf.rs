@@ -528,8 +528,8 @@ pub fn page(
         });
     }
     // `sideColumn`: beside the chat or the activity, on a wide window, the calls waiting and the
-    // Cards, 360 wide; the page keeps an iPhone's width (430) for the chat beside it, and is wider
-    // than tall. Without it, the Card bar above, and the held calls in the activity.
+    // Cards, 360 wide; the page keeps an iPhone's width (430) for the chat beside it, in a window
+    // wider than tall (the iPad in landscape). Without it, the Card bar above, and the held calls in the activity.
     let row = gtk::Box::new(gtk::Orientation::Horizontal, 16);
     panes.set_hexpand(true);
     row.append(&panes);
@@ -551,11 +551,18 @@ pub fn page(
         );
         let has_cards = !t.cards.is_empty();
         outer.add_tick_callback(move |o, _| {
-            let (width, height) = (o.width(), o.height());
+            let width = o.width();
+            // "Only in landscape": the iPad's page is wider than tall exactly when the iPad is
+            // in landscape. Here that's the window's shape, as a 4:3 window less the sidebar
+            // leaves a page about as tall as it's wide.
+            let landscape = o
+                .root()
+                .map(|r| r.width() > r.height())
+                .unwrap_or(width > o.height());
             let section_lt_card = !card_tab.is_active() && !setup_tab.is_active();
             let wide = has_cards
                 && section_lt_card
-                && width > height
+                && landscape
                 && width - SIDE_WIDTH - 32 >= CHAT_AT_LEAST;
             if side.is_visible() != wide {
                 side.set_visible(wide);
