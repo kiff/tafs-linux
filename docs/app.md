@@ -137,21 +137,38 @@ libadwaita 1.1, and the app needs GTK 4.14 and libadwaita 1.5. Reaching 22.04 wo
 building those two from source on 22.04, or shipping a Flatpak.
 
 **In CI** (`.github/workflows/appimage.yml`):
-- A pull request that changes the packaging builds the AppImage and runs its `--help` (which
-  loads every bundled library and starts nothing). The file isn't kept: the repository is public,
-  and a run's artifact would be a copy anyone signed in to GitHub could download.
+- A pull request that changes the packaging builds the AppImage, runs its `--help` (which loads
+  every bundled library and starts nothing), and starts it on a clean Ubuntu 24.04 (below). The
+  file isn't kept: the repository is public, and a run's artifact would be a copy anyone signed in
+  to GitHub could download.
 - Run by hand with a version (`v` and three numbers, as `v0.1.0`: anything else is refused before
-  a tag is made), one job builds it, checks it starts, and attaches it with its `SHA256SUMS` to a
-  **draft** release, its only copy. Publishing it is the owner's yes, never the workflow's.
+  a tag is made), one job builds it, checks it starts, starts it on a clean Ubuntu 24.04, and only
+  then attaches it with its `SHA256SUMS` to a **draft** release, its only copy. Publishing it is
+  the owner's yes, never the workflow's.
 - Before a draft is published, `.github/workflows/verify-release.yml`, run by hand with its tag,
-  downloads the draft's own AppImage and `SHA256SUMS`, checks one against the other, and starts it
-  in a clean `ubuntu:24.04` container. The container has what every Ubuntu 24.04 desktop has and
-  the AppImage counts on, since linuxdeploy leaves those base libraries out on purpose (fribidi,
-  HarfBuzz, fontconfig, FreeType, GL/EGL, X11, xkbcommon, the Wayland client), plus a virtual
-  display (`xvfb`) and one font. It never has GTK or libadwaita: the job fails if either is
-  installed. It names any library the app finds in neither the AppImage nor that base, then saves
-  the first screen and the sign-in as screenshots, the run's only artifact. Nothing is created,
-  edited or published. (A bare container without that base stops at `libfribidi.so.0`.)
+  downloads the draft's own AppImage and `SHA256SUMS`, checks one against the other, and starts
+  that file on a clean Ubuntu 24.04. Its three screenshots are the run's only artifact. Nothing
+  is created, edited or published. It takes `tools/check-appimage.sh` from the branch it's run
+  on (main), so a draft is checked with today's check, not the one it was built with.
+
+**On a clean Ubuntu 24.04** (`tools/check-appimage.sh`, in an `ubuntu:24.04` container): the
+container has what every Ubuntu 24.04 desktop has and the AppImage counts on, since linuxdeploy
+leaves those base libraries out on purpose (fribidi, HarfBuzz, fontconfig, FreeType, GL/EGL, X11,
+xkbcommon, the Wayland client), plus a virtual display (`xvfb`) and one font. It never has GTK,
+libadwaita or a MIME database (`shared-mime-info`): the check fails if one is installed. It then
+fails on:
+- a library the app finds in neither the AppImage nor that base (a bare container without the
+  base stops at `libfribidi.so.0`);
+- an image loader that can't find its own libraries, or a `loaders.cache` line naming one that
+  isn't in the AppImage. GTK opens the gdk-pixbuf loaders at run time, with no
+  `LD_LIBRARY_PATH`, and the SVG one draws every icon. The GTK plugin copies them from the build
+  system with no RUNPATH, so `tools/appimage.sh` points each at the AppImage's `usr/lib`
+  (`patchelf`) before the AppImage is made: the SVG loader never depends on the system's librsvg;
+- an icon GTK can't load, in any of the three screens it saves: the first screen, the sign-in,
+  and the sample signed in, whose sidebar draws the app's own icons. gdk-pixbuf tells an image's
+  format by the MIME database (through GIO) before it chooses a loader, so the AppImage brings
+  its own compiled `usr/share/mime/mime.cache`. Without it, the v1.0.0 draft drew every SVG icon
+  as a missing-image placeholder ("Unrecognized image file format").
 
 **Signing.** The draft job signs `SHA256SUMS` with tafs for Linux's OpenPGP key
 (`tools/sign.sh`): an armored detached signature, `SHA256SUMS.asc`, attached beside it. Whoever

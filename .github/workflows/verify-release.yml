@@ -1,14 +1,10 @@
 name: Verify a draft release
 
 # Run by hand with a draft's tag, before it's published: its own AppImage, checked against its
-# SHA256SUMS, then started once in a clean Ubuntu 24.04 container, first screen and sign-in. The
-# container has what every Ubuntu 24.04 desktop has and the AppImage counts on (linuxdeploy leaves
-# those base libraries out on purpose: fribidi, HarfBuzz, fontconfig, FreeType, GL/EGL, X11,
-# xkbcommon, the Wayland client), plus a virtual display and a font; never GTK 4 or libadwaita,
-# which the AppImage must bring itself. Three screenshots, kept as the run's artifact: the first
-# screen, the sign-in, and the sample signed in (its sidebar draws the app's own icons); the
-# AppImage isn't kept, since this repository is public. The image loaders GTK opens at run time,
-# and any library a bundled module can't find, are printed for the record.
+# SHA256SUMS, then started on a clean Ubuntu 24.04 by tools/check-appimage.sh, which fails on a
+# library missing, an image loader that can't find its own, or an icon GTK can't load. Its three
+# screenshots (the first screen, the sign-in, the sample signed in) are kept as the run's
+# artifact; the AppImage isn't, since this repository is public.
 on:
   workflow_dispatch:
     inputs:
@@ -58,59 +54,15 @@ jobs:
           cd release
           ls -l
           sha256sum -c SHA256SUMS
-      - name: In a clean Ubuntu 24.04, to its first screen and the sign-in
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          # Only for tools/check-appimage.sh: the token isn't written into .git/config.
+          persist-credentials: false
+          path: src
+      - name: On a clean Ubuntu 24.04, its three screens with every icon
         run: |
-          docker run --rm -v "$PWD/release:/release" -w /release ubuntu:24.04 bash -c '
-            set -euo pipefail
-            apt-get update -qq
-            DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends \
-              xvfb xauth fonts-dejavu-core \
-              libfribidi0 libharfbuzz0b libfontconfig1 libfreetype6 libexpat1 zlib1g \
-              libgl1 libegl1 libglx0 libgbm1 libdrm2 \
-              libx11-6 libx11-xcb1 libxcb1 libxext6 libxrender1 libxi6 libxrandr2 libxfixes3 \
-              libxcursor1 libxinerama1 libxdamage1 libxcomposite1 libxkbcommon0 \
-              libwayland-client0 libwayland-cursor0 libwayland-egl1 > /dev/null
-            if dpkg -l | grep -qE "libgtk-4|libgtk-3|libadwaita"; then
-              echo "Not clean: GTK or libadwaita is installed." >&2
-              exit 1
-            fi
-            app=$(ls tafs-*-x86_64.AppImage)
-            chmod +x "$app"
-            # Every library the app needs, from the AppImage or this system: one it can find in
-            # neither is named here, before anything starts.
-            "./$app" --appimage-extract > /dev/null
-            libs=$(find squashfs-root/usr/lib -type d | tr "\n" ":")
-            missing=$(LD_LIBRARY_PATH="$libs" ldd squashfs-root/usr/bin/tafs | grep "not found" || true)
-            if [ -n "$missing" ]; then
-              echo "Not found on a clean Ubuntu 24.04 desktop base:" >&2
-              echo "$missing" >&2
-              exit 1
-            fi
-            # What GTK opens at run time, for the record: the image loaders it draws icons with
-            # (an SVG icon needs the SVG one), their cache, and any library a bundled module
-            # finds in neither the AppImage nor the base.
-            echo "::group::Image loaders in the AppImage"
-            find squashfs-root -path "*gdk-pixbuf*" \( -name "*.so" -o -name "loaders.cache" \) | sort
-            for cache in $(find squashfs-root -path "*gdk-pixbuf*" -name loaders.cache); do
-              grep -v "^#" "$cache" | grep "\.so" || true
-            done
-            echo "::endgroup::"
-            echo "::group::Bundled modules with a library not found"
-            find squashfs-root/usr/lib -type f -name "*.so*" | while read -r f; do
-              gone=$(LD_LIBRARY_PATH="$libs" ldd "$f" 2>/dev/null | grep "not found" || true)
-              if [ -n "$gone" ]; then echo "$f"; echo "$gone"; fi
-            done
-            echo "::endgroup::"
-            rm -rf squashfs-root
-            export APPIMAGE_EXTRACT_AND_RUN=1 GSK_RENDERER=cairo NO_AT_BRIDGE=1
-            timeout 120 xvfb-run -a "./$app" --screenshot /release/first-screen.png
-            timeout 120 xvfb-run -a "./$app" --page sign-in --screenshot /release/sign-in.png
-            # The sample, signed in: the sidebar and the Overview, drawn with the app's own icons.
-            timeout 120 xvfb-run -a "./$app" --sample --signed-in --screenshot /release/sample.png
-            test -s /release/first-screen.png
-            test -s /release/sign-in.png
-            test -s /release/sample.png
-          '
+          docker run --rm -v "$PWD:/w" -w /w ubuntu:24.04 \
+            src/tools/check-appimage.sh "$(ls release/tafs-*-x86_64.AppImage)" release
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: verify-${{ inputs.version }}
