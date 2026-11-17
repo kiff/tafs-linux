@@ -384,12 +384,17 @@ fn screen_link(
     knobs: &crate::starts_when::Knobs,
     screen: crate::starts_when::Screen,
 ) -> gtk::Button {
+    // `Label(…, systemImage:)` in the amber text colour, icon and words alike; the caret dim.
     let row = gtk::Box::new(gtk::Orientation::Horizontal, 10);
-    row.append(&crate::widgets::symbol(icon, 16));
+    let mark = crate::widgets::symbol(icon, 16);
+    mark.add_css_class("tafs-amber-text");
+    row.append(&mark);
     let label = text(words, 15, 600, &["tafs-amber-text"]);
     label.set_hexpand(true);
     row.append(&label);
-    row.append(&crate::widgets::symbol("go-next-symbolic", 14));
+    let caret = crate::widgets::symbol("go-next-symbolic", 14);
+    caret.add_css_class("tafs-dim");
+    row.append(&caret);
     let b = gtk::Button::new();
     b.set_child(Some(&row));
     b.add_css_class("tafs-panel-link");
@@ -551,12 +556,45 @@ fn tools_ring(
         });
     }
     p.append(&overlay);
-    // The workflow, folded: its title and summary; open, each step and Change with Coach.
+    // The workflow, folded (`DisclosureGroup`): its title in the accent and its summary, the
+    // chevron at the right, turned down while open; open, each step and Change with Coach.
     let head = gtk::Box::new(gtk::Orientation::Vertical, 2);
-    head.append(&text(&view.workflow.title, 15, 400, &["tafs-ink"]));
+    head.set_hexpand(true);
+    head.append(&text(&view.workflow.title, 17, 400, &["tafs-amber"]));
     head.append(&text(&view.workflow.summary, 13, 400, &["tafs-soft"]));
-    let expander = gtk::Expander::new(None);
-    expander.set_label_widget(Some(&head));
+    let row = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+    row.append(&head);
+    let chevron = crate::widgets::symbol("go-next-symbolic", 14);
+    chevron.add_css_class("tafs-ink");
+    chevron.set_valign(gtk::Align::Center);
+    row.append(&chevron);
+    let toggle = gtk::Button::new();
+    toggle.add_css_class("tafs-plain");
+    toggle.set_child(Some(&row));
+    toggle.set_widget_name("taf.workflow");
+    let expander = gtk::Revealer::new();
+    expander.set_transition_type(gtk::RevealerTransitionType::SlideDown);
+    {
+        let (open, chevron) = (expander.clone(), chevron.clone());
+        toggle.connect_clicked(move |b| {
+            let now = !open.reveals_child();
+            open.set_reveal_child(now);
+            chevron.set_icon_name(Some(if now {
+                "go-down-symbolic"
+            } else {
+                "go-next-symbolic"
+            }));
+            b.set_state_flags(
+                if now {
+                    gtk::StateFlags::CHECKED
+                } else {
+                    gtk::StateFlags::NORMAL
+                },
+                true,
+            );
+        });
+    }
+    p.append(&toggle);
     let steps = gtk::Box::new(gtk::Orientation::Vertical, 8);
     steps.set_margin_top(8);
     for step in &view.workflow.steps {

@@ -454,9 +454,8 @@ pub fn page(
         let setup_scroller = gtk::ScrolledWindow::new();
         setup_scroller.set_hscrollbar_policy(gtk::PolicyType::Never);
         setup_scroller.set_vexpand(true);
+        // At the page's own edges, with the tabs, as the Card tab and the iPad's Setup.
         let column = gtk::Box::new(gtk::Orientation::Vertical, 0);
-        column.set_margin_start(16);
-        column.set_margin_end(16);
         setup_scroller.set_child(Some(&column));
         panes.add_named(&setup_scroller, Some("setup"));
         let made = std::cell::Cell::new(false);
@@ -580,7 +579,8 @@ pub fn page(
                 side.set_visible(wide);
             }
             if let Some(bar) = &bar {
-                let shown = !wide && !card_tab.is_active();
+                // Above the chat or the activity only (`section < 2`), never the Card or Setup.
+                let shown = !wide && section_lt_card;
                 if bar.is_visible() != shown {
                     bar.set_visible(shown);
                 }
