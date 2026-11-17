@@ -84,6 +84,7 @@ button.tafs-link { background: none; box-shadow: none; border: none; color: @taf
 .tafs-sidebar .taf-now.no { color: @tafs_no; }
 .tafs-sidebar .brand { font-size: 22px; font-weight: 700; color: @tafs_ink; }
 .tafs-dot { background-color: @tafs_amber; border-radius: 4px; min-width: 8px; min-height: 8px; }
+button.tafs-unreachable-status { padding: 0 2px; min-height: 0; font-size: 12px; font-weight: 600; }
 
 /* Coach: the ink button, the dark ground's colour on it, 44 high, corners of 14. */
 button.tafs-coach { background-color: @tafs_ink; background-image: none; color: @tafs_on_fill; font-size: 15px; font-weight: 600;

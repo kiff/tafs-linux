@@ -131,7 +131,60 @@ pub struct SidebarModel {
     /// tafs cloud's name for Needs you's row once there's a brief ("Your brief",
     /// `needsYouTabTitle`); none, Needs you.
     pub brief_tab: Option<String>,
+    /// The chat each row whose setup stopped partway opens in Coach (`finishSetup`), by the row's
+    /// key: only those `canFinishSetup` allows.
+    pub finish: std::collections::BTreeMap<String, String>,
+    /// What the last read of Home couldn't do (`unreachable`), and whether the app tries again by
+    /// itself (`retryingRefresh`); none once a read goes through.
+    pub unreachable: Option<(Unreachable, bool)>,
 }
+
+/// Why Home couldn't be read (`refreshWords`): the network, or KIFF or tafs cloud answering with
+/// an error.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Unreachable {
+    Network,
+    Error,
+}
+
+/// The line at the sidebar's foot while KIFF can't be reached (`UnreachableLine`): an amber dot,
+/// the words (with "trying again" while the app tries by itself), and Status, which opens KIFF's
+/// status page.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UnreachableLine {
+    pub words: String,
+    pub status: String,
+    pub url: &'static str,
+}
+
+/// KIFF's status page, served apart from KIFF, so it answers when KIFF doesn't (`Legal.status`).
+pub const STATUS_URL: &str = "https://status.kiff.dev";
+
+/// `UnreachableLine`'s words for what failed: with "trying again" while the app tries again by
+/// itself (`statusRetrying`).
+pub fn unreachable_line(
+    w: &WordBook,
+    why: Unreachable,
+    retrying: bool,
+) -> Result<UnreachableLine, WordsError> {
+    let words = w.line(match why {
+        Unreachable::Network => "home.cant_reach_kiff",
+        Unreachable::Error => "home.couldnt_load_from_kiff",
+    })?;
+    Ok(UnreachableLine {
+        words: if retrying {
+            w.get("home.status_retrying", &[("words", &words)])?
+        } else {
+            words
+        },
+        status: w.line("home.status")?,
+        url: STATUS_URL,
+    })
+}
+
+/// The waits between the app's own tries after a read that failed, in seconds, then no more until
+/// the person comes back (`retryWaits`).
+pub const RETRY_WAITS: [u64; 5] = [2, 10, 30, 60, 120];
 
 /// The plan's line at the sidebar's foot (`PlanLine`): tafs cloud's words, in red while it
 /// waits on the owner, else the amber; then Plan & usage, which it opens.
@@ -167,6 +220,12 @@ pub struct SidebarLines {
     pub others: Vec<TafRow>,
     /// The plan, only when it needs the owner, signed in with KIFF.
     pub plan: Option<PlanLine>,
+    /// + New ("Start a new taf"), signed in with KIFF (`canStartTafs`).
+    pub start_new: Option<String>,
+    /// The chat each row whose setup stopped partway opens in Coach, by the row's key.
+    pub finish: std::collections::BTreeMap<String, String>,
+    /// KIFF can't be reached just now; nothing when all is well.
+    pub unreachable: Option<UnreachableLine>,
     /// Coach's button, for those who may use it.
     pub coach: Option<String>,
     pub account: String,
@@ -364,6 +423,14 @@ impl SidebarModel {
                 }
                 _ => None,
             },
+            start_new: (self.mode == Mode::Kiff)
+                .then(|| w.line("home.start_new_taf"))
+                .transpose()?,
+            finish: self.finish.clone(),
+            unreachable: self
+                .unreachable
+                .map(|(why, retrying)| unreachable_line(w, why, retrying))
+                .transpose()?,
             coach: self
                 .coach_available()
                 .then(|| w.line("coach.title"))
@@ -471,6 +538,8 @@ mod tests {
             setting_up: vec![],
             plan: None,
             brief_tab: None,
+            finish: Default::default(),
+            unreachable: None,
         }
     }
 
@@ -621,5 +690,39 @@ mod tests {
     fn short_time_is_24_hour() {
         assert_eq!(short_time(at(3, 2)), "03:02");
         assert_eq!(initial("bill pay"), "B");
+    }
+
+    /// New taf (`canStartTafs`) signed in with KIFF only, and each row's chat to finish in
+    /// Coach as the app allows it.
+    #[test]
+    fn new_and_finish_setting_up_are_signed_in_only() {
+        let w = WordBook::load(&WordBook::default_root(), "en").unwrap();
+        let mut m = signed_in(vec![]);
+        m.finish = [("agent:s".to_string(), "chat_1".to_string())].into();
+        let l = m.lines(&w).unwrap();
+        assert_eq!(l.start_new.as_deref(), Some("Start a new taf"));
+        assert_eq!(l.finish.get("agent:s").map(String::as_str), Some("chat_1"));
+        m.mode = Mode::Sample;
+        assert_eq!(m.lines(&w).unwrap().start_new, None);
+    }
+
+    /// `UnreachableLine`: what failed, "trying again" while the app tries by itself, and Status.
+    #[test]
+    fn the_unreachable_line_says_what_failed() {
+        let w = WordBook::load(&WordBook::default_root(), "en").unwrap();
+        let mut m = signed_in(vec![]);
+        assert_eq!(m.lines(&w).unwrap().unreachable, None);
+        m.unreachable = Some((Unreachable::Network, true));
+        let u = m.lines(&w).unwrap().unreachable.unwrap();
+        assert_eq!(u.words, "Can't reach KIFF · trying again");
+        assert_eq!(
+            (u.status.as_str(), u.url),
+            ("Status", "https://status.kiff.dev")
+        );
+        m.unreachable = Some((Unreachable::Error, false));
+        assert_eq!(
+            m.lines(&w).unwrap().unreachable.unwrap().words,
+            "Couldn't load from KIFF"
+        );
     }
 }

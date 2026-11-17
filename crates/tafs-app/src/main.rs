@@ -89,6 +89,9 @@ struct Cloud {
     /// "Your brief" (`GET /v1/brief`), read with the list: none (a 404, an error, nothing in
     /// it) keeps Needs you as today.
     brief: Option<tafs_core::brief::Brief>,
+    /// Coach's id at tafs cloud (`setupTaf?.id`, `GET /v1/setup`), read with Home when a row's
+    /// setup stopped partway: only Coach's own chat can be finished there.
+    coach_setup: Option<String>,
 }
 
 /// The window's size, a laptop's, as the screenshots are saved.
@@ -167,13 +170,18 @@ struct Options {
     /// With `--brief`: a mission's log as tafs cloud answers `GET /v1/missions/{id}/log`, for
     /// every mission's Evidence.
     mission_log: Option<String>,
+    /// With `--home`: Coach as tafs cloud answers `GET /v1/setup`, for Finish setting up.
+    setup: Option<String>,
+    /// With `--home`: Home couldn't be read just now (`network` or `error`), and the app tries
+    /// again, for the Unreachable line's screenshot. Nothing is read again.
+    unreachable: Option<String>,
     /// `--size WxH`: the window's size, for a screenshot of a narrower layout.
     size: Option<(i32, i32)>,
     screenshot: Option<String>,
 }
 
 const USAGE: &str = "tafs [--lang en|de|fr|es|it|pt|nl|pl] [--theme light|dark] [--sample] [--signed-in] [--view-only [--paired]]
-     [--home contract.json] [--usage answers.json] [--people answers.json] [--unproven answers.json] [--recipes answers.json] [--gallery answers.json] [--halt answer.json] [--record-search answers.json] [--access answer.json] [--receipts answer.json] [--activity answer.json] [--calls answer.json] [--receipt answer.json] [--work answer.json] [--doors answer.json] [--account-reads answers.json] [--me answer.json] [--memory answer.json] [--runs answer.json] [--request answer.json] [--balance answer.json] [--coach answer.json] [--coach-chats answer.json] [--chat answer.json [--report]] [--brief answer.json] [--mission-log answer.json] [--size WxH] [--page welcome|sign-in|pair|recipe:<id>|gallery|new-taf|halt-all|halt:<id>|record-search:<q>|record-export|receipt:<proposal id>|run:<taf id>|pin-sheet|coach|coach-hand:<id>|overview|overview-label:<id>|needs-you|brief-answer:<decision id>|mission-log:<mission id>|record|calendar|calendar-week|usage|usage-ask|usage-decline|connect-apps|account|kiff-account|time-zone|time-zone-use|alerts|devices|devices-sign-out|people|people-rename|people-add|taf|taf-card|taf-setup|consent|connected|sign-in-code] [--screenshot out.png]";
+     [--home contract.json] [--usage answers.json] [--people answers.json] [--unproven answers.json] [--recipes answers.json] [--gallery answers.json] [--halt answer.json] [--record-search answers.json] [--access answer.json] [--receipts answer.json] [--activity answer.json] [--calls answer.json] [--receipt answer.json] [--work answer.json] [--doors answer.json] [--account-reads answers.json] [--me answer.json] [--memory answer.json] [--runs answer.json] [--request answer.json] [--balance answer.json] [--coach answer.json] [--coach-chats answer.json] [--chat answer.json [--report]] [--brief answer.json] [--mission-log answer.json] [--setup answer.json] [--unreachable network|error] [--size WxH] [--page welcome|sign-in|pair|recipe:<id>|gallery|new-taf|halt-all|halt:<id>|record-search:<q>|record-export|receipt:<proposal id>|run:<taf id>|pin-sheet|coach|coach-hand:<id>|overview|overview-label:<id>|needs-you|brief-answer:<decision id>|mission-log:<mission id>|record|calendar|calendar-week|usage|usage-ask|usage-decline|connect-apps|account|kiff-account|time-zone|time-zone-use|alerts|devices|devices-sign-out|people|people-rename|people-add|taf|taf-card|taf-setup|consent|connected|sign-in-code] [--screenshot out.png]";
 
 fn options() -> Result<Options, String> {
     let mut o = Options::default();
@@ -212,6 +220,8 @@ fn options() -> Result<Options, String> {
             "--report" => o.report = true,
             "--brief" => o.brief = Some(value()?),
             "--mission-log" => o.mission_log = Some(value()?),
+            "--setup" => o.setup = Some(value()?),
+            "--unreachable" => o.unreachable = Some(value()?),
             "--size" => {
                 let v = value()?;
                 let (w, h) = v.split_once('x').ok_or("--size takes WxH")?;
@@ -355,6 +365,18 @@ fn activate(app: &adw::Application, o: &Options) {
 
     let app_state = Rc::new(App {
         window: window.clone(),
+        shell: RefCell::new(None),
+        unreachable: Cell::new(o.unreachable.as_deref().map(|why| {
+            (
+                if why == "error" {
+                    tafs_core::sidebar::Unreachable::Error
+                } else {
+                    tafs_core::sidebar::Unreachable::Network
+                },
+                0,
+            )
+        })),
+        account_reads: Cell::new(0),
         words,
         languages,
         signed_in: o.signed_in,
@@ -447,7 +469,11 @@ fn activate(app: &adw::Application, o: &Options) {
     }
     // `--page coach-hand:<recipe id>`: a job handed to Coach from its sheet, its words in Coach's
     // box (`handRecipeToCoach`); nothing is sent.
-    if let Some(id) = o.page.as_deref().and_then(|p| p.strip_prefix("coach-hand:")) {
+    if let Some(id) = o
+        .page
+        .as_deref()
+        .and_then(|p| p.strip_prefix("coach-hand:"))
+    {
         if let Some(r) = recipes_file(o.recipes.as_deref())
             .and_then(|r| r.recipes.into_iter().find(|x| x.id == id))
         {
@@ -512,6 +538,17 @@ fn activate(app: &adw::Application, o: &Options) {
             used_by: Default::default(),
             reports: Default::default(),
             balance: balance_file(o.balance.as_deref()),
+            coach_setup: o.setup.as_deref().map(|path| {
+                std::fs::read(path)
+                    .ok()
+                    .and_then(|b| serde_json::from_slice::<serde_json::Value>(&b).ok())
+                    .and_then(|v| serde_json::to_vec(v.get("answer").unwrap_or(&v)).ok())
+                    .and_then(|b| tafs_core::coach::setup_id(&b).ok().flatten())
+                    .unwrap_or_else(|| {
+                        eprintln!("{path} isn't Coach as tafs cloud answers GET /v1/setup");
+                        std::process::exit(2);
+                    })
+            }),
             brief: o.brief.as_deref().map(|path| {
                 std::fs::read(path)
                     .ok()
@@ -647,6 +684,13 @@ fn activate(app: &adw::Application, o: &Options) {
 /// The window and what it shows: the welcome, or the shell over the sample or the account.
 struct App {
     window: adw::ApplicationWindow,
+    /// The window's shell once drawn: what's open in it, and its Unreachable line.
+    shell: RefCell<Option<shell::Shell>>,
+    /// Home couldn't be read (`unreachable`): why, and how many times the app has tried again by
+    /// itself (`retries`); none once a read goes through.
+    unreachable: Cell<Option<(tafs_core::sidebar::Unreachable, usize)>>,
+    /// The account's reads in force: a sign-out or another sign-in ends the app's tries.
+    account_reads: Cell<u64>,
     words: Rc<WordBook>,
     languages: Vec<&'static str>,
     /// `--signed-in`: the sample with the account's items, as the reference set draws it.
@@ -733,8 +777,8 @@ enum Read {
     Cloud(Box<Cloud>),
     /// KIFF answered 401: the session is over.
     SignedOut,
-    /// Nothing that could be read: the screen stays as it was.
-    Nothing,
+    /// Home couldn't be read: the screen stays as it was, and the sidebar says why.
+    Unreachable(tafs_core::sidebar::Unreachable),
 }
 
 impl App {
@@ -753,6 +797,9 @@ impl App {
         // Signed out: nothing written to Coach for the last account stays.
         coach::forget();
         coach_start::forget();
+        // And the app's tries at reading the last account.
+        self.account_reads.set(self.account_reads.get() + 1);
+        self.unreachable.set(None);
         // And nothing written to a taf.
         taf_chat::forget();
         // Signed out: no account, so this computer's zone.
@@ -828,14 +875,34 @@ impl App {
         ai_consent::forget();
         let view_only = kept.approval_mode.is_view_only();
         *self.kept.borrow_mut() = Some(kept.clone());
+        self.unreachable.set(None);
         self.open_shell(Mode::Kiff, view_only, None);
+        self.read_account(kept, view_only);
+    }
+
+    /// The account's reads (`refresh`): the account, Home and the held calls, then the shell drawn
+    /// again with them. When Home can't be read, the sidebar says so quietly (`UnreachableLine`)
+    /// and the app tries again by itself, then less often, and stops after a few tries.
+    fn read_account(self: &Rc<Self>, kept: KeptSession, view_only: bool) {
+        let generation = self.account_reads.get() + 1;
+        self.account_reads.set(generation);
         let (me, languages, token) = (self.clone(), self.languages.clone(), kept.token.clone());
         let words: WordBook = (*self.words).clone();
         glib::spawn_future_local(async move {
             let read = gio::spawn_blocking(move || {
                 let signed_out = |a: &tafs_core::signin::Answer| a.status == 401;
                 let me = kiff::me(&token, &languages).ok();
-                let home = kiff::home(&token, &languages).ok();
+                let home = kiff::home(&token, &languages);
+                // What a failed read of Home says (`refreshWords`): the network, or an error.
+                let home_failed = match &home {
+                    Err(tafs_core::signin::KiffError::Offline) => {
+                        Some(tafs_core::sidebar::Unreachable::Network)
+                    }
+                    Err(_) => Some(tafs_core::sidebar::Unreachable::Error),
+                    Ok(a) if a.status != 200 => Some(tafs_core::sidebar::Unreachable::Error),
+                    Ok(_) => None,
+                };
+                let home = home.ok();
                 let held = kiff::held(&token, &languages).ok();
                 let activity = kiff::activity(&token, &languages).ok();
                 // KIFF ended the session (a 401 on any of them: the computer removed in Devices,
@@ -865,7 +932,9 @@ impl App {
                     .filter(|a| a.status == 200)
                     .and_then(|a| Home::read(&a.body))
                 else {
-                    return Read::Nothing;
+                    return Read::Unreachable(
+                        home_failed.unwrap_or(tafs_core::sidebar::Unreachable::Error),
+                    );
                 };
                 // KIFF's held calls: none read, none shown, and Home still is.
                 let held = held
@@ -905,7 +974,28 @@ impl App {
                     .ok()
                     .filter(|a| a.status == 200)
                     .and_then(|a| brief::read_answer(&a.body, &words));
+                // Coach's id, only when a row's setup stopped partway and this person may use
+                // Coach (`canFinishSetup`): a read that fails finishes none here.
+                let stopped = home.setting_up().iter().any(|s| s.chat.is_some())
+                    || home
+                        .other_agents()
+                        .iter()
+                        .any(|t| t.finish_chat().is_some());
+                let coach_setup = if stopped
+                    && account.as_ref().is_some_and(|a| {
+                        a.capabilities
+                            .as_ref()
+                            .is_some_and(|c| c.iter().any(|x| x == "members.manage"))
+                    }) {
+                    kiff::cloud(&token, &languages, tafs_core::coach::SETUP_PATH)
+                        .ok()
+                        .filter(|a| a.status == 200)
+                        .and_then(|a| tafs_core::coach::setup_id(&a.body).ok().flatten())
+                } else {
+                    None
+                };
                 Read::Cloud(Box::new(Cloud {
+                    coach_setup,
                     brief,
                     balance,
                     home,
@@ -923,9 +1013,24 @@ impl App {
                 }))
             })
             .await
-            .unwrap_or(Read::Nothing);
+            .unwrap_or(Read::Unreachable(tafs_core::sidebar::Unreachable::Error));
+            // Signed out, or another account's reads, since: this one's answer is dropped.
+            if me.account_reads.get() != generation {
+                return;
+            }
             match read {
                 Read::Cloud(cloud) => {
+                    // Read: nothing to say, and no try waiting. What was open stays open.
+                    if me.unreachable.take().is_some() {
+                        let open = me
+                            .shell
+                            .borrow()
+                            .as_ref()
+                            .and_then(|s| s.selection.borrow().clone());
+                        if let Some(open) = open {
+                            *me.first.borrow_mut() = open;
+                        }
+                    }
                     // KIFF's word for how the session approves is what counts (contract §1.2).
                     let view_only = match cloud
                         .account
@@ -951,7 +1056,41 @@ impl App {
                     me.watch_holds(&cloud);
                 }
                 Read::SignedOut => me.signed_out_by_kiff(),
-                Read::Nothing => {}
+                Read::Unreachable(why) => me.unreachable_now(why, kept, view_only, generation),
+            }
+        });
+    }
+
+    /// Home couldn't be read (`refreshFailed`): said quietly at the sidebar's foot, and read again
+    /// a moment later, then less often, and no more after a few tries.
+    fn unreachable_now(
+        self: &Rc<Self>,
+        why: tafs_core::sidebar::Unreachable,
+        kept: KeptSession,
+        view_only: bool,
+        generation: u64,
+    ) {
+        use tafs_core::sidebar::RETRY_WAITS;
+        let tries = self.unreachable.get().map_or(0, |(_, n)| n);
+        let retrying = tries < RETRY_WAITS.len();
+        self.unreachable
+            .set(Some((why, (tries + 1).min(RETRY_WAITS.len()))));
+        if let Some(shell) = self.shell.borrow().as_ref() {
+            shell.set_unreachable(
+                tafs_core::sidebar::unreachable_line(&self.words, why, retrying)
+                    .ok()
+                    .as_ref(),
+            );
+        }
+        if !retrying {
+            return;
+        }
+        let me = Rc::downgrade(self);
+        glib::timeout_add_seconds_local_once(RETRY_WAITS[tries] as u32, move || {
+            if let Some(me) = me.upgrade() {
+                if me.account_reads.get() == generation {
+                    me.read_account(kept, view_only);
+                }
             }
         });
     }
@@ -1577,6 +1716,33 @@ impl App {
                 .as_ref()
                 .is_some_and(|c| c.iter().any(|x| x == "members.manage"));
         }
+        // `canFinishSetup`: the rows whose setup stopped partway that Coach can finish, by key.
+        if let (Mode::Kiff, Some(c)) = (mode, cloud.as_deref()) {
+            let coach = c.coach_setup.as_deref();
+            let may = model.may_use_coach;
+            let setting_up = c
+                .home
+                .setting_up()
+                .into_iter()
+                .filter_map(|s| Some((s.key(), s.chat.clone()?)));
+            let others = c
+                .home
+                .other_agents()
+                .iter()
+                .filter_map(|t| Some((t.key(), t.finish_chat()?)));
+            model.finish = setting_up
+                .chain(others)
+                .filter(|(_, f)| f.can_finish(true, may, coach))
+                .map(|(key, f)| (key, f.session))
+                .collect();
+        }
+        // KIFF couldn't be reached at the last read, and whether the app tries again.
+        if mode == Mode::Kiff {
+            model.unreachable = self
+                .unreachable
+                .get()
+                .map(|(why, tries)| (why, tries < tafs_core::sidebar::RETRY_WAITS.len()));
+        }
         let count = model.needs_you_count();
         let needs_you_words = match cloud_words {
             Some(words) => words,
@@ -1990,6 +2156,7 @@ impl App {
             self.first.borrow().clone(),
         );
         self.window.set_content(Some(&shell.root));
+        *self.shell.borrow_mut() = Some(shell);
     }
 
     /// A language picked in Account › Language (`AppLanguage.choose`): kept for the next launch,
@@ -2289,6 +2456,8 @@ fn kiff_model() -> SidebarModel {
         setting_up: vec![],
         plan: None,
         brief_tab: None,
+        finish: Default::default(),
+        unreachable: None,
     }
 }
 

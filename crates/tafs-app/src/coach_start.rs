@@ -14,6 +14,8 @@ use tafs_core::coach_send::Conversation;
 pub enum Start {
     /// A new conversation, on no taf (`newSetupChat`).
     New,
+    /// One of Coach's chats, by its session (`openSetupChat`).
+    Chat(String),
 }
 
 thread_local! {
@@ -52,6 +54,11 @@ pub fn hand(say: &str) {
     open(Start::New, Some(say));
 }
 
+/// `finishSetup`: Coach on the chat where the setup stopped.
+pub fn finish(session: &str) {
+    open(Start::Chat(session.to_string()), None);
+}
+
 /// What was asked, taken once: none after.
 pub fn take() -> Option<Start> {
     START.with(|s| s.borrow_mut().take())
@@ -61,6 +68,7 @@ pub fn take() -> Option<Start> {
 pub fn apply(conv: &mut Conversation) {
     match take() {
         Some(Start::New) => conv.new_chat(),
+        Some(Start::Chat(session)) => conv.open_chat(&session),
         None => {}
     }
 }
@@ -89,9 +97,12 @@ mod tests {
         assert_eq!(conv.chat, None);
         // Taken once: Coach opened again from its button is as it was.
         assert_eq!(take(), None);
-        hand("Chase unpaid invoices");
+        finish("chat_1");
         assert_eq!(opened.get(), 2);
-        assert_eq!(take(), Some(Start::New));
+        let mut conv = Conversation::default();
+        apply(&mut conv);
+        assert_eq!(conv.chat.as_deref(), Some("chat_1"));
+        assert!(!conv.fresh);
         forget();
         new_taf();
         assert_eq!(opened.get(), 2, "signed out, nothing opens");

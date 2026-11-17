@@ -75,6 +75,8 @@ time), so does Linux, when the account's clock isn't this computer's at that mom
 | `--unproven answers.json` | with `--home`: KIFF's "Did this happen?" answer from a file, in place of KIFF |
 | `--recipes answers.json` | with `--home`: tafs cloud's recipes answer from a file, for Home with no taf ([recipes](recipes.md)) |
 | `--gallery answers.json` | with `--home`: tafs cloud's gallery answer from a file, for Explore jobs and the strip |
+| `--setup answer.json` | with `--home`: Coach as tafs cloud answers `GET /v1/setup`, for Finish setting up |
+| `--unreachable network\|error` | with `--home`: the sidebar as after Home couldn't be read, the Unreachable line at its foot; nothing is read again |
 | `--halt answer.json` | with `--home`: a halt as tafs cloud answers it; every read is it and nothing is sent ([halting](halt.md)) |
 | `--record-search answers.json` | with `--home`: a Record search page and case as tafs cloud answers them; nothing is sent |
 | `--access answer.json` | with `--home`: what this person may do with each taf, as tafs cloud answers `GET /v1/me/access` |
@@ -98,9 +100,9 @@ account's items), the Overview from the `home.json` contract, Needs you (and wit
 page and its Card tab, Plan & usage and Account over the sample, Plan & usage signed in with
 KIFF from synthetic answers (managing billing, and as a member), Connect apps, Devices, People & groups, the KIFF account and its time zone picker (from synthetic answers), Alerts, the
 calendar's Day and Week (and Day at an upright iPad's size, `--size 1032x1376`), a tafs cloud
-taf's page and its Card tab from the contracts (and with its Card's own lines) (and with its work and runs, and a run's own page), the sidebar over the plain sample (and with an agent not run by tafs, and with the plan's line), and Home with no taf and a recipe's sheet, the strip and the gallery (and as + New opens it, and Coach with a job handed to it), the halt screens, a Record search, the receipts export open, a Record line's receipt, the Delete account sheet, the security key's PIN sheet,
+taf's page and its Card tab from the contracts (and with its Card's own lines) (and with its work and runs, and a run's own page), the sidebar over the plain sample (and with an agent not run by tafs, with a taf being set up, with the plan's line, and with the Unreachable line), and Home with no taf and a recipe's sheet, the strip and the gallery (and as + New opens it, and Coach with a job handed to it), the halt screens, a Record search, the receipts export open, a Record line's receipt, the Delete account sheet, the security key's PIN sheet,
 Coach's conversation from the contract (and with an approval waiting under tafs cloud's wider line, with a confirm and a questions card waiting and a message not sent, with Previous conversations open, empty, and before it's started), a taf's chat (and while it works, and with Report this answer open), Your brief (and with a signed answer tapped, with nothing to decide, and a mission's log), the Overview with Home's label chips (and filtered to one), the
-view-only notice (and once paired), and the boards' empty states (the Overview with no taf, Needs you with nothing waiting, Halt all once halted, the brief with nothing to decide) in en, fr and pt, light and dark: 498 pictures, as the `screenshots`
+view-only notice (and once paired), and the boards' empty states (the Overview with no taf, Needs you with nothing waiting, Halt all once halted, the brief with nothing to decide) in en, fr and pt, light and dark: 504 pictures, as the `screenshots`
 artifact of the run. The job fails if any is missing.
 
 ## The AppImage
