@@ -44,7 +44,9 @@ them. Each signed act (`signed::Act`) names the call the iPad would make, and th
 that none of them can be made.
 
 The acts drawn this way: People & groups' changes, signing another device out, and the
-account's time zone (`docs/account.md`); declining a request (`docs/usage.md`).
+account's time zone (`docs/account.md`); declining a request (`docs/usage.md`); removing a Slack
+door, whose subscription at planque the device signs first (`docs/taf.md`). planque's acts
+(`Act::at_planque`) have no route here at all: this computer's only planque call is its grants read.
 
 A button the iPad itself wraps in `ApprovalGate` is the exception: there, as on the iPad, the
 gate's line is drawn in the button's place (`approval::gate`), not the button. Raise the limit is

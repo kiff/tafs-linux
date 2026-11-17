@@ -326,6 +326,8 @@ link, label link { color: @tafs_amber_text; }
 /* A taf's knocks: the panel's edge in amber at 45%; a stranger's knock on amber at 7%, a
    paired sender's calmly; Do it in amber, Pair outlined, Ignore plain. */
 .tafs-panel.knocks-edge { border-color: alpha(@tafs_amber, 0.45); }
+switch.tafs-ok-switch:checked { background-color: @tafs_ok; }
+button.tafs-app-row { padding: 12px; border-radius: 14px; background-color: @tafs_panel; border: 1px solid @tafs_line; box-shadow: none; }
 .tafs-knock { padding: 12px; border-radius: 16px; background-color: alpha(@tafs_amber, 0.07); border: 1px solid alpha(@tafs_amber, 0.45); }
 .tafs-knock.paired { background-color: @tafs_panel; border-color: alpha(@tafs_ink, 0.2); }
 button.tafs-knock-do { background: @tafs_amber; color: white; font-size: 14px; font-weight: 600; border-radius: 999px; padding: 8px 14px; border: none; box-shadow: none; min-height: 0; }

@@ -46,6 +46,11 @@ pub struct TafPage {
     pub opens_on_card: bool,
     /// Opens on the Setup tab (`--page taf-setup:<id>`).
     pub opens_on_setup: bool,
+    /// Its doors open over the page (`DoorsView`, `--page doors:<id>`), or one door's screen
+    /// (`--page doors:<id>:<door>`), for a screenshot.
+    pub opens_doors: Option<Option<String>>,
+    /// This person's sign-in email: their own key at a door reads "You".
+    pub my_email: Option<String>,
     /// tafs cloud's id for it, and where its Activity is read from.
     pub cloud_id: Option<String>,
     pub source: ActivitySource,
@@ -418,6 +423,30 @@ pub fn page(
         chat_tab.set_active(true);
     } else {
         activity_tab.set_active(true);
+    }
+    // `DoorsView`, the doors' own dial over the door it's turned to: the iPad's page has no tab
+    // for it at the pin, so a screenshot opens it over the page.
+    if let (Some(focus), Some(id)) = (&t.opens_doors, &t.cloud_id) {
+        if !matches!(t.doors, crate::knocks::DoorsSource::None) {
+            let model = crate::doors::DoorsModel::new(w.clone(), id.clone(), t.doors.clone());
+            let taf = crate::doors::DoorsTaf {
+                name: t.name.clone(),
+                initial: t.initial.clone(),
+                color: t.color,
+            };
+            let opens = crate::doors::Opens {
+                manages: t.manages,
+                my_email: t.my_email.clone(),
+                focus: focus.clone(),
+                ..Default::default()
+            };
+            let once = std::cell::Cell::new(Some((model, taf, opens)));
+            outer.connect_map(move |o| {
+                if let Some((model, taf, opens)) = once.take() {
+                    crate::doors::sheet(model, taf, opens, o);
+                }
+            });
+        }
     }
     crate::widgets::ground(&outer);
     outer.upcast()

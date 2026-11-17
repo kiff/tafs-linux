@@ -11,6 +11,7 @@ mod coach;
 mod connect;
 mod connected;
 mod devices;
+mod doors;
 mod fido_key;
 mod halt;
 mod illustrations;
@@ -287,6 +288,10 @@ fn selection_of(page: Option<&str>) -> Selection {
         Some(other) if other.starts_with("taf-setup:") => {
             Selection::Taf(other["taf-setup:".len()..].into())
         }
+        Some(other) if other.starts_with("doors:") => {
+            let rest = &other["doors:".len()..];
+            Selection::Taf(rest.split(':').next().unwrap_or(rest).into())
+        }
         _ => Selection::Overview,
     }
 }
@@ -421,6 +426,11 @@ fn activate(app: &adw::Application, o: &Options) {
             .page
             .as_deref()
             .is_some_and(|p| p.starts_with("taf-setup:")),
+        on_doors: o
+            .page
+            .as_deref()
+            .and_then(|p| p.strip_prefix("doors:"))
+            .map(|rest| rest.split_once(':').map(|(_, door)| door.to_string())),
     });
     if let Some(id) = o
         .page
@@ -708,6 +718,9 @@ struct App {
     on_card: bool,
     /// `--page taf-setup:<id>`: a taf's page opens on Setup.
     on_setup: bool,
+    /// `--page doors:<id>[:<door>]`: a taf's doors open over its page (`DoorsView`), or one door's
+    /// screen, for a screenshot.
+    on_doors: Option<Option<String>>,
     /// `--page calendar`: the calendar opens on Day, as the reference set's `calendar.png`.
     calendar_day: bool,
 }
@@ -1082,6 +1095,8 @@ impl App {
                         issued_by: w.line("common.you").unwrap_or_default(),
                         opens_on_card: self.on_card,
                         opens_on_setup: self.on_setup,
+                        opens_doors: None,
+                        my_email: None,
                         cloud_id: None,
                         source: taf::ActivitySource::None,
                         work: work_panel::WorkSource::None,
@@ -1189,6 +1204,8 @@ impl App {
                         },
                         opens_on_card: self.on_card,
                         opens_on_setup: self.on_setup,
+                        opens_doors: self.on_doors.clone(),
+                        my_email: c.account.as_ref().and_then(|a| a.email.clone()),
                         source: source.clone(),
                         chat: chat.clone(),
                     },

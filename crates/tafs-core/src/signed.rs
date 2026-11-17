@@ -144,6 +144,9 @@ pub enum Act {
     RaiseLimit,
     /// `declineRequest`: a member's request declined, with a note.
     DeclineRequest { request: String },
+    /// `removeSlackDoor`: a Slack door's subscription stopped at planque, signed by the device,
+    /// before the door goes.
+    StopSlackSubscription { grant: String, trigger: String },
 }
 
 impl Act {
@@ -170,7 +173,21 @@ impl Act {
                 "POST",
                 format!("/v1/me/pack-requests/{}/decline", escaped(request)),
             ),
+            Act::StopSlackSubscription { grant, trigger } => (
+                "DELETE",
+                format!(
+                    "/v1/grants/{}/triggers/{}",
+                    escaped(grant),
+                    escaped(trigger)
+                ),
+            ),
         }
+    }
+
+    /// Whether the call goes to planque (`PlanqueClient`), which takes every change signed by the
+    /// device. This computer has no planque client but its grants read (`planque.rs`).
+    pub fn at_planque(&self) -> bool {
+        matches!(self, Act::StopSlackSubscription { .. })
     }
 }
 
@@ -246,6 +263,10 @@ mod tests {
             Act::DeclineRequest {
                 request: "req_1".into(),
             },
+            Act::StopSlackSubscription {
+                grant: "g1".into(),
+                trigger: "tr_1".into(),
+            },
         ]
     }
 
@@ -253,6 +274,14 @@ mod tests {
     fn no_signed_act_makes_a_request() {
         for act in acts() {
             let (method, path) = act.route();
+            if act.at_planque() {
+                // planque's: signed by the device, and this computer can't call it.
+                assert_eq!(
+                    (method, path.as_str()),
+                    ("DELETE", "/v1/grants/g1/triggers/tr_1")
+                );
+                continue;
+            }
             assert!(
                 signed(method, &path),
                 "{act:?} is signed at {method} {path}"

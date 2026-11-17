@@ -1,191 +1,33 @@
 //! What waits for the owner at a taf's doors, on its Activity (`TafKnocksPanel`,
 //! `TafPresentationViews.swift`): strangers' knocks (Do it, Pair them, Ignore), then a paired
 //! sender's message kept from its knock, apart and calmly. Each knock is `KnockCard`
-//! (`DoorsView.swift`) and Do it opens `DoItSheet`. The doors are read as the session when the
-//! Activity opens (`GET /v1/tafs/{id}/doors`), tried again quietly after 1 s and 3 s (`DoorsModel`);
-//! an answer is `POST /v1/tafs/{id}/doors/knocks/{knock}`, unsigned. The lines are
-//! `tafs-core/src/doors.rs`.
+//! (`DoorsView.swift`), on the Activity and on the doors' own screen (`doors.rs`), and Do it opens
+//! `DoItSheet`. The doors are read as the session when the Activity opens (`GET /v1/tafs/{id}/doors`),
+//! tried again quietly after 1 s and 3 s (`DoorsModel`, `doors.rs`); an answer is
+//! `POST /v1/tafs/{id}/doors/knocks/{knock}`, unsigned. The lines are `tafs-core/src/doors.rs`.
 
-use std::cell::RefCell;
 use std::rc::Rc;
 
 use adw::prelude::*;
-use gtk::{gio, glib};
-use tafs_core::doors::{self, Doors, Knock};
+use tafs_core::doors::{self, Knock};
 use tafs_core::words::WordBook;
 
-use crate::widgets::{eyebrow, panel, primary, text};
+use crate::doors::DoorsModel;
+pub use crate::doors::DoorsSource;
+use crate::widgets::{eyebrow, outline, panel, primary, text};
 
-/// Where a taf's doors are read and its knocks answered.
-#[derive(Clone)]
-pub enum DoorsSource {
-    /// tafs cloud, as the session.
-    Cloud {
-        token: String,
-        languages: Vec<&'static str>,
-    },
-    /// A screenshot's answer (`--doors`): read, and its answers send nothing.
-    File(std::path::PathBuf),
-    None,
-}
-
-/// The panel's state (`DoorsModel`): the doors once read, why an answer or a read failed, and
-/// whether an answer is on its way.
-#[derive(Default)]
-struct State {
-    doors: Option<Doors>,
-    error: Option<String>,
+/// `KnockCard`: who wrote, what, and the owner's three answers; or the door's line about its
+/// day's messages, with OK. `taf` names it in Do it; `compact` keeps a message to three lines
+/// (eight otherwise).
+pub(crate) fn knock_card(
+    model: &DoorsModel,
+    taf: Option<&str>,
+    knock: &Knock,
     busy: bool,
-}
-
-type Redraw = Rc<RefCell<Option<Rc<dyn Fn()>>>>;
-
-#[derive(Clone)]
-struct Knocks {
-    w: Rc<WordBook>,
-    id: String,
-    taf: Option<String>,
-    source: DoorsSource,
-    state: Rc<RefCell<State>>,
-    redraw: Redraw,
-}
-
-impl Knocks {
-    fn redraw(&self) {
-        let f = self.redraw.borrow().clone();
-        if let Some(f) = f {
-            f();
-        }
-    }
-
-    /// `DoorsModel.load`: read, trying again quietly when a read fails; only a read that keeps
-    /// failing says so.
-    fn load(&self) {
-        let me = self.clone();
-        glib::spawn_future_local(async move {
-            let (source, id) = (me.source.clone(), me.id.clone());
-            let read = gio::spawn_blocking(move || -> Option<Doors> {
-                for (attempt, wait) in [0u64, 1, 3].into_iter().enumerate() {
-                    if attempt > 0 {
-                        std::thread::sleep(std::time::Duration::from_secs(wait));
-                    }
-                    let body = match &source {
-                        DoorsSource::Cloud { token, languages } => {
-                            match crate::kiff::cloud(token, languages, &doors::path(&id)) {
-                                Ok(a) if a.status == 200 => a.body,
-                                _ => continue,
-                            }
-                        }
-                        DoorsSource::File(file) => std::fs::read(file).ok()?,
-                        DoorsSource::None => return None,
-                    };
-                    if let Some(d) = doors::read(&body) {
-                        return Some(d);
-                    }
-                }
-                None
-            })
-            .await
-            .ok()
-            .flatten();
-            {
-                let mut s = me.state.borrow_mut();
-                match read {
-                    Some(d) => {
-                        s.doors = Some(d);
-                        s.error = None;
-                    }
-                    None => s.error = me.w.line("door.not_read").ok(),
-                }
-            }
-            me.redraw();
-        });
-    }
-
-    /// `DoorsModel.answer`: "do" (with the owner's words), "pair" or "ignore". Pairing keeps the
-    /// message waiting, so the doors are read again; anything else takes the knock away.
-    fn answer(&self, knock: &Knock, action: &'static str, say: Option<String>, done: Rc<dyn Fn()>) {
-        if self.state.borrow().busy {
-            return;
-        }
-        self.state.borrow_mut().busy = true;
-        self.redraw();
-        let me = self.clone();
-        let knock_id = knock.id.clone();
-        glib::spawn_future_local(async move {
-            let (words, source, id, k) = (
-                (*me.w).clone(),
-                me.source.clone(),
-                me.id.clone(),
-                knock_id.clone(),
-            );
-            let sent = gio::spawn_blocking(move || -> Result<bool, String> {
-                match &source {
-                    DoorsSource::Cloud { token, languages } => {
-                        let a = crate::kiff::answer_knock(
-                            token,
-                            languages,
-                            &doors::knock_path(&id, &k),
-                            &doors::answer_body(action, say.as_deref()),
-                        )
-                        .map_err(|e| e.words(&words).unwrap_or_default())?;
-                        if a.status == 200 && doors::answered(&a.body) {
-                            return Ok(true);
-                        }
-                        // A 429 without tafs cloud's words: the app's own line, as the chat says it.
-                        let cloud_words = serde_json::from_slice::<serde_json::Value>(&a.body)
-                            .ok()
-                            .and_then(|v| {
-                                v.get("words").and_then(|w| w.as_str()).map(String::from)
-                            });
-                        if a.status == 429 && cloud_words.is_none() {
-                            return Err(words.line("door.knock.too_many").unwrap_or_default());
-                        }
-                        Err(tafs_core::signin::refusal(&a, Some(&words))
-                            .words(&words)
-                            .unwrap_or_default())
-                    }
-                    // A screenshot's knocks: nothing is sent, and nothing changes.
-                    _ => Ok(false),
-                }
-            })
-            .await
-            .unwrap_or_else(|_| Err(String::new()));
-            let reload = {
-                let mut s = me.state.borrow_mut();
-                s.busy = false;
-                match sent {
-                    Ok(true) => {
-                        s.error = None;
-                        if action == "pair" {
-                            true
-                        } else {
-                            if let Some(d) = s.doors.as_mut() {
-                                d.knocks.retain(|k| k.id != knock_id);
-                            }
-                            false
-                        }
-                    }
-                    Ok(false) => false,
-                    Err(why) => {
-                        s.error = Some(why);
-                        false
-                    }
-                }
-            };
-            me.redraw();
-            done();
-            if reload {
-                me.load();
-            }
-        });
-    }
-}
-
-/// `KnockCard` for a message (the panel draws no door lines): who wrote, what, and the owner's
-/// answers.
-fn knock_card(k: &Knocks, knock: &Knock, busy: bool, parent: &gtk::Box) -> gtk::Box {
-    let w = &k.w;
+    compact: bool,
+    parent: &impl IsA<gtk::Widget>,
+) -> gtk::Box {
+    let w = &model.w;
     let card = gtk::Box::new(gtk::Orientation::Vertical, 8);
     card.add_css_class("tafs-knock");
     if knock.paired {
@@ -194,6 +36,7 @@ fn knock_card(k: &Knocks, knock: &Knock, busy: bool, parent: &gtk::Box) -> gtk::
     let Ok(lines) = doors::knock_lines(w, knock) else {
         return card;
     };
+    let parent: gtk::Widget = parent.clone().upcast();
     card.append(&text(
         &lines.head,
         10,
@@ -210,11 +53,19 @@ fn knock_card(k: &Knocks, knock: &Knock, busy: bool, parent: &gtk::Box) -> gtk::
     if let Some(line) = &lines.paired_line {
         card.append(&text(line, 12, 400, &["tafs-dim"]));
     }
+    if let Ok(Some(rest)) = doors::rest_line(w, knock) {
+        card.append(&text(&rest, 14, 400, &["tafs-ink"]));
+        let ok = outline(&w.line("common.ok").unwrap_or_default());
+        ok.set_sensitive(!busy);
+        let (m, knock) = (model.clone(), knock.clone());
+        ok.connect_clicked(move |_| m.answer(&knock, "ignore", None, Rc::new(|| {})));
+        card.append(&ok);
+        return card;
+    }
     card.append(&text(&lines.wrote, 14, 600, &["tafs-ink"]));
     let body = text(&lines.text, 14, 400, &["tafs-soft"]);
     body.set_selectable(true);
-    // `lineLimit(3)` on the Activity.
-    body.set_lines(3);
+    body.set_lines(if compact { 3 } else { 8 });
     body.set_ellipsize(gtk::pango::EllipsizeMode::End);
     card.append(&body);
     if let Some(a) = &lines.attachments {
@@ -228,24 +79,29 @@ fn knock_card(k: &Knocks, knock: &Knock, busy: bool, parent: &gtk::Box) -> gtk::
         let b = gtk::Button::with_label(label);
         b.add_css_class("tafs-knock-do");
         b.set_sensitive(!busy);
-        let (k, knock, parent) = (k.clone(), knock.clone(), parent.clone());
-        b.connect_clicked(move |_| do_it_sheet(&k, &knock, &parent));
+        let (m, taf, knock, parent) = (
+            model.clone(),
+            taf.map(str::to_string),
+            knock.clone(),
+            parent.clone(),
+        );
+        b.connect_clicked(move |_| do_it_sheet(&m, taf.as_deref(), &knock, &parent));
         row.append(&b);
     }
     if let Some(label) = &lines.pair {
         let b = gtk::Button::with_label(label);
         b.add_css_class("tafs-knock-pair");
         b.set_sensitive(!busy);
-        let (k, knock) = (k.clone(), knock.clone());
-        b.connect_clicked(move |_| k.answer(&knock, "pair", None, Rc::new(|| {})));
+        let (m, knock) = (model.clone(), knock.clone());
+        b.connect_clicked(move |_| m.answer(&knock, "pair", None, Rc::new(|| {})));
         row.append(&b);
     }
     let ignore = gtk::Button::with_label(&lines.ignore);
     ignore.add_css_class("tafs-knock-ignore");
     ignore.set_sensitive(!busy);
     {
-        let (k, knock) = (k.clone(), knock.clone());
-        ignore.connect_clicked(move |_| k.answer(&knock, "ignore", None, Rc::new(|| {})));
+        let (m, knock) = (model.clone(), knock.clone());
+        ignore.connect_clicked(move |_| m.answer(&knock, "ignore", None, Rc::new(|| {})));
     }
     row.append(&ignore);
     card.append(&row);
@@ -253,13 +109,13 @@ fn knock_card(k: &Knocks, knock: &Knock, busy: bool, parent: &gtk::Box) -> gtk::
 }
 
 /// `DoItSheet`: what the owner tells the taf to do about a knock; their words are the instruction.
-fn do_it_sheet(k: &Knocks, knock: &Knock, parent: &gtk::Box) {
-    let Ok(lines) = doors::do_it_lines(&k.w, knock, k.taf.as_deref()) else {
+fn do_it_sheet(k: &DoorsModel, taf: Option<&str>, knock: &Knock, parent: &gtk::Widget) {
+    let Ok(lines) = doors::do_it_lines(&k.w, knock, taf) else {
         return;
     };
     // `onAppear`: no error from before.
     k.state.borrow_mut().error = None;
-    k.redraw();
+    k.changed();
     let column = gtk::Box::new(gtk::Orientation::Vertical, 14);
     column.set_margin_start(20);
     column.set_margin_end(20);
@@ -365,21 +221,15 @@ pub fn panel_for(
     if matches!(source, DoorsSource::None) {
         return root;
     }
-    let k = Knocks {
-        w,
-        id,
-        taf,
-        source,
-        state: Rc::new(RefCell::new(State::default())),
-        redraw: Rc::new(RefCell::new(None)),
-    };
+    let model = DoorsModel::new(w, id, source);
     let draw: Rc<dyn Fn()> = {
-        let (k, root) = (k.clone(), root.clone());
+        let (m, root) = (model.clone(), root.downgrade());
         Rc::new(move || {
+            let Some(root) = root.upgrade() else { return };
             while let Some(c) = root.first_child() {
                 root.remove(&c);
             }
-            let s = k.state.borrow();
+            let s = m.state.borrow();
             let Some(d) = &s.doors else {
                 return;
             };
@@ -388,22 +238,22 @@ pub fn panel_for(
                 let p = panel(false);
                 p.add_css_class("knocks-edge");
                 p.append(&eyebrow(
-                    &k.w.line("door.knocks_waiting").unwrap_or_default(),
+                    &m.w.line("door.knocks_waiting").unwrap_or_default(),
                     true,
                 ));
                 for knock in &waiting {
-                    p.append(&knock_card(&k, knock, s.busy, &root));
+                    p.append(&knock_card(&m, taf.as_deref(), knock, s.busy, true, &root));
                 }
                 root.append(&p);
             }
             if !paired.is_empty() {
                 let p = panel(false);
                 p.append(&eyebrow(
-                    &k.w.line("door.paired").unwrap_or_default(),
+                    &m.w.line("door.paired").unwrap_or_default(),
                     false,
                 ));
                 for knock in &paired {
-                    p.append(&knock_card(&k, knock, s.busy, &root));
+                    p.append(&knock_card(&m, taf.as_deref(), knock, s.busy, true, &root));
                 }
                 root.append(&p);
             }
@@ -415,8 +265,12 @@ pub fn panel_for(
             root.set_visible(root.first_child().is_some());
         })
     };
-    *k.redraw.borrow_mut() = Some(draw);
+    let listening = model.listen(draw);
+    {
+        let model = model.clone();
+        root.connect_destroy(move |_| model.unlisten(listening));
+    }
     root.set_visible(false);
-    k.load();
+    model.load();
     root
 }

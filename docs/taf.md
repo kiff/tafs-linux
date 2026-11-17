@@ -79,7 +79,8 @@ or time, none; the rest of a knock when it can be.
 
 - **Knocks · waiting on you** (amber eyebrow, the panel's edge in amber at 45%): each open knock
   from someone not paired, then **Paired**, a paired sender's message kept from its knock. The
-  door's line about its day's messages (`rest`) isn't one of them: it's the Doors tab's.
+  door's line about its day's messages (`rest`) isn't one of them, here or on the doors' screen
+  (as the iPad filters it); `KnockCard` draws it with OK (an Ignore) where it's given one.
 - **Each knock** (`KnockCard`), on amber at 7% with an amber edge, a paired sender's on the panel
   with a quiet edge: "● KNOCK · BY EMAIL" or "PAIRED · BY EMAIL" (10 semibold, monospaced), with
   "· DIDN'T CHECK OUT" when the sender check failed; for a paired sender "Paired · Do it or
@@ -96,6 +97,65 @@ or time, none; the rest of a knock when it can be.
 `--doors <file>` with `--home` draws a taf's doors from a file, as if tafs cloud offered them, and
 its answers send nothing: `crates/tafs-app/fixtures/taf-doors.json` (synthetic), with
 `access-manage.json` so the taf is managed, CI's `taf-knocks`.
+
+## Its doors
+
+`DoorsView` (`crates/tafs-app/src/doors.rs`, `tafs-core/src/doors.rs`), with one `DoorsModel` per
+view that every panel and sheet on it listens to. At the pin the iPad's page has no tab for it (its
+tabs are Chat, Activity, Card and Setup): one door's screen opens from Setup › Starts when › Doors ›
+Edit (`only`), and the whole of it, with the doors' own dial, from nowhere. Linux draws both, in a
+sheet over the page.
+
+- **The doors' dial** (`DoorDial`, without the taf's own dial): DOORS · TURN TO PICK, PRESS TO
+  OPEN; the taf's avatar in the middle on a knob with grip ticks, in a glow that breathes while a
+  door is open; each door's arc on the ring, lit in the taf's colour while open, grey while resting,
+  dashed while closed; a pointer at the top; each door's badge on the ring (`DoorBadge`: "@" for
+  email, "W" for WhatsApp, else its initial; filled in its colour while open) with an amber dot
+  while a knock waits there, its name outside in capitals, and a last dashed "+" stop, ADD. Under
+  the avatar, "EMAIL · OPEN" or ADD A DOOR, in the taf's colour unless the door is closed. Under the
+  dial, tafs cloud's tap words for the door, else "Press Rae to close Email", or "Press Rae to add
+  a door". The ring is Cairo shapes; every word and letter on it is a label over it (rule 14).
+- **Turning it:** dragging turns it (past 6 points), a tap on a stop turns the short way to it,
+  the arrow keys a stop at a time, each springing to its stop (`DialMath`, its tests ported);
+  with animations off it jumps. A tap on the taf, Enter or Space presses: for whoever manages it,
+  the door at the top opens or closes, or Add a door opens. It's a slider to a screen reader, with
+  "Email door, open, 1 of 3".
+- **The door at the top** (or the screen's own door): tafs cloud's line that its settings are
+  below; its badge, EMAIL DOOR and where it stands (tafs cloud's words, else Open, Closed or
+  Resting until tomorrow), with a switch in green for whoever manages it; its address (monospaced,
+  selectable), Copy address for email ("Copied" for 1.4 s); a meter of today's messages, in the
+  taf's colour or grey while resting, and the day's lines. Then PAIRED · CAN GIVE WORK with each key
+  ("You" only on this person's own sign-in email; a name that is only the address isn't said
+  twice; Unpair for one the owner paired), how it knows who wrote, Pair someone; or, for a door
+  that can't tell, why no one can give work. Remove door in red.
+- **With no door:** for whoever manages it, ADD A DOOR, what a door is, and Add a door (none left:
+  "No more doors can be added here."); for anyone else, that someone who manages it can add one.
+  A door removed from its own screen: "This door was removed."
+- **Its knocks:** Paired, then Knocks · waiting on you, each `KnockCard` as on the Activity; why
+  a change failed, in red; the footer.
+- **Add a door** (`AddDoorSheet`): its title and Done, a search, the apps that can tell who's
+  writing, then those that can't, each with its badge and how; "No app called "…" here yet." or
+  none left; replies only go to who wrote.
+- **Pair someone** (`PairSheet`): what pairing does, the sender (email address, phone number, Slack
+  member ID or the door's own word for it), a name (optional), Pair while there's a sender, Cancel.
+- **The owner's changes, as the session, unsigned** (`kiff::cloud_send`): adding a door
+  (`POST /v1/tafs/{id}/doors {"app"}`), opening or closing it (`PATCH …/doors/{door} {"open"}`),
+  pairing (`POST …/keys {"id", "name"?}`, the sender trimmed), unpairing (`DELETE …/keys/{sender}`),
+  each answered with the door (`{"door"}`), which replaces the one shown; removing it
+  (`DELETE …/doors/{door}`, answered `{"removed"}`), after its question. A change that fails says
+  why in red and leaves the doors as they were.
+- **WhatsApp:** its signup comes back to the iPhone's own address, which this computer has none
+  of, so Add says "WhatsApp doors are added from tafs on an iPhone for now; once added, they show
+  here." and sends nothing.
+- **A Slack door's removal**, from one door's screen: planque's subscription is stopped first,
+  signed by the device; this computer can't, so Remove's yes shows the can't-approve line and the
+  door stays ([approval](approval.md)). Adding one through Slack's own sheet is Starts when's.
+
+`--page doors:<id>` with `--doors` and `--home` opens the doors over the taf's page, and
+`--page doors:<id>:<door>` one door's screen, from a file, sending nothing:
+`crates/tafs-app/fixtures/taf-doors-dial.json` (synthetic, from the iPad's `DoorsModel.sample` and
+`DoorsTests`), with `access-manage.json` and `me-manager.json`, whose email is the owner's key.
+CI's `doors` and `doors-door`.
 
 ## Its work
 
