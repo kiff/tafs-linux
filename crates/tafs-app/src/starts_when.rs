@@ -895,7 +895,8 @@ impl Screens {
                 "setup.approve_note_device",
                 &[("device", &self.l("device.linux"))],
             )
-            .unwrap_or_default();
+            // A pin without the key: the phone's words, never an empty line.
+            .unwrap_or_else(|_| self.l("setup.approve_note"));
         p.append(&text(&note, 12, 400, &["tafs-dim"]));
         self.column.append(&p);
     }
