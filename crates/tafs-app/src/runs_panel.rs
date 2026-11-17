@@ -374,9 +374,8 @@ pub fn runs_panel(
     if !line.1 {
         return p;
     }
+    // `OutlineButtonStyle`: across the panel, as the iPad's.
     let run = outline(&w.line("taf.run_now").unwrap_or_default());
-    run.set_hexpand(false);
-    run.set_halign(gtk::Align::Start);
     p.append(&run);
     let said = text("", 13, 400, &["tafs-soft"]);
     said.set_visible(false);

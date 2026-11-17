@@ -547,6 +547,9 @@ pub fn page(
     let side_scroller = gtk::ScrolledWindow::new();
     side_scroller.set_hscrollbar_policy(gtk::PolicyType::Never);
     side_scroller.set_size_request(SIDE_WIDTH, -1);
+    // 360 wide, never more: what's in it wanting room mustn't take it from the chat or the
+    // activity.
+    side_scroller.set_hexpand(false);
     side_scroller.set_child(Some(&side(&w, t, &card_tab)));
     side_scroller.set_visible(false);
     side_scroller.set_widget_name("taf.side");
