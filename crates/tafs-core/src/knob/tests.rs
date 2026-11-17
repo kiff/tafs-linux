@@ -161,3 +161,182 @@ fn the_pending_panel_and_the_places_in_words() {
         built_in_rows(&w, None).unwrap();
     }
 }
+
+fn nav_knob() -> Knob {
+    read(br#"{
+      "rings": [{"key":"what","name":"Does"},{"key":"wakes","name":"Starts"},{"key":"what","name":"x"}],
+      "connections": [{"grant":"g_log","name":"Notion","wakes":0,"results":1}],
+      "wakes": [{"id":"daily","label":"Daily"}],
+      "what": [{"id":"step1","label":"Check","step":1},{"id":"step2","label":"Log","step":2,"grant":"g_log"}],
+      "results": [{"id":"log","label":"Log","grant":"g_log"}]
+    }"#)
+    .unwrap()
+}
+
+#[test]
+fn the_remote_walks_the_stops_a_filter_shows() {
+    let k = nav_knob();
+    // tafs cloud's order, each once; Results left out as it named none.
+    assert_eq!(k.ordered_rings(), [Ring::What, Ring::Wakes]);
+    let w = words("en");
+    assert_eq!(k.title(&w, Ring::What).unwrap(), "Does");
+    assert_eq!(k.title(&w, Ring::Results).unwrap(), "Where");
+    let own = nav::stops(&k, &nav::Filter::Taf);
+    assert_eq!(
+        own.iter().map(|s| s.item.id.as_str()).collect::<Vec<_>>(),
+        ["step1", "daily"]
+    );
+    let log = nav::stops(&k, &nav::Filter::Connection("g_log".into()));
+    assert_eq!(
+        log.iter().map(|s| s.item.id.as_str()).collect::<Vec<_>>(),
+        ["step2"]
+    );
+    assert!(nav::stops(&k, &nav::Filter::Connection("missing".into())).is_empty());
+    let all = nav::stops(&k, &nav::Filter::All);
+    assert_eq!(nav::next(&all, None, None, 1).unwrap().item.id, "step1");
+    assert_eq!(nav::next(&all, None, None, -1).unwrap().item.id, "daily");
+    assert_eq!(
+        nav::next(&all, Some(Ring::What), Some("step2"), 1)
+            .unwrap()
+            .item
+            .id,
+        "daily"
+    );
+    assert_eq!(
+        nav::next(&all, Some(Ring::Wakes), Some("daily"), 1)
+            .unwrap()
+            .item
+            .id,
+        "step1"
+    );
+    assert_eq!(
+        nav::next(&all, Some(Ring::What), Some("step1"), -1)
+            .unwrap()
+            .item
+            .id,
+        "daily"
+    );
+    assert!(nav::next(&[], None, None, 1).is_none());
+    // `KnobNavigationTests`' measures.
+    assert_eq!(nav::nearest_turn(0, 3, 4), -1);
+    assert_eq!(nav::nearest_turn(5, 1, 4), 5);
+    assert!((nav::label_width(90.0, 6, 100.0, 12.0) - 78.0).abs() < 1e-9);
+    assert_eq!(nav::label_width(180.0, 6, 100.0, 12.0), 100.0);
+    assert_eq!(nav::label_width(90.0, 1, 100.0, 12.0), 100.0);
+    assert_eq!(nav::label_width(2.0, 6, 100.0, 12.0), 0.0);
+    let items: Vec<Item> = (0..10)
+        .map(|i| Item {
+            id: format!("i{i}"),
+            ..k.wakes[0].clone()
+        })
+        .collect();
+    assert_eq!(nav::page(&items, Some("i5"), 4)[0].id, "i4");
+    assert_eq!(nav::page(&items, Some("i9"), 4).len(), 2);
+    assert_eq!(nav::page(&items, None, 4)[0].id, "i0");
+    assert!(nav::page(&items, None, 0).is_empty());
+}
+
+#[test]
+fn the_face_says_the_stop_the_call_or_the_job() {
+    let w = words("en");
+    let k = read(SETUP.as_bytes()).unwrap();
+    let all = nav::Filter::All;
+    let o = face_lines(&w, &k, &Face::Overview, &all, &[]).unwrap();
+    assert_eq!((o.kicker.as_str(), o.big.as_str()), ("WHY", "Refund"));
+    assert_eq!(o.hint, "Tap a ring");
+    let s = face_lines(
+        &w,
+        &k,
+        &Face::Chosen(Ring::Wakes, "schedule_1".into()),
+        &all,
+        &[],
+    )
+    .unwrap();
+    assert_eq!(s.kicker, "WHEN · EVERY 4 HOURS");
+    assert_eq!(s.big, "Every 4 hours");
+    assert_eq!(s.hint, "Use \u{2212} and +");
+    assert_eq!(s.size.as_deref(), Some("Every 4 hours · Every 4 hours"));
+    assert_eq!(s.tint, Tint::Ring(Ring::Wakes));
+    let e = face_lines(
+        &w,
+        &k,
+        &Face::Chosen(Ring::Wakes, "event_1".into()),
+        &all,
+        &[],
+    )
+    .unwrap();
+    assert_eq!(e.hint, "Approve with your passcode");
+    let d = face_lines(
+        &w,
+        &k,
+        &Face::Chosen(Ring::Wakes, "door_email".into()),
+        &all,
+        &[],
+    )
+    .unwrap();
+    assert_eq!(
+        (d.big.as_str(), d.hint.as_str()),
+        ("Open", "Ask Coach to change")
+    );
+    let held = HeldFace {
+        id: "h1".into(),
+        summary: "Refund €150".into(),
+        amount: Some("€150".into()),
+        reason: "Over its €100 limit".into(),
+        approvable_once: true,
+    };
+    let h = face_lines(
+        &w,
+        &k,
+        &Face::Held("h1".into()),
+        &all,
+        std::slice::from_ref(&held),
+    )
+    .unwrap();
+    assert_eq!((h.kicker.as_str(), h.big.as_str()), ("REFUND €150", "€150"));
+    assert_eq!(h.hint, "Tap to approve once");
+    assert_eq!(h.tint, Tint::Held);
+    // A stop the filter hides: the job.
+    let hidden = face_lines(
+        &w,
+        &k,
+        &Face::Chosen(Ring::Wakes, "schedule_1".into()),
+        &nav::Filter::Connection("none".into()),
+        &[],
+    )
+    .unwrap();
+    assert_eq!(hidden.kicker, "WHY");
+    for lang in crate::words::SHIPPED {
+        let w = words(lang);
+        face_lines(&w, &k, &Face::Overview, &all, &[]).unwrap();
+        filter_choices(&w, &nav_knob()).unwrap();
+    }
+}
+
+#[test]
+fn the_menu_and_the_rim() {
+    let w = words("en");
+    let k = nav_knob();
+    let choices = filter_choices(&w, &k).unwrap();
+    // Results is left out of this dial's rings, so its stop there doesn't count.
+    assert_eq!(choices[2].1, "Notion · 1 stop");
+    assert_eq!(
+        filter_name(&w, &k, &nav::Filter::Connection("g_log".into())).unwrap(),
+        "Notion"
+    );
+    assert_eq!(
+        filter_name(&w, &k, &nav::Filter::Connection("x".into())).unwrap(),
+        "All services"
+    );
+    let arcs = rim_arcs(&Rim {
+        done: 3,
+        working: 1,
+        retrying: 0,
+        needs_you: 0,
+        line: None,
+    });
+    assert_eq!(arcs.len(), 2);
+    assert_eq!(arcs[1].2, "blue");
+    assert!((arcs[0].1 - (0.75 - 1.2 / 360.0)).abs() < 1e-9);
+    assert!(rim_arcs(&Rim::default()).is_empty());
+}

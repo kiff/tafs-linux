@@ -159,6 +159,39 @@ sheet over the page.
   signed by the device; this computer can't, so Remove's yes shows the can't-approve line and the
   door stays ([approval](approval.md)). Adding one through Slack's own sheet is Starts when's.
 
+### The taf's dial
+
+Where the taf's dial was read, it stands in the doors' own dial (`TafDialPanel`, `TafKnobView`,
+`crates/tafs-app/src/dial.rs`, `tafs-core/src/knob.rs` › `nav`, `face_lines`), the door's panels
+under it, as on the iPad's Doors tab:
+
+- DRAFT · V8 · NOT LIVE while a version waits; Ask Coach or find anything (opens Coach); the
+  service menu, "Showing All services", with This taf and each connection's stops ("Notion · 2
+  stops"), a new choice starting from the job with every ring unturned.
+- **The dial**, on its 360 grid: today's work round the rim (done green, working blue, retrying
+  amber, needing you red), When, What and Where as bands in their own colours inside it, in tafs
+  cloud's order, each showing six stops at a time (`page`), a door's stop with its arc (amber while
+  a knock waits, grey while resting, dashed while closed) and its light; the pointer at the chosen
+  ring's top stop, or at the rim; the face with its kicker, its big word (the stop's state, its
+  size, its label; the call's amount; else the taf's why) and its hint. Choosing a stop turns its
+  ring the short way to bring it to the top (`nearestTurn`) and dims the other rings; a door's
+  stop on When picks that door for the panels below. The rings are shapes; the stops' labels are
+  buttons over them, upright (the iPad turns each with its ring).
+- **The face pressed:** a held call that may be approved once (signed: the can't-approve line);
+  Coach for an "Add a door" stop; else, for whoever manages the taf, the chosen stop's act as the
+  session: a door opened or closed (`PATCH …/doors/{door}`), a run started (`POST …/run`), a
+  follow-up removed; an app event's Approve is signed at planque (refused here). With nothing
+  chosen, it walks to the first stop.
+- Under it, the stop's words or the dial's caption, the size in force, Needs you while a call may
+  be approved once (its face), ‹ Why back to the job; **the remote** (Back, Lower, the power
+  button to pause or resume every start, Raise, Next), under the dial here since a sheet that
+  scrolls has no foot to keep it on; the waiting version's lines and Make it live (refused, as in
+  Starts when); tafs cloud's line for today's work, opening its requests (`KnobRequestsSheet`),
+  the one still asking for attention opened at once on its own page (`KnobRequestDetail`).
+
+`--knob crates/tafs-app/fixtures/taf-knob-dial.json` (synthetic: the iPad's `Screenshots.knob`
+with four services) with `--page doors:<id>` is CI's `taf-dial`.
+
 `--page doors:<id>` with `--doors` and `--home` opens the doors over the taf's page, and
 `--page doors:<id>:<door>` one door's screen, from a file, sending nothing:
 `crates/tafs-app/fixtures/taf-doors-dial.json` (synthetic, from the iPad's `DoorsModel.sample` and

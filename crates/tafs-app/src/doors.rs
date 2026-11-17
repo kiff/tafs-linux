@@ -424,6 +424,9 @@ pub struct Opens {
     pub removes_slack: bool,
     /// Adding a Slack door opens its own sheet.
     pub add_slack: Option<Rc<dyn Fn(DoorApp)>>,
+    /// The taf's dial, as tafs cloud last sent it, and the held calls its face can show: the
+    /// dial stands in the doors' own (`knob(_:held:press:approve:)`).
+    pub knob: Option<(crate::starts_when::Knobs, Vec<tafs_core::knob::HeldFace>)>,
 }
 
 // Colours, in the appearance on screen.
@@ -1118,7 +1121,7 @@ pub fn view(model: DoorsModel, taf: DoorsTaf, opens: Opens) -> gtk::Box {
     let selected = Rc::new(Cell::new(0usize));
     let slot = crate::approval::refusal_slot();
     let details = gtk::Box::new(gtk::Orientation::Vertical, 16);
-    let dial = if opens.focus.is_none() {
+    let dial = if opens.focus.is_none() && opens.knob.is_none() {
         let p = panel(false);
         p.append(&eyebrow(
             &w.line("door.doors_turn_pick_press_open")
@@ -1136,7 +1139,10 @@ pub fn view(model: DoorsModel, taf: DoorsTaf, opens: Opens) -> gtk::Box {
     } else {
         None
     };
-    root.append(&details);
+    let taf_dial = opens.knob.clone().filter(|_| opens.focus.is_none());
+    if taf_dial.is_none() {
+        root.append(&details);
+    }
     let ctx = Rc::new(Ctx {
         model: model.clone(),
         taf,
@@ -1183,6 +1189,26 @@ pub fn view(model: DoorsModel, taf: DoorsTaf, opens: Opens) -> gtk::Box {
     }
     if let Some(d) = &ctx.dial {
         d.set(Vec::new(), Vec::new());
+    }
+    // The taf's dial in the doors' own dial's place (`TafDialPanel`), the door's panels under it;
+    // a door's stop on When picks that door.
+    if let Some((knobs, held)) = taf_dial {
+        let weak = Rc::downgrade(&ctx);
+        root.append(&crate::dial::panel(
+            knobs,
+            model.clone(),
+            ctx.opens.manages,
+            held,
+            ctx.details.clone(),
+            Rc::new(move |door: &str| {
+                if let Some(c) = weak.upgrade() {
+                    if let Some(i) = c.model.doors().iter().position(|d| d.id == door) {
+                        c.selected.set(i);
+                        c.draw();
+                    }
+                }
+            }),
+        ));
     }
     ctx.draw();
     model.load();
@@ -1273,8 +1299,13 @@ impl Ctx {
                 }
             }
         }
-        // tafs cloud's line saying the door's settings are below.
-        if let Some(settings) = door.as_ref().and_then(|d| d.words.as_ref()) {
+        // tafs cloud's line saying the door's settings are below; the taf's dial says its own.
+        let shows_dial = self.opens.knob.is_some() && self.opens.focus.is_none();
+        if let Some(settings) = door
+            .as_ref()
+            .and_then(|d| d.words.as_ref())
+            .filter(|_| !shows_dial)
+        {
             let l = text(&settings.settings, 12, 400, &["tafs-dim"]);
             l.set_xalign(0.5);
             l.set_justify(gtk::Justification::Center);
@@ -1286,7 +1317,8 @@ impl Ctx {
                 self.details
                     .append(&text(&self.l("door.door_removed"), 15, 400, &["tafs-soft"]));
             }
-            None if self.opens.manages => self.details.append(&self.add_panel()),
+            None if self.opens.manages && !shows_dial => self.details.append(&self.add_panel()),
+            None if self.opens.manages => {}
             None => self.details.append(&text(
                 &w.get("door.no_door_yet", &[("taf", name)])
                     .unwrap_or_default(),

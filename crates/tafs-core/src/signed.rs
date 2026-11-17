@@ -111,10 +111,21 @@ fn answers_handoff(method: &str, path: &str) -> bool {
         && !p[4].is_empty()
 }
 
+/// `approveOnce`, `reject`, `changeCard`: a held call answered, with the device key's signature
+/// in its body (`AnswerSignature`).
+fn answers_hold(method: &str, path: &str) -> bool {
+    let p = parts(path);
+    method == "POST"
+        && p.len() == 6
+        && path.starts_with("/v1/me/card-exceptions/")
+        && matches!(p[5], "approve-once" | "reject" | "change-card")
+        && !p[4].is_empty()
+}
+
 /// Whether KIFF takes `method` on `path` only signed: a signed setup call, one that grants
 /// authority, the session's approval key and its relink, or one the iPad builds and signs
 /// beforehand (a device signed out, a computer's pairing, a passkey added or removed, a step's
-/// answer).
+/// or a held call's answer).
 pub fn signed(method: &str, path: &str) -> bool {
     let path = path.split('#').next().unwrap_or(path);
     signs_setup(path)
@@ -125,6 +136,7 @@ pub fn signed(method: &str, path: &str) -> bool {
         || (method == "POST" && path == "/v1/me/pairings")
         || (method != "GET" && path.starts_with("/v1/me/passkeys"))
         || answers_handoff(method, path)
+        || answers_hold(method, path)
 }
 
 /// A path part, escaped (`KIFFClient.escaped`).
@@ -179,6 +191,10 @@ pub enum Act {
     RemoveTaf { taf: String },
     /// `answerYourStep`: Done or Skip it on a step a taf handed its owner.
     AnswerStep { handoff: String },
+    /// `approveOnce`: a held call approved once, from the dial's face.
+    ApproveOnce { call: String },
+    /// `approveKnobEvent`: an app event's subscription at planque, signed by the device.
+    ApproveEvent { grant: String, event: String },
 }
 
 impl Act {
@@ -218,6 +234,13 @@ impl Act {
             }
             Act::Disconnect { grant } => ("DELETE", format!("/v1/grants/{}", escaped(grant))),
             Act::RemoveTaf { taf } => ("DELETE", format!("/v1/tafs/{}", escaped(taf))),
+            Act::ApproveOnce { call } => (
+                "POST",
+                format!("/v1/me/card-exceptions/{}/approve-once", escaped(call)),
+            ),
+            Act::ApproveEvent { grant, .. } => {
+                ("POST", format!("/v1/grants/{}/triggers", escaped(grant)))
+            }
             Act::AnswerStep { handoff } => (
                 "POST",
                 format!("/v1/me/handoffs/{}/answer", escaped(handoff)),
@@ -240,7 +263,10 @@ impl Act {
     pub fn at_planque(&self) -> bool {
         matches!(
             self,
-            Act::StopSlackSubscription { .. } | Act::ConnectAgain { .. } | Act::Disconnect { .. }
+            Act::StopSlackSubscription { .. }
+                | Act::ConnectAgain { .. }
+                | Act::Disconnect { .. }
+                | Act::ApproveEvent { .. }
         )
     }
 }
@@ -330,6 +356,11 @@ mod tests {
             Act::RemoveTaf { taf: "t1".into() },
             Act::AnswerStep {
                 handoff: "h1".into(),
+            },
+            Act::ApproveOnce { call: "ce1".into() },
+            Act::ApproveEvent {
+                grant: "g1".into(),
+                event: "NEW_TICKET".into(),
             },
         ]
     }
@@ -444,6 +475,14 @@ mod tests {
         // A step's answer carries the device's signature; reading the step doesn't.
         assert!(signed("POST", "/v1/me/handoffs/h1/answer"));
         assert!(!signed("GET", "/v1/me/handoffs/h1"));
+        // A held call's answers carry it too; reading the call doesn't.
+        for answer in ["approve-once", "reject", "change-card"] {
+            assert!(signed(
+                "POST",
+                &format!("/v1/me/card-exceptions/ce1/{answer}")
+            ));
+        }
+        assert!(!signed("GET", "/v1/me/card-exceptions/ce1"));
     }
 
     #[test]

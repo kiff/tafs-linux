@@ -328,6 +328,11 @@ link, label link { color: @tafs_amber_text; }
 .tafs-panel.knocks-edge { border-color: alpha(@tafs_amber, 0.45); }
 switch.tafs-ok-switch:checked { background-color: @tafs_ok; }
 button.tafs-app-row { padding: 12px; border-radius: 14px; background-color: @tafs_panel; border: 1px solid @tafs_line; box-shadow: none; }
+button.tafs-search-capsule { background-color: @tafs_panel; background-image: none; border: 1px solid @tafs_line; border-radius: 999px; box-shadow: none; min-height: 46px; padding: 0 14px; }
+menubutton.tafs-service-menu > button { background-color: @tafs_panel; background-image: none; border: 1px solid @tafs_line; border-radius: 14px; box-shadow: none; min-height: 44px; padding: 0 14px; }
+button.tafs-remote { background-color: @tafs_panel; background-image: none; border: 1px solid @tafs_line; border-radius: 16px; box-shadow: none; color: @tafs_ink; }
+button.tafs-remote-power { background-color: @tafs_ink; background-image: none; border: 1px solid @tafs_line; border-radius: 26px; box-shadow: none; color: white; }
+button.tafs-remote-power.paused { background-color: @tafs_dim; }
 menubutton.tafs-plain > button { background: none; background-image: none; border: none; box-shadow: none; padding: 0; }
 button.tafs-outline.tafs-ok { color: @tafs_ok; border-color: alpha(@tafs_ok, 0.5); }
 button.tafs-link.tafs-big-link { font-size: 15px; }

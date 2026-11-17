@@ -11,6 +11,7 @@ mod coach;
 mod connect;
 mod connected;
 mod devices;
+mod dial;
 mod doors;
 mod fido_key;
 mod halt;

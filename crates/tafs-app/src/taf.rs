@@ -383,18 +383,12 @@ pub fn page(
     let panes = gtk::Stack::new();
     panes.add_named(&scroller, Some("activity"));
     panes.add_named(&card_scroller, Some("card"));
-    // Setup: read when it's first shown.
-    if let (true, Some(id)) = (has_setup, &t.cloud_id) {
-        let setup_scroller = gtk::ScrolledWindow::new();
-        setup_scroller.set_hscrollbar_policy(gtk::PolicyType::Never);
-        setup_scroller.set_vexpand(true);
-        let column = gtk::Box::new(gtk::Orientation::Vertical, 0);
-        column.set_margin_start(16);
-        column.set_margin_end(16);
-        setup_scroller.set_child(Some(&column));
-        panes.add_named(&setup_scroller, Some("setup"));
-        let made = std::cell::Cell::new(false);
-        let knobs = (!matches!(t.knob, crate::starts_when::KnobSource::None)).then(|| {
+    // Its dial, shared by Setup's screens and its doors (`knobs[tafID]`), signed in with KIFF.
+    let dial_knobs = match (
+        &t.cloud_id,
+        matches!(t.knob, crate::starts_when::KnobSource::None),
+    ) {
+        (Some(id), false) => Some({
             crate::starts_when::Knobs::new(
                 w.clone(),
                 crate::starts_when::KnobTaf {
@@ -411,11 +405,26 @@ pub fn page(
                     email: t.my_email.clone(),
                     doors: t.doors.clone(),
                     work: t.work.clone(),
+                    runs: t.runs.clone(),
                     open_coach: open_coach.clone(),
                 },
                 t.knob.clone(),
             )
-        });
+        }),
+        _ => None,
+    };
+    // Setup: read when it's first shown.
+    if let (true, Some(id)) = (has_setup, &t.cloud_id) {
+        let setup_scroller = gtk::ScrolledWindow::new();
+        setup_scroller.set_hscrollbar_policy(gtk::PolicyType::Never);
+        setup_scroller.set_vexpand(true);
+        let column = gtk::Box::new(gtk::Orientation::Vertical, 0);
+        column.set_margin_start(16);
+        column.set_margin_end(16);
+        setup_scroller.set_child(Some(&column));
+        panes.add_named(&setup_scroller, Some("setup"));
+        let made = std::cell::Cell::new(false);
+        let knobs = dial_knobs.clone();
         let open_activity: Rc<dyn Fn()> = {
             let tab = activity_tab.downgrade();
             Rc::new(move || {
@@ -530,6 +539,9 @@ pub fn page(
                 manages: t.manages,
                 my_email: t.my_email.clone(),
                 focus: focus.clone(),
+                knob: dial_knobs
+                    .clone()
+                    .map(|k| (k, crate::dial::held_faces(&t.held))),
                 ..Default::default()
             };
             let once = std::cell::Cell::new(Some((model, taf, opens)));

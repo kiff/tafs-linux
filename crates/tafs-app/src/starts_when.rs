@@ -52,6 +52,8 @@ pub struct KnobTaf {
     pub email: Option<String>,
     pub doors: crate::doors::DoorsSource,
     pub work: crate::work_panel::WorkSource,
+    /// Where a run's own page is read (the dial's requests).
+    pub runs: crate::runs_panel::RunsSource,
     /// Opens Coach (`improveTaf`, then Coach).
     pub open_coach: Rc<dyn Fn()>,
 }
@@ -80,7 +82,7 @@ pub struct Knobs {
 }
 
 /// What a request came to.
-enum Sent {
+pub(crate) enum Sent {
     Answer(tafs_core::signin::Answer),
     /// A screenshot's: nothing sent.
     Nothing,
@@ -108,18 +110,18 @@ impl Knobs {
         }
     }
 
-    fn listen(&self, f: Rc<dyn Fn()>) -> u64 {
+    pub(crate) fn listen(&self, f: Rc<dyn Fn()>) -> u64 {
         let id = self.next.get() + 1;
         self.next.set(id);
         self.listeners.borrow_mut().push((id, f));
         id
     }
 
-    fn unlisten(&self, id: u64) {
+    pub(crate) fn unlisten(&self, id: u64) {
         self.listeners.borrow_mut().retain(|(i, _)| *i != id);
     }
 
-    fn changed_now(&self) {
+    pub(crate) fn changed_now(&self) {
         let all: Vec<Rc<dyn Fn()>> = self
             .listeners
             .borrow()
@@ -131,12 +133,17 @@ impl Knobs {
         }
     }
 
-    fn l(&self, k: &str) -> String {
+    pub(crate) fn l(&self, k: &str) -> String {
         self.w.line(k).unwrap_or_default()
     }
 
     /// One request to tafs cloud as the session; a screenshot's sends nothing.
-    async fn send(&self, method: &'static str, path: String, body: Option<Vec<u8>>) -> Sent {
+    pub(crate) async fn send(
+        &self,
+        method: &'static str,
+        path: String,
+        body: Option<Vec<u8>>,
+    ) -> Sent {
         let (words, source) = ((*self.w).clone(), self.source.clone());
         gio::spawn_blocking(move || match &source {
             KnobSource::Cloud { token, languages } => {
@@ -161,7 +168,7 @@ impl Knobs {
     }
 
     /// tafs cloud's words for a refusal.
-    fn refused(&self, a: &tafs_core::signin::Answer) -> String {
+    pub(crate) fn refused(&self, a: &tafs_core::signin::Answer) -> String {
         if (200..300).contains(&a.status) {
             return tafs_core::signin::plain_words(&self.w, 200).unwrap_or_default();
         }
@@ -186,7 +193,7 @@ impl Knobs {
 
     /// `loadKnob`: the dial, and when a version waits, that version's dial; one installed or
     /// replaced while reading (404) is read again as it is now.
-    pub async fn load(&self) {
+    pub(crate) async fn load(&self) {
         let read = match self.read_once(None).await {
             Ok(k) => match k.pending.as_ref().map(|p| p.version) {
                 Some(v) if !matches!(self.source, KnobSource::File(_)) => {
@@ -219,13 +226,54 @@ impl Knobs {
         self.changed_now();
     }
 
+    /// The dial as last read, why it couldn't be read or changed, whether a change is on its
+    /// way, the version the last change made, whether every start is paused, its work, and the
+    /// taf.
+    pub(crate) fn knob(&self) -> Option<Knob> {
+        self.knob.borrow().clone()
+    }
+
+    pub(crate) fn error(&self) -> Option<String> {
+        self.error.borrow().clone()
+    }
+
+    pub(crate) fn set_error(&self, why: Option<String>) {
+        *self.error.borrow_mut() = why;
+        self.changed_now();
+    }
+
+    pub(crate) fn busy(&self) -> bool {
+        self.busy.get()
+    }
+
+    pub(crate) fn set_busy(&self, busy: bool) {
+        self.busy.set(busy);
+        self.changed_now();
+    }
+
+    pub(crate) fn paused(&self) -> bool {
+        self.paused.get()
+    }
+
+    pub(crate) fn work(&self) -> Option<tafs_core::work::Work> {
+        self.work.borrow().clone()
+    }
+
+    pub(crate) fn taf(&self) -> &KnobTaf {
+        &self.taf
+    }
+
+    pub(crate) fn words(&self) -> &Rc<WordBook> {
+        &self.w
+    }
+
     pub fn reload(&self) {
         let me = self.clone();
         glib::spawn_future_local(async move { me.load().await });
     }
 
     /// Its work (`loadWork`), for the replies given up on.
-    fn load_work(&self) {
+    pub(crate) fn load_work(&self) {
         let me = self.clone();
         glib::spawn_future_local(async move {
             let (source, id) = (me.taf.work.clone(), me.taf.id.clone());
@@ -293,7 +341,7 @@ impl Knobs {
     }
 
     /// `adjustKnob`: a stop's next size down or up, made on the newest draft only.
-    fn adjust(&self, item: &Item, direction: i64) {
+    pub(crate) fn adjust(&self, item: &Item, direction: i64) {
         let choice = {
             let knob = self.knob.borrow();
             let Some(k) = knob.as_ref() else { return };
@@ -308,7 +356,7 @@ impl Knobs {
         self.change(move |s| *s = choice);
     }
 
-    fn can_move(&self, item: &Item, direction: i64) -> bool {
+    pub(crate) fn can_move(&self, item: &Item, direction: i64) -> bool {
         let knob = self.knob.borrow();
         knob.as_ref()
             .is_some_and(|k| k.accepts_choices(self.changed.get()))
@@ -350,7 +398,7 @@ impl Knobs {
         });
     }
 
-    fn remove_follow_up(&self, id: &str) {
+    pub(crate) fn remove_follow_up(&self, id: &str) {
         self.act(
             "DELETE",
             knob::follow_up_path(&self.taf.id, id),
@@ -370,7 +418,7 @@ impl Knobs {
     }
 
     /// `setPaused`: no run starts while paused. A 502 while pausing: not every start could be.
-    fn set_paused(&self, paused: bool) {
+    pub(crate) fn set_paused(&self, paused: bool) {
         *self.error.borrow_mut() = None;
         self.act(
             "POST",
@@ -893,6 +941,7 @@ impl Screens {
                 focus: Some(id.to_string()),
                 removes_slack: true,
                 add_slack: Some(Rc::new(|_| {})),
+                knob: None,
             },
         );
         content.set_margin_start(16);

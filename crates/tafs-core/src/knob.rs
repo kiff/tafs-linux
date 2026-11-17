@@ -576,6 +576,362 @@ pub fn pending_lines(
     )))
 }
 
+/// The rings, inside to out (`Knob.Ring`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Ring {
+    Wakes,
+    What,
+    Results,
+}
+
+impl Ring {
+    pub const ALL: [Ring; 3] = [Ring::Wakes, Ring::What, Ring::Results];
+
+    fn key(self) -> &'static str {
+        match self {
+            Ring::Wakes => "wakes",
+            Ring::What => "what",
+            Ring::Results => "results",
+        }
+    }
+
+    /// `TafKnobView.color`: the same on every appearance.
+    pub fn color(self) -> u32 {
+        match self {
+            Ring::Wakes => 0x0B7DA4,
+            Ring::What => 0x2A64F5,
+            Ring::Results => 0x7B4DFF,
+        }
+    }
+
+    /// The dial's own words for it, the same on iPhone, iPad and Android.
+    fn own_title(self, w: &WordBook) -> Result<String, WordsError> {
+        w.line(match self {
+            Ring::Wakes => "knob.ring.when",
+            Ring::What => "knob.ring.what",
+            Ring::Results => "knob.ring.where",
+        })
+    }
+}
+
+impl Knob {
+    /// `orderedRings`: tafs cloud's order, each once; all three when it names none.
+    pub fn ordered_rings(&self) -> Vec<Ring> {
+        if self.rings.is_empty() {
+            return Ring::ALL.to_vec();
+        }
+        let mut out: Vec<Ring> = Vec::new();
+        for name in &self.rings {
+            if let Some(r) = Ring::ALL.into_iter().find(|r| r.key() == name.key) {
+                if !out.contains(&r) {
+                    out.push(r);
+                }
+            }
+        }
+        out
+    }
+
+    /// `title(_:)`: tafs cloud's name for a ring, else the dial's own.
+    pub fn title(&self, w: &WordBook, ring: Ring) -> Result<String, WordsError> {
+        match self.rings.iter().find(|r| r.key == ring.key()) {
+            Some(r) => Ok(r.name.clone()),
+            None => ring.own_title(w),
+        }
+    }
+
+    pub fn items(&self, ring: Ring) -> &[Item] {
+        match ring {
+            Ring::Wakes => &self.wakes,
+            Ring::What => &self.what,
+            Ring::Results => &self.results,
+        }
+    }
+}
+
+/// `KnobNavigation`: presentation only, filtering and walking the stops never changes their
+/// meaning.
+pub mod nav {
+    use super::{Item, Knob, Ring};
+
+    /// Which stops show: all, the taf's own, or one connection's.
+    #[derive(Debug, Clone, PartialEq, Eq, Default)]
+    pub enum Filter {
+        #[default]
+        All,
+        Taf,
+        Connection(String),
+    }
+
+    #[derive(Debug, Clone, PartialEq)]
+    pub struct Stop {
+        pub ring: Ring,
+        pub item: Item,
+    }
+
+    pub fn items(knob: &Knob, ring: Ring, filter: &Filter) -> Vec<Item> {
+        knob.items(ring)
+            .iter()
+            .filter(|i| match filter {
+                Filter::All => true,
+                Filter::Taf => i.grant.is_none(),
+                Filter::Connection(g) => i.grant.as_deref() == Some(g.as_str()),
+            })
+            .cloned()
+            .collect()
+    }
+
+    pub fn stops(knob: &Knob, filter: &Filter) -> Vec<Stop> {
+        knob.ordered_rings()
+            .into_iter()
+            .flat_map(|ring| {
+                items(knob, ring, filter)
+                    .into_iter()
+                    .map(move |item| Stop { ring, item })
+            })
+            .collect()
+    }
+
+    /// The next stop (`direction` 1) or the one before (-1), round the dial; from none, the first
+    /// or the last.
+    pub fn next(
+        stops: &[Stop],
+        ring: Option<Ring>,
+        id: Option<&str>,
+        direction: i64,
+    ) -> Option<Stop> {
+        if stops.is_empty() {
+            return None;
+        }
+        let n = stops.len() as i64;
+        let Some(index) = stops
+            .iter()
+            .position(|s| Some(s.ring) == ring && Some(s.item.id.as_str()) == id)
+        else {
+            return if direction < 0 {
+                stops.last()
+            } else {
+                stops.first()
+            }
+            .cloned();
+        };
+        Some(stops[((index as i64 + direction % n + n) % n) as usize].clone())
+    }
+
+    /// A crowded ring shows `capacity` stops at a time: the page with the chosen one.
+    pub fn page(items: &[Item], selected: Option<&str>, capacity: usize) -> Vec<Item> {
+        if capacity == 0 {
+            return Vec::new();
+        }
+        let index = items
+            .iter()
+            .position(|i| Some(i.id.as_str()) == selected)
+            .unwrap_or(0);
+        let start = index / capacity * capacity;
+        items.iter().skip(start).take(capacity).cloned().collect()
+    }
+
+    /// `nearestTurn`: the ring's turn that brings stop `index` to the top the short way.
+    pub fn nearest_turn(turn: i64, index: i64, stops: i64) -> i64 {
+        if stops <= 0 {
+            return turn;
+        }
+        let at = turn.rem_euclid(stops);
+        let mut d = index - at;
+        if d as f64 > stops as f64 / 2.0 {
+            d -= stops;
+        }
+        if (d as f64) < -(stops as f64) / 2.0 {
+            d += stops;
+        }
+        turn + d
+    }
+
+    /// `labelWidth`: the chord inside a stop's share of its ring, leaving a gap between
+    /// neighbours.
+    pub fn label_width(radius: f64, stops: usize, maximum: f64, gap: f64) -> f64 {
+        if stops <= 1 {
+            return maximum.max(0.0);
+        }
+        (2.0 * radius * (std::f64::consts::PI / stops as f64).sin() - gap)
+            .min(maximum)
+            .max(0.0)
+    }
+}
+
+/// What the dial's face shows (`TafKnobView.Face`): the job, a chosen stop, or a held call.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub enum Face {
+    #[default]
+    Overview,
+    Chosen(Ring, String),
+    Held(String),
+}
+
+/// A held call the face can show: what it is, its amount, why, and whether it may be approved
+/// once.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HeldFace {
+    pub id: String,
+    pub summary: String,
+    pub amount: Option<String>,
+    pub reason: String,
+    pub approvable_once: bool,
+}
+
+/// The face's tint.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Tint {
+    Held,
+    Ring(Ring),
+    Ink,
+}
+
+/// The face's words, the note under the dial, and the chosen stop's size.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FaceLines {
+    pub kicker: String,
+    pub big: String,
+    pub hint: String,
+    pub note: String,
+    pub size: Option<String>,
+    pub tint: Tint,
+}
+
+/// The chosen stop, among those the filter shows.
+pub fn chosen_item(knob: &Knob, face: &Face, filter: &nav::Filter) -> Option<Item> {
+    match face {
+        Face::Chosen(ring, id) => nav::items(knob, *ring, filter)
+            .into_iter()
+            .find(|i| &i.id == id),
+        _ => None,
+    }
+}
+
+/// `TafKnobView`'s `kicker`, `big`, `hint` and `note`. Approving an app event names what the
+/// device asks for: "your passcode" on this computer, which can't.
+pub fn face_lines(
+    w: &WordBook,
+    knob: &Knob,
+    face: &Face,
+    filter: &nav::Filter,
+    held: &[HeldFace],
+) -> Result<FaceLines, WordsError> {
+    let call = match face {
+        Face::Held(id) => held.iter().find(|h| &h.id == id),
+        _ => None,
+    };
+    let item = chosen_item(knob, face, filter);
+    let size = item.as_ref().and_then(|i| i.size.as_ref()).and_then(|s| {
+        usize::try_from(s.index)
+            .ok()
+            .and_then(|n| s.choices.get(n))
+            .map(|c| format!("{} · {}", s.label, c.label))
+    });
+    if let Some(call) = call {
+        return Ok(FaceLines {
+            kicker: crate::words::upper(&call.summary),
+            big: call.amount.clone().unwrap_or_else(|| call.summary.clone()),
+            hint: if call.approvable_once {
+                w.line("knob.approve_once")?
+            } else {
+                String::new()
+            },
+            note: call.reason.clone(),
+            size: None,
+            tint: Tint::Held,
+        });
+    }
+    let (ring, item) = match (face, item) {
+        (Face::Chosen(ring, _), Some(item)) => (*ring, item),
+        _ => {
+            return Ok(FaceLines {
+                kicker: w.line("knob.why")?,
+                big: knob.why.clone().unwrap_or_else(|| knob.does.label.clone()),
+                hint: w.line("knob.tap_a_ring")?,
+                note: w.line("knob.caption")?,
+                size: None,
+                tint: Tint::Ink,
+            })
+        }
+    };
+    let big = match item.state.as_deref().filter(|s| !s.is_empty()) {
+        Some(state) => state.to_string(),
+        None => item
+            .size
+            .as_ref()
+            .and_then(|s| usize::try_from(s.index).ok().and_then(|n| s.choices.get(n)))
+            .map(|c| c.label.clone())
+            .unwrap_or_else(|| item.label.clone()),
+    };
+    let hint = if item.ok.as_deref() == Some("approve") {
+        w.get(
+            "approval.approve_with",
+            &[("biometry", &w.line("approval.your_passcode")?)],
+        )?
+    } else if let Some(tap) = &item.tap {
+        tap.clone()
+    } else if item.size.is_some() {
+        w.line("knob.use_size")?
+    } else {
+        w.line("knob.ask_coach_to_change")?
+    };
+    Ok(FaceLines {
+        kicker: crate::words::upper(&format!("{} · {}", knob.title(w, ring)?, item.ring_label())),
+        big,
+        hint,
+        note: item.words.clone(),
+        size,
+        tint: Tint::Ring(ring),
+    })
+}
+
+/// The service menu (`serviceMenu`): "Showing All services", and each choice with its words.
+pub fn filter_name(w: &WordBook, knob: &Knob, filter: &nav::Filter) -> Result<String, WordsError> {
+    match filter {
+        nav::Filter::All => w.line("knob.all_services"),
+        nav::Filter::Taf => w.line("knob.this_taf"),
+        nav::Filter::Connection(g) => match knob.connections.iter().find(|c| &c.grant == g) {
+            Some(c) => Ok(c.name.clone()),
+            None => w.line("knob.all_services"),
+        },
+    }
+}
+
+pub fn filter_choices(w: &WordBook, knob: &Knob) -> Result<Vec<(nav::Filter, String)>, WordsError> {
+    let mut out = vec![
+        (nav::Filter::All, w.line("knob.all_services")?),
+        (nav::Filter::Taf, w.line("knob.this_taf")?),
+    ];
+    for c in &knob.connections {
+        let f = nav::Filter::Connection(c.grant.clone());
+        let n = nav::stops(knob, &f).len() as i64;
+        out.push((f, w.count("knob.with_stops", n, &[("name", &c.name)])?));
+    }
+    Ok(out)
+}
+
+/// The rim's arcs: today's done, working, retrying and needing you, each its share of the
+/// circle (0 to 1), with a hair between them.
+pub fn rim_arcs(rim: &Rim) -> Vec<(f64, f64, &'static str)> {
+    let total = rim.total().max(1) as f64;
+    let gap = 1.2 / 360.0;
+    let mut from = 0.0;
+    let mut out = Vec::new();
+    for (n, tone) in [
+        (rim.done, "ok"),
+        (rim.working, "blue"),
+        (rim.retrying, "amber"),
+        (rim.needs_you, "no"),
+    ] {
+        if n > 0 {
+            let span = n as f64 / total;
+            out.push((from + gap, (from + span - gap).max(from + gap), tone));
+            from += span;
+        }
+    }
+    out
+}
+
 /// Starts when's line under its schedule: tafs cloud's words for its next run, else "Next run at
 /// 14:00" in the account's zone, then the account's zone (UTC when it has none); none while
 /// paused or with no next run.
