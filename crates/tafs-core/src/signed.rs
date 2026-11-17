@@ -242,6 +242,12 @@ pub enum Act {
     /// `resumeHalt`: a halted taf resumed, or every taf with no agent, confirmed by the device
     /// (`tafs.resume.v1`) and signed.
     Resume { agent: Option<String> },
+    /// `startTrying`: a version's trial opened on the KIFF draft the phone confirmed.
+    StartTrial { taf: String },
+    /// `installTrial`: the version tried made live, once the phone confirmed its draft.
+    InstallTrial { taf: String },
+    /// `goBackFromTrial`: the trial's KIFF draft ended with the setup signer, then the trial.
+    EndTrial { draft: String },
     /// `discardSettingUp`: a taf being set up discarded, its Cards revoked and tafs cloud's
     /// `POST` signed by the approval key, as a removal is.
     DiscardSettingUp { agent: String },
@@ -329,6 +335,14 @@ impl Act {
                     None => "/v1/resume".into(),
                 },
             ),
+            Act::StartTrial { taf } => ("PUT", format!("/v1/tafs/{}/trial", escaped(taf))),
+            Act::InstallTrial { taf } => {
+                ("POST", format!("/v1/tafs/{}/trial/install", escaped(taf)))
+            }
+            Act::EndTrial { draft } => (
+                "DELETE",
+                format!("/v1/me/agent-drafts/{}/trial", escaped(draft)),
+            ),
             Act::DiscardSettingUp { agent } => (
                 "POST",
                 format!("/v1/home/setting-up/{}/discard", escaped(agent)),
@@ -382,7 +396,11 @@ impl Act {
     pub fn at_device(&self) -> bool {
         matches!(
             self,
-            Act::MakeLive { .. } | Act::RemoveTaf { .. } | Act::DiscardSettingUp { .. }
+            Act::MakeLive { .. }
+                | Act::RemoveTaf { .. }
+                | Act::DiscardSettingUp { .. }
+                | Act::StartTrial { .. }
+                | Act::InstallTrial { .. }
         )
     }
 
@@ -502,6 +520,11 @@ mod tests {
                 agent: Some("agt_1".into()),
             },
             Act::Resume { agent: None },
+            Act::StartTrial { taf: "t1".into() },
+            Act::InstallTrial { taf: "t1".into() },
+            Act::EndTrial {
+                draft: "drf_t".into(),
+            },
             Act::AnswerStep {
                 handoff: "h1".into(),
             },
@@ -572,7 +595,7 @@ mod tests {
                 // The device signs or checks first; the app never sends it, by path too.
                 assert!(signed_at_cloud(method, &path), "{act:?}");
                 assert!(
-                    matches!(method, "POST" | "DELETE"),
+                    matches!(method, "POST" | "PUT" | "DELETE"),
                     "{act:?} changes something"
                 );
                 continue;

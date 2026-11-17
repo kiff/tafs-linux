@@ -62,6 +62,7 @@ pub mod taf_page;
 pub mod theme;
 pub mod unproven;
 pub mod usage;
+pub mod versions;
 pub mod waits;
 pub mod words;
 pub mod work;
