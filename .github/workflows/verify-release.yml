@@ -1,9 +1,12 @@
 name: Verify a draft release
 
 # Run by hand with a draft's tag, before it's published: its own AppImage, checked against its
-# SHA256SUMS, then started once in a clean Ubuntu 24.04 container (nothing of GTK or libadwaita
-# installed, only a virtual display and a font), first screen and sign-in. The two screenshots
-# are kept as the run's artifact; the AppImage isn't, since this repository is public.
+# SHA256SUMS, then started once in a clean Ubuntu 24.04 container, first screen and sign-in. The
+# container has what every Ubuntu 24.04 desktop has and the AppImage counts on (linuxdeploy leaves
+# those base libraries out on purpose: fribidi, HarfBuzz, fontconfig, FreeType, GL/EGL, X11,
+# xkbcommon, the Wayland client), plus a virtual display and a font; never GTK 4 or libadwaita,
+# which the AppImage must bring itself. The two screenshots are kept as the run's artifact; the
+# AppImage isn't, since this repository is public.
 on:
   workflow_dispatch:
     inputs:
@@ -59,13 +62,29 @@ jobs:
             set -euo pipefail
             apt-get update -qq
             DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends \
-              xvfb xauth fonts-dejavu-core > /dev/null
-            if dpkg -l | grep -qE "libgtk-4|libadwaita"; then
-              echo "Not clean: GTK 4 or libadwaita is installed." >&2
+              xvfb xauth fonts-dejavu-core \
+              libfribidi0 libharfbuzz0b libfontconfig1 libfreetype6 libexpat1 zlib1g \
+              libgl1 libegl1 libglx0 libgbm1 libdrm2 \
+              libx11-6 libx11-xcb1 libxcb1 libxext6 libxrender1 libxi6 libxrandr2 libxfixes3 \
+              libxcursor1 libxinerama1 libxdamage1 libxcomposite1 libxkbcommon0 \
+              libwayland-client0 libwayland-cursor0 libwayland-egl1 > /dev/null
+            if dpkg -l | grep -qE "libgtk-4|libgtk-3|libadwaita"; then
+              echo "Not clean: GTK or libadwaita is installed." >&2
               exit 1
             fi
             app=$(ls tafs-*-x86_64.AppImage)
             chmod +x "$app"
+            # Every library the app needs, from the AppImage or this system: one it can find in
+            # neither is named here, before anything starts.
+            "./$app" --appimage-extract > /dev/null
+            libs=$(find squashfs-root/usr/lib -type d | tr "\n" ":")
+            missing=$(LD_LIBRARY_PATH="$libs" ldd squashfs-root/usr/bin/tafs | grep "not found" || true)
+            if [ -n "$missing" ]; then
+              echo "Not found on a clean Ubuntu 24.04 desktop base:" >&2
+              echo "$missing" >&2
+              exit 1
+            fi
+            rm -rf squashfs-root
             export APPIMAGE_EXTRACT_AND_RUN=1 GSK_RENDERER=cairo NO_AT_BRIDGE=1
             timeout 120 xvfb-run -a "./$app" --screenshot /release/first-screen.png
             timeout 120 xvfb-run -a "./$app" --page sign-in --screenshot /release/sign-in.png
