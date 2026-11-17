@@ -390,6 +390,12 @@ crates/tafs-app/fixtures/access-manage.json --people crates/tafs-app/fixtures/pe
 with `--page share:taf-aaaa0000000000000000` (step one, CI's `share`) or `share-step2:…` (step two
 with a change picked and Share tapped, CI's `share-step2`).
 
+## Its Usage
+
+On the Card tab, for whoever manages a tafs cloud taf, signed in: Usage, in amber with a chart and a
+chevron, opens Plan & usage on this taf's credits this period and its runs (`TafCreditsView`,
+[usage](usage.md)); Back there returns to Plan & usage.
+
 ## Its versions and its trial
 
 For the person who manages a tafs cloud taf, under its name (`VersionsPanel`, `TrialViews.swift`;
@@ -427,7 +433,6 @@ nothing shows until they're read, or when they can't be. A 401 signs this comput
 - **The sample's Chat**, there, dimmed. A tafs cloud taf's page opens on its chat ([chat.md](chat.md)).
 - **On the Setup tab:** the sample's Setup (there, dimmed); pulling Starts when or Results go to
   to read them again.
-- **On the Card tab:** Usage (`TafCreditsView` is Plan & usage's own, not reachable from here yet).
 - **In the trial's sheet:** its guide stays above the chat once messages are in (the iPad shows it
   before the first only), and the chat's box is under it, a scroll down.
 - **On a tafs cloud taf's Activity:** "All apps" for a selection (an app's calls open the

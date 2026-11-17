@@ -383,7 +383,7 @@ pub fn page(
     scroller.set_vexpand(true);
     let card_scroller = gtk::ScrolledWindow::new();
     card_scroller.set_hscrollbar_policy(gtk::PolicyType::Never);
-    let card = card_pane(&w, t, &open_coach);
+    let card = card_pane(&w, t, &open_coach, &open_usage);
     // `HaltRow(tafID:framed:)`, at the Card's foot as on the iPad.
     if let Some(row) = halt_row {
         row.set_margin_start(16);
@@ -570,7 +570,12 @@ pub fn page(
 }
 
 /// The Card tab (`card(_:)`): the Cards as a wallet stack, the front Card's lines, and Revoke.
-fn card_pane(w: &Rc<WordBook>, t: &TafPage, open_coach: &Rc<dyn Fn()>) -> gtk::Box {
+fn card_pane(
+    w: &Rc<WordBook>,
+    t: &TafPage,
+    open_coach: &Rc<dyn Fn()>,
+    open_usage: &Rc<dyn Fn()>,
+) -> gtk::Box {
     // `offersReconnect`: signed in, for whoever manages the taf and may use Coach.
     let reconnect: Option<Rc<dyn Fn()>> =
         (!t.sample && t.manages && t.may_use_coach).then(|| open_coach.clone());
@@ -672,6 +677,35 @@ fn card_pane(w: &Rc<WordBook>, t: &TafPage, open_coach: &Rc<dyn Fn()>) -> gtk::B
     let f = draw.borrow().clone();
     if let Some(f) = f {
         f();
+    }
+    // Its Usage row: its credits this period and its runs, in Plan & usage (`TafCreditsView`), for
+    // whoever manages a tafs cloud taf, signed in.
+    if let (false, true, Some(id)) = (t.sample, t.manages, &t.cloud_id) {
+        let row = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+        let icon = crate::widgets::symbol(crate::widgets::icon_for("chart.bar"), 15);
+        icon.add_css_class("tafs-amber-text");
+        row.append(&icon);
+        let label = text(
+            &w.line("usage.label").unwrap_or_default(),
+            15,
+            600,
+            &["tafs-amber-text"],
+        );
+        label.set_hexpand(true);
+        row.append(&label);
+        let chevron = crate::widgets::symbol("go-next-symbolic", 13);
+        chevron.add_css_class("tafs-dim");
+        row.append(&chevron);
+        let b = gtk::Button::new();
+        b.set_child(Some(&row));
+        b.add_css_class("tafs-panel-link");
+        b.set_widget_name("taf.usage");
+        let (open, id) = (open_usage.clone(), id.clone());
+        b.connect_clicked(move |_| {
+            crate::usage::open_runs_of(&id);
+            open();
+        });
+        pane.append(&b);
     }
     // Revoke, for the sample or whoever manages the taf (`manages`, from KIFF's access read). A
     // view-only session (KIFF's `view`) isn't offered it, on every device alike: the shared line
