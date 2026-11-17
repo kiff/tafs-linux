@@ -266,6 +266,11 @@ button.tafs-chip-button:checked { background-color: @tafs_ink; color: @tafs_on_f
 .tafs-taf-dot { border-radius: 4px; min-width: 8px; min-height: 8px; }
 .tafs-day { font-family: monospace; font-size: 11px; font-weight: 500; color: @tafs_dim; }
 .tafs-record-row { background-color: @tafs_panel; border: 1px solid @tafs_line; border-radius: 14px; padding: 14px; }
+/* A row that opens its receipt: the row itself, at the column's edges like the heading (no
+   button padding around it). */
+button.tafs-record-line { padding: 0; margin: 0; border-radius: 14px; min-height: 0; }
+/* The Record's search, as the iPad's: a white field with the line colour's edge. */
+entry.tafs-record-search { background-color: @tafs_panel; border: 1px solid @tafs_line; border-radius: 12px; min-height: 44px; box-shadow: none; outline: none; }
 .tafs-kind-dot { border-radius: 5px; min-width: 9px; min-height: 9px; }
 .tafs-kind-dot.ok { background-color: @tafs_ok; }
 .tafs-kind-dot.amber { background-color: @tafs_amber; }
