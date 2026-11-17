@@ -65,20 +65,19 @@ without it, every taf on tafs cloud this person manages. "Which taf is this for?
 with "{app} is connected for one taf…", even when there's one; Cancel closes it. No taf at all:
 Connect is off, and "Make one first" says why.
 
-Picking a taf starts the connection at tafs cloud as the session (`startConnect`,
-`POST /v1/connect/apps/{entry}` with `{"taf": id}`, the entry escaped as the iPad's path, with
-this computer's signed grants read in `Planque-Device-Signature`, as Connect apps' reads send it).
-It approves nothing: planque makes the request for the taf's KIFF agent. Every Connect is off
-while it starts. tafs cloud's `not_needed` shows its own words; any other refusal "{vendor}
-couldn't be connected: …", in red over the list.
+Picking a taf is where the iPad starts the connection at tafs cloud (`startConnect`), only to
+approve it on its sheet behind Face ID. Connecting is done on the phone: this computer can't
+approve, so once a taf is picked it shows the shared can't-approve line over the list and sends
+nothing (`signed::Act::Connect`, which `sends_nothing`). Started here, the request would wait at
+planque for an approval this computer can never give, and nothing on any device would end it
+but Cancel the request. "Which taf?" itself is drawn as the iPad's, so the person sees which taf
+the app would be for.
 
-Then its approval opens as a sheet (`ConnectApprovalSheet`): "Connect {vendor}", Cancel. With the
-request, its words from the connection server, "This request doesn't match what it shows…" when
-its digest isn't checked, then for a key where it goes ("The key goes from this phone…"), and in
-the approve button's place, `ApprovalGate`'s line: this computer can't approve. The button is the
-iPad's `ApprovalGate`'s own, so the line stands where it would be. Without the request (signed in
-with KIFF, always: see below), the sheet says "Reading the request…", as the iPad does until its
-read comes.
+The approval's sheet (`ConnectApprovalSheet`) is still drawn where this computer reaches it
+without starting anything: Replace the key on a connection (the sample's screenshot). It shows the
+connection's words, "This request doesn't match what it shows…" when its digest isn't checked,
+for a key where it goes ("The key goes from this phone…"), and in the approve button's place
+`ApprovalGate`'s line; without the request, "Reading the request…".
 
 ## An app's connections
 
@@ -118,16 +117,17 @@ kept as `crates/tafs-app/fixtures/grants.json`): Stripe for Refunds and Chargeba
 Refunds. `--page connect-app` opens the app with the most connections, `connect-connection` its
 first connection, `connect-remove` its Remove access question. Signed in with KIFF,
 `--connect crates/tafs-app/fixtures/connect-kiff.json` (the contract's first page with Qonto
-needed by Rae, and a start) with `--page connect-which-taf` or `connect-approve` draws "Which
-taf?" and the approval; a fixture's read never sends.
+needed by Rae) with `--page connect-which-taf` draws "Which taf?", and `connect-approve` Rae
+picked, with the can't-approve line; a fixture's read never sends.
 
 ## Not on Linux
 
 - **planque's read of the connections**: the iPad reads them only once set up with planque, a
-  signed act. So signed in with KIFF no connection is listed, the approval stays at "Reading the
-  request…", and what needs one (Disconnect's question, Clear, Sign in again, a connection's
+  signed act. So signed in with KIFF no connection is listed, and what needs one (Disconnect's question, Clear, Sign in again, a connection's
   detail) is reached only in the sample's screenshot. tafs cloud's `removed_tafs` and
   `misplaced` are read, and drawn where a connection is.
+- **Starting a connection** (`startConnect`): it exists only to be approved, which is done on the
+  phone (above).
 - **Approving, giving a key, and the receipt**: signed. The key's sheet in tafs cloud's words
   (`ConnectionSheet`), pasting a key, the Card signed with it, its receipt with board 5 (an app
   connected) and its Remove access come only after a signature, so not here.

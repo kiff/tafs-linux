@@ -1,5 +1,5 @@
 {
-  "about": "Connect apps signed in with KIFF, for a screenshot (--connect): `answer` is shared/contracts/connect-apps.json's first page with Qonto needed by Rae (`needed_by`), so its Connect asks \"Which taf?\"; `start` is what starting it answers (`TafsCloud.ConnectStart`). Read only: nothing is sent.",
+  "about": "Connect apps signed in with KIFF, for a screenshot (--connect): `answer` is shared/contracts/connect-apps.json's first page with Qonto needed by Rae (`needed_by`), so its Connect asks \"Which taf?\". Read only: nothing is sent.",
   "answer": {
     "apps": [
       {
@@ -96,9 +96,5 @@
         "removed_at": "2026-11-07T20:00:00Z"
       }
     ]
-  },
-  "start": {
-    "grant": "g-qonto",
-    "needs_key": true
   }
 }

@@ -75,7 +75,7 @@ fn refusal(ctx: &Rc<Ctx>, column: &gtk::Box) -> Refuse {
     let ctx = ctx.clone();
     Rc::new(move |act: Act| {
         crate::approval::refuse(&ctx.w, ctx.mode(), &act, &slot);
-        panel.set_visible(slot.is_visible());
+        panel.set_visible(slot.get_visible());
     })
 }
 
@@ -537,7 +537,7 @@ fn take(ctx: &Rc<Ctx>, g: &Grant, action: &Action, b: &gtk::Button, slot_column:
             panel.append(&slot);
             slot_column.append(&panel);
             crate::approval::refuse(&ctx.w, ctx.mode(), &act, &slot);
-            panel.set_visible(slot.is_visible());
+            panel.set_visible(slot.get_visible());
         }
     };
     let w = &ctx.w;

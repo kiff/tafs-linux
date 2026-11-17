@@ -160,6 +160,10 @@ pub enum Act {
     ClearRemoved { grants: Vec<String> },
     /// `reconnect`: a connection signed in again, approved behind Face ID first.
     SignInAgain { grant: String },
+    /// Connect apps' Connect, once "Which taf?" is answered: the iPad starts the connection
+    /// (`startConnect`) only to approve it behind Face ID on its sheet. Started here, it would
+    /// leave a request at planque this computer can never approve, so nothing is sent at all.
+    Connect { entry: String, taf: String },
 }
 
 impl Act {
@@ -197,7 +201,15 @@ impl Act {
                 ),
             ),
             Act::SignInAgain { grant } => ("POST", format!("grants/{}/approve", escaped(grant))),
+            // tafs cloud's start, then planque's approval: this computer makes neither.
+            Act::Connect { entry, .. } => ("POST", crate::connect::start_path(entry)),
         }
+    }
+
+    /// An act this computer never sends anything for, not even the unsigned call before its
+    /// signature: planque's, and a connection's start.
+    pub fn sends_nothing(&self) -> bool {
+        self.at_planque() || matches!(self, Act::Connect { .. })
     }
 
     /// The call goes to planque, which this computer never reaches (`session::may_send_to`).
@@ -290,6 +302,10 @@ mod tests {
             Act::SignInAgain {
                 grant: "g_1".into(),
             },
+            Act::Connect {
+                entry: "qonto@2".into(),
+                taf: "taf-1".into(),
+            },
         ]
     }
 
@@ -301,6 +317,15 @@ mod tests {
                 // planque's: this computer sends nothing there, signed or not.
                 let url = format!("{}/v1/accounts/t1/{path}", crate::planque::PLANQUE);
                 assert!(!crate::session::may_send_to(&url), "{act:?}");
+                continue;
+            }
+            if act.sends_nothing() {
+                // A connection's start: never sent from here, though tafs cloud would take it
+                // unsigned (the app has no call that makes it: `connections.rs`' test).
+                assert_eq!(
+                    (method, path.as_str()),
+                    ("POST", "/v1/connect/apps/qonto@2")
+                );
                 continue;
             }
             assert!(

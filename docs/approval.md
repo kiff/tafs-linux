@@ -46,7 +46,8 @@ can be made unsigned. Each signed act (`signed::Act`) names the call the iPad wo
 that none of them can be made.
 
 The acts drawn this way: People & groups' changes, signing another device out, and the
-account's time zone (`docs/account.md`); declining a request (`docs/usage.md`); removing an app's
+account's time zone (`docs/account.md`); declining a request (`docs/usage.md`); connecting an app
+once its taf is picked (nothing is started, so nothing waits at planque), removing an app's
 access, cancelling its request or sign-in, clearing a removed taf's connections and signing in
 again, which are planque's (`docs/connect-apps.md`).
 

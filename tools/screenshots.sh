@@ -52,7 +52,7 @@ for screen in welcome sign-in sign-in-code sign-in-narrow pair connected overvie
     connect-app) opts=(--sample --signed-in --page connect-app) ;;
     connect-connection) opts=(--sample --signed-in --page connect-connection) ;;
     connect-remove) opts=(--sample --signed-in --page connect-remove) ;;
-    # Signed in with KIFF: Connect, "Which taf?" and the approval once started, read from a fixture.
+    # Signed in with KIFF, read from a fixture: Connect, "Which taf?", and a taf picked (can't approve here).
     connect-kiff) opts=(--home shared/contracts/home.json --access crates/tafs-app/fixtures/access-manage.json --connect crates/tafs-app/fixtures/connect-kiff.json --page connect-apps) ;;
     connect-which-taf) opts=(--home shared/contracts/home.json --access crates/tafs-app/fixtures/access-manage.json --connect crates/tafs-app/fixtures/connect-kiff.json --page connect-which-taf) ;;
     connect-approve) opts=(--home shared/contracts/home.json --access crates/tafs-app/fixtures/access-manage.json --connect crates/tafs-app/fixtures/connect-kiff.json --page connect-approve) ;;

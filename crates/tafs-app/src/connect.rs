@@ -1,9 +1,9 @@
 //! Connect apps beside the sidebar (`ConnectAppsView`): what tafs cloud offers to connect, the
 //! person's own first (Yours) with a ✓, then the rest (Discover), searched as the person types,
 //! as the iPad's table on a wide window: App, How it connects, Whose, Status (`ConnectColumns`).
-//! Connect asks "Which taf?" and starts the connection at tafs cloud as the session, then its
-//! approval opens (`ConnectApprovalSheet`), drawn up to the signature; an app with connections
-//! opens them (`connections.rs`). The lines are `tafs-core/src/connect.rs` and `connections.rs`.
+//! Connect asks "Which taf?"; picking one says this computer can't approve, and nothing is
+//! started (the iPad starts a connection only to approve it). An app with connections opens them
+//! (`connections.rs`). The lines are `tafs-core/src/connect.rs` and `connections.rs`.
 
 use std::cell::RefCell;
 use std::path::PathBuf;
@@ -12,12 +12,13 @@ use std::sync::{Arc, Mutex};
 
 use adw::prelude::*;
 use tafs_core::connect::{
-    called, connect_for, connectable_for, path, says_make_a_taf, split, start_body, start_path,
-    App, ConnectApps, ConnectFor, ConnectStart, Connectable, Row, NOT_NEEDED,
+    called, connect_for, connectable_for, path, says_make_a_taf, split, App, ConnectApps,
+    ConnectFor, Connectable, Row,
 };
 use tafs_core::connections::{connections_of, opens_connections, Grant};
 use tafs_core::session::KeptSession;
 use tafs_core::sidebar::Mode;
+use tafs_core::signed::Act;
 use tafs_core::words::WordBook;
 
 use crate::widgets::{one_line, outline, symbol, text};
@@ -40,8 +41,8 @@ pub enum ConnectSource {
         connectable: Vec<Connectable>,
         manages: bool,
     },
-    /// A screenshot's answers (`--connect`): `answer` as tafs cloud's first page, `start` as
-    /// starting a connection answers. A fixture's read never sends.
+    /// A screenshot's answers (`--connect`): `answer` as tafs cloud's first page. A fixture's
+    /// read never sends.
     File {
         path: PathBuf,
         connectable: Vec<Connectable>,
@@ -62,7 +63,7 @@ thread_local! {
     /// A screenshot's page: `connect-app` opens the app with the most connections,
     /// `connect-connection` its first connection's detail, `connect-remove` that connection's
     /// Remove access question, `connect-which-taf` "Which taf?" for the first app it asks for,
-    /// `connect-approve` that app's approval once started.
+    /// `connect-approve` that app's first taf picked.
     pub static OPEN: std::cell::Cell<Option<&'static str>> = const { std::cell::Cell::new(None) };
 }
 
@@ -144,16 +145,12 @@ impl Ctx {
 struct State {
     apps: Option<ConnectApps>,
     error: Option<String>,
-    /// Why a connection couldn't be started, in tafs cloud's words or the app's.
-    note: Option<String>,
     query: String,
     loading_more: bool,
     /// Each read's number: only the newest search may replace the page.
     request: u64,
     /// A narrow window: one-line rows and no table (`sizeClass != .regular`).
     narrow: bool,
-    /// The app whose connection is being started: every Connect waits for it.
-    starting: Option<String>,
 }
 
 type Redraw = Rc<dyn Fn()>;
@@ -173,14 +170,14 @@ fn sample_grants() -> Vec<Grant> {
         .unwrap_or_default()
 }
 
-/// A screenshot's file: its `answer`, and its `start`.
+/// A screenshot's file: its `answer`.
 fn file_part(path: &PathBuf, key: &str) -> Option<Vec<u8>> {
     let v: serde_json::Value = serde_json::from_slice(&std::fs::read(path).ok()?).ok()?;
     Some(v.get(key)?.to_string().into_bytes())
 }
 
 /// This computer's signed read of the account's grants (`grantsReadProof`), made as the iPad
-/// sends it with Connect apps' reads and a start: tafs cloud then says which tafs need an app.
+/// sends it with Connect apps' reads: tafs cloud then says which tafs need an app.
 /// None without a key, a tenant, or KIFF's name for this computer. Never logged.
 fn proof(
     kept: &KeptSession,
@@ -232,52 +229,6 @@ fn read_page(
     }
     ConnectApps::read(&answer.body)
         .ok_or_else(|| why(tafs_core::signin::plain_words(w, 200).unwrap_or_default()))
-}
-
-/// `startConnect`: `POST /v1/connect/apps/{entry}` for one taf, as the session, with a fresh
-/// signed grants read. It approves and signs nothing: the approval comes after, on its sheet.
-fn start(
-    w: &WordBook,
-    kept: &KeptSession,
-    languages: &[&'static str],
-    device: &Mutex<Option<String>>,
-    app: &App,
-    taf: &str,
-) -> Result<ConnectStart, String> {
-    let couldnt = |why: String| {
-        w.get(
-            "connect.could_not_connected",
-            &[("vendor", called(app)), ("why", &why)],
-        )
-        .unwrap_or(why)
-    };
-    let proof = proof(kept, languages, device);
-    let headers: Vec<(&str, &str)> = proof
-        .as_deref()
-        .map(|p| vec![(tafs_core::planque::HEADER, p)])
-        .unwrap_or_default();
-    let body = start_body(taf);
-    let answer = crate::kiff::cloud_send_with(
-        &kept.token,
-        languages,
-        "POST",
-        &start_path(&app.entry),
-        Some(&body),
-        &headers,
-    )
-    .map_err(|e| couldnt(e.words(w).unwrap_or_default()))?;
-    if !(200..300).contains(&answer.status) {
-        let refused = tafs_core::coach_send::Refusal::read(answer.status, &answer.body);
-        let words = refused.words(w).unwrap_or_default();
-        // This taf doesn't use the app: tafs cloud's words, which send the person to Coach.
-        return Err(if refused.code.as_deref() == Some(NOT_NEEDED) {
-            words
-        } else {
-            couldnt(words)
-        });
-    }
-    ConnectStart::read(&answer.body)
-        .ok_or_else(|| couldnt(tafs_core::signin::plain_words(w, 200).unwrap_or_default()))
 }
 
 /// The page's screens: the list, an app's connections over it, and one connection's detail over
@@ -389,69 +340,30 @@ pub fn page(w: Rc<WordBook>, source: ConnectSource, open_coach: Rc<dyn Fn()>) ->
             screens.show("app", &page);
         })
     };
-    // The approval, once started: its sheet over the list.
-    let approve: Rc<dyn Fn(ConnectStart)> = {
-        let (ctx, outer) = (ctx.clone(), outer.clone());
-        Rc::new(move |start: ConnectStart| {
-            crate::connections::approval_sheet(&ctx, &start, outer.upcast_ref());
-        })
-    };
-    // Starts connecting an app for one taf: as the session at tafs cloud; a fixture's never.
-    let start_for: Rc<dyn Fn(App, String)> = {
-        let (ctx, state, redraw, device, approve) = (
-            ctx.clone(),
-            state.clone(),
-            redraw.clone(),
-            device.clone(),
-            approve.clone(),
-        );
-        Rc::new(move |app: App, taf: String| match &ctx.source {
-            ConnectSource::Cloud {
-                kept, languages, ..
-            } => {
-                {
-                    let mut s = state.borrow_mut();
-                    s.starting = Some(app.entry.clone());
-                    s.note = None;
-                }
-                redraw();
-                let (words, kept, languages, device) = (
-                    (*ctx.w).clone(),
-                    kept.clone(),
-                    languages.clone(),
-                    device.clone(),
-                );
-                let (state, redraw, approve) = (state.clone(), redraw.clone(), approve.clone());
-                gtk::glib::spawn_future_local(async move {
-                    let started = gtk::gio::spawn_blocking(move || {
-                        start(&words, &kept, &languages, &device, &app, &taf)
-                    })
-                    .await
-                    .unwrap_or_else(|_| Err(String::new()));
-                    {
-                        let mut s = state.borrow_mut();
-                        s.starting = None;
-                        if let Err(e) = &started {
-                            s.note = Some(e.clone());
-                        }
-                    }
-                    redraw();
-                    if let Ok(start) = started {
-                        approve(start);
-                    }
-                });
-            }
-            ConnectSource::File { path, .. } => {
-                if let Some(start) = file_part(path, "start").and_then(|b| ConnectStart::read(&b)) {
-                    approve(start);
-                }
-            }
-            _ => {}
+    // Where Connect's tap says this computer can't approve, over the list, once a taf is
+    // picked: hidden until then.
+    let refused = crate::approval::refusal_slot();
+    let refused_panel = crate::widgets::panel(false);
+    refused_panel.append(&refused);
+    refused_panel.set_visible(false);
+    column.insert_child_after(&refused_panel, Some(&head));
+    // Connect for one taf, once picked: the iPad starts the connection only to approve it on its
+    // sheet behind Face ID. This computer can't approve, so it says so and starts nothing: a
+    // request left at planque could never be approved from here.
+    let connect_for_taf: Rc<dyn Fn(App, String)> = {
+        let (ctx, refused, refused_panel) = (ctx.clone(), refused.clone(), refused_panel.clone());
+        Rc::new(move |app: App, taf: String| {
+            let act = Act::Connect {
+                entry: app.entry.clone(),
+                taf,
+            };
+            crate::approval::refuse(&ctx.w, ctx.mode(), &act, &refused);
+            refused_panel.set_visible(refused.get_visible());
         })
     };
     // "Which taf is this for?": the tafs that can have the app, then Cancel.
     let which_taf: Rc<dyn Fn(App, gtk::Widget)> = {
-        let (ctx, start_for) = (ctx.clone(), start_for.clone());
+        let (ctx, connect_for_taf) = (ctx.clone(), connect_for_taf.clone());
         Rc::new(move |app: App, over: gtk::Widget| {
             let w = &ctx.w;
             let tafs = connectable_for(ctx.source.connectable(), app.needed_by.as_deref());
@@ -467,11 +379,11 @@ pub fn page(w: Rc<WordBook>, source: ConnectSource, open_coach: Rc<dyn Fn()>) ->
             }
             ask.add_response("cancel", &w.line("common.cancel").unwrap_or_default());
             ask.set_close_response("cancel");
-            let start_for = start_for.clone();
+            let connect_for_taf = connect_for_taf.clone();
             ask.connect_response(None, move |_, r| {
                 if let Some(i) = r.strip_prefix('t').and_then(|i| i.parse::<usize>().ok()) {
                     if let Some(t) = tafs.get(i) {
-                        start_for(app.clone(), t.id.clone());
+                        connect_for_taf(app.clone(), t.id.clone());
                     }
                 }
             });
@@ -603,7 +515,7 @@ pub fn page(w: Rc<WordBook>, source: ConnectSource, open_coach: Rc<dyn Fn()>) ->
             }
             let s = state.borrow();
             let l = |k: &str| w.line(k).unwrap_or_default();
-            for why in [&s.error, &s.note].into_iter().flatten() {
+            if let Some(why) = &s.error {
                 list.append(&text(why, 14, 400, &["tafs-no"]));
             }
             let Some(apps) = &s.apps else {
@@ -620,15 +532,7 @@ pub fn page(w: Rc<WordBook>, source: ConnectSource, open_coach: Rc<dyn Fn()>) ->
                 apps.removed_tafs.iter().map(|t| t.agent.clone()).collect();
             let row_for = |app: &App| {
                 let used = ctx.used_here(app, &removed);
-                row(
-                    &ctx,
-                    app,
-                    &used,
-                    s.narrow,
-                    s.starting.is_some(),
-                    &connect,
-                    &open_app,
-                )
+                row(&ctx, app, &used, s.narrow, &connect, &open_app)
             };
             let (yours, discover) = split(&apps.apps);
             if !yours.is_empty() {
@@ -743,8 +647,8 @@ pub fn page(w: Rc<WordBook>, source: ConnectSource, open_coach: Rc<dyn Fn()>) ->
                             let tafs =
                                 connectable_for(ctx.source.connectable(), app.needed_by.as_deref());
                             if let Some(t) = tafs.first() {
-                                let (start_for, id) = (start_for.clone(), t.id.clone());
-                                gtk::glib::idle_add_local_once(move || start_for(app, id));
+                                let (connect_for_taf, id) = (connect_for_taf.clone(), t.id.clone());
+                                gtk::glib::idle_add_local_once(move || connect_for_taf(app, id));
                             }
                         }
                     }
@@ -929,7 +833,6 @@ fn row(
     app: &App,
     used_here: &[String],
     narrow: bool,
-    starting: bool,
     connect: &Rc<dyn Fn(App, gtk::Widget)>,
     open_app: &Rc<dyn Fn(App)>,
 ) -> gtk::Widget {
@@ -970,7 +873,7 @@ fn row(
         s.set_ellipsize(gtk::pango::EllipsizeMode::End);
         name.append(&s);
     }
-    let end = trailing(ctx, app, starting, connect);
+    let end = trailing(ctx, app, connect);
     let chevron = opens.then(|| {
         let c = symbol("go-next-symbolic", 13);
         c.add_css_class("tafs-dim");
@@ -1069,14 +972,9 @@ fn row(
 }
 
 /// `trailing`: a ✓ for a connected app; else Connect (or Sign in again, or Ask Coach where no taf
-/// needs it) as wide as its words, off while a connection starts or no taf can have it;
+/// needs it) as wide as its words, off while no taf can have it;
 /// nothing for an app not set up yet.
-fn trailing(
-    ctx: &Ctx,
-    app: &App,
-    starting: bool,
-    connect: &Rc<dyn Fn(App, gtk::Widget)>,
-) -> Option<gtk::Widget> {
+fn trailing(ctx: &Ctx, app: &App, connect: &Rc<dyn Fn(App, gtk::Widget)>) -> Option<gtk::Widget> {
     let w = &ctx.w;
     if app.needs_setup() {
         None
@@ -1102,7 +1000,7 @@ fn trailing(
         b.set_hexpand(false);
         b.add_css_class("compact");
         b.set_valign(gtk::Align::Center);
-        b.set_sensitive(!starting && route != ConnectFor::NoTaf);
+        b.set_sensitive(route != ConnectFor::NoTaf);
         let (connect, app) = (connect.clone(), app.clone());
         b.connect_clicked(move |b| connect(app.clone(), b.clone().upcast()));
         Some(b.upcast())

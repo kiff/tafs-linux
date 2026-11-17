@@ -958,11 +958,21 @@ mod tests {
         }
         // Every signed act goes to `approval::refuse`, never anywhere else.
         assert!(source.contains("crate::approval::refuse("));
+        // Connect apps sends nothing: its reads, and Connect's tap once a taf is picked says this
+        // computer can't approve. No start is made that only a signature here could finish.
         let file = concat!(env!("CARGO_MANIFEST_DIR"), "/../tafs-app/src/connect.rs");
         let source = std::fs::read_to_string(file).unwrap();
-        // Connect apps sends one change: starting a connection, as the session.
-        assert_eq!(source.matches("cloud_send").count(), 1);
-        assert!(!source.contains("kiff_send"));
+        for call in [
+            "cloud_send",
+            "kiff_send",
+            "start_path",
+            "start_body",
+            "ConnectStart",
+        ] {
+            assert!(!source.contains(call), "{call}");
+        }
+        assert!(source.contains("Act::Connect {"));
+        assert!(source.contains("crate::approval::refuse("));
     }
 
     #[test]

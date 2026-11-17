@@ -180,32 +180,15 @@ pub fn cloud_send(
     path: &str,
     body: Option<&[u8]>,
 ) -> Result<Answer, KiffError> {
-    cloud_send_with(token, languages, method, path, body, &[])
-}
-
-/// A change at tafs cloud as the session with headers of its own: starting a connection with
-/// this device's proof (`Planque-Device-Signature`), which tafs cloud only forwards. It signs
-/// nothing; neither the token nor a header's value is ever logged.
-pub fn cloud_send_with(
-    token: &str,
-    languages: &[&str],
-    method: &str,
-    path: &str,
-    body: Option<&[u8]>,
-    headers: &[(&str, &str)],
-) -> Result<Answer, KiffError> {
     let url = format!("{}{path}", tafs_core::home::TAFS_CLOUD);
     if !may_send_to(&url) || !matches!(method, "POST" | "PUT" | "DELETE") {
         return Err(KiffError::Unreadable);
     }
-    let mut request = agent()
+    let request = agent()
         .request(method, &url)
         .set("Accept", "application/json")
         .set("Accept-Language", &accept_language(languages))
         .set("Authorization", &format!("Bearer {token}"));
-    for (name, value) in headers {
-        request = request.set(name, value);
-    }
     Kiff::read(match body {
         Some(b) => request
             .set("Content-Type", "application/json")
