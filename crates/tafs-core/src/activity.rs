@@ -124,6 +124,78 @@ pub fn foot(pages: &[ActivityPage], error: Option<&str>) -> Foot {
     Foot::Nothing
 }
 
+/// What a not-done row's next step does (`NextStepWords.Action`), as this computer can: tafs
+/// cloud says which step and its words, the app only finds what the button opens.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum NextAction {
+    /// Connect apps, where the owner connects that app again. Signing in again where its vendor
+    /// signed it out needs planque's grants, which this computer doesn't read: Connect apps.
+    ConnectApps,
+    /// Coach on the taf, with these words in the box for the owner to send.
+    AskCoach(String),
+    /// A line: try later, or a kind this app doesn't know.
+    Line,
+}
+
+/// `NextStepWords.action`; `fallback` is Coach's first message when tafs cloud sent none.
+pub fn next_action(next: &NextStep, fallback: &str) -> NextAction {
+    match next.kind.as_str() {
+        "reconnect" => NextAction::ConnectApps,
+        "ask_coach" => {
+            let message = next.message.as_deref().map(str::trim).unwrap_or("");
+            NextAction::AskCoach(if message.is_empty() {
+                fallback.to_string()
+            } else {
+                next.message.clone().unwrap_or_default()
+            })
+        }
+        _ => NextAction::Line,
+    }
+}
+
+/// `NextStepRow`'s `may`: a button only for whoever manages the taf, signed in; Coach's only for
+/// whoever may use Coach.
+pub fn next_has_button(action: &NextAction, manages: bool, may_use_coach: bool) -> bool {
+    manages
+        && match action {
+            NextAction::AskCoach(_) => may_use_coach,
+            NextAction::ConnectApps => true,
+            NextAction::Line => false,
+        }
+}
+
+/// `SourceActivityRow.evidence`: the row as the Record's line its receipt opens on, its kind,
+/// title and detail tafs cloud's (`RecordEntry.Kind(rawValue:)`, else unknown); none for a call
+/// with no actor.
+pub fn evidence(
+    w: &crate::words::WordBook,
+    e: &ActivityEntry,
+    taf: &str,
+) -> Option<crate::record::Entry> {
+    use crate::record::Kind;
+    e.call.actor_id.as_ref()?;
+    let mut entry =
+        crate::record::record(w, std::slice::from_ref(&e.call), &|_| Some(taf.to_string()))
+            .ok()?
+            .into_iter()
+            .next()?;
+    entry.kind = match e.kind.as_str() {
+        "done" => Kind::Done,
+        "approved" => Kind::Approved,
+        "refused" => Kind::Refused,
+        "held" => Kind::Held,
+        "revoked" => Kind::Revoked,
+        "started" => Kind::Started,
+        "not_done" => Kind::NotDone,
+        "sending" => Kind::Sending,
+        "in_tafs" => Kind::InTafs,
+        _ => Kind::Unknown,
+    };
+    entry.title = e.title.clone();
+    entry.detail = e.detail.clone();
+    Some(entry)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -162,5 +234,60 @@ mod tests {
             path("a/b", "held", Some("c 1&x")),
             "/v1/tafs/a%2Fb/activity?filter=held&cursor=c%201%26x"
         );
+    }
+
+    #[test]
+    fn a_next_step_and_what_it_opens() {
+        let step = |kind: &str, message: Option<&str>| NextStep {
+            kind: kind.into(),
+            words: "Connect it again".into(),
+            tool: Some("stripe.refund".into()),
+            taf: None,
+            message: message.map(String::from),
+        };
+        assert_eq!(
+            next_action(&step("reconnect", None), "f"),
+            NextAction::ConnectApps
+        );
+        assert_eq!(
+            next_action(&step("ask_coach", Some("Why did it stop?")), "f"),
+            NextAction::AskCoach("Why did it stop?".into())
+        );
+        assert_eq!(
+            next_action(&step("ask_coach", Some("  ")), "Refund: not sent"),
+            NextAction::AskCoach("Refund: not sent".into())
+        );
+        assert_eq!(next_action(&step("try_later", None), "f"), NextAction::Line);
+        let coach = NextAction::AskCoach("x".into());
+        assert!(next_has_button(&coach, true, true));
+        assert!(!next_has_button(&coach, true, false));
+        assert!(!next_has_button(&NextAction::ConnectApps, false, true));
+        assert!(!next_has_button(&NextAction::Line, true, true));
+    }
+
+    #[test]
+    fn a_row_opens_its_receipt_as_the_records_line() {
+        let w =
+            crate::words::WordBook::load(&crate::words::WordBook::default_root(), "en").unwrap();
+        let body = include_str!("../../../shared/contracts/taf-activity.json");
+        let v: serde_json::Value = serde_json::from_str(body).unwrap();
+        let page = ActivityPage::read(v["answer"].to_string().as_bytes()).unwrap();
+        let mut e = page.entries[0].clone();
+        let entry = evidence(&w, &e, "rae").unwrap();
+        assert_eq!(entry.taf, "rae");
+        assert_eq!(entry.kind, crate::record::Kind::Done);
+        assert_eq!(entry.title, e.title);
+        e.kind = "not_done".into();
+        assert_eq!(
+            evidence(&w, &e, "rae").unwrap().kind,
+            crate::record::Kind::NotDone
+        );
+        e.kind = "whatever".into();
+        assert_eq!(
+            evidence(&w, &e, "rae").unwrap().kind,
+            crate::record::Kind::Unknown
+        );
+        e.call.actor_id = None;
+        assert!(evidence(&w, &e, "rae").is_none());
     }
 }

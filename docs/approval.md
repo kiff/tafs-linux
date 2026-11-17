@@ -49,7 +49,20 @@ The acts drawn this way: People & groups' changes, signing another device out, a
 account's time zone (`docs/account.md`); declining a request (`docs/usage.md`); connecting an app
 once its taf is picked (nothing is started, so nothing waits at planque), removing an app's
 access, cancelling its request or sign-in, clearing a removed taf's connections and signing in
-again, which are planque's (`docs/connect-apps.md`).
+again, which are planque's (`docs/connect-apps.md`); removing a Slack
+door, whose subscription at planque the device signs first, making a taf's waiting version live, which the device checks before
+tafs cloud's switch begins, and removing a taf for good, whose `DELETE` the approval key signs
+(`docs/taf.md`); Done and Skip it on a step a taf handed its owner, whose answer carries the
+device key's signature (`docs/needs-you.md`; `signed` lists `POST /v1/me/handoffs/{id}/answer`);
+and on the taf's dial, approving a held call once and an app event (`docs/taf.md`; `signed` lists a
+held call's answers, `POST /v1/me/card-exceptions/{id}/approve-once|reject|change-card`). Revoking a Card isn't signed (it only takes authority away): it really goes, as
+the session, unless KIFF keeps the session view-only. planque's acts
+(`Act::at_planque`) have no route here at all: this computer's only planque call is its grants read.
+Making a version live and removing a taf (`Act::at_device`) are checked or signed by the device before a call it makes as the
+session; this computer never begins either, since a switch stops the taf until it's finished.
+
+Approving an app event's subscription in Starts when is one the iPad disables itself where the
+device can't approve (`approvalBlocked`): disabled here too.
 
 A button the iPad itself wraps in `ApprovalGate` is the exception: there, as on the iPad, the
 gate's line is drawn in the button's place (`approval::gate`), not the button. Raise the limit is

@@ -1,0 +1,67 @@
+{
+  "doors": [
+    {
+      "id": "door_email",
+      "app": "email",
+      "kind": "email",
+      "label": "Email",
+      "open": true,
+      "address": "refunds@tafs.example",
+      "proof": "proven",
+      "how": "It checks the sender's server signed the message",
+      "keys": [
+        {"id": "owner@acme.example", "name": "owner@acme.example", "auto": true},
+        {"id": "ana@company.example", "name": "Ana"}
+      ],
+      "today": 3,
+      "limit": 20,
+      "resting": false,
+      "others_today": 1,
+      "others_limit": 10
+    },
+    {
+      "id": "door_whatsapp",
+      "app": "whatsapp",
+      "kind": "whatsapp",
+      "label": "WhatsApp",
+      "open": false,
+      "address": "+34 600 000 000",
+      "proof": "proven",
+      "how": "WhatsApp gives the sender's number",
+      "keys": [],
+      "today": 0,
+      "limit": 20,
+      "resting": false
+    }
+  ],
+  "apps": [
+    {"id": "email", "label": "Email", "kind": "email", "proof": "proven", "how": "It checks the sender's server signed the message"},
+    {"id": "whatsapp", "label": "WhatsApp", "kind": "whatsapp", "proof": "proven", "how": "WhatsApp gives the sender's number"},
+    {"id": "telegram", "label": "Telegram", "kind": "telegram", "proof": "proven", "how": "Telegram gives the sender's user id"},
+    {"id": "sms", "label": "Text message", "kind": "sms", "proof": "none", "how": "A text can't prove who sent it"}
+  ],
+  "knocks": [
+    {
+      "id": "knock_sample",
+      "door": "door_email",
+      "app": "email",
+      "from": "mara@customer.example",
+      "name": "Mara",
+      "proof": "pass",
+      "subject": "Refund request",
+      "text": "Hi, I'd like $15 back on order T-3001.",
+      "at": "2026-11-16T09:50:00Z",
+      "state": "open"
+    },
+    {
+      "id": "knock_rest",
+      "door": "door_email",
+      "app": "email",
+      "from": "door_email",
+      "at": "2026-11-16T10:30:00Z",
+      "state": "open",
+      "rest": "others",
+      "dropped": 4
+    }
+  ]
+}

@@ -69,7 +69,9 @@ calls, in the iPad's order:
   what (16 semibold) and why (14, soft); the vendor's page when tafs cloud vouched for its link
   (an https link whose own host is tafs cloud's `link_host`; anything else is no button), which
   opens in the browser exactly as it was parsed and checked (never the string as sent), with that
-  host under it; then Done and Skip it.
+  host under it; then Done and Skip it. The answer is signed by the device key
+  (`answerHandoff`), so their tap shows the can't-approve line under them and sends nothing
+  ([approval](approval.md)).
 - **"Set all aside"** above two or more of Coach's waiting chats, when tafs cloud sends its words.
 - **A Coach chat waiting on the person** (`CoachWaitingCard`): tafs cloud's line with Coach's
   mark; Open Coach, for someone who may use Coach; Set aside, when tafs cloud sends its words.

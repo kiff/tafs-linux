@@ -68,6 +68,8 @@ pub struct CardLines {
     pub answers: Answers,
     /// What a screen reader says for the card's face (`sentence`).
     pub sentence: String,
+    /// It may be approved once (`approvableOnce`): the taf's dial shows it on its face.
+    pub approvable_once: bool,
 }
 
 /// A Card unit request's panel (`CardUnitExceptionPanel`): tafs cloud's title, words and history;
@@ -235,6 +237,7 @@ pub fn lines(
             .collect::<Vec<_>>()
             .join(", ");
         cards.push(CardLines {
+            approvable_once: call.approvable_once,
             id: call.id.clone(),
             avatar: taf.map(|t| (t.initial.to_string(), t.color)),
             remaining: remaining(w, call.expires_at, now)?,

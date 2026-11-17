@@ -336,6 +336,9 @@ pub struct HomeTaf {
     /// Its doors, for its avatar's rim and Needs you's knocks; absent when it has none.
     #[serde(default)]
     pub doors: Option<Vec<DoorLight>>,
+    /// Where tafs cloud delivers its results itself (`door_reply`, `app`, `owner_email`), live.
+    #[serde(default)]
+    pub results: Option<Vec<Value>>,
     /// Its labels by id (docs/labels.md), only on a taf that has any; another shape is none
     /// (`LabelIDs`).
     #[serde(default)]
@@ -604,6 +607,8 @@ pub struct Taf {
     pub card_active: bool,
     pub card_count: usize,
     pub revoked: bool,
+    /// Its Cards' ids at KIFF (`kiffCardIDs`), which Revoke revokes.
+    pub card_ids: Vec<String>,
     /// Knocks waiting at its doors (`knocks(_:)`: their sum), for Needs you's row.
     pub knocks: i64,
     /// A door with a knock waiting (`doors.contains { $0.knocks > 0 }`), for `relevantNow`.
@@ -692,6 +697,7 @@ pub fn taf(w: &WordBook, h: &HomeTaf) -> Result<Taf, WordsError> {
             .filter(|c| !c.is_empty())
             .map_or(1, Vec::len),
         revoked: !h.card.active,
+        card_ids: h.card.ids.clone(),
         // Only a tafs cloud taf carries labels (`cloudTaf(for:)?.labels`).
         labels: if h.id.is_some() {
             crate::brief::label_ids(&h.labels)

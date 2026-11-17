@@ -26,6 +26,7 @@ pub mod held;
 pub mod hold_alert;
 pub mod home;
 pub mod keys;
+pub mod knob;
 pub mod language;
 pub mod money;
 pub mod needs_you;
