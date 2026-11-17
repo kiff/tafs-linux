@@ -154,18 +154,21 @@ building those two from source on 22.04, or shipping a Flatpak.
 **On a clean Ubuntu 24.04** (`tools/check-appimage.sh`, in an `ubuntu:24.04` container): the
 container has what every Ubuntu 24.04 desktop has and the AppImage counts on, since linuxdeploy
 leaves those base libraries out on purpose (fribidi, HarfBuzz, fontconfig, FreeType, GL/EGL, X11,
-xkbcommon, the Wayland client), plus a virtual display (`xvfb`) and one font. It never has GTK or
-libadwaita: the check fails if either is installed. It then fails on:
+xkbcommon, the Wayland client), plus a virtual display (`xvfb`) and one font. It never has GTK,
+libadwaita or a MIME database (`shared-mime-info`): the check fails if one is installed. It then
+fails on:
 - a library the app finds in neither the AppImage nor that base (a bare container without the
   base stops at `libfribidi.so.0`);
 - an image loader that can't find its own libraries, or a `loaders.cache` line naming one that
-  isn't in the AppImage. GTK opens the gdk-pixbuf loaders at run
-  time, with no `LD_LIBRARY_PATH`, and the SVG one draws every icon. The GTK plugin copies them
-  from the build system with no RUNPATH, so `tools/appimage.sh` points each at the AppImage's
-  `usr/lib` (`patchelf`) before the AppImage is made: without that, on a system without librsvg,
-  every icon was a missing-image placeholder;
+  isn't in the AppImage. GTK opens the gdk-pixbuf loaders at run time, with no
+  `LD_LIBRARY_PATH`, and the SVG one draws every icon. The GTK plugin copies them from the build
+  system with no RUNPATH, so `tools/appimage.sh` points each at the AppImage's `usr/lib`
+  (`patchelf`) before the AppImage is made: the SVG loader never depends on the system's librsvg;
 - an icon GTK can't load, in any of the three screens it saves: the first screen, the sign-in,
-  and the sample signed in, whose sidebar draws the app's own icons.
+  and the sample signed in, whose sidebar draws the app's own icons. gdk-pixbuf tells an image's
+  format by the MIME database (through GIO) before it chooses a loader, so the AppImage brings
+  its own compiled `usr/share/mime/mime.cache`. Without it, the v1.0.0 draft drew every SVG icon
+  as a missing-image placeholder ("Unrecognized image file format").
 
 **Signing.** The draft job signs `SHA256SUMS` with tafs for Linux's OpenPGP key
 (`tools/sign.sh`): an armored detached signature, `SHA256SUMS.asc`, attached beside it. Whoever

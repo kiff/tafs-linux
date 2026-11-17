@@ -37,7 +37,7 @@ jobs:
           # The token isn't written into .git/config, where the build's code could read it.
           persist-credentials: false
       - name: GTK 4, libadwaita, and the icon theme to bundle
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq libgtk-4-dev libadwaita-1-dev adwaita-icon-theme file patchelf
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq libgtk-4-dev libadwaita-1-dev adwaita-icon-theme shared-mime-info file patchelf
       - name: Rust
         run: rustup toolchain install stable --profile minimal && rustup default stable
       - name: Words and contracts at the pin
@@ -92,7 +92,7 @@ jobs:
           # The token isn't written into .git/config, where the build's code could read it.
           persist-credentials: false
       - name: GTK 4, libadwaita, and the icon theme to bundle
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq libgtk-4-dev libadwaita-1-dev adwaita-icon-theme file patchelf
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq libgtk-4-dev libadwaita-1-dev adwaita-icon-theme shared-mime-info file patchelf
       - name: Rust
         run: rustup toolchain install stable --profile minimal && rustup default stable
       - name: Words and contracts at the pin

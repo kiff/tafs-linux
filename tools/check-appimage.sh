@@ -10,7 +10,8 @@
 # - an image loader that can't find its own libraries. GTK opens those at run time with no
 #   LD_LIBRARY_PATH, so each must find them by its own RUNPATH; the SVG one draws every icon;
 # - an icon GTK can't load, in any of the three screens it saves: the first screen, the sign-in,
-#   and the sample signed in, whose sidebar draws the app's own icons.
+#   and the sample signed in, whose sidebar draws the app's own icons. The container has no MIME
+#   database (shared-mime-info), so the AppImage's own is what lets gdk-pixbuf tell an SVG.
 set -euo pipefail
 app=$(realpath "$1")
 out=$(realpath "$2")
@@ -25,8 +26,8 @@ DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends \
   libx11-6 libx11-xcb1 libxcb1 libxext6 libxrender1 libxi6 libxrandr2 libxfixes3 \
   libxcursor1 libxinerama1 libxdamage1 libxcomposite1 libxkbcommon0 \
   libwayland-client0 libwayland-cursor0 libwayland-egl1 > /dev/null
-if dpkg -l | grep -qE "libgtk-4|libgtk-3|libadwaita"; then
-  echo "Not clean: GTK or libadwaita is installed." >&2
+if dpkg -l | grep -qE "libgtk-4|libgtk-3|libadwaita|shared-mime-info"; then
+  echo "Not clean: GTK, libadwaita or a MIME database is installed." >&2
   exit 1
 fi
 chmod +x "$app"
