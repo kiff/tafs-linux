@@ -403,12 +403,12 @@ pub fn card_unit_panel(w: &Rc<WordBook>, ask: &tafs_core::needs_you::CardUnitLin
     p.append(&text(&ask.title, 16, 600, &["tafs-ink"]));
     p.append(&text(&ask.words, 14, 400, &["tafs-soft"]));
     p.append(&text(&ask.history, 12, 400, &["tafs-dim"]));
-    if let Some(discuss) = &ask.discuss {
+    if let (Some(discuss), Some((taf, name))) = (&ask.discuss, &ask.coach) {
         let b = gtk::Button::with_label(discuss);
         b.add_css_class("tafs-link");
         b.set_halign(gtk::Align::Start);
         // `discussCardUnit`: Coach on its taf, its words in the box.
-        let (taf, name, say) = (ask.taf.clone(), ask.name.clone(), ask.coach_text.clone());
+        let (taf, name, say) = (taf.clone(), name.clone(), ask.coach_text.clone());
         b.connect_clicked(move |_| crate::coach_start::improve(&taf, &name, Some(&say)));
         p.append(&b);
     }

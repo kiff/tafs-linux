@@ -85,10 +85,9 @@ pub struct CardUnitLines {
     pub discuss: Option<String>,
     /// What goes in Coach's box when it's tapped (`coach_text`), for the person to send.
     pub coach_text: String,
-    /// The taf it asks for, by its id at tafs cloud and its name: Coach opens on it
-    /// (`discussCardUnit`).
-    pub taf: String,
-    pub name: String,
+    /// The taf Coach opens on (`discussCardUnit`), by its id at tafs cloud and its name: only with
+    /// `discuss`, for someone who may use Coach and manages it.
+    pub coach: Option<(String, String)>,
     pub dismiss: String,
 }
 
@@ -101,8 +100,7 @@ pub fn card_unit_lines(ask: &crate::waits::CardUnitException, discuss: bool) -> 
         history: ask.history.clone(),
         discuss: discuss.then(|| ask.action_title.clone()),
         coach_text: ask.coach_text.clone(),
-        taf: ask.taf.clone(),
-        name: ask.name.clone(),
+        coach: discuss.then(|| (ask.taf.clone(), ask.name.clone())),
         dismiss: ask.dismiss_title.clone(),
     }
 }

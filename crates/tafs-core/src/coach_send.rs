@@ -902,8 +902,6 @@ impl Conversation {
         self.thread.messages.retain(|m| m.id() != local);
     }
 
-    /// Sent: the chat it went into is the one shown, a new chat after a hand-over is followed,
-    /// and the copy takes tafs cloud's id. Coach is awaited until it answers.
     /// An improvement's first message taken (`improve`): the conversation goes on in the chat
     /// tafs cloud answered with, as any other, and Coach is at work.
     pub fn improved(&mut self, d: &Delivery, sent: &Sent, now: DateTime<Utc>) {
@@ -916,6 +914,8 @@ impl Conversation {
         self.awaiting = Some(now);
     }
 
+    /// Sent: the chat it went into is the one shown, a new chat after a hand-over is followed,
+    /// and the copy takes tafs cloud's id. Coach is awaited until it answers.
     pub fn delivered(&mut self, d: &Delivery, sent: &Sent, now: DateTime<Utc>) {
         self.sending = false;
         self.settle_chat(&sent.session);

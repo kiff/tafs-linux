@@ -93,7 +93,9 @@ out, as every other read does.
 - **Coach on a taf** (`improveTaf`, `askCoachAbout`): from a tafs cloud taf's page (Improve in
   Coach, a next step's Ask Coach, its work's fix, Reconnect it in Coach), its chat's Ask Coach card
   and a Card unit request's Discuss, Coach opens on a new conversation on that taf, with the words
-  in the box where there are some, nothing sent. Its first message goes to
+  in the box where there are some, nothing sent. Only for someone who may use Coach and manages
+  the taf, as the iPad's `askCoachAbout` and `canDiscuss`: anyone else reads the card or the line
+  without its button, and the page's Coach is Coach on no taf. Its first message goes to
   `POST /v1/tafs/{taf}/improve` with `{"text"}` alone (`improve`: tafs cloud adds the taf's
   context, so it takes no files and the files stay), the dots from the send; then the conversation
   goes on in the chat tafs cloud answered with, as any other. A new conversation, or another

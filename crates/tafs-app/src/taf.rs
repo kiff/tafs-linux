@@ -118,7 +118,7 @@ pub fn page(
     // Coach from a tafs cloud taf's page is Coach on this taf (`improveTaf`, `askCoachAbout`): a
     // new conversation whose first message goes with the taf's context, the words in the box.
     let open_coach: Rc<dyn Fn()> = match (&t.cloud_id, t.sample) {
-        (Some(id), false) => {
+        (Some(id), false) if t.manages && t.may_use_coach => {
             let (id, name) = (id.clone(), t.name.clone());
             Rc::new(move || crate::coach_start::improve(&id, &name, None))
         }
