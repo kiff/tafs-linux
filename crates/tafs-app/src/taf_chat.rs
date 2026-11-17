@@ -1399,7 +1399,7 @@ impl Page {
         h.set_halign(gtk::Align::End);
         let m = symbol(
             if u.halted {
-                "process-stop-symbolic"
+                crate::widgets::icon_for("hand.raised.fill")
             } else {
                 "dialog-error-symbolic"
             },

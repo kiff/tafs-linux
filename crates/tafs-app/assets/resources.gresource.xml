@@ -3,6 +3,7 @@
   <gresource prefix="/dev/kiff/tafs">
     <file>mascot.png</file>
     <file alias="icons/scalable/actions/tafs-bell-symbolic.svg">icons/tafs-bell-symbolic.svg</file>
+    <file alias="icons/scalable/actions/tafs-stack-symbolic.svg">icons/tafs-stack-symbolic.svg</file>
     <file alias="icons/scalable/actions/tafs-hand-raised-symbolic.svg">icons/tafs-hand-raised-symbolic.svg</file>
     <file alias="icons/scalable/actions/tafs-hand-raised-fill-symbolic.svg">icons/tafs-hand-raised-fill-symbolic.svg</file>
     <file alias="icons/scalable/actions/tafs-list-symbolic.svg">icons/tafs-list-symbolic.svg</file>

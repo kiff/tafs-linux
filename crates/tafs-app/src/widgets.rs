@@ -124,6 +124,7 @@ pub fn icon_for(sf: &str) -> &'static str {
         "list.bullet" => "tafs-list-symbolic",
         "calendar" => "tafs-calendar-symbolic",
         "chart.bar" => "tafs-chart-bar-symbolic",
+        "square.stack.3d.up" => "tafs-stack-symbolic",
         "app.connected.to.app.below.fill" => "tafs-apps-connected-symbolic",
         "person.crop.circle" => "tafs-person-circle-symbolic",
         "person.crop.circle.fill" => "tafs-person-circle-fill-symbolic",

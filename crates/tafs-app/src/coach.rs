@@ -2214,7 +2214,7 @@ fn unsent(page: &Rc<Page>, u: &UnsentLines, busy: bool) -> gtk::Widget {
     h.set_halign(gtk::Align::End);
     let m = symbol(
         if u.resume.is_some() {
-            "process-stop-symbolic"
+            crate::widgets::icon_for("hand.raised.fill")
         } else {
             "dialog-error-symbolic"
         },

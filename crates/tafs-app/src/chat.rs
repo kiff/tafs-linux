@@ -577,7 +577,7 @@ fn step_list(rows: &[tafs_core::coach_lines::StepRow]) -> gtk::Box {
             StepStatus::Done => ("tafs-checkmark-symbolic", "tafs-dim"),
             StepStatus::Error => ("dialog-error-symbolic", "tafs-no"),
             StepStatus::NotMade => ("edit-undo-symbolic", "tafs-dim"),
-            StepStatus::Held => ("process-stop-symbolic", "tafs-amber"),
+            StepStatus::Held => (crate::widgets::icon_for("hand.raised"), "tafs-amber"),
             StepStatus::Running => ("content-loading-symbolic", "tafs-dim"),
         };
         let mark = symbol(icon, 11);

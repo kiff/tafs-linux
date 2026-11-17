@@ -323,7 +323,8 @@ pub fn row(
 ) -> gtk::Button {
     let p = panel(false);
     let h = gtk::Box::new(gtk::Orientation::Horizontal, 12);
-    let hand = symbol("process-stop-symbolic", 16);
+    // The iPad's hand: open while it runs, filled once it's halted.
+    let hand = symbol(crate::widgets::icon_for("hand.raised"), 16);
     hand.add_css_class("tafs-no");
     h.append(&hand);
     let v = gtk::Box::new(gtk::Orientation::Vertical, 2);
@@ -338,7 +339,9 @@ pub fn row(
     chevron.add_css_class("tafs-dim");
     h.append(&chevron);
     p.append(&h);
-    let _ = stopped;
+    if stopped {
+        hand.set_icon_name(Some(crate::widgets::icon_for("hand.raised.fill")));
+    }
     let b = gtk::Button::new();
     b.set_child(Some(&p));
     b.add_css_class("tafs-plain");
@@ -369,6 +372,11 @@ pub fn row(
                 state.set_label(&line);
                 state.remove_css_class("tafs-dim");
                 state.add_css_class(if stopped { "tafs-no" } else { "tafs-dim" });
+                hand.set_icon_name(Some(crate::widgets::icon_for(if stopped {
+                    "hand.raised.fill"
+                } else {
+                    "hand.raised"
+                })));
             }
         }
     });

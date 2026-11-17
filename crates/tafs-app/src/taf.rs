@@ -396,11 +396,23 @@ pub fn page(
     let card_scroller = gtk::ScrolledWindow::new();
     card_scroller.set_hscrollbar_policy(gtk::PolicyType::Never);
     let card = card_pane(&w, t, &open_coach, &open_usage);
-    // `HaltRow(tafID:framed:)`, at the Card's foot as on the iPad.
+    // `HaltRow(tafID:framed:)`, as on the iPad: after the Card's own lines and How this is
+    // counted, before Changes to how it runs, Usage and Revoke.
     if let Some(row) = halt_row {
-        row.set_margin_start(16);
-        row.set_margin_end(16);
-        card.append(&row);
+        let next = ["taf.changes", "taf.usage"].iter().find_map(|n| {
+            let mut c = card.first_child();
+            while let Some(w) = c {
+                if w.widget_name() == *n && w.is_visible() {
+                    return Some(w);
+                }
+                c = w.next_sibling();
+            }
+            None
+        });
+        match next.and_then(|n| n.prev_sibling()) {
+            Some(before) => card.insert_child_after(&row, Some(&before)),
+            None => card.append(&row),
+        }
     }
     card_scroller.set_child(Some(&card));
     card_scroller.set_vexpand(true);
@@ -744,6 +756,18 @@ fn card_pane(
     let f = draw.borrow().clone();
     if let Some(f) = f {
         f();
+    }
+    // Changes to how it runs: its versions, for whoever manages a tafs cloud taf.
+    if let (false, true, Some(id)) = (t.sample, t.manages, &t.cloud_id) {
+        pane.append(&crate::versions::changes_row(
+            w.clone(),
+            crate::versions::VersionsTaf {
+                id: id.clone(),
+                name: t.name.clone(),
+                chat: t.chat.clone(),
+            },
+            t.setup.clone(),
+        ));
     }
     // Its Usage row: its credits this period and its runs, in Plan & usage (`TafCreditsView`), for
     // whoever manages a tafs cloud taf, signed in.

@@ -87,6 +87,16 @@ async fn read_setup(w: &WordBook, source: &SetupSource, id: &str) -> Result<Setu
     .unwrap_or_else(|_| Err(String::new()))
 }
 
+/// The taf's versions as Setup's read says them (`tafSetups[taf].versions`): their title and
+/// summary in tafs cloud's words; none when it can't be read.
+pub async fn versions_of(
+    w: &WordBook,
+    source: &SetupSource,
+    id: &str,
+) -> Option<tafs_core::setup::Versions> {
+    read_setup(w, source, id).await.ok().map(|s| s.versions)
+}
+
 trait OkOrDefault<T> {
     fn ok_or_default(self) -> Result<T, String>;
 }
