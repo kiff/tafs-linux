@@ -157,7 +157,7 @@ pub fn run_now(token: &str, languages: &[&str], taf: &str) -> Result<Answer, Kif
 /// the session. It does no work and signs nothing.
 pub fn send_again(token: &str, languages: &[&str], path: &str) -> Result<Answer, KiffError> {
     let url = format!("{}{path}", tafs_core::home::TAFS_CLOUD);
-    if !may_send_to(&url) {
+    if !may_send_to(&url) || tafs_core::signed::signed_at_cloud("POST", path) {
         return Err(KiffError::Unreadable);
     }
     Kiff::read(
@@ -181,7 +181,11 @@ pub fn cloud_send(
     body: Option<&[u8]>,
 ) -> Result<Answer, KiffError> {
     let url = format!("{}{path}", tafs_core::home::TAFS_CLOUD);
-    if !may_send_to(&url) || !matches!(method, "POST" | "PUT" | "PATCH" | "DELETE") {
+    // What the device signs at tafs cloud is never sent from here, whatever builds its path.
+    if !may_send_to(&url)
+        || !matches!(method, "POST" | "PUT" | "PATCH" | "DELETE")
+        || tafs_core::signed::signed_at_cloud(method, path)
+    {
         return Err(KiffError::Unreadable);
     }
     let request = agent()
@@ -208,7 +212,10 @@ pub fn set_aside(
     proof: Option<&str>,
 ) -> Result<Answer, KiffError> {
     let url = format!("{}{path}", tafs_core::home::TAFS_CLOUD);
-    if !may_send_to(&url) || tafs_core::signed::signed("POST", path) {
+    if !may_send_to(&url)
+        || tafs_core::signed::signed("POST", path)
+        || tafs_core::signed::signed_at_cloud("POST", path)
+    {
         return Err(KiffError::Unreadable);
     }
     let mut request = agent()
@@ -232,7 +239,7 @@ pub fn answer_knock(
     body: &[u8],
 ) -> Result<Answer, KiffError> {
     let url = format!("{}{path}", tafs_core::home::TAFS_CLOUD);
-    if !may_send_to(&url) {
+    if !may_send_to(&url) || tafs_core::signed::signed_at_cloud("POST", path) {
         return Err(KiffError::Unreadable);
     }
     Kiff::read(

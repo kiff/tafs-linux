@@ -147,6 +147,30 @@ pub fn signed(method: &str, path: &str) -> bool {
         || answers_hold(method, path)
 }
 
+/// Whether tafs cloud takes `method` on `path` only after the device has checked the person or
+/// signed with its approval key (`useVersion`, `removeTaf`, a trial opened on a KIFF draft the
+/// phone signed, a trial installed): a version switched to or made live, a trial opened or
+/// installed, a taf removed for good. This computer never sends one, by path as well as by `Act`.
+pub fn signed_at_cloud(method: &str, path: &str) -> bool {
+    if path.contains("//") || path.contains("/./") || path.contains("/../") || path.ends_with("/..")
+    {
+        return true;
+    }
+    let path = path.split(['?', '#']).next().unwrap_or(path);
+    let path = path.trim_end_matches('/');
+    let p = parts(path);
+    if !path.starts_with("/v1/tafs/") || p.len() < 4 || p[3].is_empty() {
+        return false;
+    }
+    matches!(
+        (method, &p[4..]),
+        ("DELETE", [])
+            | ("POST", ["versions", _, "switch" | "live"])
+            | ("PUT", ["trial"])
+            | ("POST", ["trial", "install"])
+    )
+}
+
 /// A path part, escaped (`KIFFClient.escaped`).
 fn escaped(v: &str) -> String {
     crate::access::escaped(v)
@@ -465,6 +489,37 @@ mod tests {
                 subject: Some("auth0|rae".into()),
             },
         ]
+    }
+
+    #[test]
+    fn what_the_device_signs_at_tafs_cloud_is_never_sent() {
+        for (m, p) in [
+            ("DELETE", "/v1/tafs/t1"),
+            ("DELETE", "/v1/tafs/t1/"),
+            ("POST", "/v1/tafs/t1/versions/3/switch"),
+            ("POST", "/v1/tafs/t1/versions/3/live?x=1"),
+            ("PUT", "/v1/tafs/t1/trial"),
+            ("POST", "/v1/tafs/t1/trial/install"),
+            ("POST", "/v1/tafs/t1//versions/3/live"),
+        ] {
+            assert!(signed_at_cloud(m, p), "{m} {p}");
+        }
+        // What the iPad sends unsigned: a door, a memory note, the trial's chat, going back.
+        for (m, p) in [
+            ("DELETE", "/v1/tafs/t1/doors/d1"),
+            ("DELETE", "/v1/tafs/t1/memory/n1"),
+            ("POST", "/v1/tafs/t1/trial/messages"),
+            ("DELETE", "/v1/tafs/t1/trial"),
+            ("DELETE", "/v1/tafs/t1/switching"),
+            ("POST", "/v1/home/coach-waiting/set-aside"),
+        ] {
+            assert!(!signed_at_cloud(m, p), "{m} {p}");
+        }
+        // Every act the device signs at tafs cloud is one of them.
+        for act in acts().iter().filter(|a| a.at_device()) {
+            let (m, p) = act.route();
+            assert!(signed_at_cloud(m, &p), "{act:?}");
+        }
     }
 
     #[test]

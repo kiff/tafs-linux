@@ -45,6 +45,11 @@ a path that isn't plain (`//`, `/./`, `/../`) counts as signed, so no spelling o
 can be made unsigned. Each signed act (`signed::Act`) names the call the iPad would make, and the tests check
 that none of them can be made.
 
+At tafs cloud, `signed::signed_at_cloud` names what the device checks or signs before the iPad
+sends it: a version switched to or made live, a trial opened (on a KIFF draft the phone signed)
+or installed, and a taf removed for good. Every write to tafs cloud (`kiff::cloud_send` and the
+rest) refuses those routes by path, whatever built it, read as `signed` reads a route.
+
 The acts drawn this way: People & groups' changes, signing another device out, and the
 account's time zone (`docs/account.md`); declining a request (`docs/usage.md`); sharing a taf and taking a share away (`docs/taf.md`); connecting an app
 once its taf is picked (nothing is started, so nothing waits at planque), removing an app's
