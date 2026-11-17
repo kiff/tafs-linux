@@ -365,6 +365,31 @@ them over Setup, with `--knob crates/tafs-app/fixtures/taf-knob-setup.json` (syn
 `Screenshots.setupKnob` with a version waiting), `--doors` and `--work`; nothing is sent. CI's
 `taf-starts` and `taf-results`.
 
+## Sharing it
+
+Under the head row, for whoever manages the taf, signed in with KIFF (`headerLine`'s `ShareLine`):
+**Share** (a capsule with the share mark, 15 semibold) and who it's shared with beside it (14,
+soft): "Shared with Finance and sam@example.test", "Shared with everyone" for KIFF's default group
+alone, "Not shared" (the reader is never named), "Sharing…" until read. The shares
+(`GET /v1/agents/{agent}/grants`), groups and people are read as the session, and again when the
+sheet closes (`share.rs`, `tafs-core/share.rs`).
+
+Share opens its sheet (`ShareTafSheet`), "Share {taf}", in two steps:
+1. **Who uses it**: each group, its people under it, managers first ("Maria (manager), Ana"), and
+   each person with their badge, each picked with a circle; "Choose someone on the account." under
+   them. Cancel at the start; Next once read and something changed.
+2. **What it means**: "Who gets {taf}" (or "{taf} won't be shared"), then each person's own chats,
+   who gets it (a group with its people, everyone, a person) and who stops using it. Back at the
+   start. **Share** at the end is signed on the iPad (one Face ID for every grant added and taken
+   away, `signsSetup`'s grants route), so its tap says this computer can't approve, and nothing is
+   sent.
+
+The line sits under the head row from `shell.rs`, as the taf page's own file belongs to another
+port. Screenshots: `--home shared/contracts/home.json --access
+crates/tafs-app/fixtures/access-manage.json --people crates/tafs-app/fixtures/people-kiff.json`
+with `--page share:taf-aaaa0000000000000000` (step one, CI's `share`) or `share-step2:…` (step two
+with a change picked and Share tapped, CI's `share-step2`).
+
 ## Not yet
 
 - **The sample's Chat**, there, dimmed. A tafs cloud taf's page opens on its chat ([chat.md](chat.md)).

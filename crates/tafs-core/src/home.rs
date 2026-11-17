@@ -346,6 +346,11 @@ pub struct HomeTaf {
 }
 
 impl HomeTaf {
+    /// Where Finish setting up opens, for an agent whose setup stopped partway (`finish`).
+    pub fn finish_chat(&self) -> Option<FinishChat> {
+        FinishChat::read(&self.finish)
+    }
+
     /// Its key in the app: tafs cloud's id, else its KIFF agent's.
     pub fn key(&self) -> String {
         self.id
@@ -377,6 +382,46 @@ pub struct DiscardWords {
     pub no: String,
 }
 
+/// Where Finish setting up opens (`HomeTaf.Finish`): Coach's taf and the chat where the setup
+/// stopped, each trimmed; one the app can open has both and its words (`usable`).
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct FinishChat {
+    pub taf: String,
+    pub session: String,
+    pub words: String,
+}
+
+impl FinishChat {
+    /// Read as `Finish.init(from:)`: anything not an object, or a field missing or not a string,
+    /// reads as empty.
+    pub fn read(v: &Value) -> Option<FinishChat> {
+        let f = v.as_object()?;
+        let text = |k: &str| {
+            f.get(k)
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .unwrap_or("")
+                .to_string()
+        };
+        Some(FinishChat {
+            taf: text("taf"),
+            session: text("session"),
+            words: text("words"),
+        })
+    }
+
+    /// `usable`: a chat and its words.
+    pub fn usable(&self) -> bool {
+        !self.taf.is_empty() && !self.session.is_empty() && !self.words.is_empty()
+    }
+
+    /// `canFinishSetup`: usable, for someone who may use Coach, signed in, and only in Coach's
+    /// own chat (`coach`, Coach's id at tafs cloud, once read).
+    pub fn can_finish(&self, kiff: bool, may_use_coach: bool, coach: Option<&str>) -> bool {
+        kiff && may_use_coach && self.usable() && coach == Some(self.taf.as_str())
+    }
+}
+
 /// A taf whose setup stopped partway (`TafsCloud.Home.SettingUp`), read as the iPad's own
 /// `init(from:)` reads it: whatever is missing or of the wrong kind reads as empty, so an item never
 /// fails Home, and one without a name is skipped.
@@ -390,6 +435,8 @@ pub struct SettingUp {
     pub finish: Option<String>,
     /// Discard, for the person whose setup it was.
     pub discard: Option<DiscardWords>,
+    /// Where Finish setting up opens, as sent (`finish`); none when it isn't an object.
+    pub chat: Option<FinishChat>,
 }
 
 impl SettingUp {
@@ -401,10 +448,11 @@ impl SettingUp {
                 .trim()
                 .to_string()
         };
-        let finish = v.get("finish").filter(|f| f.is_object()).and_then(|f| {
-            let (taf, session, words) = (text(f, "taf"), text(f, "session"), text(f, "words"));
-            (!taf.is_empty() && !session.is_empty() && !words.is_empty()).then_some(words)
-        });
+        let chat = v.get("finish").and_then(FinishChat::read);
+        let finish = chat
+            .as_ref()
+            .filter(|f| f.usable())
+            .map(|f| f.words.clone());
         let discard = v
             .get("discard")
             .and_then(|d| d.get("words"))
@@ -432,6 +480,7 @@ impl SettingUp {
             color: v.get("color").and_then(Value::as_i64).unwrap_or(0),
             finish,
             discard,
+            chat,
         }
     }
 
@@ -941,5 +990,42 @@ pub fn long_date(language: &str, day: chrono::NaiveDate) -> String {
     match language {
         "en" => format!("{short}, {}", day.year()),
         _ => format!("{short} {}", day.year()),
+    }
+}
+
+#[cfg(test)]
+mod finish_tests {
+    use super::*;
+
+    #[test]
+    fn finish_setting_up_opens_only_coach_s_own_chat() {
+        let f = FinishChat::read(&serde_json::json!({
+            "taf": " setup-coach ", "session": "chat_1", "words": "Needs you to finish setting up"
+        }))
+        .unwrap();
+        assert_eq!(
+            (f.taf.as_str(), f.session.as_str()),
+            ("setup-coach", "chat_1")
+        );
+        assert!(f.usable());
+        assert!(f.can_finish(true, true, Some("setup-coach")));
+        // Another Coach's chat, Coach not read, the sample, or someone who may not use Coach.
+        assert!(!f.can_finish(true, true, Some("other")));
+        assert!(!f.can_finish(true, true, None));
+        assert!(!f.can_finish(false, true, Some("setup-coach")));
+        assert!(!f.can_finish(true, false, Some("setup-coach")));
+        // Lenient as the iPad's: a field of another kind reads as empty, and isn't usable.
+        let half =
+            FinishChat::read(&serde_json::json!({"taf": 3, "session": "chat_1", "words": "w"}))
+                .unwrap();
+        assert_eq!(half.taf, "");
+        assert!(!half.usable());
+        assert_eq!(FinishChat::read(&serde_json::json!("chat_1")), None);
+        // A setting-up item keeps where it opens, and its words only when usable.
+        let s = SettingUp::read(&serde_json::json!({
+            "name": "Invoice chaser", "finish": {"taf": "c", "session": "", "words": "Finish"}
+        }));
+        assert_eq!(s.finish, None);
+        assert_eq!(s.chat.map(|c| c.taf), Some("c".to_string()));
     }
 }

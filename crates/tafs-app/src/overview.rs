@@ -32,12 +32,19 @@ pub fn page(o: &OverviewLines, open: Rc<dyn Fn(Selection)>) -> gtk::Widget {
     head.append(&text(&o.subtitle, 14, 400, &["tafs-dim"]));
     column.append(&head);
     // Board 10, the Overview's header (`Illustration.overview`); with no taf yet, board 2
-    // (`Illustration.noTafs`) in its place, above the grid's "No tafs yet".
-    column.append(&if o.empty.is_some() {
-        crate::illustrations::no_tafs()
-    } else {
-        crate::illustrations::overview()
-    });
+    // (`Illustration.noTafs`) in its place, above the grid's "No tafs yet"; the mascot while the
+    // list is read or when it couldn't be.
+    match o.board() {
+        tafs_core::overview::Board::Overview => {
+            column.append(&crate::illustrations::overview());
+        }
+        tafs_core::overview::Board::NoTafs => column.append(&crate::illustrations::no_tafs()),
+        tafs_core::overview::Board::Mascot => {
+            let m = crate::widgets::mascot(72);
+            m.set_halign(gtk::Align::Center);
+            column.append(&m);
+        }
+    }
 
     if let Some(label) = &o.needs_you_label {
         let section = gtk::Box::new(gtk::Orientation::Vertical, 8);

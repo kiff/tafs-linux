@@ -33,8 +33,8 @@ At most 720 wide, centred, 24 from the sides:
 
 - tafs cloud's line (17 semibold);
 - **Say it in your own words** (`OwnWordsRow`: title 16 semibold, line 14 soft, a chevron), for
-  someone who may use Coach. It opens Coach with nothing in its box: there, dimmed, until Coach is
-  ported;
+  someone who may use Coach. It opens Coach in a new conversation, on no taf (`startNewTaf`), with
+  what was in its box kept;
 - a chip per category, with two or more: in its colour where tafs cloud sent one (its words and
   edge, and its fill once picked). Picking one narrows the list; picking it again shows every
   recipe;
@@ -54,13 +54,17 @@ A recipe opens its sheet (`RecipeSheet`), over the window: the problem it ends (
 (15), what it costs today (14, soft), each zone of its Card in a panel (Does on its own, Asks you
 first, Never does: `labels`' words; a zone the Card leaves empty isn't one), its proof run's line
 with a check, what that run reported, and **Hand it to Coach** (`labels.hand`) for someone who may
-use Coach: there, dimmed, until Coach is ported.
+use Coach (`handRecipeToCoach`): the sheet closes, and Coach opens beside the sidebar in a new
+conversation with the recipe's words (`say`) in its box, for the person to edit and send. Nothing
+is sent. How Coach is opened from elsewhere is `coach_start.rs`; Coach takes it as it opens.
 
 ## Screenshots
 
 `--home crates/tafs-app/fixtures/home-empty.json --recipes crates/tafs-app/fixtures/recipes.json`
 (both synthetic) draws the pane, CI's `recipes`; with `--page recipe:refunds`, the sheet, as
-someone who may use Coach, CI's `recipe-sheet`.
+someone who may use Coach, CI's `recipe-sheet`. `--page coach-hand:refunds` (with `--coach`
+crates/tafs-app/fixtures/coach-empty.json) is Coach as Hand it to Coach leaves it, CI's
+`coach-hand`.
 
 ## The jobs' gallery
 
@@ -79,18 +83,23 @@ In the sidebar, after Your tafs:
 
 Both open the gallery browsing: its title ("Explore jobs"), "All jobs" over the list, then Home's
 list of every job (chips and categories, as above). A job's sheet there is read only: its one
-button is "Try it with Coach" (`words.try`), for someone who may use Coach, there, dimmed; the
-label over its sample is the gallery's (`words.sample`). The sheet's words are the gallery's
+button is "Try it with Coach" (`words.try`), for someone who may use Coach; the label over its
+sample is the gallery's (`words.sample`). The sheet's words are the gallery's
 `labels`, else `/v1/recipes`'s.
 
-**+ New** opens the gallery to start a taf with Coach (its own-words row, "Hand it to Coach"):
-with Coach.
+**+ New** opens the gallery to start a taf (`GalleryMode.create`): its title is the gallery's own
+(`words.title`), and for someone who may use Coach it leads with **Say it in your own words**
+(`words.own_words`, `own_words_line`) with board 8 (a new taf: words in a bubble becoming a card)
+beside it, then "All jobs" and every job; a job's sheet hands it with its own words
+(`labels.hand`). Either choice closes the gallery first, then Coach opens over Home: the own words
+in a new conversation, a job with its words in the box (`actOnGalleryChoice`). A job from the
+strip opens the same sheet. Without the gallery, + New opens Coach in a new conversation.
 
 `--home shared/contracts/home.json --gallery crates/tafs-app/fixtures/gallery.json` (synthetic)
 draws the Explore row and the strip, CI's `gallery-strip`; with `--page gallery` (and
-`--recipes`), the gallery, CI's `gallery`.
+`--recipes`), the gallery, CI's `gallery`; with `--page new-taf`, as + New opens it, CI's
+`new-taf`.
 
 ## Not yet
 
-- **Coach:** "Say it in your own words" and "Hand it to Coach" open it.
-- **+ New**, which opens the gallery to start a taf with Coach.
+Nothing: every branch of `HomeRecipes` and `RecipeGallery` is drawn and acts.

@@ -21,6 +21,44 @@ pub const SIDEBAR_WIDTH: i32 = 320;
 
 pub struct Shell {
     pub root: gtk::Box,
+    /// What's open beside the sidebar, for a redraw to open it again.
+    pub selection: Rc<RefCell<Option<Selection>>>,
+    /// Where the Unreachable line goes, at the sidebar's foot.
+    unreachable: gtk::Box,
+}
+
+impl Shell {
+    /// `UnreachableLine`: KIFF can't be reached just now (with "trying again" while the app tries
+    /// by itself), and Status, which opens KIFF's status page; nothing when all is well.
+    pub fn set_unreachable(&self, line: Option<&tafs_core::sidebar::UnreachableLine>) {
+        unreachable_line(&self.unreachable, line);
+    }
+}
+
+fn unreachable_line(slot: &gtk::Box, line: Option<&tafs_core::sidebar::UnreachableLine>) {
+    while let Some(c) = slot.first_child() {
+        slot.remove(&c);
+    }
+    slot.set_visible(line.is_some());
+    let Some(line) = line else {
+        return;
+    };
+    let dot = gtk::Box::new(gtk::Orientation::Horizontal, 0);
+    dot.add_css_class("tafs-dot");
+    dot.add_css_class("tafs-dot7");
+    dot.set_valign(gtk::Align::Center);
+    slot.append(&dot);
+    let words = text(&line.words, 12, 400, &["tafs-dim"]);
+    words.set_hexpand(false);
+    slot.append(&words);
+    let status = gtk::LinkButton::with_label(line.url, &line.status);
+    status.add_css_class("tafs-unreachable-status");
+    status.set_valign(gtk::Align::Center);
+    slot.append(&status);
+    slot.update_property(&[gtk::accessible::Property::Label(&format!(
+        "{}, {}",
+        line.words, line.status
+    ))]);
 }
 
 /// The screens ported so far, as they read now, and what Account's actions do.
@@ -65,6 +103,11 @@ pub struct Screens {
     pub coach_listed: Rc<Vec<tafs_core::coach_lines::Listed>>,
     /// "Your brief", in Needs you's place once tafs cloud sends one.
     pub brief: Option<Rc<crate::brief::BriefPane>>,
+    /// Signed in with KIFF: where a taf's shares are read, each taf's KIFF agent by its key, and
+    /// the account's email, for `ShareLine` on a taf's page.
+    pub share: Option<crate::share::ShareSource>,
+    pub share_agents: Rc<std::collections::BTreeMap<String, String>>,
+    pub account_email: Option<String>,
 }
 
 /// Builds the shell. `view_only` shows the notice that this computer can't approve yet.
@@ -100,7 +143,11 @@ pub fn build(
         coach,
         coach_listed,
         brief,
+        share,
+        share_agents,
+        account_email,
     } = screens;
+    let has_coach = !matches!(coach, crate::coach::CoachSource::None);
     let entries = Rc::new(record.entries.clone());
     let lines = model.lines(&w).unwrap_or_else(|e| panic!("{e}"));
     let root = gtk::Box::new(gtk::Orientation::Horizontal, 0);
@@ -122,8 +169,17 @@ pub fn build(
     let selection: Rc<RefCell<Option<Selection>>> = Rc::new(RefCell::new(None));
     let rows: Rc<RefCell<Vec<(gtk::ListBoxRow, Selection)>>> = Rc::new(RefCell::new(Vec::new()));
     let has_tafs = !model.tafs.is_empty();
-    let (sidebar, list, account_icon, account_button, coach_button, plan_button) =
-        sidebar(&w, &lines, &rows, gallery.as_ref(), has_tafs);
+    let finishes: Rc<RefCell<Vec<(gtk::ListBoxRow, String)>>> = Rc::default();
+    let foot = sidebar(&w, &lines, &rows, &finishes, gallery.as_ref(), has_tafs);
+    let Foot {
+        pane: sidebar,
+        list,
+        account_icon,
+        account: account_button,
+        coach: coach_button,
+        plan: plan_button,
+        unreachable,
+    } = foot;
     root.append(&sidebar);
     root.append(&detail);
 
@@ -359,7 +415,7 @@ pub fn build(
                                 _ => None,
                             };
                             let (o1, o2, o3) = (open.clone(), open.clone(), open.clone());
-                            crate::taf::page(
+                            let page = crate::taf::page(
                                 w.clone(),
                                 t,
                                 entries.clone(),
@@ -367,7 +423,46 @@ pub fn build(
                                 Rc::new(move || o1(Selection::Usage)),
                                 Rc::new(move || o2(Selection::Coach)),
                                 Rc::new(move || o3(Selection::ConnectApps)),
-                            )
+                            );
+                            // Who it's shared with, and Share, under the head row (`headerLine`'s
+                            // `ShareLine`): the taf's manager's to see, signed in with KIFF.
+                            if let (Some(source), Some(agent), true) =
+                                (&share, share_agents.get(&t.key), t.manages)
+                            {
+                                let taf = crate::share::ShareTaf {
+                                    agent: agent.clone(),
+                                    name: t.name.clone(),
+                                    manages: t.manages,
+                                    email: account_email.clone(),
+                                };
+                                let line = crate::share::line(
+                                    w.clone(),
+                                    source.clone(),
+                                    taf.clone(),
+                                    tafs_core::sidebar::Mode::Kiff,
+                                );
+                                if let Ok(outer) = page.clone().downcast::<gtk::Box>() {
+                                    outer.insert_child_after(&line, outer.first_child().as_ref());
+                                }
+                                // `--page share:<key>`: its sheet open, for a screenshot.
+                                if crate::share::OPEN
+                                    .with(|o| o.borrow().as_deref() == Some(&t.key))
+                                {
+                                    crate::share::OPEN.with(|o| o.borrow_mut().take());
+                                    let (w, source) = (w.clone(), source.clone());
+                                    gtk::glib::idle_add_local_once(move || {
+                                        crate::share::sheet(
+                                            w,
+                                            source,
+                                            taf,
+                                            tafs_core::sidebar::Mode::Kiff,
+                                            &line,
+                                            Rc::new(|| {}),
+                                        );
+                                    });
+                                }
+                            }
+                            page
                         }
                         None => screen_page(&title).upcast::<gtk::Widget>(),
                     }
@@ -429,7 +524,13 @@ pub fn build(
 
     {
         let (select, rows) = (select.clone(), rows.clone());
+        let finishes = finishes.clone();
         list.connect_row_activated(move |_, row| {
+            // Finish setting up: Coach on the chat where the setup stopped (`finishSetup`).
+            if let Some((_, session)) = finishes.borrow().iter().find(|(r, _)| r == row) {
+                crate::coach_start::finish(session);
+                return;
+            }
             if let Some((_, s)) = rows.borrow().iter().find(|(r, _)| r == row) {
                 select(s.clone());
             }
@@ -449,8 +550,34 @@ pub fn build(
         plan.connect_clicked(move |_| select(Selection::Usage));
     }
     *holder.borrow_mut() = Some(select.clone());
+    // Coach opened from elsewhere (a new taf, a job handed over, a setup to finish): afresh, even
+    // when it's open already, so it opens on what was asked.
+    if has_coach {
+        let (select, selection) = (select.clone(), selection.clone());
+        crate::coach_start::set_opener(Some(Rc::new(move || {
+            *selection.borrow_mut() = None;
+            select(Selection::Coach);
+        })));
+    } else {
+        crate::coach_start::set_opener(None);
+    }
     select(first);
-    Shell { root }
+    Shell {
+        root,
+        selection,
+        unreachable,
+    }
+}
+
+/// The sidebar and the parts of it the window acts on.
+struct Foot {
+    pane: gtk::Box,
+    list: gtk::ListBox,
+    account_icon: gtk::Image,
+    account: gtk::Button,
+    coach: Option<gtk::Button>,
+    plan: Option<gtk::Button>,
+    unreachable: gtk::Box,
 }
 
 /// The sidebar: its list (the brand, the screens, NEEDS YOU, YOUR TAFS) and its foot.
@@ -458,16 +585,10 @@ fn sidebar(
     w: &WordBook,
     lines: &SidebarLines,
     rows: &Rc<RefCell<Vec<(gtk::ListBoxRow, Selection)>>>,
+    finishes: &Rc<RefCell<Vec<(gtk::ListBoxRow, String)>>>,
     gallery: Option<&Rc<crate::recipes::GalleryPane>>,
     has_tafs: bool,
-) -> (
-    gtk::Box,
-    gtk::ListBox,
-    gtk::Image,
-    gtk::Button,
-    Option<gtk::Button>,
-    Option<gtk::Button>,
-) {
+) -> Foot {
     let pane = gtk::Box::new(gtk::Orientation::Vertical, 0);
     pane.add_css_class("tafs-sidebar");
     pane.set_size_request(SIDEBAR_WIDTH, -1);
@@ -600,9 +721,9 @@ fn sidebar(
             add(taf_row(taf), Some(Selection::Taf(taf.key.clone())));
         }
         // A taf being set up, among the tafs, by its name, with no state. Its line is Finish setting
-        // up's words, from tafs cloud; finishing it opens Coach, which isn't on this computer, so
-        // the row opens nothing. Discard, for the person whose setup it was, is signed, so it's
-        // there, dimmed.
+        // up's words, from tafs cloud; where Coach can finish it (`canFinishSetup`), the row opens
+        // Coach on the chat where the setup stopped, else nothing. Discard, for the person whose
+        // setup it was, is signed, so it's there, dimmed.
         for (taf, discard) in &lines.setting_up {
             let b = gtk::Box::new(gtk::Orientation::Horizontal, 12);
             b.append(&avatar(&taf.initial, taf.color_index, 34));
@@ -628,7 +749,15 @@ fn sidebar(
             } else {
                 format!("{}, {}", taf.name, taf.now)
             })]);
-            add(row, None);
+            match lines.finish.get(&taf.key) {
+                Some(session) => {
+                    row.set_widget_name("home.finish-setup");
+                    row.set_selectable(false);
+                    finishes.borrow_mut().push((row.clone(), session.clone()));
+                    list.append(&row);
+                }
+                None => add(row, None),
+            }
             if let Some(words) = discard {
                 let d = gtk::Button::with_label(words);
                 d.add_css_class("tafs-outline");
@@ -666,7 +795,9 @@ fn sidebar(
             b.add_css_class("tafs-plain");
             b.set_widget_name("home.explore");
             let pane = pane.clone();
-            b.connect_clicked(move |b| crate::recipes::gallery(&pane, b));
+            b.connect_clicked(move |b| {
+                crate::recipes::gallery(&pane, crate::recipes::GalleryMode::Browse, b)
+            });
             add(sidebar_row(&b, 44), None);
         }
         // A few jobs the account doesn't run yet, where tafs cloud shows them (`RecipeStrip`):
@@ -704,7 +835,9 @@ fn sidebar(
                 b.add_css_class("tafs-plain");
                 b.set_widget_name("home.recipe-strip.all");
                 let pane = pane.clone();
-                b.connect_clicked(move |b| crate::recipes::gallery(&pane, b));
+                b.connect_clicked(move |b| {
+                    crate::recipes::gallery(&pane, crate::recipes::GalleryMode::Browse, b)
+                });
                 add(sidebar_row(&b, 44), None);
             }
         }
@@ -714,7 +847,17 @@ fn sidebar(
     if let Some(label) = &lines.others_label {
         add(section(label, false), None);
         for taf in &lines.others {
-            add(taf_row(taf), Some(Selection::Taf(taf.key.clone())));
+            // Its setup stopped partway: Coach's chat where it stopped, where Coach can finish it.
+            match lines.finish.get(&taf.key) {
+                Some(session) => {
+                    let row = taf_row(taf);
+                    row.set_widget_name("home.finish-setup");
+                    row.set_selectable(false);
+                    finishes.borrow_mut().push((row.clone(), session.clone()));
+                    list.append(&row);
+                }
+                None => add(taf_row(taf), Some(Selection::Taf(taf.key.clone()))),
+            }
         }
     }
 
@@ -730,6 +873,32 @@ fn sidebar(
     foot.set_margin_end(16);
     foot.set_margin_top(12);
     foot.set_margin_bottom(12);
+    // + New, signed in with KIFF (`canStartTafs`): every ready-made job where tafs cloud sends the
+    // gallery (`.create`), else Coach in a new conversation (`startNewTaf`).
+    if let Some(words) = &lines.start_new {
+        let b = gtk::Button::new();
+        b.add_css_class("tafs-primary");
+        let inner = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+        inner.set_halign(gtk::Align::Center);
+        inner.append(&symbol("list-add-symbolic", 15));
+        inner.append(&one_line(words, 15, 600, &[]));
+        b.set_child(Some(&inner));
+        b.update_property(&[gtk::accessible::Property::Label(words)]);
+        b.set_widget_name("home.new");
+        let gallery = gallery.cloned();
+        b.connect_clicked(move |b| match &gallery {
+            Some(pane) => {
+                crate::recipes::gallery(pane, crate::recipes::GalleryMode::Create, b);
+            }
+            None => crate::coach_start::new_taf(),
+        });
+        foot.append(&b);
+    }
+    // KIFF can't be reached just now, with the status page; nothing when all is well.
+    let unreachable = gtk::Box::new(gtk::Orientation::Horizontal, 6);
+    unreachable.set_widget_name("unreachable");
+    unreachable_line(&unreachable, lines.unreachable.as_ref());
+    foot.append(&unreachable);
     // The plan, only when it needs the owner (`PlanLine`): tafs cloud's words, then Plan & usage,
     // which it opens.
     let mut plan_button = None;
@@ -789,7 +958,15 @@ fn sidebar(
     account.update_property(&[gtk::accessible::Property::Label(&lines.account_accessible)]);
     foot.append(&account);
     pane.append(&foot);
-    (pane, list, icon, account, coach_button, plan_button)
+    Foot {
+        pane,
+        list,
+        account_icon: icon,
+        account,
+        coach: coach_button,
+        plan: plan_button,
+        unreachable,
+    }
 }
 
 /// A row's line colour: dim, or what went wrong in the amber, or red when it's failing.

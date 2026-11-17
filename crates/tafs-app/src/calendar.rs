@@ -259,6 +259,39 @@ pub fn page(
             gtk::glib::ControlFlow::Continue
         });
     }
+    // Pull to refresh (`.refreshable`): pulled past the top, the range is read again; Ctrl+R or F5
+    // too, a computer's way to ask. Not while a read is on its way.
+    let refresh: Rc<dyn Fn()> = {
+        let (data, load, redraw) = (data.clone(), load.clone(), redraw.clone());
+        Rc::new(move || {
+            if data.borrow().reading.is_some() {
+                return;
+            }
+            load(true);
+            redraw();
+        })
+    };
+    {
+        let refresh = refresh.clone();
+        scroller.connect_edge_overshot(move |_, edge| {
+            if edge == gtk::PositionType::Top {
+                refresh();
+            }
+        });
+    }
+    let keys = gtk::ShortcutController::new();
+    keys.set_scope(gtk::ShortcutScope::Managed);
+    for trigger in ["<Control>r", "F5"] {
+        let refresh = refresh.clone();
+        keys.add_shortcut(gtk::Shortcut::new(
+            gtk::ShortcutTrigger::parse_string(trigger),
+            Some(gtk::CallbackAction::new(move |_, _| {
+                refresh();
+                gtk::glib::Propagation::Stop
+            })),
+        ));
+    }
+    outer.add_controller(keys);
     load(false);
     redraw();
     crate::widgets::ground(&outer);

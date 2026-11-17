@@ -131,6 +131,8 @@ pub fn sidebar(
         setting_up: vec![],
         plan: None,
         brief_tab: None,
+        finish: Default::default(),
+        unreachable: None,
     })
 }
 

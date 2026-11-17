@@ -39,8 +39,13 @@ out), the range is empty, as the iPad's screenshot over the sample. `--page cale
 `--page calendar-week` Week; CI also saves Day at an upright iPad's size (`--size 1032x1376`), the
 compact layout, as the reference set's `calendar.png`.
 
+## Reading again
+
+The screen reads its month's range when it opens, on Try again, and when pulled past its top
+(`.refreshable`: a touchpad's or a touch screen's pull, as GTK reports it) or on Ctrl+R or F5, a
+computer's way to ask. A pull while a read is on its way asks nothing more.
+
 ## Not yet
 
-- **Pull to refresh:** the screen reads again when it opens, and on Try again.
 - **The sample** reads nothing: the iPad's sample, outside a screenshot, tries tafs cloud without
   a session and shows why it couldn't.
