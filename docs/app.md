@@ -145,9 +145,13 @@ building those two from source on 22.04, or shipping a Flatpak.
   **draft** release, its only copy. Publishing it is the owner's yes, never the workflow's.
 - Before a draft is published, `.github/workflows/verify-release.yml`, run by hand with its tag,
   downloads the draft's own AppImage and `SHA256SUMS`, checks one against the other, and starts it
-  in a clean `ubuntu:24.04` container: no GTK 4 or libadwaita installed (the job fails if either
-  is), only a virtual display (`xvfb`) and one font. It saves the first screen and the sign-in as
-  screenshots, the run's only artifact; nothing is created, edited or published.
+  in a clean `ubuntu:24.04` container. The container has what every Ubuntu 24.04 desktop has and
+  the AppImage counts on, since linuxdeploy leaves those base libraries out on purpose (fribidi,
+  HarfBuzz, fontconfig, FreeType, GL/EGL, X11, xkbcommon, the Wayland client), plus a virtual
+  display (`xvfb`) and one font. It never has GTK or libadwaita: the job fails if either is
+  installed. It names any library the app finds in neither the AppImage nor that base, then saves
+  the first screen and the sign-in as screenshots, the run's only artifact. Nothing is created,
+  edited or published. (A bare container without that base stops at `libfribidi.so.0`.)
 
 **Signing.** The draft job signs `SHA256SUMS` with tafs for Linux's OpenPGP key
 (`tools/sign.sh`): an armored detached signature, `SHA256SUMS.asc`, attached beside it. Whoever
