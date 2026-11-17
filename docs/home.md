@@ -184,7 +184,7 @@ As the iPad's sidebar (`HomeSplitView`, `tafSections`, `otherAgents`):
 - The screenshots (synthetic) are CI's `sidebar-others` (`--home
   crates/tafs-app/fixtures/home-others.json`, which sends no `setting_up`) and
   `sidebar-setting-up` (`home-setting-up.json`: one with Finish and Discard, one plain, and two
-  items skipped; with `--setup crates/tafs-app/fixtures/setup-coach.json`, Coach's id, so Finish
+  items skipped; with `--coach-setup crates/tafs-app/fixtures/setup-coach.json`, Coach's id, so Finish
   opens Coach). `--unreachable network` draws the Unreachable line as after a failed read,
   CI's `sidebar-unreachable`; nothing is read again.
 

@@ -99,7 +99,7 @@ for screen in welcome sign-in sign-in-code sign-in-narrow pair connected overvie
     taf-card) opts=(--sample --signed-in --page taf-card) ;;
     taf-home-card) opts=(--home shared/contracts/home.json --page taf-card:taf-aaaa0000000000000000) ;;
     sidebar-plan) opts=(--home shared/contracts/home.json --balance crates/tafs-app/fixtures/balance-home-line.json --page overview) ;;
-    sidebar-setting-up) opts=(--home crates/tafs-app/fixtures/home-setting-up.json --me crates/tafs-app/fixtures/me-manager.json --setup crates/tafs-app/fixtures/setup-coach.json --page overview) ;;
+    sidebar-setting-up) opts=(--home crates/tafs-app/fixtures/home-setting-up.json --me crates/tafs-app/fixtures/me-manager.json --coach-setup crates/tafs-app/fixtures/setup-coach.json --page overview) ;;
     # Home couldn't be read: the Unreachable line at the foot, as the app tries again (nothing is read).
     sidebar-unreachable) opts=(--home shared/contracts/home.json --me crates/tafs-app/fixtures/me-manager.json --unreachable network) ;;
     sidebar-others) opts=(--home crates/tafs-app/fixtures/home-others.json --page overview) ;;

@@ -146,8 +146,13 @@ struct Options {
     /// With `--home`: a taf's doors as tafs cloud answers `GET /v1/tafs/{id}/doors`; its knocks'
     /// answers send nothing.
     doors: Option<String>,
+    /// With `--home`: a taf's knob as tafs cloud answers `GET /v1/tafs/{id}/knob` (Starts when,
+    /// Results go to, the dial); its changes send nothing.
     knob: Option<String>,
+    /// With `--home`: a taf's Setup as tafs cloud answers `GET /v1/tafs/{id}/setup`, in place of
+    /// the contract's `taf-setup.json`.
     setup: Option<String>,
+    /// With `--home`: a taf's Activity as tafs cloud answers `GET /v1/tafs/{id}/activity`.
     taf_activity: Option<String>,
     /// With `--home`: Account's reads, `{"suggestions": …, "consent": …}`, each as tafs cloud
     /// answers it; its changes send nothing.
@@ -180,7 +185,7 @@ struct Options {
     /// every mission's Evidence.
     mission_log: Option<String>,
     /// With `--home`: Coach as tafs cloud answers `GET /v1/setup`, for Finish setting up.
-    setup: Option<String>,
+    coach_setup: Option<String>,
     /// With `--home`: Home couldn't be read just now (`network` or `error`), and the app tries
     /// again, for the Unreachable line's screenshot. Nothing is read again.
     unreachable: Option<String>,
@@ -190,7 +195,7 @@ struct Options {
 }
 
 const USAGE: &str = "tafs [--lang en|de|fr|es|it|pt|nl|pl] [--theme light|dark] [--sample] [--signed-in] [--view-only [--paired]]
-     [--home contract.json] [--usage answers.json] [--people answers.json] [--connect answers.json] [--knob answer.json] [--setup answer.json] [--taf-activity answer.json] [--unproven answers.json] [--recipes answers.json] [--gallery answers.json] [--halt answer.json] [--record-search answers.json] [--access answer.json] [--receipts answer.json] [--activity answer.json] [--calls answer.json] [--receipt answer.json] [--work answer.json] [--doors answer.json] [--account-reads answers.json] [--me answer.json] [--memory answer.json] [--runs answer.json] [--request answer.json] [--balance answer.json] [--coach answer.json] [--coach-chats answer.json] [--chat answer.json [--report]] [--brief answer.json] [--mission-log answer.json] [--unreachable network|error] [--size WxH] [--page welcome|sign-in|pair|recipe:<id>|gallery|new-taf|halt-all|halt:<id>|record-search:<q>|record-export|receipt:<proposal id>|run:<taf id>|pin-sheet|share:<key>|share-step2:<key>|coach|coach-hand:<id>|overview|overview-label:<id>|needs-you|brief-answer:<decision id>|mission-log:<mission id>|record|calendar|calendar-week|usage|usage-ask|usage-decline|connect-apps|connect-app|connect-connection|connect-remove|connect-which-taf|connect-approve|account|kiff-account|time-zone|time-zone-use|alerts|devices|devices-sign-out|people|people-rename|people-add|taf|taf-card|taf-setup|taf-setup:<id>|starts:<id>|results:<id>|doors:<id>[:<door>]|consent|connected|sign-in-code] [--screenshot out.png]";
+     [--home contract.json] [--usage answers.json] [--people answers.json] [--connect answers.json] [--knob answer.json] [--setup answer.json] [--taf-activity answer.json] [--unproven answers.json] [--recipes answers.json] [--gallery answers.json] [--halt answer.json] [--record-search answers.json] [--access answer.json] [--receipts answer.json] [--activity answer.json] [--calls answer.json] [--receipt answer.json] [--work answer.json] [--doors answer.json] [--account-reads answers.json] [--me answer.json] [--memory answer.json] [--runs answer.json] [--request answer.json] [--balance answer.json] [--coach answer.json] [--coach-chats answer.json] [--chat answer.json [--report]] [--brief answer.json] [--mission-log answer.json] [--coach-setup answer.json] [--unreachable network|error] [--size WxH] [--page welcome|sign-in|pair|recipe:<id>|gallery|new-taf|halt-all|halt:<id>|record-search:<q>|record-export|receipt:<proposal id>|run:<taf id>|pin-sheet|share:<key>|share-step2:<key>|coach|coach-hand:<id>|overview|overview-label:<id>|needs-you|brief-answer:<decision id>|mission-log:<mission id>|record|calendar|calendar-week|usage|usage-ask|usage-decline|connect-apps|connect-app|connect-connection|connect-remove|connect-which-taf|connect-approve|account|kiff-account|time-zone|time-zone-use|alerts|devices|devices-sign-out|people|people-rename|people-add|taf|taf-card|taf-setup|taf-setup:<id>|starts:<id>|results:<id>|doors:<id>[:<door>]|consent|connected|sign-in-code] [--screenshot out.png]";
 
 fn options() -> Result<Options, String> {
     let mut o = Options::default();
@@ -233,7 +238,7 @@ fn options() -> Result<Options, String> {
             "--report" => o.report = true,
             "--brief" => o.brief = Some(value()?),
             "--mission-log" => o.mission_log = Some(value()?),
-            "--setup" => o.setup = Some(value()?),
+            "--coach-setup" => o.coach_setup = Some(value()?),
             "--unreachable" => o.unreachable = Some(value()?),
             "--size" => {
                 let v = value()?;
@@ -608,7 +613,7 @@ fn activate(app: &adw::Application, o: &Options) {
             used_by: Default::default(),
             reports: Default::default(),
             balance: balance_file(o.balance.as_deref()),
-            coach_setup: o.setup.as_deref().map(|path| {
+            coach_setup: o.coach_setup.as_deref().map(|path| {
                 std::fs::read(path)
                     .ok()
                     .and_then(|b| serde_json::from_slice::<serde_json::Value>(&b).ok())
