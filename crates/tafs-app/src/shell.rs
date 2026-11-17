@@ -19,19 +19,45 @@ type Opener = Rc<dyn Fn(Selection)>;
 /// The sidebar's width: the iPad's at full width.
 pub const SIDEBAR_WIDTH: i32 = 320;
 
+thread_local! {
+    /// Home read again for the sidebar, in place (`refresh`): set while signed in with KIFF.
+    static HOME_REREAD: RefCell<Option<Rc<dyn Fn()>>> = RefCell::new(None);
+}
+
+/// What reads Home again for the sidebar, or none.
+pub fn set_home_reread(reread: Option<Rc<dyn Fn()>>) {
+    HOME_REREAD.with(|h| *h.borrow_mut() = reread);
+}
+
+/// `refresh`: Home read again and the sidebar drawn from it, in place, when signed in with KIFF;
+/// a chat calls it when an answer's stream ends, as the iPad does.
+pub fn reread_home() {
+    if let Some(f) = HOME_REREAD.with(|h| h.borrow().clone()) {
+        f();
+    }
+}
+
 pub struct Shell {
     pub root: gtk::Box,
     /// What's open beside the sidebar, for a redraw to open it again.
     pub selection: Rc<RefCell<Option<Selection>>>,
     /// Where the Unreachable line goes, at the sidebar's foot.
-    unreachable: gtk::Box,
+    unreachable: Rc<RefCell<gtk::Box>>,
+    /// The sidebar drawn again from Home read again, in place: what's open beside it stays.
+    redraw: Rc<dyn Fn(&SidebarModel)>,
 }
 
 impl Shell {
     /// `UnreachableLine`: KIFF can't be reached just now (with "trying again" while the app tries
     /// by itself), and Status, which opens KIFF's status page; nothing when all is well.
     pub fn set_unreachable(&self, line: Option<&tafs_core::sidebar::UnreachableLine>) {
-        unreachable_line(&self.unreachable, line);
+        unreachable_line(&self.unreachable.borrow(), line);
+    }
+
+    /// Home read again (`refresh`): the sidebar's rows, counts and NEEDS YOU drawn anew, its
+    /// choice kept; what's open beside it isn't drawn again.
+    pub fn redraw_sidebar(&self, model: &SidebarModel) {
+        (self.redraw)(model);
     }
 }
 
@@ -191,6 +217,11 @@ pub fn build(
     } = foot;
     screens.append(&sidebar);
     screens.append(&detail);
+    // What the sidebar is now: drawn again in place when Home is read again.
+    let side = Rc::new(RefCell::new(sidebar.clone()));
+    let list_now = Rc::new(RefCell::new(list.clone()));
+    let icon_now = Rc::new(RefCell::new(account_icon.clone()));
+    let unreachable = Rc::new(RefCell::new(unreachable));
 
     // What a screen opens goes through the sidebar's own choice, once it exists.
     let holder: Rc<RefCell<Option<Opener>>> = Rc::new(RefCell::new(None));
@@ -230,15 +261,14 @@ pub fn build(
         );
         let (tafs, entries) = (tafs.clone(), entries.clone());
         let set_aside = set_aside.clone();
-        let (w, stack, selection, rows, list, account_icon, lines) = (
+        let (w, stack, selection, rows, lines) = (
             w.clone(),
             stack.clone(),
             selection.clone(),
             rows.clone(),
-            list.clone(),
-            account_icon.clone(),
             lines.clone(),
         );
+        let (list_now, icon_now) = (list_now.clone(), icon_now.clone());
         let model_tafs: Vec<(String, String)> = model
             .tafs
             .iter()
@@ -249,32 +279,7 @@ pub fn build(
                 return;
             }
             *selection.borrow_mut() = Some(s.clone());
-            // The list shows what's chosen: a row of it, or none for Account at the foot.
-            match rows.borrow().iter().find(|(_, sel)| *sel == s) {
-                Some((row, _)) => list.select_row(Some(row)),
-                None => list.unselect_all(),
-            }
-            // Account, and the screens it opens.
-            let account_open = matches!(
-                s,
-                Selection::Account
-                    | Selection::Devices
-                    | Selection::People
-                    | Selection::KiffAccount
-                    | Selection::TimeZone
-                    | Selection::Alerts
-                    | Selection::Language
-            );
-            account_icon.set_icon_name(Some(icon_for(if account_open {
-                "person.crop.circle.fill"
-            } else {
-                "person.crop.circle"
-            })));
-            if account_open {
-                account_icon.add_css_class("open");
-            } else {
-                account_icon.remove_css_class("open");
-            }
+            mark_chosen(&rows, &list_now.borrow(), &icon_now.borrow(), &s);
             let title = title_of(&w, &lines, &model_tafs, &s);
             let page = match s {
                 Selection::Overview => match &recipes {
@@ -572,24 +577,6 @@ pub fn build(
         })
     };
 
-    {
-        let (select, rows) = (select.clone(), rows.clone());
-        let finishes = finishes.clone();
-        list.connect_row_activated(move |_, row| {
-            // Finish setting up: Coach on the chat where the setup stopped (`finishSetup`).
-            if let Some((_, session)) = finishes.borrow().iter().find(|(r, _)| r == row) {
-                crate::coach_start::finish(session);
-                return;
-            }
-            if let Some((_, s)) = rows.borrow().iter().find(|(r, _)| r == row) {
-                select(s.clone());
-            }
-        });
-    }
-    {
-        let select = select.clone();
-        account_button.connect_clicked(move |_| select(Selection::Account));
-    }
     // Coach, signed in with KIFF, opens Coach mode over what's on screen; anything else is a
     // screen beside the sidebar. In the sample, Coach is its title.
     let route: Rc<dyn Fn(Selection)> = {
@@ -606,14 +593,102 @@ pub fn build(
             }
         })
     };
-    if let Some(coach) = coach_button {
-        let route = route.clone();
-        coach.connect_clicked(move |_| route(Selection::Coach));
-    }
-    if let Some(plan) = plan_button {
-        let select = select.clone();
-        plan.connect_clicked(move |_| select(Selection::Usage));
-    }
+    // The sidebar's rows and buttons, as drawn now and when drawn again.
+    let wire: Wire = {
+        let (select, route, rows, finishes) = (
+            select.clone(),
+            route.clone(),
+            rows.clone(),
+            finishes.clone(),
+        );
+        Rc::new(move |list, account, coach, plan| {
+            {
+                let (select, rows, finishes) = (select.clone(), rows.clone(), finishes.clone());
+                list.connect_row_activated(move |_, row| {
+                    // Finish setting up: Coach on the chat where the setup stopped
+                    // (`finishSetup`).
+                    if let Some((_, session)) = finishes.borrow().iter().find(|(r, _)| r == row) {
+                        crate::coach_start::finish(session);
+                        return;
+                    }
+                    let chosen = rows
+                        .borrow()
+                        .iter()
+                        .find(|(r, _)| r == row)
+                        .map(|(_, s)| s.clone());
+                    if let Some(s) = chosen {
+                        select(s);
+                    }
+                });
+            }
+            {
+                let select = select.clone();
+                account.connect_clicked(move |_| select(Selection::Account));
+            }
+            if let Some(coach) = coach {
+                let route = route.clone();
+                coach.connect_clicked(move |_| route(Selection::Coach));
+            }
+            if let Some(plan) = plan {
+                let select = select.clone();
+                plan.connect_clicked(move |_| select(Selection::Usage));
+            }
+        })
+    };
+    wire(
+        &list,
+        &account_button,
+        coach_button.as_ref(),
+        plan_button.as_ref(),
+    );
+    let redraw: Rc<dyn Fn(&SidebarModel)> = {
+        let (w, rows, finishes, selection) =
+            (w.clone(), rows.clone(), finishes.clone(), selection.clone());
+        let (side, list_now, icon_now, unreachable, screens) = (
+            side.clone(),
+            list_now.clone(),
+            icon_now.clone(),
+            unreachable.clone(),
+            screens.clone(),
+        );
+        let gallery = gallery.clone();
+        Rc::new(move |model: &SidebarModel| {
+            let Ok(lines) = model.lines(&w) else {
+                return;
+            };
+            // What the Unreachable line said stays, until the window says otherwise.
+            let line = unreachable.borrow().first_child();
+            rows.borrow_mut().clear();
+            finishes.borrow_mut().clear();
+            let foot = self::sidebar(
+                &w,
+                &lines,
+                &rows,
+                &finishes,
+                gallery.as_ref(),
+                !model.tafs.is_empty(),
+            );
+            screens.remove(&*side.borrow());
+            screens.prepend(&foot.pane);
+            if let Some(line) = line {
+                line.unparent();
+                foot.unreachable.append(&line);
+            }
+            wire(
+                &foot.list,
+                &foot.account,
+                foot.coach.as_ref(),
+                foot.plan.as_ref(),
+            );
+            *side.borrow_mut() = foot.pane;
+            *list_now.borrow_mut() = foot.list;
+            *icon_now.borrow_mut() = foot.account_icon;
+            *unreachable.borrow_mut() = foot.unreachable;
+            if let Some(s) = selection.borrow().as_ref() {
+                mark_chosen(&rows, &list_now.borrow(), &icon_now.borrow(), s);
+            }
+        })
+    };
     *holder.borrow_mut() = Some(route.clone());
     // Coach opened from elsewhere (a new taf, a job handed over, a setup to finish): Coach mode
     // afresh, even when it's open already, so it opens on what was asked.
@@ -634,6 +709,44 @@ pub fn build(
         root,
         selection,
         unreachable,
+        redraw,
+    }
+}
+
+/// What wires a sidebar's list, Account, Coach and Plan to what they open.
+type Wire = Rc<dyn Fn(&gtk::ListBox, &gtk::Button, Option<&gtk::Button>, Option<&gtk::Button>)>;
+
+/// The list shows what's chosen: a row of it, or none for Account at the foot, whose mark is
+/// filled while Account or a screen it opens is.
+fn mark_chosen(
+    rows: &RefCell<Vec<(gtk::ListBoxRow, Selection)>>,
+    list: &gtk::ListBox,
+    account_icon: &gtk::Image,
+    s: &Selection,
+) {
+    match rows.borrow().iter().find(|(_, sel)| sel == s) {
+        Some((row, _)) => list.select_row(Some(row)),
+        None => list.unselect_all(),
+    }
+    let account_open = matches!(
+        s,
+        Selection::Account
+            | Selection::Devices
+            | Selection::People
+            | Selection::KiffAccount
+            | Selection::TimeZone
+            | Selection::Alerts
+            | Selection::Language
+    );
+    account_icon.set_icon_name(Some(icon_for(if account_open {
+        "person.crop.circle.fill"
+    } else {
+        "person.crop.circle"
+    })));
+    if account_open {
+        account_icon.add_css_class("open");
+    } else {
+        account_icon.remove_css_class("open");
     }
 }
 

@@ -508,6 +508,7 @@ fn activate(app: &adw::Application, o: &Options) {
             )
         })),
         account_reads: Cell::new(0),
+        home_rereads: Cell::new(0),
         words,
         languages,
         signed_in: o.signed_in,
@@ -921,6 +922,9 @@ struct App {
     unreachable: Cell<Option<(tafs_core::sidebar::Unreachable, usize)>>,
     /// The account's reads in force: a sign-out or another sign-in ends the app's tries.
     account_reads: Cell<u64>,
+    /// Each in-place reread of Home, numbered: only the newest's answer is drawn, so two that
+    /// overlap (a stream's end, then a held call) can't leave the older one on screen.
+    home_rereads: Cell<u64>,
     words: Rc<WordBook>,
     languages: Vec<&'static str>,
     /// `--signed-in`: the sample with the account's items, as the reference set draws it.
@@ -1140,131 +1144,9 @@ impl App {
         let (me, languages, token) = (self.clone(), self.languages.clone(), kept.token.clone());
         let words: WordBook = (*self.words).clone();
         glib::spawn_future_local(async move {
-            let read = gio::spawn_blocking(move || {
-                let signed_out = |a: &tafs_core::signin::Answer| a.status == 401;
-                let me = kiff::me(&token, &languages).ok();
-                let home = kiff::home(&token, &languages);
-                // What a failed read of Home says (`refreshWords`): the network, or an error.
-                let home_failed = match &home {
-                    Err(tafs_core::signin::KiffError::Offline) => {
-                        Some(tafs_core::sidebar::Unreachable::Network)
-                    }
-                    Err(_) => Some(tafs_core::sidebar::Unreachable::Error),
-                    Ok(a) if a.status != 200 => Some(tafs_core::sidebar::Unreachable::Error),
-                    Ok(_) => None,
-                };
-                let home = home.ok();
-                let held = kiff::held(&token, &languages).ok();
-                let activity = kiff::activity(&token, &languages).ok();
-                // KIFF ended the session (a 401 on any of them: the computer removed in Devices,
-                // the account gone): this computer is signed out (`forgetSession`).
-                if [&me, &home, &held, &activity]
-                    .into_iter()
-                    .flatten()
-                    .any(signed_out)
-                {
-                    return Read::SignedOut;
-                }
-                let account = me.and_then(|a| Account::read(&a).ok());
-                // "Did this happen?", only for someone who may answer holds (`loadUnproven`).
-                // None read, none shown; a 401 there signs this computer out as anywhere.
-                let unproven = if account.as_ref().is_none_or(|a| a.allows("holds.answer")) {
-                    match kiff::did_this_happen(&token, &languages) {
-                        Ok(a) if signed_out(&a) => return Read::SignedOut,
-                        Ok(a) if a.status == 200 => {
-                            tafs_core::unproven::read_unproven(&a.body).unwrap_or_default()
-                        }
-                        _ => vec![],
-                    }
-                } else {
-                    vec![]
-                };
-                let Some(home) = home
-                    .filter(|a| a.status == 200)
-                    .and_then(|a| Home::read(&a.body))
-                else {
-                    return Read::Unreachable(
-                        home_failed.unwrap_or(tafs_core::sidebar::Unreachable::Error),
-                    );
-                };
-                // KIFF's held calls: none read, none shown, and Home still is.
-                let held = held
-                    .filter(|a| a.status == 200)
-                    .and_then(|a| tafs_core::held::read_held(&a.body))
-                    .unwrap_or_default();
-                // KIFF's activity: none read, an empty Record, and the rest still is.
-                let activity = activity
-                    .filter(|a| a.status == 200)
-                    .and_then(|a| tafs_core::record::read_activity(&a.body))
-                    .unwrap_or_default();
-                let call_refs = call_refs(&token, &languages, &home, &activity);
-                let (access, used_by, reports) = taf_reads(&words, &token, &languages, &home);
-                // `loadRecipes`: read with the rest; one that can't be read lists none.
-                let recipes = kiff::recipes(&token, &languages)
-                    .ok()
-                    .filter(|a| a.status == 200)
-                    .and_then(|a| tafs_core::recipes::Recipes::read(&a.body));
-                // The account's halt, for the sidebar's Halt all: none read, it reads running.
-                let account_halt = kiff::halt(&token, &languages, None, false)
-                    .ok()
-                    .filter(|a| a.status == 200)
-                    .and_then(|a| tafs_core::halt::read(&a.body));
-                // `loadGallery`: a read that fails leaves none.
-                let gallery = kiff::gallery(&token, &languages)
-                    .ok()
-                    .filter(|a| a.status == 200)
-                    .and_then(|a| tafs_core::recipes::Gallery::read(&a.body));
-                // The balance alone, for the plan's line: quietly, a failure shows none.
-                let balance = kiff::cloud(&token, &languages, tafs_core::usage::BALANCE_PATH)
-                    .ok()
-                    .filter(|a| a.status == 200)
-                    .and_then(|a| tafs_core::usage::Balance::read(&a.body));
-                // Your brief, read with the list: tafs cloud answering `/v1/brief` is what turns
-                // it on (a 404, an error or a brief with nothing in it keeps Needs you as today).
-                let brief = kiff::cloud(&token, &languages, &tafs_core::brief::Brief::path(None))
-                    .ok()
-                    .filter(|a| a.status == 200)
-                    .and_then(|a| brief::read_answer(&a.body, &words));
-                // Coach's id, only when a row's setup stopped partway and this person may use
-                // Coach (`canFinishSetup`): a read that fails finishes none here.
-                let stopped = home.setting_up().iter().any(|s| s.chat.is_some())
-                    || home
-                        .other_agents()
-                        .iter()
-                        .any(|t| t.finish_chat().is_some());
-                let coach_setup = if stopped
-                    && account.as_ref().is_some_and(|a| {
-                        a.capabilities
-                            .as_ref()
-                            .is_some_and(|c| c.iter().any(|x| x == "members.manage"))
-                    }) {
-                    kiff::cloud(&token, &languages, tafs_core::coach::SETUP_PATH)
-                        .ok()
-                        .filter(|a| a.status == 200)
-                        .and_then(|a| tafs_core::coach::setup_id(&a.body).ok().flatten())
-                } else {
-                    None
-                };
-                Read::Cloud(Box::new(Cloud {
-                    coach_setup,
-                    brief,
-                    balance,
-                    home,
-                    held,
-                    account,
-                    activity,
-                    call_refs,
-                    unproven,
-                    recipes,
-                    gallery,
-                    account_halt,
-                    access,
-                    used_by,
-                    reports,
-                }))
-            })
-            .await
-            .unwrap_or(Read::Unreachable(tafs_core::sidebar::Unreachable::Error));
+            let read = gio::spawn_blocking(move || read_cloud(&token, &languages, &words))
+                .await
+                .unwrap_or(Read::Unreachable(tafs_core::sidebar::Unreachable::Error));
             // Signed out, or another account's reads, since: this one's answer is dropped.
             if me.account_reads.get() != generation {
                 return;
@@ -1984,19 +1866,21 @@ impl App {
     }
 
     /// The shell: over the sample, or the account's with what's been read.
-    fn open_shell(self: &Rc<Self>, mode: Mode, view_only: bool, cloud: Option<Rc<Cloud>>) {
+    /// The sidebar's model from what was read (`HomeSplitView`'s), with the Overview's tafs and
+    /// tafs cloud's words for Needs you: for the window, and for the sidebar drawn again in place.
+    fn sidebar_model(
+        &self,
+        mode: Mode,
+        cloud: Option<&Rc<Cloud>>,
+        at: chrono::DateTime<chrono::Local>,
+    ) -> (
+        SidebarModel,
+        Vec<tafs_core::overview::OverviewTaf>,
+        Option<String>,
+    ) {
         let words = &self.words;
-        *self.cloud.borrow_mut() = cloud.clone();
-        // `AccountTime.use`: signed in with KIFF, every time in the account's zone (UTC when
-        // KIFF says none); the sample, or no account read yet, this computer's.
-        let kiff_account = cloud.as_ref().and_then(|c| c.account.as_ref());
-        tafs_core::account_time::use_zone(match (mode, kiff_account) {
-            (Mode::Kiff, Some(a)) => Some(a.time_zone.as_deref().unwrap_or("UTC")),
-            _ => None,
-        });
-        let at = chrono::Local::now();
         let fail = |e: tafs_core::words::WordsError| -> ! { panic!("{e}") };
-        let (mut model, tafs, cloud_words) = match (mode, &cloud) {
+        let (mut model, tafs, cloud_words) = match (mode, cloud) {
             (Mode::Sample, _) => (
                 sample::sidebar(words, at, self.signed_in).unwrap_or_else(|e| fail(e)),
                 sample::overview(words, at).unwrap_or_else(|e| fail(e)),
@@ -2053,7 +1937,7 @@ impl App {
         // `showsAccountHalt`: signed in with KIFF, to someone who manages Cards, while a tafs
         // cloud taf runs, and whenever the account is halted or halting, since that row is
         // where it's resumed from.
-        if let (Mode::Kiff, Some(c)) = (mode, cloud.as_deref()) {
+        if let (Mode::Kiff, Some(c)) = (mode, cloud.map(|c| &**c)) {
             let h = c
                 .account_halt
                 .clone()
@@ -2078,7 +1962,7 @@ impl App {
                 .is_some_and(|c| c.iter().any(|x| x == "members.manage"));
         }
         // `canFinishSetup`: the rows whose setup stopped partway that Coach can finish, by key.
-        if let (Mode::Kiff, Some(c)) = (mode, cloud.as_deref()) {
+        if let (Mode::Kiff, Some(c)) = (mode, cloud.map(|c| &**c)) {
             let coach = c.coach_setup.as_deref();
             let may = model.may_use_coach;
             let setting_up = c
@@ -2104,6 +1988,73 @@ impl App {
                 .get()
                 .map(|(why, tries)| (why, tries < tafs_core::sidebar::RETRY_WAITS.len()));
         }
+        (model, tafs, cloud_words)
+    }
+
+    /// `refresh`: Home and what goes with it read again as the session, and the sidebar drawn
+    /// from it in place; the screen beside it stays as it is. A read that fails changes nothing.
+    fn reread_home(self: &Rc<Self>) {
+        let Some(kept) = self.kept.borrow().clone() else {
+            return;
+        };
+        if self.cloud.borrow().is_none() {
+            return;
+        }
+        let generation = self.account_reads.get();
+        let reread = self.home_rereads.get() + 1;
+        self.home_rereads.set(reread);
+        let (me, languages, token) = (self.clone(), self.languages.clone(), kept.token.clone());
+        let words: WordBook = (*self.words).clone();
+        glib::spawn_future_local(async move {
+            let read = gio::spawn_blocking(move || read_cloud(&token, &languages, &words))
+                .await
+                .unwrap_or(Read::Unreachable(tafs_core::sidebar::Unreachable::Error));
+            // Another account's, or an older reread's answer, since: dropped.
+            if me.account_reads.get() != generation || me.home_rereads.get() != reread {
+                return;
+            }
+            match read {
+                Read::Cloud(cloud) => {
+                    let cloud = Rc::new(*cloud);
+                    *me.cloud.borrow_mut() = Some(cloud.clone());
+                    let (model, _, _) =
+                        me.sidebar_model(Mode::Kiff, Some(&cloud), chrono::Local::now());
+                    if let Some(shell) = me.shell.borrow().as_ref() {
+                        shell.redraw_sidebar(&model);
+                    }
+                }
+                Read::SignedOut => me.signed_out_by_kiff(),
+                Read::Unreachable(_) => {}
+            }
+        });
+    }
+
+    fn open_shell(self: &Rc<Self>, mode: Mode, view_only: bool, cloud: Option<Rc<Cloud>>) {
+        let words = &self.words;
+        // Signed in with KIFF, a chat's stream ending reads Home again for the sidebar.
+        crate::shell::set_home_reread(match (mode, self.kept.borrow().is_some()) {
+            (Mode::Kiff, true) => {
+                let me = Rc::downgrade(self);
+                Some(Rc::new(move || {
+                    if let Some(me) = me.upgrade() {
+                        me.reread_home();
+                    }
+                }))
+            }
+            _ => None,
+        });
+        *self.cloud.borrow_mut() = cloud.clone();
+        // `AccountTime.use`: signed in with KIFF, every time in the account's zone (UTC when
+        // KIFF says none); the sample, or no account read yet, this computer's.
+        let kiff_account = cloud.as_ref().and_then(|c| c.account.as_ref());
+        tafs_core::account_time::use_zone(match (mode, kiff_account) {
+            (Mode::Kiff, Some(a)) => Some(a.time_zone.as_deref().unwrap_or("UTC")),
+            _ => None,
+        });
+        let at = chrono::Local::now();
+        let fail = |e: tafs_core::words::WordsError| -> ! { panic!("{e}") };
+        let (model, tafs, cloud_words) = self.sidebar_model(mode, cloud.as_ref(), at);
+        let account = cloud.as_ref().and_then(|c| c.account.clone());
         let count = model.needs_you_count();
         let needs_you_words = match cloud_words {
             Some(words) => words,
@@ -2705,6 +2656,130 @@ fn read_contract(path: &str) -> Option<Home> {
 /// The account's sidebar and Overview from Home, KIFF's held calls and its activity: the tafs a
 /// call waits on first, then the one with the newest call in the Record, then tafs cloud's order
 /// (`listedTafs`, `byRecent`); Your tafs those relevant now, and tafs cloud's count of what waits.
+/// Everything the window reads at tafs cloud and KIFF as the session (`refresh`): Home, KIFF's held
+/// calls and activity, the account, and the rest the screens draw. Blocking: off the main loop.
+fn read_cloud(token: &str, languages: &[&'static str], words: &WordBook) -> Read {
+    let signed_out = |a: &tafs_core::signin::Answer| a.status == 401;
+    let me = kiff::me(token, languages).ok();
+    let home = kiff::home(token, languages);
+    // What a failed read of Home says (`refreshWords`): the network, or an error.
+    let home_failed = match &home {
+        Err(tafs_core::signin::KiffError::Offline) => {
+            Some(tafs_core::sidebar::Unreachable::Network)
+        }
+        Err(_) => Some(tafs_core::sidebar::Unreachable::Error),
+        Ok(a) if a.status != 200 => Some(tafs_core::sidebar::Unreachable::Error),
+        Ok(_) => None,
+    };
+    let home = home.ok();
+    let held = kiff::held(token, languages).ok();
+    let activity = kiff::activity(token, languages).ok();
+    // KIFF ended the session (a 401 on any of them: the computer removed in Devices,
+    // the account gone): this computer is signed out (`forgetSession`).
+    if [&me, &home, &held, &activity]
+        .into_iter()
+        .flatten()
+        .any(signed_out)
+    {
+        return Read::SignedOut;
+    }
+    let account = me.and_then(|a| Account::read(&a).ok());
+    // "Did this happen?", only for someone who may answer holds (`loadUnproven`).
+    // None read, none shown; a 401 there signs this computer out as anywhere.
+    let unproven = if account.as_ref().is_none_or(|a| a.allows("holds.answer")) {
+        match kiff::did_this_happen(token, languages) {
+            Ok(a) if signed_out(&a) => return Read::SignedOut,
+            Ok(a) if a.status == 200 => {
+                tafs_core::unproven::read_unproven(&a.body).unwrap_or_default()
+            }
+            _ => vec![],
+        }
+    } else {
+        vec![]
+    };
+    let Some(home) = home
+        .filter(|a| a.status == 200)
+        .and_then(|a| Home::read(&a.body))
+    else {
+        return Read::Unreachable(home_failed.unwrap_or(tafs_core::sidebar::Unreachable::Error));
+    };
+    // KIFF's held calls: none read, none shown, and Home still is.
+    let held = held
+        .filter(|a| a.status == 200)
+        .and_then(|a| tafs_core::held::read_held(&a.body))
+        .unwrap_or_default();
+    // KIFF's activity: none read, an empty Record, and the rest still is.
+    let activity = activity
+        .filter(|a| a.status == 200)
+        .and_then(|a| tafs_core::record::read_activity(&a.body))
+        .unwrap_or_default();
+    let call_refs = call_refs(token, languages, &home, &activity);
+    let (access, used_by, reports) = taf_reads(words, token, languages, &home);
+    // `loadRecipes`: read with the rest; one that can't be read lists none.
+    let recipes = kiff::recipes(token, languages)
+        .ok()
+        .filter(|a| a.status == 200)
+        .and_then(|a| tafs_core::recipes::Recipes::read(&a.body));
+    // The account's halt, for the sidebar's Halt all: none read, it reads running.
+    let account_halt = kiff::halt(token, languages, None, false)
+        .ok()
+        .filter(|a| a.status == 200)
+        .and_then(|a| tafs_core::halt::read(&a.body));
+    // `loadGallery`: a read that fails leaves none.
+    let gallery = kiff::gallery(token, languages)
+        .ok()
+        .filter(|a| a.status == 200)
+        .and_then(|a| tafs_core::recipes::Gallery::read(&a.body));
+    // The balance alone, for the plan's line: quietly, a failure shows none.
+    let balance = kiff::cloud(token, languages, tafs_core::usage::BALANCE_PATH)
+        .ok()
+        .filter(|a| a.status == 200)
+        .and_then(|a| tafs_core::usage::Balance::read(&a.body));
+    // Your brief, read with the list: tafs cloud answering `/v1/brief` is what turns
+    // it on (a 404, an error or a brief with nothing in it keeps Needs you as today).
+    let brief = kiff::cloud(token, languages, &tafs_core::brief::Brief::path(None))
+        .ok()
+        .filter(|a| a.status == 200)
+        .and_then(|a| brief::read_answer(&a.body, words));
+    // Coach's id, only when a row's setup stopped partway and this person may use
+    // Coach (`canFinishSetup`): a read that fails finishes none here.
+    let stopped = home.setting_up().iter().any(|s| s.chat.is_some())
+        || home
+            .other_agents()
+            .iter()
+            .any(|t| t.finish_chat().is_some());
+    let coach_setup = if stopped
+        && account.as_ref().is_some_and(|a| {
+            a.capabilities
+                .as_ref()
+                .is_some_and(|c| c.iter().any(|x| x == "members.manage"))
+        }) {
+        kiff::cloud(token, languages, tafs_core::coach::SETUP_PATH)
+            .ok()
+            .filter(|a| a.status == 200)
+            .and_then(|a| tafs_core::coach::setup_id(&a.body).ok().flatten())
+    } else {
+        None
+    };
+    Read::Cloud(Box::new(Cloud {
+        coach_setup,
+        brief,
+        balance,
+        home,
+        held,
+        account,
+        activity,
+        call_refs,
+        unproven,
+        recipes,
+        gallery,
+        account_halt,
+        access,
+        used_by,
+        reports,
+    }))
+}
+
 fn home_model(
     w: &WordBook,
     h: &Home,
