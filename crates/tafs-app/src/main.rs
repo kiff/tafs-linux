@@ -158,6 +158,8 @@ struct Options {
     /// With `--coach`: KIFF's answers to the drafts its approvals name, by draft id, each
     /// `{"status": …, "answer": …}`: nothing is read.
     coach_drafts: Option<String>,
+    /// With `--coach`: tafs cloud's `GET /v1/setup` answer, for Coach's tools: nothing is read.
+    coach_setup: Option<String>,
     /// With `--home`: a taf's chat as tafs cloud answers `GET /v1/tafs/{id}/conversation`, read
     /// from a file: nothing is sent.
     chat: Option<String>,
@@ -175,7 +177,7 @@ struct Options {
 }
 
 const USAGE: &str = "tafs [--lang en|de|fr|es|it|pt|nl|pl] [--theme light|dark] [--sample] [--signed-in] [--view-only [--paired]]
-     [--home contract.json] [--usage answers.json] [--people answers.json] [--unproven answers.json] [--recipes answers.json] [--gallery answers.json] [--halt answer.json] [--record-search answers.json] [--access answer.json] [--receipts answer.json] [--activity answer.json] [--calls answer.json] [--receipt answer.json] [--work answer.json] [--doors answer.json] [--account-reads answers.json] [--me answer.json] [--memory answer.json] [--runs answer.json] [--request answer.json] [--balance answer.json] [--coach answer.json] [--coach-chats answer.json] [--coach-drafts answers.json] [--chat answer.json [--report]] [--brief answer.json] [--mission-log answer.json] [--size WxH] [--page welcome|sign-in|pair|recipe:<id>|gallery|halt-all|halt:<id>|record-search:<q>|record-export|receipt:<proposal id>|run:<taf id>|pin-sheet|coach|overview|overview-label:<id>|needs-you|brief-answer:<decision id>|mission-log:<mission id>|record|calendar|calendar-week|usage|usage-ask|usage-decline|connect-apps|account|kiff-account|time-zone|time-zone-use|alerts|devices|devices-sign-out|people|people-rename|people-add|taf|taf-card|taf-setup|consent|connected|sign-in-code] [--screenshot out.png]";
+     [--home contract.json] [--usage answers.json] [--people answers.json] [--unproven answers.json] [--recipes answers.json] [--gallery answers.json] [--halt answer.json] [--record-search answers.json] [--access answer.json] [--receipts answer.json] [--activity answer.json] [--calls answer.json] [--receipt answer.json] [--work answer.json] [--doors answer.json] [--account-reads answers.json] [--me answer.json] [--memory answer.json] [--runs answer.json] [--request answer.json] [--balance answer.json] [--coach answer.json] [--coach-chats answer.json] [--coach-drafts answers.json] [--coach-setup answer.json] [--chat answer.json [--report]] [--brief answer.json] [--mission-log answer.json] [--size WxH] [--page welcome|sign-in|pair|recipe:<id>|gallery|halt-all|halt:<id>|record-search:<q>|record-export|receipt:<proposal id>|run:<taf id>|pin-sheet|coach|coach-tools|overview|overview-label:<id>|needs-you|brief-answer:<decision id>|mission-log:<mission id>|record|calendar|calendar-week|usage|usage-ask|usage-decline|connect-apps|account|kiff-account|time-zone|time-zone-use|alerts|devices|devices-sign-out|people|people-rename|people-add|taf|taf-card|taf-setup|consent|connected|sign-in-code] [--screenshot out.png]";
 
 fn options() -> Result<Options, String> {
     let mut o = Options::default();
@@ -211,6 +213,7 @@ fn options() -> Result<Options, String> {
             "--coach" => o.coach = Some(value()?),
             "--coach-chats" => o.coach_chats = Some(value()?),
             "--coach-drafts" => o.coach_drafts = Some(value()?),
+            "--coach-setup" => o.coach_setup = Some(value()?),
             "--chat" => o.chat = Some(value()?),
             "--report" => o.report = true,
             "--brief" => o.brief = Some(value()?),
@@ -274,7 +277,7 @@ fn selection_of(page: Option<&str>) -> Selection {
         Some("time-zone") | Some("time-zone-use") => Selection::TimeZone,
         Some("alerts") => Selection::Alerts,
         Some("language") => Selection::Language,
-        Some("coach") => Selection::Coach,
+        Some("coach") | Some("coach-tools") => Selection::Coach,
         // The sample's Refunds, as the reference set's taf.png opens it.
         Some("taf") | Some("taf-card") => Selection::Taf("refunds".into()),
         // With `--home`, the contract's first taf.
@@ -382,6 +385,7 @@ fn activate(app: &adw::Application, o: &Options) {
         coach_file: o.coach.as_ref().map(std::path::PathBuf::from),
         coach_chats: o.coach_chats.as_ref().map(std::path::PathBuf::from),
         coach_drafts: o.coach_drafts.as_ref().map(std::path::PathBuf::from),
+        coach_setup: o.coach_setup.as_ref().map(std::path::PathBuf::from),
         chat_file: o.chat.as_ref().map(std::path::PathBuf::from),
         open_report: o.report,
         brief_file: o.brief.as_ref().map(std::path::PathBuf::from),
@@ -457,6 +461,7 @@ fn activate(app: &adw::Application, o: &Options) {
         Some("devices-sign-out") => devices::OPEN_SIGN_OUT.with(|d| d.set(true)),
         Some("time-zone-use") => zones::TAP_USE_HERE.with(|t| t.set(true)),
         Some("usage-ask") => usage::OPEN.with(|u| u.set(Some("ask"))),
+        Some("coach-tools") => coach::OPEN_TOOLS.with(|t| t.set(true)),
         Some("usage-decline") => usage::OPEN.with(|u| u.set(Some("decline-tapped"))),
         _ => {}
     }
@@ -678,6 +683,8 @@ struct App {
     coach_chats: Option<std::path::PathBuf>,
     /// `--coach-drafts`: KIFF's answers for the drafts, never read.
     coach_drafts: Option<std::path::PathBuf>,
+    /// `--coach-setup`: Coach's tools from tafs cloud's answer, never read.
+    coach_setup: Option<std::path::PathBuf>,
     /// `--chat`: a taf's chat from a file, never sent.
     chat_file: Option<std::path::PathBuf>,
     /// `--report`: Report this answer open over the chat.
@@ -1920,6 +1927,7 @@ impl App {
                     thread: f.clone(),
                     chats: self.coach_chats.clone(),
                     drafts: self.coach_drafts.clone(),
+                    setup: self.coach_setup.clone(),
                 },
                 (Mode::Kiff, Some(kept), None) => coach::CoachSource::Cloud {
                     kept: Box::new(kept.clone()),

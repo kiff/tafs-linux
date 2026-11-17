@@ -22,13 +22,14 @@ use tafs_core::coach_lines::{
 use tafs_core::coach_send::{
     self, CardSend, Conversation, Delivery, Polls, QuestionSelection, Refusal, Steered, Submit,
 };
+use tafs_core::coach_tools::CoachTools;
 use tafs_core::session::KeptSession;
 use tafs_core::sidebar::{Mode, Selection};
 use tafs_core::signin::Answer;
 use tafs_core::words::WordBook;
 
 use crate::chat::{owner, Composer, Sent};
-use crate::widgets::{eyebrow, outline, panel, primary, symbol, text};
+use crate::widgets::{eyebrow, one_line, outline, panel, primary, symbol, text};
 
 /// Where Coach's conversation is read from, and where what's written goes.
 #[derive(Clone)]
@@ -40,6 +41,8 @@ pub enum CoachSource {
         chats: Option<std::path::PathBuf>,
         /// KIFF's answers to the drafts the approvals name, by id (`{"status", "answer"}`).
         drafts: Option<std::path::PathBuf>,
+        /// tafs cloud's `GET /v1/setup` answer, for Coach's tools.
+        setup: Option<std::path::PathBuf>,
     },
     /// tafs cloud, as the session, with this device's proof when it has a key and KIFF names
     /// this computer. `signed_out` is called when tafs cloud says the session is over.
@@ -53,6 +56,8 @@ pub enum CoachSource {
 }
 
 thread_local! {
+    /// A screenshot opens Coach's tools step over the conversation.
+    pub static OPEN_TOOLS: Cell<bool> = const { Cell::new(false) };
     /// What the owner is typing to Coach, not sent yet (`setupDraft`): kept while the app runs, so
     /// leaving Coach and coming back keeps it. Signing out forgets it.
     static DRAFT: RefCell<String> = const { RefCell::new(String::new()) };
@@ -107,6 +112,10 @@ struct Page {
     composer: Composer,
     /// The window is wide enough for the panel beside the conversation.
     wide: Cell<bool>,
+    /// Coach's tools as tafs cloud last read them (`coachTools`), and their row above the
+    /// conversation (`CoachToolsRow`).
+    coach_tools: RefCell<Option<CoachTools>>,
+    tools_row: gtk::Button,
     /// "Taking shape" beside the conversation, and what it holds.
     side: gtk::Box,
     shape: gtk::Box,
@@ -179,6 +188,12 @@ pub fn page(
     // A wide window (`shaping`): the conversation, and beside it what it has made so far.
     let chat = gtk::Box::new(gtk::Orientation::Vertical, 0);
     chat.set_hexpand(true);
+    // Coach's tools still to give: one line, which opens the step.
+    let tools_row = gtk::Button::new();
+    tools_row.add_css_class("tafs-tools-row");
+    tools_row.set_widget_name("coach-tools-row");
+    tools_row.set_visible(false);
+    chat.append(&tools_row);
     let plan_slot = gtk::Box::new(gtk::Orientation::Vertical, 0);
     chat.append(&plan_slot);
     let column = gtk::Box::new(gtk::Orientation::Vertical, 12);
@@ -259,11 +274,21 @@ pub fn page(
         error,
         composer,
         wide: Cell::new(true),
+        coach_tools: RefCell::new(None),
+        tools_row,
         side,
         shape,
         shape_drawn: RefCell::new(None),
     });
     wire_composer(&page);
+    {
+        let p = Rc::downgrade(&page);
+        page.tools_row.connect_clicked(move |_| {
+            if let Some(p) = p.upgrade() {
+                p.open_tools();
+            }
+        });
+    }
     for compact in [true, false] {
         let p = Rc::downgrade(&page);
         let set = move |_: &adw::Breakpoint| {
@@ -302,7 +327,15 @@ pub fn page(
             thread: path,
             chats,
             drafts,
+            setup,
         } => {
+            if let Some(setup) = setup {
+                *page.coach_tools.borrow_mut() = std::fs::read(&setup)
+                    .ok()
+                    .and_then(|b| serde_json::from_slice::<serde_json::Value>(&b).ok())
+                    .and_then(|v| serde_json::to_vec(v.get("answer").unwrap_or(&v)).ok())
+                    .and_then(|b| CoachTools::read(&b));
+            }
             let read = std::fs::read(&path)
                 .ok()
                 .and_then(|b| serde_json::from_slice::<serde_json::Value>(&b).ok())
@@ -320,6 +353,10 @@ pub fn page(
                         page.drafts_from(&drafts);
                     }
                     page.draw();
+                    if OPEN_TOOLS.with(|t| t.replace(false)) {
+                        let p = page.clone();
+                        glib::idle_add_local_once(move || p.open_tools());
+                    }
                     if let Some(chats) = chats {
                         page.conv.borrow_mut().chats = std::fs::read(&chats)
                             .ok()
@@ -440,12 +477,13 @@ impl Page {
             .await
             .unwrap_or_else(|_| Err(Fail::Why(String::new())));
         match read {
-            Ok(Some(id)) => {
+            Ok((Some(id), tools)) => {
                 self.conv.borrow_mut().setup = Some(id);
+                *self.coach_tools.borrow_mut() = tools;
                 self.load_thread().await;
             }
             // No Coach yet: its start, which is signed, on the phone.
-            Ok(None) => {
+            Ok((None, _)) => {
                 self.no_coach.set(true);
                 *self.drawn.borrow_mut() = None;
                 self.draw();
@@ -1002,6 +1040,134 @@ impl Page {
         self.composer.show(&placeholder, &send, &stop, thinking);
     }
 
+    /// `CoachToolsRow`: tafs cloud's line, and a chevron, above the conversation while Coach's
+    /// tools are still to give; nothing once they're given, or before tafs cloud has said.
+    fn draw_tools_row(&self) {
+        let shown = self.conv.borrow().setup.is_some();
+        let words = tafs_core::coach_tools::row(&self.w, self.coach_tools.borrow().as_ref())
+            .ok()
+            .flatten()
+            .filter(|_| shown);
+        let Some(words) = words else {
+            self.tools_row.set_visible(false);
+            return;
+        };
+        let h = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+        let l = one_line(&words, 14, 600, &["tafs-amber-text"]);
+        l.set_hexpand(true);
+        h.append(&l);
+        let chevron = symbol("go-next-symbolic", 13);
+        chevron.add_css_class("tafs-dim");
+        chevron.set_accessible_role(gtk::AccessibleRole::Presentation);
+        h.append(&chevron);
+        self.tools_row.set_child(Some(&h));
+        self.tools_row.set_visible(true);
+    }
+
+    /// `CoachToolsSheet`: the step in tafs cloud's words, each tool under a few groups and folded,
+    /// Coach's Cards in KIFF's words, then the one confirmation that gives them: signed on the
+    /// iPad, behind `ApprovalGate`, so here the gate's line stands in its place and nothing is
+    /// sent. Not now closes it.
+    fn open_tools(self: &Rc<Self>) {
+        let Some(tools) = self.coach_tools.borrow().clone() else {
+            return;
+        };
+        let Ok(l) = tafs_core::coach_tools::sheet(&self.w, &tools) else {
+            return;
+        };
+        let said = |s: &tafs_core::coach_tools::Said| {
+            text(
+                &s.words,
+                s.size,
+                s.weight,
+                &[if s.soft { "tafs-soft" } else { "tafs-ink" }],
+            )
+        };
+        let column = gtk::Box::new(gtk::Orientation::Vertical, 10);
+        column.set_margin_start(20);
+        column.set_margin_end(20);
+        column.set_margin_top(20);
+        column.set_margin_bottom(20);
+        for s in &l.lines {
+            column.append(&said(s));
+        }
+        if let Some(details) = &l.details {
+            let fold = gtk::Box::new(gtk::Orientation::Vertical, 2);
+            for s in &l.folded {
+                fold.append(&said(s));
+            }
+            fold.set_visible(false);
+            let label = gtk::Box::new(gtk::Orientation::Horizontal, 6);
+            label.append(&text(details, 14, 600, &["tafs-amber-text"]));
+            let chevron = symbol("pan-down-symbolic", 12);
+            chevron.add_css_class("tafs-amber-text");
+            label.append(&chevron);
+            let b = gtk::Button::new();
+            b.add_css_class("tafs-plain");
+            b.set_child(Some(&label));
+            b.set_halign(gtk::Align::Start);
+            b.set_widget_name("coach-tools-details");
+            {
+                let fold = fold.clone();
+                b.connect_clicked(move |_| {
+                    let open = !fold.is_visible();
+                    fold.set_visible(open);
+                    chevron.set_icon_name(Some(if open {
+                        "pan-up-symbolic"
+                    } else {
+                        "pan-down-symbolic"
+                    }));
+                });
+            }
+            column.append(&b);
+            column.append(&fold);
+        }
+        if let Some(ask) = &l.ask {
+            let a = said(ask);
+            a.set_margin_top(6);
+            column.append(&a);
+        }
+        if l.gives {
+            // The one confirmation, the person's: why this computer can't, in its place.
+            let give = primary(
+                &tools
+                    .step
+                    .as_ref()
+                    .map(|s| s.give.clone())
+                    .filter(|g| !g.trim().is_empty())
+                    .unwrap_or_else(|| self.w.line("coach.tools.give").unwrap_or_default()),
+            );
+            give.set_widget_name("coach-tools-give");
+            column.append(&crate::approval::gate(&self.w, Mode::Kiff, &give));
+        }
+        let not_now = outline(&l.not_now);
+        not_now.set_widget_name("coach-tools-not-now");
+        column.append(&not_now);
+        let scroller = gtk::ScrolledWindow::new();
+        scroller.set_hscrollbar_policy(gtk::PolicyType::Never);
+        scroller.set_vexpand(true);
+        scroller.set_child(Some(&column));
+        let header = adw::HeaderBar::new();
+        let toolbar = adw::ToolbarView::new();
+        toolbar.add_top_bar(&header);
+        toolbar.set_content(Some(&scroller));
+        crate::widgets::ground(&toolbar);
+        let dialog = adw::Dialog::new();
+        dialog.set_title(&l.title);
+        dialog.set_content_width(520);
+        dialog.set_content_height(640);
+        dialog.set_child(Some(&toolbar));
+        {
+            let d = dialog.downgrade();
+            not_now.connect_clicked(move |_| {
+                if let Some(d) = d.upgrade() {
+                    d.close();
+                }
+            });
+        }
+        dialog.present(Some(&self.root));
+    }
+
     /// `shaping`: a wide window with Coach's conversation shows what it has made so far beside
     /// it (`SetupShapePanel`), drawn again only when it changed. Whether it shows.
     fn draw_shape(&self) -> bool {
@@ -1079,6 +1245,7 @@ impl Page {
             selections,
         };
         drop(c);
+        self.draw_tools_row();
         let shaping = self.draw_shape();
         if self.drawn.borrow().as_ref() == Some(&now) {
             return;
@@ -1134,7 +1301,7 @@ fn read_setup(
     w: &WordBook,
     kept: &KeptSession,
     languages: &[&'static str],
-) -> Result<Option<String>, Fail> {
+) -> Result<(Option<String>, Option<CoachTools>), Fail> {
     let a = crate::kiff::cloud(&kept.token, languages, coach::SETUP_PATH)
         .map_err(|e| Fail::Why(e.words(w).unwrap_or_default()))?;
     if a.status == 401 {
@@ -1143,8 +1310,10 @@ fn read_setup(
     if !(200..300).contains(&a.status) {
         return Err(Fail::Why(refusal(w, &a)));
     }
-    coach::setup_id(&a.body)
-        .map_err(|_| Fail::Why(tafs_core::signin::plain_words(w, 200).unwrap_or_default()))
+    let id = coach::setup_id(&a.body)
+        .map_err(|_| Fail::Why(tafs_core::signin::plain_words(w, 200).unwrap_or_default()))?;
+    // Coach's tools as KIFF has them, from the same read (`setupRead().tools`).
+    Ok((id, CoachTools::read(&a.body)))
 }
 
 /// What a thread read brought: the chats when they were read, the one chosen, and the thread.

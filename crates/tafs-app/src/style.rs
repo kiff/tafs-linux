@@ -103,6 +103,9 @@ button.tafs-account:hover { background-color: alpha(@tafs_ink, 0.04); }
 /* "Taking shape" beside the conversation: Coach mode's blue a shade deeper; the Card on the panel,
    corners of 14, its edge dashed until KIFF confirms it, then the ok colour. */
 .tafs-coach-panel { background-color: @tafs_coach_panel; }
+/* Coach's tools still to give, one line above the conversation (`CoachToolsRow`). */
+button.tafs-tools-row { background: none; border: none; box-shadow: none; border-radius: 0; padding: 0 16px; min-height: 44px; }
+button.tafs-tools-row:hover { background-color: alpha(@tafs_ink, 0.04); }
 .tafs-shape-card { background-color: @tafs_panel; border: 1px dashed alpha(@tafs_ink, 0.25); border-radius: 14px; padding: 14px; }
 .tafs-shape-card.confirmed { border: 1px solid @tafs_ok; }
 .tafs-coach-text { color: @tafs_coach; }
