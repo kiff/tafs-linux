@@ -248,9 +248,14 @@ is sent (`docs/approval.md` › A view-only computer). The sample signs nothing,
 nothing. `--page devices-sign-out` opens the question over the sample's iPhone (CI's
 `devices-sign-out`).
 
+**Passkeys**, signed in with KIFF (`DevicesView`'s passkeys section): the account's passkeys, read
+as the session with Devices (`GET /v1/me/passkeys`, `tafs-core/devices.rs` › `Passkey`), each by
+its name ("A device" with none), and a computer's own with "Goes with its computer" under it. Why
+they couldn't be read shows under PASSKEYS, apart from the devices'. Removing one takes the
+approval key and adding one is an iPhone's, so on a computer the iPad lists them only, as here.
+
 Not on Linux: **Add a device**, since a phone pairs a computer (`PairComputerView`), never the
-computer itself; and **the account's passkeys** (`DevicesView`'s passkeys section), which the
-iPad draws only signed in with KIFF and which aren't ported yet.
+computer itself.
 ## Language
 
 **Change language** opens **Account › Language** (`LanguagePicker`, `language_picker.rs`):

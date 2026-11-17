@@ -7,7 +7,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use adw::prelude::*;
-use tafs_core::devices::{last_used, sign_out_question, Device};
+use tafs_core::devices::{last_used, sign_out_question, Device, Passkey, PASSKEYS_PATH};
 use tafs_core::sidebar::Mode;
 use tafs_core::words::WordBook;
 
@@ -38,6 +38,9 @@ thread_local! {
 struct State {
     devices: Vec<Device>,
     error: Option<String>,
+    /// The account's passkeys, signed in with KIFF: none before they're read.
+    passkeys: Option<Vec<Passkey>>,
+    passkeys_error: Option<String>,
 }
 
 pub fn page(w: Rc<WordBook>, source: DevicesSource, back: Rc<dyn Fn()>) -> gtk::Widget {
@@ -171,6 +174,48 @@ pub fn page(w: Rc<WordBook>, source: DevicesSource, back: Rc<dyn Fn()>) -> gtk::
             note.set_margin_start(12);
             note.set_margin_end(12);
             list.append(&note);
+            // PASSKEYS (signed in with KIFF): each by its name, a computer's own saying it goes with
+            // its computer. Remove takes the approval key and Add is an iPhone's, so on a computer
+            // the iPad lists them only, as here.
+            if s.passkeys.is_some() || s.passkeys_error.is_some() {
+                list.append(&crate::sheet::header(&l("settings.devices.passkeys_title")));
+                if let Some(why) = &s.passkeys_error {
+                    let t = text(why, 14, 400, &["tafs-no"]);
+                    t.set_margin_start(12);
+                    list.append(&t);
+                }
+                let keys = s.passkeys.as_deref().unwrap_or_default();
+                if !keys.is_empty() {
+                    let group = gtk::Box::new(gtk::Orientation::Vertical, 0);
+                    group.add_css_class("tafs-group");
+                    group.set_widget_name("devices.passkeys");
+                    for (i, k) in keys.iter().enumerate() {
+                        if i > 0 {
+                            let line = gtk::Separator::new(gtk::Orientation::Horizontal);
+                            line.add_css_class("tafs-line");
+                            group.append(&line);
+                        }
+                        let row = gtk::Box::new(gtk::Orientation::Vertical, 2);
+                        row.set_margin_top(12);
+                        row.set_margin_bottom(12);
+                        let name = k
+                            .name
+                            .clone()
+                            .unwrap_or_else(|| l("settings.devices.unnamed"));
+                        row.append(&one_line(&name, 15, 600, &["tafs-ink"]));
+                        if !k.removable() {
+                            row.append(&one_line(
+                                &l("settings.devices.passkey_with_computer"),
+                                13,
+                                400,
+                                &["tafs-dim"],
+                            ));
+                        }
+                        group.append(&row);
+                    }
+                    list.append(&group);
+                }
+            }
         })
     };
     match &source {
@@ -198,18 +243,47 @@ pub fn page(w: Rc<WordBook>, source: DevicesSource, back: Rc<dyn Fn()>) -> gtk::
                             .words(&words)
                             .unwrap_or_default()));
                     }
-                    Device::read_all(&a.body).ok_or_else(|| {
+                    let devices = Device::read_all(&a.body).ok_or_else(|| {
                         why(tafs_core::signin::plain_words(&words, 200).unwrap_or_default())
-                    })
+                    })?;
+                    // `refreshPasskeys`: the account's passkeys, read as the session; why not,
+                    // under their heading.
+                    let not_loaded = |why: String| {
+                        words
+                            .get("settings.devices.passkeys_not_loaded", &[("why", &why)])
+                            .unwrap_or(why)
+                    };
+                    let passkeys = match crate::kiff::kiff_get(&token, &languages, PASSKEYS_PATH) {
+                        Ok(a) if (200..300).contains(&a.status) => Passkey::read_all(&a.body)
+                            .ok_or_else(|| {
+                                not_loaded(
+                                    tafs_core::signin::plain_words(&words, 200).unwrap_or_default(),
+                                )
+                            }),
+                        Ok(a) => Err(not_loaded(
+                            tafs_core::signin::refusal(&a, Some(&words))
+                                .words(&words)
+                                .unwrap_or_default(),
+                        )),
+                        Err(e) => Err(not_loaded(e.words(&words).unwrap_or_default())),
+                    };
+                    Ok((devices, passkeys))
                 })
                 .await
                 .unwrap_or_else(|_| Err(String::new()));
                 {
                     let mut s = state.borrow_mut();
                     match read {
-                        Ok(d) => {
+                        Ok((d, passkeys)) => {
                             s.devices = d;
                             s.error = None;
+                            match passkeys {
+                                Ok(p) => {
+                                    s.passkeys = Some(p);
+                                    s.passkeys_error = None;
+                                }
+                                Err(e) => s.passkeys_error = Some(e),
+                            }
                         }
                         Err(e) => s.error = Some(e),
                     }

@@ -284,9 +284,63 @@ pub fn sign_out_question(
     }))
 }
 
+/// Where the account's passkeys are read (`KIFFClient.passkeysPath`), as the session.
+pub const PASSKEYS_PATH: &str = "/v1/me/passkeys";
+
+/// One of the account's passkeys (`KIFFClient.Passkey`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Passkey {
+    pub id: Option<String>,
+    pub name: Option<String>,
+    /// The computer it's that computer's own passkey of, when it is one.
+    pub device: Option<String>,
+}
+
+impl Passkey {
+    /// Only a passkey of its own can be removed: a computer's goes with the computer.
+    pub fn removable(&self) -> bool {
+        self.id.is_some() && self.device.is_none()
+    }
+
+    /// `passkeys()`'s answer: `passkeys`, none sent being none. A field present but not a string,
+    /// or a list that isn't one, fails the read, as the iPad's decoder.
+    pub fn read_all(body: &[u8]) -> Option<Vec<Passkey>> {
+        let v: Value = serde_json::from_slice(body).ok()?;
+        let list = match v.as_object()?.get("passkeys") {
+            None | Some(Value::Null) => return Some(vec![]),
+            Some(l) => l.as_array()?,
+        };
+        list.iter()
+            .map(|p| {
+                p.as_object()?;
+                Some(Passkey {
+                    id: strict_text(p, "id").ok()?,
+                    name: strict_text(p, "name").ok()?,
+                    device: strict_text(p, "device_id").ok()?,
+                })
+            })
+            .collect()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn passkeys_read_as_the_ipad_reads_them() {
+        let p = Passkey::read_all(
+            br#"{"passkeys":[{"id":"pk_1","name":"Rae's iPhone","synced":true,"created_at":"2026-11-01T09:00:00Z"},
+            {"id":"pk_2","name":null,"device_id":"dev_mac"}]}"#,
+        )
+        .unwrap();
+        assert_eq!(p.len(), 2);
+        assert!(p[0].removable());
+        assert!(!p[1].removable());
+        assert_eq!(Passkey::read_all(b"{}").unwrap(), vec![]);
+        assert_eq!(Passkey::read_all(br#"{"passkeys":[{"name":3}]}"#), None);
+        assert!(!crate::signed::signed("GET", PASSKEYS_PATH));
+    }
 
     #[test]
     fn relative_times_as_ios_says_them() {
