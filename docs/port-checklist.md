@@ -52,6 +52,7 @@ ports a file updates its line here.
 | DriveViews.swift | 73 | Coach asks to drive the app | `DriveCard` read only: answered, its line; waiting, its eyebrow, task and note, then `ApprovalGate`'s line; `DriveRecapCard`'s eyebrow and task (`coach_lines.rs`) | Approving or declining a drive; a recap's steps and why it ended (`DriveStep` isn't decoded) |
 | SetupShapePanel.swift | 130 | What Coach has made so far | `SetupShapePanel` beside Coach's conversation at 780 px or more: the eyebrow, the name or plan's title, the empty words, the plan with `StepMark` and Needs you, the Card KIFF drafted (dashed until confirmed) with its note; `SetupShape` with `asks` and `setupWaiting` (`coach.rs`, `tafs-core/setup_shape.rs`) | The tools it connects, from planque's grants (this computer reads none); shown without `planqueReady`, which this computer never is |
 | CoachToolsStep.swift | 255 | Coach's tools still to give | `CoachToolsRow` above the conversation and `CoachToolsSheet` with `CoachToolsGiven`'s step body (groups, the fold, each tool, Coach's Cards in KIFF's words, the ask, Not now), taken and unknown; Give is `ApprovalGate`'s line, as the iPad wraps it; `CoachTools.read` with the pair's Cards (`coach.rs`, `tafs-core/coach_tools.rs`) | Giving them (signed, the phone's); `CoachToolsGiven`'s Start screen (`start: true`), which belongs to Coach's first Start (signed); opening the step after a first Start |
+| CoachMode.swift | 131 | Coach mode over the app | `CoachPanel` over any screen with its shade: a third of the window or the width chosen, kept across launches; the edge's handle dragging it wider, to full screen, narrower and closed; ⤢ and Back in `CoachView`'s title row; a click outside it, Escape and Back closing it (`coach_mode.rs`, `tafs-core/coach_mode.rs`) | The swipe of the conversation that closes it (touch); the slide in and out; `PhoneCoachPanel` (a phone's) |
 | WorkLog.swift | 181 | What a taf does while it answers | `WorkSummary` folded under Coach's words (`coach: true`) and under a taf's in its chat (its steps in `tafActivityWords`' words), with `WorkLog.rows`, `duration` and `StepList` (`chat.rs`, `coach_lines.rs` › `work_lines`, `taf_work_lines`) | `LiveWork` and `SteadyMarkdown` (no stream); a connected tool's title from planque (`toolTitle`): its name in KIFF in words stands for it |
 
 ## Not started
@@ -61,7 +62,6 @@ ports a file updates its line here.
 | AllowSheetView.swift | 96 | "Allow this from now on" | HoldAllow |
 | AppEventApprovalSheet.swift | 54 | An app event's filters before signing a subscription | |
 | AttachViews.swift | 267 | Attaching photos and files in a chat | |
-| CoachMode.swift | 131 | Coach mode over the app | |
 | MicButton.swift | 122 | The mic in a chat's message bar | |
 | TafKnobView.swift | 377 | The taf's remote | KnobNavigation |
 | TafSetupViews.swift | 512 | A taf's Setup | |
@@ -125,4 +125,4 @@ ports a file updates its line here.
 
 ## Coverage
 
-Ported 12, partial 27, not started 8, not for Linux 4: the 51 view files at the pin.
+Ported 12, partial 28, not started 7, not for Linux 4: the 51 view files at the pin.

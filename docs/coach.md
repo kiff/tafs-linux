@@ -1,7 +1,7 @@
 # Coach
 
-The iPad's Coach conversation (`SetupChatView` at a regular width), beside the sidebar, with its
-message box. Its Coach button opens it, signed in with KIFF by someone who may use Coach; the sample
+The iPad's Coach conversation (`SetupChatView` at a regular width) in Coach mode over the app
+(below), with its message box. Its Coach button opens it, signed in with KIFF by someone who may use Coach; the sample
 has no Coach, so there it still opens its title alone. What it reads and how it's decoded is
 `tafs-core/src/coach.rs`; the device's proof is `tafs-core/src/planque.rs`; what's sent, and how the
 conversation holds it while it goes, is `tafs-core/src/coach_send.rs`; what it draws is
@@ -159,6 +159,22 @@ iPad does, and tafs cloud marks no card. The token, the key and the signature ar
 - **After the thread:** "While you were away" and how the tasks Coach handed out went, the dots
   while Coach is at work, and what was written to its run that it hasn't read yet.
 
+## Coach mode
+
+Coach slides in from the right over whatever is open (`CoachPanel`, `crates/tafs-app/src/coach_mode.rs`,
+`tafs-core/src/coach_mode.rs`), which stays in view under a light shade; anything that opens Coach
+(the sidebar's Coach, the brief's next move, Connect apps' Ask Coach) opens it there. It opens at a
+third of the window, or the width last chosen, kept in the user's config folder (`coach.width`,
+`coach.full`). Its left edge drags it wider, up to full screen within 40 px of the window's edge,
+or narrower, never under a third; dragged more than 60 px past that, it closes. Its title row has
+Back and ⤢ (Full screen, or Back to its width) before the title, as the iPad's `CoachView`. A click
+on the shade (not when full screen), Escape and Back close it. Closing never ends a conversation:
+its page goes, its reads stop, and opening it again reads it anew, the words not sent kept.
+
+Not on Linux: the swipe of the conversation to the right that closes it on a touch screen (a drag
+there selects text here), and the phone's `PhoneCoachPanel` (a compact width, which this computer's
+sidebar layout doesn't have). The iPad slides it in and out; here it appears and goes.
+
 ## Coach's tools
 
 While `GET /v1/setup`'s `tools` says they're still to give (`to_give`, `taken` or `unknown`),
@@ -235,4 +251,6 @@ by id (`{"status", "answer"}`), never read: `coach-draft`
 read) and `coach-draft-refused` (`coach-drafts-refused.json`: KIFF's refusal, with Try again).
 `--coach-setup <answer.json>` gives tafs cloud's `GET /v1/setup` answer for Coach's tools, and
 `--page coach-tools` opens their step: `coach-tools` (`shared/contracts/setup-coach.json` over
-`coach-asks.json`).
+`coach-asks.json`). `--page coach` opens Coach mode at a third of the window over the Overview, and
+`--page coach-full` full screen, keeping nothing: `coach-full` (`coach-card.json` with its draft,
+"Taking shape" beside it).

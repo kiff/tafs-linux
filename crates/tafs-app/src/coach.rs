@@ -1,4 +1,4 @@
-//! Coach beside the sidebar (`SetupChatView` at a regular width): Coach's conversation as tafs
+//! Coach in Coach mode's panel (`SetupChatView` at a regular width, `coach_mode.rs`): Coach's conversation as tafs
 //! cloud reads it with this computer's proof, drawn as the iPad draws it, with its message box.
 //! The owner writes to Coach, unsigned, as the session (`TafsCloud.sendMessage`, `steer`, `stop`);
 //! the sent message shows at once until tafs cloud's copy takes its place, and the thread is read
@@ -140,6 +140,7 @@ pub fn page(
     source: CoachSource,
     listed: Rc<Vec<Listed>>,
     open: Rc<dyn Fn(Selection)>,
+    chrome: Option<crate::coach_mode::Chrome>,
 ) -> gtk::Widget {
     let root = gtk::Box::new(gtk::Orientation::Vertical, 0);
     root.add_css_class("tafs-coach-wash");
@@ -184,6 +185,10 @@ pub fn page(
     tools.append(&menu);
     tools.set_visible(false);
     bar.set_end_widget(Some(&tools));
+    // In Coach mode's panel: Back, and ⤢ at the leading edge (`CoachView`).
+    if let Some(chrome) = &chrome {
+        bar.set_start_widget(Some(&crate::coach_mode::chrome_buttons(&w, chrome)));
+    }
     root.append(&bar);
     // A wide window (`shaping`): the conversation, and beside it what it has made so far.
     let chat = gtk::Box::new(gtk::Orientation::Vertical, 0);
@@ -239,17 +244,7 @@ pub fn page(
     body.set_vexpand(true);
     body.append(&chat);
     body.append(&side);
-    let bin = adw::BreakpointBin::new();
-    bin.set_size_request(320, 240);
-    bin.set_vexpand(true);
-    bin.set_child(Some(&body));
-    // Narrower than side by side: the conversation alone (a compact width keeps the chat alone).
-    let narrow = adw::Breakpoint::new(adw::BreakpointCondition::new_length(
-        adw::BreakpointConditionLengthType::MaxWidth,
-        f64::from(tafs_core::setup_shape::SIDE_BY_SIDE - 1),
-        adw::LengthUnit::Px,
-    ));
-    root.append(&bin);
+    root.append(&body);
 
     let page = Rc::new(Page {
         w,
@@ -273,7 +268,7 @@ pub fn page(
         scroller,
         error,
         composer,
-        wide: Cell::new(true),
+        wide: Cell::new(false),
         coach_tools: RefCell::new(None),
         tools_row,
         side,
@@ -289,22 +284,29 @@ pub fn page(
             }
         });
     }
-    for compact in [true, false] {
-        let p = Rc::downgrade(&page);
-        let set = move |_: &adw::Breakpoint| {
-            if let Some(p) = p.upgrade() {
-                p.wide.set(!compact);
-                *p.drawn.borrow_mut() = None;
-                p.draw();
+    // The page's width (`GeometryReader`): side by side from 780, else the conversation alone.
+    // Only a change of side draws again. The callback holds the page while it's on screen, and
+    // goes with it.
+    {
+        let p = page.clone();
+        let id = page.root.add_tick_callback(move |widget, _| {
+            let width = widget.width();
+            if width > 0 {
+                let wide = width >= tafs_core::setup_shape::SIDE_BY_SIDE;
+                if p.wide.replace(wide) != wide {
+                    *p.drawn.borrow_mut() = None;
+                    p.draw();
+                }
             }
-        };
-        if compact {
-            narrow.connect_apply(set);
-        } else {
-            narrow.connect_unapply(set);
-        }
+            glib::ControlFlow::Continue
+        });
+        let id = RefCell::new(Some(id));
+        page.root.connect_unmap(move |_| {
+            if let Some(id) = id.borrow_mut().take() {
+                id.remove();
+            }
+        });
     }
-    bin.add_breakpoint(narrow);
     {
         let p = Rc::downgrade(&page);
         new_chat.connect_clicked(move |_| {

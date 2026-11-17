@@ -15,6 +15,7 @@ pub mod card;
 pub mod cards;
 pub mod coach;
 pub mod coach_lines;
+pub mod coach_mode;
 pub mod coach_send;
 pub mod coach_tools;
 pub mod connect;
