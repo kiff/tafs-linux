@@ -181,8 +181,13 @@ pub fn page(
                 column.remove(&c);
             }
             let (width, height) = (outer.width(), outer.height());
+            // On its side: the window's shape (`layout_in`).
+            let landscape = outer
+                .root()
+                .map(|r| r.width() > r.height())
+                .unwrap_or(width > height);
             let how = if width > 0 {
-                layout(f64::from(width), f64::from(height))
+                tafs_core::calendar::layout_in(f64::from(width), f64::from(height), landscape)
             } else {
                 Layout::Wide
             };
