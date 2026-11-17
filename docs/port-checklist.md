@@ -62,9 +62,7 @@ ports a file updates its line here.
 
 ## Not started
 
-| iPad file | Lines | What | Models |
-| :- | -: | :- | :- |
-| MicButton.swift | 122 | The mic in a chat's message bar | |
+None.
 
 ## Not for Linux
 
@@ -75,6 +73,7 @@ ports a file updates its line here.
 | PairComputerView.swift | 222 | The phone's side of pairing: the camera reads a computer's code. The computer's side is tafs-macos's, ported in [pairing](pairing.md) (`pairing.rs`, `tafs-core/pairing.rs`). |
 | TafKnobRemote.swift | 64 | Keeps the remote above the phone's tab bar. |
 | AllowSheetView.swift | 96 | "Allow this from now on" comes with answering a held call on the device, which the iPad does only with the session's key (`canAnswer`). A session with no key, as this computer's, answers in KIFF. |
+| MicButton.swift | 122 | The iPad's dictation is on the device only (`requiresOnDeviceRecognition`), and a Linux desktop has no on-device speech recognition: no mic, as the iPad draws none where no on-device locale exists. Nothing of tafs sends a voice off the device. |
 
 ## Shared pieces
 
@@ -127,4 +126,4 @@ ports a file updates its line here.
 
 ## Coverage
 
-Ported 23, partial 22, not started 1, not for Linux 5: the 51 view files at the pin.
+Ported 23, partial 22, not started 0, not for Linux 6: the 51 view files at the pin.

@@ -101,6 +101,12 @@ In the iPad's order, in a column at most 720 wide:
 - **The box:** "Message Rae", or "Write the next message" while it works; Send on the brand sweep, its
   label "Send to Rae while it works" then; Stop in the ink. Ctrl+Enter sends.
 
+## No mic
+
+The iPad's mic dictates on the device only (`requiresOnDeviceRecognition`), and a Linux desktop
+has no on-device speech recognition, so there's no mic here; nothing of tafs sends a voice off the
+device.
+
 ## Files
 
 Attaching photos and files (`AttachViews.swift`, `tafs-core/attach.rs`, app `attach.rs`), in a
@@ -164,7 +170,7 @@ answer that can be reported; its Send sends nothing.
   held call (the chat opens at its newest).
 - What became of a held call the owner answered (`OutcomeLine` from the Record: KIFF's answer time
   isn't read here), and a held call's place from the stream (`anchors`).
-- A door's knocks among the messages (they're on the Activity tab), the mic, Copy
+- A door's knocks among the messages (they're on the Activity tab), Copy
   and Delete on a message not sent, and keeping across launches which unread rows were dealt with.
 - The sample's chat (`sampleReply`).
 
