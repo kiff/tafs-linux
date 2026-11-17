@@ -82,7 +82,7 @@ pub struct Opening {
     pub id: String,
     pub source: RunsSource,
     pub manages: bool,
-    /// Coach from a run's page (`openCoach`, on the taf on screen), for someone who may use it.
+    /// Coach from a run's page (`openCoach`, on the taf on screen), where `offersAskCoach`.
     pub coach: Option<Rc<dyn Fn()>>,
 }
 
@@ -115,7 +115,7 @@ fn row(r: &Row, open: &Opening) -> gtk::Widget {
 
 /// A run's own page (`KnobRequestDetail`), over the window: where it came from and its line,
 /// each step with its mark, Try the reply now for whoever manages the taf, and Ask Coach for
-/// someone who may use Coach.
+/// someone who may use Coach and manages it.
 pub fn request_sheet(open: Opening, run: String, parent: &impl IsA<gtk::Widget>) {
     let w = open.w.clone();
     let column = gtk::Box::new(gtk::Orientation::Vertical, 16);

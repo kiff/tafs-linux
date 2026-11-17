@@ -278,7 +278,8 @@ pub fn page(
                 id.clone(),
                 t.runs.clone(),
                 t.manages,
-                (t.may_use_coach && !t.sample).then(|| open_coach.clone()),
+                tafs_core::runs::offers_ask_coach(t.sample, t.may_use_coach, t.manages)
+                    .then(|| open_coach.clone()),
             );
             if let Some(line) = &t.runs_line {
                 if !matches!(t.runs, crate::runs_panel::RunsSource::None) {

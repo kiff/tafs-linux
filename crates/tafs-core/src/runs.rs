@@ -22,6 +22,13 @@ pub fn path(taf: &str, cursor: Option<&str>, limit: u32) -> String {
     p
 }
 
+/// Whether a run's own page offers Ask Coach (`KnobRequestDetail.offersAskCoach`): in the sample,
+/// and signed in for someone who may use Coach and manages the taf, as every way into Coach on
+/// a taf.
+pub fn offers_ask_coach(sample: bool, may_use_coach: bool, manages: bool) -> bool {
+    sample || (may_use_coach && manages)
+}
+
 pub fn run_path(taf: &str) -> String {
     format!("/v1/tafs/{}/run", segment(taf))
 }
@@ -230,6 +237,14 @@ pub fn next_line(w: &WordBook, h: &HomeTaf) -> Result<(String, bool), WordsError
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_runs_ask_coach_is_for_whoever_may_use_coach_and_manages_the_taf() {
+        assert!(offers_ask_coach(false, true, true));
+        assert!(!offers_ask_coach(false, true, false), "not managing it");
+        assert!(!offers_ask_coach(false, false, true), "not using Coach");
+        assert!(offers_ask_coach(true, false, false), "the sample's");
+    }
 
     const PAGE: &str = r#"{"title": "Its runs", "more_title": "See all 12 runs", "next_cursor": "c/2",
       "requests": [
