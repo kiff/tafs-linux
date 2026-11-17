@@ -291,7 +291,31 @@ fn options() -> Result<Options, String> {
     Ok(o)
 }
 
+/// GTK's own renderer draws with GL through libepoxy, which stops the app outright when the GL
+/// library it needs can't be opened ("Couldn't open libGLESv2.so.2", on a system with no GL ES,
+/// such as a bare WSL). With no renderer asked for, and EGL or GL ES not there, GTK draws with
+/// cairo, in software, instead.
+fn renderer_without_gl() -> Option<&'static str> {
+    if std::env::var_os("GSK_RENDERER").is_some_and(|r| !r.is_empty()) {
+        return None;
+    }
+    let opens = |name: &str| {
+        // SAFETY: only opened to see that it can be, by the system's own loader, and closed again.
+        unsafe { libloading::Library::new(name) }.is_ok()
+    };
+    if opens("libEGL.so.1") && opens("libGLESv2.so.2") {
+        None
+    } else {
+        Some("cairo")
+    }
+}
+
 fn main() -> glib::ExitCode {
+    // Before GTK starts, and before any thread: the renderer it can draw with here.
+    if let Some(renderer) = renderer_without_gl() {
+        eprintln!("no GL ES here: drawing with {renderer}");
+        std::env::set_var("GSK_RENDERER", renderer);
+    }
     let options = match options() {
         Ok(o) => o,
         Err(e) => {

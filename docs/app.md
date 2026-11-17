@@ -172,8 +172,12 @@ fails on:
 - a GL library GTK's own renderer can't open: the first screen is drawn again with GTK's default
   renderer, not the software one the others use. The desktop base includes GL ES (`libgles2`),
   as a desktop has: linuxdeploy leaves the GL libraries out, since they're the GPU driver's. On
-  a system without it (a server image, as WSL's Ubuntu), GTK said "Couldn't open
-  libGLESv2.so.2" and no window opened.
+  a system without it (a server image, as WSL's Ubuntu), libepoxy said "Couldn't open
+  libGLESv2.so.2" and stopped the app before any window opened. So the app now looks first:
+  with no renderer asked for (`GSK_RENDERER` unset or empty) and EGL or GL ES not there to open,
+  it draws with cairo, in software, and says "no GL ES here: drawing with cairo";
+- that fallback: the first screen once more after GL ES is removed (`dpkg -r libgles2`), which
+  must be drawn, and with cairo.
 
 **Signing.** The draft job signs `SHA256SUMS` with tafs for Linux's OpenPGP key
 (`tools/sign.sh`): an armored detached signature, `SHA256SUMS.asc`, attached beside it. Whoever

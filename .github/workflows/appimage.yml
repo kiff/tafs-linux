@@ -52,7 +52,7 @@ jobs:
           app=$(ls tafs-*-x86_64.AppImage)
           file "$app"
           APPIMAGE_EXTRACT_AND_RUN=1 "./$app" --help 2>&1 | grep -q '^tafs \['
-      - name: On a clean Ubuntu 24.04, its three screens with every icon
+      - name: On a clean Ubuntu 24.04, its screens with every icon, with GL and with no GL ES
         # tools/check-appimage.sh, in a container with no GTK. Its screenshots aren't kept.
         run: |
           mkdir -p shots
@@ -108,7 +108,7 @@ jobs:
           app=$(ls tafs-*-x86_64.AppImage)
           file "$app"
           APPIMAGE_EXTRACT_AND_RUN=1 "./$app" --help 2>&1 | grep -q '^tafs \['
-      - name: On a clean Ubuntu 24.04, its three screens with every icon
+      - name: On a clean Ubuntu 24.04, its screens with every icon, with GL and with no GL ES
         # No draft is made of an AppImage that fails here. Its screenshots aren't kept.
         run: |
           mkdir -p shots
