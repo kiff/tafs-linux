@@ -184,7 +184,8 @@ under it, as on the iPad's Doors tab:
 - **The face pressed:** a held call that may be approved once (signed: the can't-approve line);
   Coach for an "Add a door" stop; else, for whoever manages the taf, the chosen stop's act as the
   session: a door opened or closed (`PATCH …/doors/{door}`), a run started (`POST …/run`), a
-  follow-up removed; an app event's Approve is signed at planque (refused here). With nothing
+  follow-up removed; an app event to approve opens its filters (`AppEventApprovalSheet`), where
+  Approve, signed at planque, stands as the gate's line ([approval](approval.md)). With nothing
   chosen, it walks to the first stop.
 - Under it, the stop's words or the dial's caption, the size in force, Needs you while a call may
   be approved once (its face), ‹ Why back to the job; **the remote** (Back, Lower, the power

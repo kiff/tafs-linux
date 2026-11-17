@@ -128,6 +128,27 @@ impl Approval {
     }
 }
 
+impl From<&crate::knob::Item> for Item {
+    /// A stop of the dial as the dial read it, for its sheet.
+    fn from(i: &crate::knob::Item) -> Item {
+        Item {
+            id: i.id.clone(),
+            kind: i.kind.clone(),
+            label: i.label.clone(),
+            words: i.words.clone(),
+            on: i.on,
+            ok: i.ok.clone(),
+            approval: i.approval.as_ref().map(|a| Approval {
+                state: a.state.clone(),
+                grant: a.grant.clone(),
+                event: a.event.clone(),
+                config: a.config.clone(),
+                subscription: a.subscription.clone(),
+            }),
+        }
+    }
+}
+
 impl Item {
     /// One stop, or none when the iPad's decoder would throw on it.
     pub fn read(v: &Value) -> Option<Item> {
@@ -361,6 +382,12 @@ mod tests {
         assert_eq!((a.state.as_str(), a.grant.as_str()), ("needed", "g_9"));
         assert_eq!(a.event, "NEW_TICKET");
         assert_eq!(a.subscription, None);
+    }
+
+    #[test]
+    fn the_dials_stop_is_the_sheets() {
+        let knob: crate::knob::Item = serde_json::from_str(NEEDED).unwrap();
+        assert_eq!(Item::from(&knob), Item::parse(NEEDED.as_bytes()).unwrap());
     }
 
     #[test]
