@@ -1,0 +1,80 @@
+name: Verify a draft release
+
+# Run by hand with a draft's tag, before it's published: its own AppImage, checked against its
+# SHA256SUMS, then started once in a clean Ubuntu 24.04 container (nothing of GTK or libadwaita
+# installed, only a virtual display and a font), first screen and sign-in. The two screenshots
+# are kept as the run's artifact; the AppImage isn't, since this repository is public.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "The draft's tag, as v1.0.0"
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    permissions:
+      # A draft release is listed only to a token that may write the repository's contents. This
+      # job only reads it: it creates, edits and publishes nothing.
+      contents: write
+    steps:
+      - name: The version
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          if ! [[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "The version is v and three numbers, as v1.0.0: not '$VERSION'." >&2
+            exit 1
+          fi
+      - name: The draft's AppImage and SHA256SUMS, checked
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          mkdir release
+          id=$(gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
+            --jq ".[] | select(.tag_name == \"$VERSION\" and .draft) | .id")
+          if [ -z "$id" ]; then
+            echo "No draft release $VERSION." >&2
+            exit 1
+          fi
+          gh api "repos/$GITHUB_REPOSITORY/releases/$id/assets" --jq '.[] | "\(.id) \(.name)"' |
+            while read -r asset name; do
+              case "$name" in
+                tafs-*-x86_64.AppImage | SHA256SUMS)
+                  gh api -H "Accept: application/octet-stream" \
+                    "repos/$GITHUB_REPOSITORY/releases/assets/$asset" > "release/$name" ;;
+              esac
+            done
+          cd release
+          ls -l
+          sha256sum -c SHA256SUMS
+      - name: In a clean Ubuntu 24.04, to its first screen and the sign-in
+        run: |
+          docker run --rm -v "$PWD/release:/release" -w /release ubuntu:24.04 bash -c '
+            set -euo pipefail
+            apt-get update -qq
+            DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends \
+              xvfb xauth fonts-dejavu-core > /dev/null
+            if dpkg -l | grep -qE "libgtk-4|libadwaita"; then
+              echo "Not clean: GTK 4 or libadwaita is installed." >&2
+              exit 1
+            fi
+            app=$(ls tafs-*-x86_64.AppImage)
+            chmod +x "$app"
+            export APPIMAGE_EXTRACT_AND_RUN=1 GSK_RENDERER=cairo NO_AT_BRIDGE=1
+            timeout 120 xvfb-run -a "./$app" --screenshot /release/first-screen.png
+            timeout 120 xvfb-run -a "./$app" --page sign-in --screenshot /release/sign-in.png
+            test -s /release/first-screen.png
+            test -s /release/sign-in.png
+          '
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: verify-${{ inputs.version }}
+          path: |
+            release/first-screen.png
+            release/sign-in.png
