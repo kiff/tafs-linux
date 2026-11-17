@@ -328,7 +328,8 @@ button.tafs-back { background: none; border: none; box-shadow: none; color: @taf
 button.tafs-list-button { background-color: @tafs_panel; background-image: none; border: none; border-radius: 18px; padding: 16px; box-shadow: none; color: @tafs_amber_text; font-size: 17px; font-weight: 400; }
 button.tafs-list-button label { font-size: 17px; }
 button.tafs-list-button > label { margin: 0; }
-entry.tafs-search, .tafs-search { border-radius: 999px; min-height: 36px; }
+/* The search capsule (`.searchable`): white with the line colour's edge, as the iPad's. */
+entry.tafs-search, .tafs-search { border-radius: 999px; min-height: 36px; background-color: @tafs_panel; border: 1px solid @tafs_line; box-shadow: none; outline: none; }
 button.tafs-outline.compact { min-height: 30px; padding: 8px 16px; }
 button.tafs-list-button label { margin: 0; }
 .tafs-ok { color: @tafs_ok; }
