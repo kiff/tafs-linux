@@ -115,6 +115,18 @@ impl ChatTarget {
 
 /// `MessageBody` as `JSONEncoder` writes it: an absent option is left out, `new_chat` and
 /// `new_chat_after_handover` only when true, and the files' ids only when there are some.
+/// Whether a message not sent keeps its id for Retry (kiff/tafs `docs/api.md`): when nothing
+/// answered (`None`), the connection dropped (0), it timed out (408) or tafs cloud failed (5xx),
+/// tafs cloud may have taken it, and the same id gets the run it started. A 2xx whose answer
+/// couldn't be read was taken. Any other answer (a 409, a 400, a 429) refused it: Retry is a new
+/// message, with a new id.
+pub fn retry_keeps_id(status: Option<u16>) -> bool {
+    match status {
+        None | Some(0) | Some(408) => true,
+        Some(s) => (200..300).contains(&s) || s >= 500,
+    }
+}
+
 /// A message's own id (`client_message_id`): a v4 UUID, one per message composed, sent on the
 /// stream, on the plain send that takes its place and on a steer, so a send that's repeated is
 /// acted on once.
@@ -1235,17 +1247,21 @@ impl Conversation {
     }
 
     /// It didn't go: kept in the thread as not sent, with why.
+    /// `answered`: tafs cloud's status, none when nothing answered (`retry_keeps_id`).
     pub fn not_sent(
         &mut self,
         d: &Delivery,
         why: &str,
         halted: Option<String>,
+        answered: Option<u16>,
         now: DateTime<Utc>,
     ) {
         self.sending = false;
         self.drop_local(&d.local);
         self.keep_unsent(&d.text, why, halted, None, now);
-        self.unsent_id(&d.client_id);
+        if retry_keeps_id(answered) {
+            self.unsent_id(&d.client_id);
+        }
     }
 
     /// The id the next message goes under: a Retry's, else a new one.
@@ -1276,10 +1292,13 @@ impl Conversation {
         id: &str,
         why: &str,
         halted: Option<String>,
+        answered: Option<u16>,
         now: DateTime<Utc>,
     ) {
         self.keep_unsent(text, why, halted, None, now);
-        self.unsent_id(id);
+        if retry_keeps_id(answered) {
+            self.unsent_id(id);
+        }
     }
 
     /// `settleSetupChat`: once a new conversation's first message went, its chat is the one shown.
@@ -2061,7 +2080,7 @@ mod tests {
         let Submit::Send(d) = c.submit("Hi", now) else {
             panic!()
         };
-        c.not_sent(&d, "offline", None, now);
+        c.not_sent(&d, "offline", None, None, now);
         assert_eq!(c.thread.messages.len(), n);
         assert_eq!(c.unsent[0].text, "Hi");
         // Its row keeps the message's id: Retry goes under it again.
@@ -2073,7 +2092,7 @@ mod tests {
             panic!()
         };
         assert_eq!(again.client_id, d.client_id);
-        c.not_sent(&again, "offline", None, now);
+        c.not_sent(&again, "offline", None, None, now);
         let (place2, back2) = c.retry(c.unsent[0].id).unwrap();
         assert_eq!(back2.client_id, back.client_id);
         let _ = place;

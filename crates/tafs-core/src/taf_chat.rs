@@ -684,12 +684,16 @@ impl TafChat {
         why: &str,
         halted: Option<String>,
         busy: bool,
+        answered: Option<u16>,
         now: DateTime<Utc>,
     ) {
         self.sending = false;
         self.drop_local(&d.local);
         self.keep_unsent(&d.text, why, halted, None, busy, now);
-        self.unsent_id(&d.client_id);
+        // Retry keeps the id only where tafs cloud may have taken it (`retry_keeps_id`).
+        if crate::coach_send::retry_keeps_id(answered) {
+            self.unsent_id(&d.client_id);
+        }
     }
 
     /// The id the next message goes under: a Retry's, else a new one.
@@ -726,10 +730,13 @@ impl TafChat {
         why: &str,
         halted: Option<String>,
         busy: bool,
+        answered: Option<u16>,
         now: DateTime<Utc>,
     ) {
         self.keep_unsent(text, why, halted, None, busy, now);
-        self.unsent_id(id);
+        if crate::coach_send::retry_keeps_id(answered) {
+            self.unsent_id(id);
+        }
     }
 
     /// The chat Stop stops (`stopChat`): the one at work, else the thread's latest. The wait ends.

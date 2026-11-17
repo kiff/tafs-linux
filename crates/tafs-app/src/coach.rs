@@ -1060,7 +1060,9 @@ impl Page {
                 }
                 None => {
                     let why = tafs_core::signin::plain_words(&self.w, 200).unwrap_or_default();
-                    self.conv.borrow_mut().not_sent(&d, &why, None, now);
+                    self.conv
+                        .borrow_mut()
+                        .not_sent(&d, &why, None, Some(200), now);
                     true
                 }
             },
@@ -1076,14 +1078,18 @@ impl Page {
                     false
                 } else {
                     let why = r.words(&self.w).unwrap_or_default();
-                    self.conv
-                        .borrow_mut()
-                        .not_sent(&d, &why, r.halted.clone(), now);
+                    self.conv.borrow_mut().not_sent(
+                        &d,
+                        &why,
+                        r.halted.clone(),
+                        Some(r.status),
+                        now,
+                    );
                     true
                 }
             }
             Err(why) => {
-                self.conv.borrow_mut().not_sent(&d, &why, None, now);
+                self.conv.borrow_mut().not_sent(&d, &why, None, None, now);
                 true
             }
         };
@@ -1221,7 +1227,7 @@ impl Page {
                     let why = tafs_core::signin::plain_words(&self.w, 200).unwrap_or_default();
                     self.conv
                         .borrow_mut()
-                        .steer_not_sent(words, id, &why, None, now);
+                        .steer_not_sent(words, id, &why, None, Some(200), now);
                     true
                 }
             },
@@ -1243,16 +1249,21 @@ impl Page {
                     false
                 } else {
                     let why = r.words(&self.w).unwrap_or_default();
-                    self.conv
-                        .borrow_mut()
-                        .steer_not_sent(words, id, &why, r.halted.clone(), now);
+                    self.conv.borrow_mut().steer_not_sent(
+                        words,
+                        id,
+                        &why,
+                        r.halted.clone(),
+                        Some(r.status),
+                        now,
+                    );
                     true
                 }
             }
             Err(why) => {
                 self.conv
                     .borrow_mut()
-                    .steer_not_sent(words, id, &why, None, now);
+                    .steer_not_sent(words, id, &why, None, None, now);
                 true
             }
         };

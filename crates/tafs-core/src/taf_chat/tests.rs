@@ -548,14 +548,15 @@ fn not_sent_rows_and_a_halt_this_computer_cant_resume() {
         "Rae is halted. Resume it to send.",
         Some("taf".into()),
         false,
+        Some(409),
         now,
     );
     assert!(!c.sending);
     assert!(c.thread.messages.iter().all(|m| m.session != PENDING));
     let d = c.deliver("Refund 4411", now).unwrap();
-    c.not_sent(&d, "Rae is halted", None, false, now);
+    c.not_sent(&d, "Rae is halted", None, false, None, now);
     let d = c.deliver("Refund 4412", now).unwrap();
-    c.not_sent(&d, "It didn't reach tafs cloud.", None, false, now);
+    c.not_sent(&d, "It didn't reach tafs cloud.", None, false, None, now);
     let whose = Whose {
         name: Some("Rae"),
         ask_coach: false,
@@ -605,7 +606,7 @@ fn a_message_that_goes_takes_a_too_fast_one_away() {
         taf("Hello", "2026-11-16T09:00:00Z", "s")
     ));
     let d = c.deliver("one", now).unwrap();
-    c.not_sent(&d, "too many", None, true, now);
+    c.not_sent(&d, "too many", None, true, Some(429), now);
     let d = c.deliver("two", now).unwrap();
     c.delivered(
         &d,
@@ -617,7 +618,7 @@ fn a_message_that_goes_takes_a_too_fast_one_away() {
     let mut c = chat_of(std::str::from_utf8(&fixture("taf-chat.json")).unwrap());
     let (_, u) = c.retry(c.unsent[0].id).unwrap();
     let left = c.unsent.len();
-    c.steer_not_sent(&u.text, "id", "again", None, false, now);
+    c.steer_not_sent(&u.text, "id", "again", None, false, None, now);
     c.retry_kept(left, &u);
     assert_eq!(c.unsent[0].settle, u.settle);
 }
@@ -1322,7 +1323,7 @@ fn each_message_goes_under_its_own_id_and_retry_under_the_same() {
         serde_json::from_slice(&message_body(&d.text, &d.target, &d.files, Some(&id))).unwrap();
     assert_eq!(body["client_message_id"], serde_json::json!(id));
     // Not sent: its row keeps the id, and Retry sends under it again.
-    c.not_sent(&d, "It didn't go.", None, false, now);
+    c.not_sent(&d, "It didn't go.", None, false, None, now);
     assert_eq!(c.unsent[0].client_id.as_deref(), Some(id.as_str()));
     let (_, again) = c.retry(c.unsent[0].id).unwrap();
     let d2 = c.deliver(&again.text, now).unwrap();
@@ -1340,13 +1341,13 @@ fn each_message_goes_under_its_own_id_and_retry_under_the_same() {
     let d3 = c.deliver("And 4411", now).unwrap();
     assert_ne!(d3.client_id, id);
     // Edit takes the words back to the box: what's sent from there is a new message.
-    c.not_sent(&d3, "It didn't go.", None, false, now);
+    c.not_sent(&d3, "It didn't go.", None, false, None, now);
     let row = c.unsent.last().unwrap().id;
     let words = c.edit(row).unwrap();
     let d4 = c.deliver(&words, now).unwrap();
     assert_ne!(d4.client_id, d3.client_id);
     // A Retry that wasn't taken leaves no id for the next message.
-    c.not_sent(&d4, "It didn't go.", None, false, now);
+    c.not_sent(&d4, "It didn't go.", None, false, None, now);
     let row = c.unsent.last().unwrap().id;
     let (at_, m) = c.retry(row).unwrap();
     c.retry_back(at_, m);
@@ -1375,7 +1376,7 @@ fn a_steer_goes_under_its_id_and_its_retry_too() {
     };
     let body: Value = serde_json::from_slice(&steer_body(&run, &text, Some(&client_id))).unwrap();
     assert_eq!(body["client_message_id"], serde_json::json!(client_id));
-    c.steer_not_sent(&text, &client_id, "It didn't go.", None, false, now);
+    c.steer_not_sent(&text, &client_id, "It didn't go.", None, false, None, now);
     let row = c.unsent.last().unwrap().id;
     c.retry(row).unwrap();
     let Submit::Steer {
@@ -1400,4 +1401,76 @@ fn an_id_already_used_for_other_words_says_so() {
         SendRefused::NotSent { why: said, .. } => assert_eq!(said, why),
         other => panic!("{other:?}"),
     }
+}
+
+#[test]
+fn retry_keeps_the_id_only_where_tafs_cloud_may_have_taken_the_message() {
+    let w = en();
+    let now = at("2026-11-16T10:00:00Z");
+    // (what answered, whether Retry goes under the same id)
+    for (answered, same) in [
+        (None, true),
+        (Some(0), true),
+        (Some(408), true),
+        (Some(503), true),
+        (Some(500), true),
+        (Some(200), true),
+        (Some(409), false),
+        (Some(400), false),
+        (Some(429), false),
+    ] {
+        let mut c = chat_of(r#"{"messages":[]}"#);
+        let Submit::Send(d) = c.submit(&w, "Refund 4410", now).unwrap() else {
+            panic!("a message");
+        };
+        c.not_sent(
+            &d,
+            "It didn't go.",
+            None,
+            answered == Some(429),
+            answered,
+            now,
+        );
+        assert_eq!(c.unsent[0].client_id.is_some(), same, "{answered:?}");
+        let (_, again) = c.retry(c.unsent[0].id).unwrap();
+        let d2 = c.deliver(&again.text, now).unwrap();
+        let body: Value = serde_json::from_slice(&message_body(
+            &d2.text,
+            &d2.target,
+            &d2.files,
+            Some(&d2.client_id),
+        ))
+        .unwrap();
+        assert_eq!(
+            body["client_message_id"] == serde_json::json!(d.client_id),
+            same,
+            "{answered:?}"
+        );
+    }
+    // A steer refused as another message's (409) is a new one on Retry too.
+    let mut c = chat_of(std::str::from_utf8(&fixture("taf-chat-working.json")).unwrap());
+    let Submit::Steer {
+        text, client_id, ..
+    } = c.submit(&w, "and 4411", now).unwrap()
+    else {
+        panic!("a steer");
+    };
+    c.steer_not_sent(
+        &text,
+        &client_id,
+        "Sent with other text",
+        None,
+        false,
+        Some(409),
+        now,
+    );
+    let row = c.unsent.last().unwrap().id;
+    c.retry(row).unwrap();
+    let Submit::Steer {
+        client_id: again, ..
+    } = c.submit(&w, "and 4411", now).unwrap()
+    else {
+        panic!("a steer");
+    };
+    assert_ne!(again, client_id);
 }

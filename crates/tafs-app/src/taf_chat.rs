@@ -615,7 +615,9 @@ impl Page {
                 }
                 None => {
                     let why = tafs_core::signin::plain_words(&self.w, 200).unwrap_or_default();
-                    self.chat.borrow_mut().not_sent(&d, &why, None, false, now);
+                    self.chat
+                        .borrow_mut()
+                        .not_sent(&d, &why, None, false, Some(200), now);
                     true
                 }
             },
@@ -633,7 +635,14 @@ impl Page {
                         false
                     }
                     Ok(SendRefused::NotSent { why, halted, busy }) => {
-                        self.chat.borrow_mut().not_sent(&d, &why, halted, busy, now);
+                        self.chat.borrow_mut().not_sent(
+                            &d,
+                            &why,
+                            halted,
+                            busy,
+                            Some(r.status),
+                            now,
+                        );
                         true
                     }
                     Err(_) => {
@@ -643,7 +652,9 @@ impl Page {
                 }
             }
             Err(why) => {
-                self.chat.borrow_mut().not_sent(&d, &why, None, false, now);
+                self.chat
+                    .borrow_mut()
+                    .not_sent(&d, &why, None, false, None, now);
                 true
             }
         };
@@ -952,9 +963,15 @@ impl Page {
                 }
                 None => {
                     let why = tafs_core::signin::plain_words(&self.w, 200).unwrap_or_default();
-                    self.chat
-                        .borrow_mut()
-                        .steer_not_sent(words, id, &why, None, false, now);
+                    self.chat.borrow_mut().steer_not_sent(
+                        words,
+                        id,
+                        &why,
+                        None,
+                        false,
+                        Some(200),
+                        now,
+                    );
                     true
                 }
             },
@@ -970,9 +987,15 @@ impl Page {
                         false
                     }
                     Ok(SendRefused::NotSent { why, halted, busy }) => {
-                        self.chat
-                            .borrow_mut()
-                            .steer_not_sent(words, id, &why, halted, busy, now);
+                        self.chat.borrow_mut().steer_not_sent(
+                            words,
+                            id,
+                            &why,
+                            halted,
+                            busy,
+                            Some(a.status),
+                            now,
+                        );
                         true
                     }
                     Err(_) => false,
@@ -981,7 +1004,7 @@ impl Page {
             Err(why) => {
                 self.chat
                     .borrow_mut()
-                    .steer_not_sent(words, id, &why, None, false, now);
+                    .steer_not_sent(words, id, &why, None, false, None, now);
                 true
             }
         };
