@@ -508,6 +508,7 @@ fn activate(app: &adw::Application, o: &Options) {
             )
         })),
         account_reads: Cell::new(0),
+        home_rereads: Cell::new(0),
         words,
         languages,
         signed_in: o.signed_in,
@@ -921,6 +922,9 @@ struct App {
     unreachable: Cell<Option<(tafs_core::sidebar::Unreachable, usize)>>,
     /// The account's reads in force: a sign-out or another sign-in ends the app's tries.
     account_reads: Cell<u64>,
+    /// Each in-place reread of Home, numbered: only the newest's answer is drawn, so two that
+    /// overlap (a stream's end, then a held call) can't leave the older one on screen.
+    home_rereads: Cell<u64>,
     words: Rc<WordBook>,
     languages: Vec<&'static str>,
     /// `--signed-in`: the sample with the account's items, as the reference set draws it.
@@ -1997,13 +2001,16 @@ impl App {
             return;
         }
         let generation = self.account_reads.get();
+        let reread = self.home_rereads.get() + 1;
+        self.home_rereads.set(reread);
         let (me, languages, token) = (self.clone(), self.languages.clone(), kept.token.clone());
         let words: WordBook = (*self.words).clone();
         glib::spawn_future_local(async move {
             let read = gio::spawn_blocking(move || read_cloud(&token, &languages, &words))
                 .await
                 .unwrap_or(Read::Unreachable(tafs_core::sidebar::Unreachable::Error));
-            if me.account_reads.get() != generation {
+            // Another account's, or an older reread's answer, since: dropped.
+            if me.account_reads.get() != generation || me.home_rereads.get() != reread {
                 return;
             }
             match read {
