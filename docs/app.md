@@ -143,6 +143,11 @@ building those two from source on 22.04, or shipping a Flatpak.
 - Run by hand with a version (`v` and three numbers, as `v0.1.0`: anything else is refused before
   a tag is made), one job builds it, checks it starts, and attaches it with its `SHA256SUMS` to a
   **draft** release, its only copy. Publishing it is the owner's yes, never the workflow's.
+- Before a draft is published, `.github/workflows/verify-release.yml`, run by hand with its tag,
+  downloads the draft's own AppImage and `SHA256SUMS`, checks one against the other, and starts it
+  in a clean `ubuntu:24.04` container: no GTK 4 or libadwaita installed (the job fails if either
+  is), only a virtual display (`xvfb`) and one font. It saves the first screen and the sign-in as
+  screenshots, the run's only artifact; nothing is created, edited or published.
 
 **Signing.** The draft job signs `SHA256SUMS` with tafs for Linux's OpenPGP key
 (`tools/sign.sh`): an armored detached signature, `SHA256SUMS.asc`, attached beside it. Whoever
