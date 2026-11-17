@@ -254,13 +254,15 @@ impl CoachMode {
     }
 }
 
-/// The title row's leading buttons: Back, and ⤢ (full screen, or back to its width).
+/// The title row's leading buttons, in the iPad's order: ⤢ (full screen, or back to its width),
+/// then Back.
 pub fn chrome_buttons(w: &WordBook, chrome: &Chrome) -> gtk::Box {
     let b = gtk::Box::new(gtk::Orientation::Horizontal, 4);
     b.set_margin_start(10);
     b.set_valign(gtk::Align::Center);
     let back = gtk::Button::new();
     back.add_css_class("tafs-bar-icon");
+    back.add_css_class("tafs-coach-tint");
     back.set_child(Some(&crate::widgets::symbol("go-previous-symbolic", 18)));
     let label = w.line("common.back").unwrap_or_default();
     back.set_tooltip_text(Some(&label));
@@ -268,9 +270,9 @@ pub fn chrome_buttons(w: &WordBook, chrome: &Chrome) -> gtk::Box {
     back.set_widget_name("coach.back");
     let close = chrome.close.clone();
     back.connect_clicked(move |_| close());
-    b.append(&back);
     let full = gtk::Button::new();
     full.add_css_class("tafs-bar-icon");
+    full.add_css_class("tafs-coach-tint");
     full.set_child(Some(&crate::widgets::symbol(
         if chrome.full {
             "view-restore-symbolic"
@@ -292,5 +294,6 @@ pub fn chrome_buttons(w: &WordBook, chrome: &Chrome) -> gtk::Box {
     let toggle = chrome.toggle_full.clone();
     full.connect_clicked(move |_| toggle());
     b.append(&full);
+    b.append(&back);
     b
 }

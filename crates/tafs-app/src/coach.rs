@@ -174,6 +174,7 @@ pub fn page(
     tools.set_valign(gtk::Align::Center);
     let new_chat = gtk::Button::new();
     new_chat.add_css_class("tafs-bar-icon");
+    new_chat.add_css_class("tafs-coach-tint");
     new_chat.set_child(Some(&symbol("tafs-compose-symbolic", 18)));
     new_chat.set_tooltip_text(w.line("coach.new_conversation").ok().as_deref());
     new_chat.update_property(&[gtk::accessible::Property::Label(
@@ -183,7 +184,9 @@ pub fn page(
     tools.append(&new_chat);
     let menu = gtk::MenuButton::new();
     menu.add_css_class("tafs-bar-icon");
-    menu.set_icon_name("view-more-symbolic");
+    menu.add_css_class("tafs-coach-tint");
+    // The iPad's ⋯, across.
+    menu.set_icon_name("view-more-horizontal-symbolic");
     menu.update_property(&[gtk::accessible::Property::Label(
         &w.line("coach.conversations").unwrap_or_default(),
     )]);

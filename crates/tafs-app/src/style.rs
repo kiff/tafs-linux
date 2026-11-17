@@ -210,6 +210,8 @@ button.tafs-send.brand:disabled { opacity: 0.4; color: white; }
 .tafs-mono { font-family: monospace; }
 /* Coach's bar: New conversation and its menu, plain icons in the ink. */
 button.tafs-bar-icon, menubutton.tafs-bar-icon > button { background: none; border: none; box-shadow: none; color: @tafs_ink; min-width: 36px; min-height: 36px; padding: 0; }
+/* CoachMode's `.tint(Theme.coach)`: its bar's buttons in Coach's blue. */
+button.tafs-bar-icon.tafs-coach-tint, menubutton.tafs-bar-icon.tafs-coach-tint > button { color: @tafs_coach; }
 button.tafs-bar-icon:hover, menubutton.tafs-bar-icon > button:hover { background-color: alpha(@tafs_ink, 0.06); }
 /* Previous conversations: each chat on the panel, the one shown on the raised colour. */
 .tafs-chat-line { background-color: @tafs_panel; border-radius: 12px; padding: 0 14px 0 0; }
