@@ -190,8 +190,12 @@ gpg --verify SHA256SUMS.asc SHA256SUMS && sha256sum -c SHA256SUMS
 - The key is two secrets in the `linux-signing` environment, `TAFS_SIGNING_KEY` (armored) and
   `TAFS_SIGNING_PASSPHRASE`. Only the signing step reads them. They're imported into a keyring
   made for the step and removed after it, from stdin, never a file or the command line.
-- **While the environment holds no key, the draft goes out unsigned** and the step says so.
-  Adding the key is a value in the environment, not a change here; its public half then goes in
-  `packaging/` and on the download page.
+- **The public key** is `packaging/tafs-release-key.asc`: ed25519, signing only, expires
+  2028-11-16, fingerprint `73BC 9445 0F18 1366 FE44  3DCB 2845 162C 93DB BCA1`. The README's
+  Install says how to check a download with it.
+- `linux-signing` is protected: the owner is its required reviewer, and only `main` can use it.
+  A draft run waits for the owner's Approve before the job starts.
+- **While the environment holds no key, the draft goes out unsigned** and the step says so
+  (v1.0.1's first draft did).
 - A pull request that changes the packaging runs the same step with a throwaway key made in the
   job, so the signing is known to work before the real key exists.
