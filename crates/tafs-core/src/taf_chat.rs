@@ -160,6 +160,8 @@ pub struct TafChat {
     pub sending: bool,
     pub unsent: Vec<Unsent>,
     next_unsent: u64,
+    /// A Retry's id, for the send it starts.
+    reuse_id: Option<String>,
     /// The unread messages of runs dealt with here, by hash (in memory: this computer keeps no
     /// list across launches).
     settled: HashSet<String>,
@@ -310,6 +312,7 @@ impl TafChat {
             halted,
             settle,
             busy,
+            client_id: None,
         });
     }
 
@@ -337,6 +340,7 @@ impl TafChat {
                 Some(run) => Submit::Steer {
                     run,
                     text: text.into(),
+                    client_id: self.message_id(),
                 },
                 None => Submit::Stay,
             });
@@ -405,6 +409,7 @@ impl TafChat {
             target: ChatTarget::default(),
             generation: 0,
             files,
+            client_id: self.message_id(),
         })
     }
 
@@ -679,11 +684,30 @@ impl TafChat {
         why: &str,
         halted: Option<String>,
         busy: bool,
+        answered: Option<u16>,
         now: DateTime<Utc>,
     ) {
         self.sending = false;
         self.drop_local(&d.local);
         self.keep_unsent(&d.text, why, halted, None, busy, now);
+        // Retry keeps the id only where tafs cloud may have taken it (`retry_keeps_id`).
+        if crate::coach_send::retry_keeps_id(answered) {
+            self.unsent_id(&d.client_id);
+        }
+    }
+
+    /// The id the next message goes under: a Retry's, else a new one.
+    fn message_id(&mut self) -> String {
+        self.reuse_id
+            .take()
+            .unwrap_or_else(crate::coach_send::new_message_id)
+    }
+
+    /// The row just kept as not sent keeps its message's id, for Retry.
+    fn unsent_id(&mut self, id: &str) {
+        if let Some(u) = self.unsent.last_mut() {
+            u.client_id = Some(id.into());
+        }
     }
 
     /// Written to the run while the taf works (`steer`, with `hold`): shown at once, as the run
@@ -698,16 +722,22 @@ impl TafChat {
     }
 
     /// A steer that didn't reach tafs cloud stays in the thread as not sent. The app never
-    /// resends it on its own.
+    /// resends it on its own. `sent`: the steer's id, and tafs cloud's status, none when nothing
+    /// answered (`retry_keeps_id`).
     pub fn steer_not_sent(
         &mut self,
         text: &str,
+        sent: (&str, Option<u16>),
         why: &str,
         halted: Option<String>,
         busy: bool,
         now: DateTime<Utc>,
     ) {
         self.keep_unsent(text, why, halted, None, busy, now);
+        let (id, answered) = sent;
+        if crate::coach_send::retry_keeps_id(answered) {
+            self.unsent_id(id);
+        }
     }
 
     /// The chat Stop stops (`stopChat`): the one at work, else the thread's latest. The wait ends.
@@ -740,11 +770,15 @@ impl TafChat {
             return None;
         }
         let at = self.unsent.iter().position(|u| u.id == id)?;
-        Some((at, self.unsent.remove(at)))
+        let message = self.unsent.remove(at);
+        // Sent again under its own id: tafs cloud acts on it once.
+        self.reuse_id = message.client_id.clone();
+        Some((at, message))
     }
 
     /// A retry that wasn't taken at all goes back in its place.
     pub fn retry_back(&mut self, at: usize, message: Unsent) {
+        self.reuse_id = None;
         let at = at.min(self.unsent.len());
         self.unsent.insert(at, message);
     }

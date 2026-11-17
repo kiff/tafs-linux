@@ -115,9 +115,51 @@ impl ChatTarget {
 
 /// `MessageBody` as `JSONEncoder` writes it: an absent option is left out, `new_chat` and
 /// `new_chat_after_handover` only when true, and the files' ids only when there are some.
-pub fn message_body(text: &str, target: &ChatTarget, files: &[Attachment]) -> Vec<u8> {
+/// Whether a message not sent keeps its id for Retry (kiff/tafs `docs/api.md`): when nothing
+/// answered (`None`), the connection dropped (0), it timed out (408) or tafs cloud failed (5xx),
+/// tafs cloud may have taken it, and the same id gets the run it started. A 2xx whose answer
+/// couldn't be read was taken. Any other answer (a 409, a 400, a 429) refused it: Retry is a new
+/// message, with a new id.
+pub fn retry_keeps_id(status: Option<u16>) -> bool {
+    match status {
+        None | Some(0) | Some(408) => true,
+        Some(s) => (200..300).contains(&s) || s >= 500,
+    }
+}
+
+/// A message's own id (`client_message_id`): a v4 UUID, one per message composed, sent on the
+/// stream, on the plain send that takes its place and on a steer, so a send that's repeated is
+/// acted on once.
+pub fn new_message_id() -> String {
+    use rand_core::RngCore;
+    let mut b = [0u8; 16];
+    rand_core::OsRng.fill_bytes(&mut b);
+    b[6] = (b[6] & 0x0f) | 0x40;
+    b[8] = (b[8] & 0x3f) | 0x80;
+    let h: String = b.iter().map(|x| format!("{x:02x}")).collect();
+    format!(
+        "{}-{}-{}-{}-{}",
+        &h[0..8],
+        &h[8..12],
+        &h[12..16],
+        &h[16..20],
+        &h[20..32]
+    )
+}
+
+/// The message's body. `id`: its `client_message_id`; none for an improvement's first message and
+/// a trial's chat, as on Windows.
+pub fn message_body(
+    text: &str,
+    target: &ChatTarget,
+    files: &[Attachment],
+    id: Option<&str>,
+) -> Vec<u8> {
     let mut body = Map::new();
     body.insert("text".into(), json!(text));
+    if let Some(id) = id {
+        body.insert("client_message_id".into(), json!(id));
+    }
     if let Some(s) = &target.session {
         body.insert("session".into(), json!(s));
     }
@@ -135,10 +177,12 @@ pub fn message_body(text: &str, target: &ChatTarget, files: &[Attachment]) -> Ve
 }
 
 /// `steer`'s body: the run, the words, and `hold`, so what the run doesn't take tafs cloud keeps.
-pub fn steer_body(run: &str, text: &str) -> Vec<u8> {
-    json!({"run": run, "text": text, "hold": true})
-        .to_string()
-        .into_bytes()
+pub fn steer_body(run: &str, text: &str, id: Option<&str>) -> Vec<u8> {
+    let mut body = json!({"run": run, "text": text, "hold": true});
+    if let Some(id) = id {
+        body["client_message_id"] = json!(id);
+    }
+    body.to_string().into_bytes()
 }
 
 /// `stop`'s body: the chat whose latest run is cancelled.
@@ -376,6 +420,9 @@ pub const AI_CONSENT_REQUIRED: &str = "ai_consent_required";
 /// The codes of a refusal because the tafs wait for credits (`creditsCodes`).
 pub const CREDITS_CODES: [&str; 3] = ["credits_used_up", "limit_reached", "no_plan"];
 
+/// tafs cloud's code for a message id already used for other words (409).
+pub const DEDUP_CONFLICT: &str = "dedup_key_conflict";
+
 /// tafs cloud's refusal (`CloudError.refusal`): its body read as one `Decodable`, so a field of
 /// another shape leaves none of it.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -418,6 +465,11 @@ impl Refusal {
 
     /// `errorDescription`: tafs cloud's words, else its error, else "tafs cloud answered 500".
     pub fn words(&self, w: &WordBook) -> Result<String, WordsError> {
+        // The message's id was already used for other words: it says so, never "It changed in
+        // the meantime".
+        if self.code.as_deref() == Some(DEDUP_CONFLICT) {
+            return w.line("error.sent_with_other_text");
+        }
         match self.words.as_ref().or(self.error.as_ref()) {
             Some(s) => Ok(s.clone()),
             None => w.get(
@@ -635,6 +687,8 @@ pub struct Unsent {
     /// Not sent only because the owner wrote too many too fast (`busy`): a message that goes
     /// through takes it away.
     pub busy: bool,
+    /// Its `client_message_id`: Retry sends it again under the same one.
+    pub client_id: Option<String>,
 }
 
 /// A message on its way: the local copy's id, its words and where it goes.
@@ -646,6 +700,8 @@ pub struct Delivery {
     pub generation: u64,
     /// The files it carries.
     pub files: Vec<Attachment>,
+    /// Its `client_message_id`.
+    pub client_id: String,
 }
 
 /// What Submit does with the composer's words (`submitSetup`).
@@ -656,7 +712,11 @@ pub enum Submit {
     /// A message: send it.
     Send(Delivery),
     /// Coach is at work: write it to its run.
-    Steer { run: String, text: String },
+    Steer {
+        run: String,
+        text: String,
+        client_id: String,
+    },
 }
 
 /// Coach's conversation as the app holds it (`AppModel`'s `setup*`): what tafs cloud read, what
@@ -676,6 +736,8 @@ pub struct Conversation {
     pub ended: Option<Ended>,
     pub unsent: Vec<Unsent>,
     next_unsent: u64,
+    /// A Retry's id, for the send it starts.
+    reuse_id: Option<String>,
     settled: HashSet<String>,
     /// The cards answered here, by ref (`answered`).
     pub answered: HashSet<String>,
@@ -893,6 +955,7 @@ impl Conversation {
             halted,
             settle,
             busy: false,
+            client_id: None,
         });
     }
 
@@ -908,6 +971,7 @@ impl Conversation {
                 Some(run) => Submit::Steer {
                     run,
                     text: text.into(),
+                    client_id: self.message_id(),
                 },
                 None => Submit::Stay,
             };
@@ -969,6 +1033,7 @@ impl Conversation {
             target: self.target(),
             generation: self.generation,
             files,
+            client_id: self.message_id(),
         })
     }
 
@@ -1182,16 +1247,33 @@ impl Conversation {
     }
 
     /// It didn't go: kept in the thread as not sent, with why.
+    /// `answered`: tafs cloud's status, none when nothing answered (`retry_keeps_id`).
     pub fn not_sent(
         &mut self,
         d: &Delivery,
         why: &str,
         halted: Option<String>,
+        answered: Option<u16>,
         now: DateTime<Utc>,
     ) {
         self.sending = false;
         self.drop_local(&d.local);
         self.keep_unsent(&d.text, why, halted, None, now);
+        if retry_keeps_id(answered) {
+            self.unsent_id(&d.client_id);
+        }
+    }
+
+    /// The id the next message goes under: a Retry's, else a new one.
+    fn message_id(&mut self) -> String {
+        self.reuse_id.take().unwrap_or_else(new_message_id)
+    }
+
+    /// The row just kept as not sent keeps its message's id, for Retry.
+    fn unsent_id(&mut self, id: &str) {
+        if let Some(u) = self.unsent.last_mut() {
+            u.client_id = Some(id.into());
+        }
     }
 
     /// Written to the run while Coach works (`steer`): shown at once, as the run now holds it.
@@ -1207,11 +1289,16 @@ impl Conversation {
     pub fn steer_not_sent(
         &mut self,
         text: &str,
+        id: &str,
         why: &str,
         halted: Option<String>,
+        answered: Option<u16>,
         now: DateTime<Utc>,
     ) {
         self.keep_unsent(text, why, halted, None, now);
+        if retry_keeps_id(answered) {
+            self.unsent_id(id);
+        }
     }
 
     /// `settleSetupChat`: once a new conversation's first message went, its chat is the one shown.
@@ -1280,11 +1367,14 @@ impl Conversation {
             let r = self.card_ref(&a.id);
             self.answered.insert(r);
         }
+        // Sent again under its own id: tafs cloud acts on it once.
+        self.reuse_id = message.client_id.clone();
         Some((at, message))
     }
 
     /// A retry that wasn't taken goes back in its place, its card answerable again.
     pub fn retry_back(&mut self, at: usize, message: Unsent) {
+        self.reuse_id = None;
         if let Some(a) = Answer::parse(&message.text) {
             let r = self.card_ref(&a.id);
             self.answered.remove(&r);
@@ -1522,21 +1612,21 @@ mod tests {
     fn a_message_goes_where_coach_is_shown_and_follows_a_new_chat() {
         let fresh = ChatTarget::coach(true, Some("sess1"));
         assert_eq!(
-            v(&message_body("Hi", &fresh, &[])),
+            v(&message_body("Hi", &fresh, &[], None)),
             json!({"text": "Hi", "new_chat": true, "new_chat_after_handover": true})
         );
         let shown = ChatTarget::coach(false, Some("sess1"));
         assert_eq!(
-            v(&message_body("Hi", &shown, &[])),
+            v(&message_body("Hi", &shown, &[], None)),
             json!({"text": "Hi", "session": "sess1", "new_chat_after_handover": true})
         );
         let live = ChatTarget::coach(false, None);
         assert_eq!(
-            v(&message_body("Hi", &live, &[])),
+            v(&message_body("Hi", &live, &[], None)),
             json!({"text": "Hi", "new_chat_after_handover": true})
         );
         assert_eq!(
-            v(&steer_body("run2", "and refunds")),
+            v(&steer_body("run2", "and refunds", None)),
             json!({"run": "run2", "text": "and refunds", "hold": true})
         );
         assert_eq!(v(&stop_body("sess1")), json!({"session": "sess1"}));
@@ -1956,13 +2046,11 @@ mod tests {
         assert_eq!(c.thread.messages.last().unwrap().session, "sess1");
         assert_eq!(c.awaiting, None);
         // At work: Send writes to its run.
-        assert_eq!(
+        assert!(matches!(
             c.submit("and Stripe", now),
-            Submit::Steer {
-                run: "run3".into(),
-                text: "and Stripe".into()
-            }
-        );
+            Submit::Steer { run, text, client_id }
+                if run == "run3" && text == "and Stripe" && client_id.len() == 36
+        ));
         c.steered(
             "run3",
             "and Stripe",
@@ -1992,14 +2080,25 @@ mod tests {
         let Submit::Send(d) = c.submit("Hi", now) else {
             panic!()
         };
-        c.not_sent(&d, "offline", None, now);
+        c.not_sent(&d, "offline", None, None, now);
         assert_eq!(c.thread.messages.len(), n);
         assert_eq!(c.unsent[0].text, "Hi");
+        // Its row keeps the message's id: Retry goes under it again.
+        assert_eq!(c.unsent[0].client_id.as_deref(), Some(d.client_id.as_str()));
         let id = c.unsent[0].id;
         let (place, back) = c.retry(id).unwrap();
         assert!(c.unsent.is_empty());
-        c.retry_back(place, back);
+        let Submit::Send(again) = c.submit(&back.text, now) else {
+            panic!()
+        };
+        assert_eq!(again.client_id, d.client_id);
+        c.not_sent(&again, "offline", None, None, now);
+        let (place2, back2) = c.retry(c.unsent[0].id).unwrap();
+        assert_eq!(back2.client_id, back.client_id);
+        let _ = place;
+        c.retry_back(place2, back2);
         assert_eq!(c.unsent.len(), 1);
+        let id = c.unsent[0].id;
         // Its menu: Copy copies it as written, Delete takes it out, unsent.
         let w = WordBook::load(&WordBook::default_root(), "en").unwrap();
         let l = crate::coach_lines::unsent(&w, &c.thread, &c.unsent).unwrap();

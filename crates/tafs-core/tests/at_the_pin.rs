@@ -1718,11 +1718,11 @@ fn what_is_sent_to_coach_reads_in_every_language() {
     let Submit::Send(d) = c.submit("Hi", at) else {
         panic!("not sent")
     };
-    c.not_sent(&d, "offline", Some("account".into()), at);
+    c.not_sent(&d, "offline", Some("account".into()), Some(409), at);
     let Submit::Send(d) = c.submit("[questions limits] {}", at) else {
         panic!("not sent")
     };
-    c.not_sent(&d, "offline", None, at);
+    c.not_sent(&d, "offline", None, None, at);
     for lang in SHIPPED {
         let w = book(lang);
         for thinking in [false, true] {
@@ -1788,7 +1788,7 @@ fn a_taf_s_chat_draws_in_every_language() {
             let mut c = TafChat::new("taf-1");
             c.took(&w, read(file), now);
             let d = c.deliver("x", now).unwrap();
-            c.not_sent(&d, "Rae is halted", None, false, now);
+            c.not_sent(&d, "Rae is halted", None, false, Some(409), now);
             let whose = Whose {
                 name,
                 ask_coach: true,

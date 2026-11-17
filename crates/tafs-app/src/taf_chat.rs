@@ -530,12 +530,16 @@ impl Page {
                     }
                 });
             }
-            Submit::Steer { run, text } => {
+            Submit::Steer {
+                run,
+                text,
+                client_id,
+            } => {
                 self.jump.sent(&text);
                 self.composer.set_draft("");
                 let p = self.clone();
                 glib::spawn_future_local(async move {
-                    if !p.steer(&run, &text).await {
+                    if !p.steer(&run, &text, &client_id).await {
                         back(&p);
                     }
                 });
@@ -556,7 +560,12 @@ impl Page {
         } else {
             (
                 coach_send::messages_path(&self.taf.id),
-                coach_send::message_body(&d.text, &d.target, &d.files),
+                coach_send::message_body(
+                    &d.text,
+                    &d.target,
+                    &d.files,
+                    (!self.taf.trial).then_some(d.client_id.as_str()),
+                ),
             )
         };
         // Streamed, so the taf's words show as it writes them; sent plainly when the stream can't
@@ -606,7 +615,9 @@ impl Page {
                 }
                 None => {
                     let why = tafs_core::signin::plain_words(&self.w, 200).unwrap_or_default();
-                    self.chat.borrow_mut().not_sent(&d, &why, None, false, now);
+                    self.chat
+                        .borrow_mut()
+                        .not_sent(&d, &why, None, false, Some(200), now);
                     true
                 }
             },
@@ -624,7 +635,14 @@ impl Page {
                         false
                     }
                     Ok(SendRefused::NotSent { why, halted, busy }) => {
-                        self.chat.borrow_mut().not_sent(&d, &why, halted, busy, now);
+                        self.chat.borrow_mut().not_sent(
+                            &d,
+                            &why,
+                            halted,
+                            busy,
+                            Some(r.status),
+                            now,
+                        );
                         true
                     }
                     Err(_) => {
@@ -634,7 +652,9 @@ impl Page {
                 }
             }
             Err(why) => {
-                self.chat.borrow_mut().not_sent(&d, &why, None, false, now);
+                self.chat
+                    .borrow_mut()
+                    .not_sent(&d, &why, None, false, None, now);
                 true
             }
         };
@@ -915,11 +935,12 @@ impl Page {
 
     /// Written to the run while the taf works (`steer`, once, with `hold`): true once taken, held
     /// or kept as not sent. More than tafs cloud holds leaves the words in the box.
-    async fn steer(self: &Rc<Self>, run: &str, words: &str) -> bool {
+    /// `id`: the message's `client_message_id`.
+    async fn steer(self: &Rc<Self>, run: &str, words: &str, id: &str) -> bool {
         let Some(answer) = self
             .post(
                 coach_send::steer_path(&self.taf.id),
-                coach_send::steer_body(run, words),
+                coach_send::steer_body(run, words, (!self.taf.trial).then_some(id)),
             )
             .await
         else {
@@ -942,9 +963,14 @@ impl Page {
                 }
                 None => {
                     let why = tafs_core::signin::plain_words(&self.w, 200).unwrap_or_default();
-                    self.chat
-                        .borrow_mut()
-                        .steer_not_sent(words, &why, None, false, now);
+                    self.chat.borrow_mut().steer_not_sent(
+                        words,
+                        (id, Some(200)),
+                        &why,
+                        None,
+                        false,
+                        now,
+                    );
                     true
                 }
             },
@@ -960,9 +986,14 @@ impl Page {
                         false
                     }
                     Ok(SendRefused::NotSent { why, halted, busy }) => {
-                        self.chat
-                            .borrow_mut()
-                            .steer_not_sent(words, &why, halted, busy, now);
+                        self.chat.borrow_mut().steer_not_sent(
+                            words,
+                            (id, Some(a.status)),
+                            &why,
+                            halted,
+                            busy,
+                            now,
+                        );
                         true
                     }
                     Err(_) => false,
@@ -971,7 +1002,7 @@ impl Page {
             Err(why) => {
                 self.chat
                     .borrow_mut()
-                    .steer_not_sent(words, &why, None, false, now);
+                    .steer_not_sent(words, (id, None), &why, None, false, now);
                 true
             }
         };
@@ -1053,7 +1084,11 @@ impl Page {
             let taken = match submit {
                 Submit::Stay => false,
                 Submit::Send(d) => p.deliver(d).await,
-                Submit::Steer { run, text } => p.steer(&run, &text).await,
+                Submit::Steer {
+                    run,
+                    text,
+                    client_id,
+                } => p.steer(&run, &text, &client_id).await,
             };
             if taken {
                 p.chat.borrow_mut().retry_kept(left, &message);

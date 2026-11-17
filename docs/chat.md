@@ -35,6 +35,17 @@ app runs, and signing out forgets it, with the box's words.
 
 All at tafs cloud, as the session, unsigned; a 401 on any of them signs this computer out.
 
+**One message, one id** (`client_message_id`, kiff/tafs `docs/api.md`): each message composed here,
+in a taf's chat and in Coach, gets its own v4 UUID. It goes on the stream, on the plain send that
+takes its place when the stream fails (the same body), and on a steer. A Not sent row keeps it only
+where tafs cloud may have taken the message: nothing answered (a dropped connection), a 408, a 5xx,
+or a 2xx whose answer couldn't be read. Retry then goes under the same id, and tafs cloud answers a
+repeat with the run it already started, never a second one. After any other answer (a 409, a 400, a
+429), Retry is a new message with a new id (`retry_keeps_id`). Edit and a new message get a new id. An improvement's first
+message (`/improve`) and a trial's chat send none, as on Windows. A 409 `dedup_key_conflict` is Not
+sent with `error.sent_with_other_text`. The rules are `tafs-core/src/coach_send.rs` ›
+`new_message_id`, `message_body`, `steer_body`, with tests in both chats.
+
 - **A message** (`deliverChat`): `POST /v1/tafs/{id}/messages` with `{"text"}` alone: the taf's live
   chat (`ChatTarget.live`). Trimmed, at most 2,000 characters ("That's longer than 2000 characters…"
   above the box, the words left in it), one at a time. It shows at once, faded, stamped no earlier
