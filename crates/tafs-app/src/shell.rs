@@ -103,6 +103,11 @@ pub struct Screens {
     pub coach_listed: Rc<Vec<tafs_core::coach_lines::Listed>>,
     /// "Your brief", in Needs you's place once tafs cloud sends one.
     pub brief: Option<Rc<crate::brief::BriefPane>>,
+    /// Signed in with KIFF: where a taf's shares are read, each taf's KIFF agent by its key, and
+    /// the account's email, for `ShareLine` on a taf's page.
+    pub share: Option<crate::share::ShareSource>,
+    pub share_agents: Rc<std::collections::BTreeMap<String, String>>,
+    pub account_email: Option<String>,
 }
 
 /// Builds the shell. `view_only` shows the notice that this computer can't approve yet.
@@ -138,6 +143,9 @@ pub fn build(
         coach,
         coach_listed,
         brief,
+        share,
+        share_agents,
+        account_email,
     } = screens;
     let has_coach = !matches!(coach, crate::coach::CoachSource::None);
     let entries = Rc::new(record.entries.clone());
@@ -407,13 +415,52 @@ pub fn build(
                                 _ => None,
                             };
                             let open = open.clone();
-                            crate::taf::page(
+                            let page = crate::taf::page(
                                 w.clone(),
                                 t,
                                 entries.clone(),
                                 halt_row,
                                 Rc::new(move || open(Selection::Usage)),
-                            )
+                            );
+                            // Who it's shared with, and Share, under the head row (`headerLine`'s
+                            // `ShareLine`): the taf's manager's to see, signed in with KIFF.
+                            if let (Some(source), Some(agent), true) =
+                                (&share, share_agents.get(&t.key), t.manages)
+                            {
+                                let taf = crate::share::ShareTaf {
+                                    agent: agent.clone(),
+                                    name: t.name.clone(),
+                                    manages: t.manages,
+                                    email: account_email.clone(),
+                                };
+                                let line = crate::share::line(
+                                    w.clone(),
+                                    source.clone(),
+                                    taf.clone(),
+                                    tafs_core::sidebar::Mode::Kiff,
+                                );
+                                if let Ok(outer) = page.clone().downcast::<gtk::Box>() {
+                                    outer.insert_child_after(&line, outer.first_child().as_ref());
+                                }
+                                // `--page share:<key>`: its sheet open, for a screenshot.
+                                if crate::share::OPEN
+                                    .with(|o| o.borrow().as_deref() == Some(&t.key))
+                                {
+                                    crate::share::OPEN.with(|o| o.borrow_mut().take());
+                                    let (w, source) = (w.clone(), source.clone());
+                                    gtk::glib::idle_add_local_once(move || {
+                                        crate::share::sheet(
+                                            w,
+                                            source,
+                                            taf,
+                                            tafs_core::sidebar::Mode::Kiff,
+                                            &line,
+                                            Rc::new(|| {}),
+                                        );
+                                    });
+                                }
+                            }
+                            page
                         }
                         None => screen_page(&title).upcast::<gtk::Widget>(),
                     }

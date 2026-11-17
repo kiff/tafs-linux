@@ -152,6 +152,30 @@ pub enum Act {
     RaiseLimit,
     /// `declineRequest`: a member's request declined, with a note.
     DeclineRequest { request: String },
+    /// `share(agent:with:)`: a taf shared with a group or a person, from Share's second step.
+    Share {
+        agent: String,
+        group: Option<String>,
+        subject: Option<String>,
+    },
+    /// `unshare(agent:from:)`: a share taken away, from the same step.
+    Unshare {
+        agent: String,
+        group: Option<String>,
+        subject: Option<String>,
+    },
+}
+
+/// A query's value, escaped (`KIFFClient.escapedQuery`): letters, digits and `-._~` as they are.
+fn escaped_query(v: &str) -> String {
+    v.bytes()
+        .map(|b| match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~' => {
+                (b as char).to_string()
+            }
+            _ => format!("%{b:02X}"),
+        })
+        .collect()
 }
 
 impl Act {
@@ -178,6 +202,22 @@ impl Act {
                 "POST",
                 format!("/v1/me/pack-requests/{}/decline", escaped(request)),
             ),
+            Act::Share { agent, .. } => ("POST", format!("/v1/agents/{}/grants", escaped(agent))),
+            Act::Unshare {
+                agent,
+                group,
+                subject,
+            } => {
+                let query = match (group, subject) {
+                    (Some(g), _) => format!("group={}", escaped_query(g)),
+                    (None, Some(s)) => format!("subject={}", escaped_query(s)),
+                    (None, None) => String::new(),
+                };
+                (
+                    "DELETE",
+                    format!("/v1/agents/{}/grants?{query}", escaped(agent)),
+                )
+            }
         }
     }
 }
@@ -253,6 +293,16 @@ mod tests {
             Act::RaiseLimit,
             Act::DeclineRequest {
                 request: "req_1".into(),
+            },
+            Act::Share {
+                agent: "a1".into(),
+                group: Some("g1".into()),
+                subject: None,
+            },
+            Act::Unshare {
+                agent: "a1".into(),
+                group: None,
+                subject: Some("auth0|rae".into()),
             },
         ]
     }

@@ -309,6 +309,7 @@ button.tafs-plain { background: none; border: none; box-shadow: none; padding: 0
 .tafs-dot9 { min-width: 9px; min-height: 9px; border-radius: 999px; }
 .tafs-event { background-color: @tafs_panel; border-radius: 10px; padding: 10px; }
 
+button.tafs-share-button { background-color: @tafs_panel; background-image: none; border: 1px solid @tafs_line; border-radius: 999px; padding: 7px 12px; box-shadow: none; }
 .tafs-person-badge { background-color: @tafs_raised; border-radius: 999px; color: @tafs_ink; font-size: 14px; font-weight: 600; }
 
 button.tafs-row-button { background: none; border: none; box-shadow: none; padding: 12px 0; font-size: 17px; font-weight: 400; }

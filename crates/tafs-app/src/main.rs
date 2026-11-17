@@ -32,6 +32,7 @@ mod record_search;
 mod report_sheet;
 mod runs_panel;
 mod setup_pane;
+mod share;
 mod sheet;
 mod shell;
 mod sign_in;
@@ -181,7 +182,7 @@ struct Options {
 }
 
 const USAGE: &str = "tafs [--lang en|de|fr|es|it|pt|nl|pl] [--theme light|dark] [--sample] [--signed-in] [--view-only [--paired]]
-     [--home contract.json] [--usage answers.json] [--people answers.json] [--unproven answers.json] [--recipes answers.json] [--gallery answers.json] [--halt answer.json] [--record-search answers.json] [--access answer.json] [--receipts answer.json] [--activity answer.json] [--calls answer.json] [--receipt answer.json] [--work answer.json] [--doors answer.json] [--account-reads answers.json] [--me answer.json] [--memory answer.json] [--runs answer.json] [--request answer.json] [--balance answer.json] [--coach answer.json] [--coach-chats answer.json] [--chat answer.json [--report]] [--brief answer.json] [--mission-log answer.json] [--setup answer.json] [--unreachable network|error] [--size WxH] [--page welcome|sign-in|pair|recipe:<id>|gallery|new-taf|halt-all|halt:<id>|record-search:<q>|record-export|receipt:<proposal id>|run:<taf id>|pin-sheet|coach|coach-hand:<id>|overview|overview-label:<id>|needs-you|brief-answer:<decision id>|mission-log:<mission id>|record|calendar|calendar-week|usage|usage-ask|usage-decline|connect-apps|account|kiff-account|time-zone|time-zone-use|alerts|devices|devices-sign-out|people|people-rename|people-add|taf|taf-card|taf-setup|consent|connected|sign-in-code] [--screenshot out.png]";
+     [--home contract.json] [--usage answers.json] [--people answers.json] [--unproven answers.json] [--recipes answers.json] [--gallery answers.json] [--halt answer.json] [--record-search answers.json] [--access answer.json] [--receipts answer.json] [--activity answer.json] [--calls answer.json] [--receipt answer.json] [--work answer.json] [--doors answer.json] [--account-reads answers.json] [--me answer.json] [--memory answer.json] [--runs answer.json] [--request answer.json] [--balance answer.json] [--coach answer.json] [--coach-chats answer.json] [--chat answer.json [--report]] [--brief answer.json] [--mission-log answer.json] [--setup answer.json] [--unreachable network|error] [--size WxH] [--page welcome|sign-in|pair|recipe:<id>|gallery|new-taf|halt-all|halt:<id>|record-search:<q>|record-export|receipt:<proposal id>|run:<taf id>|pin-sheet|share:<key>|share-step2:<key>|coach|coach-hand:<id>|overview|overview-label:<id>|needs-you|brief-answer:<decision id>|mission-log:<mission id>|record|calendar|calendar-week|usage|usage-ask|usage-decline|connect-apps|account|kiff-account|time-zone|time-zone-use|alerts|devices|devices-sign-out|people|people-rename|people-add|taf|taf-card|taf-setup|consent|connected|sign-in-code] [--screenshot out.png]";
 
 fn options() -> Result<Options, String> {
     let mut o = Options::default();
@@ -288,6 +289,12 @@ fn selection_of(page: Option<&str>) -> Selection {
         // With `--home`, the contract's first taf.
         Some(other) if other.starts_with("taf:") => Selection::Taf(other["taf:".len()..].into()),
         Some(other) if other.starts_with("run:") => Selection::Taf(other["run:".len()..].into()),
+        Some(other) if other.starts_with("share:") => {
+            Selection::Taf(other["share:".len()..].into())
+        }
+        Some(other) if other.starts_with("share-step2:") => {
+            Selection::Taf(other["share-step2:".len()..].into())
+        }
         Some("halt-all") => Selection::HaltAll,
         Some(other) if other.starts_with("record-search:") => Selection::Record,
         Some("record-export") => Selection::Record,
@@ -478,6 +485,16 @@ fn activate(app: &adw::Application, o: &Options) {
             .and_then(|r| r.recipes.into_iter().find(|x| x.id == id))
         {
             coach::set_draft(&r.say);
+        }
+    }
+    // `--page share:<key>` (and `share-step2:<key>`): Share's sheet over that taf's page.
+    if let Some(page) = o.page.as_deref() {
+        if let Some(key) = page
+            .strip_prefix("share:")
+            .or_else(|| page.strip_prefix("share-step2:"))
+        {
+            share::OPEN.with(|s| *s.borrow_mut() = Some(key.to_string()));
+            share::OPEN_STEP2.with(|s| s.set(page.starts_with("share-step2:")));
         }
     }
     if o.page.as_deref() == Some("delete-account") {
@@ -1913,7 +1930,32 @@ impl App {
             }),
             _ => None,
         };
+        // Sharing, signed in with KIFF: read as the session, or a screenshot's from `--people`.
+        let share = match (mode, self.kept.borrow().as_ref(), &self.people_file) {
+            (Mode::Kiff, Some(kept), _) => Some(share::ShareSource::Cloud {
+                token: kept.token.clone(),
+                languages: self.languages.clone(),
+            }),
+            (Mode::Kiff, None, Some(f)) => Some(share::ShareSource::File(f.clone())),
+            _ => None,
+        };
+        let share_agents = Rc::new(
+            cloud
+                .as_deref()
+                .map(|c| {
+                    c.home
+                        .tafs
+                        .iter()
+                        .filter_map(|h| tafs_core::home::taf(words, h).ok())
+                        .map(|t| (t.key, t.agent))
+                        .collect()
+                })
+                .unwrap_or_default(),
+        );
         let screens = shell::Screens {
+            share,
+            share_agents,
+            account_email: account.as_ref().and_then(|a| a.email.clone()),
             brief,
             overview,
             needs_you,

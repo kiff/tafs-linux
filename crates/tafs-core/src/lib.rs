@@ -45,6 +45,7 @@ pub mod sample;
 pub mod security_key;
 pub mod session;
 pub mod setup;
+pub mod share;
 pub mod sidebar;
 pub mod signed;
 pub mod signin;

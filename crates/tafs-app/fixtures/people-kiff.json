@@ -1,5 +1,5 @@
 {
-  "_comment": "Synthetic answers for People & groups', the KIFF account's and the time zone picker's screenshots signed in with KIFF (--people). Made up, not from any account.",
+  "_comment": "Synthetic answers for People & groups', the KIFF account's and the time zone picker's screenshots signed in with KIFF (--people). Made up, not from any account. `grants`: each agent's shares as KIFF answers GET /v1/agents/{agent}/grants, for Share's screenshots.",
   "account": {
     "tenant_id": "t-synthetic",
     "tenant_slug": "acme",
@@ -112,12 +112,24 @@
       },
       {
         "id": "America/New_York",
-        "title": "New York (UTC−5)"
+        "title": "New York (UTC\u22125)"
       },
       {
         "id": "Asia/Tokyo",
         "title": "Tokyo (UTC+9)"
       }
     ]
+  },
+  "grants": {
+    "rae": {
+      "grants": [
+        {
+          "group": "g-finance"
+        },
+        {
+          "subject": "u-sam"
+        }
+      ]
+    }
   }
 }

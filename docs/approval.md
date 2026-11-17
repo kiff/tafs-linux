@@ -46,7 +46,8 @@ can be made unsigned. Each signed act (`signed::Act`) names the call the iPad wo
 that none of them can be made.
 
 The acts drawn this way: People & groups' changes, signing another device out, and the
-account's time zone (`docs/account.md`); declining a request (`docs/usage.md`).
+account's time zone (`docs/account.md`); declining a request (`docs/usage.md`); sharing a taf and
+taking a share away (`docs/taf.md`).
 
 A button the iPad itself wraps in `ApprovalGate` is the exception: there, as on the iPad, the
 gate's line is drawn in the button's place (`approval::gate`), not the button. Raise the limit is
