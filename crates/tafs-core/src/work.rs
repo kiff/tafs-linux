@@ -85,6 +85,8 @@ pub struct Request {
     pub deliveries: Vec<Delivery>,
     /// What the run used, in tafs cloud's words (`creditsLine`): none until KIFF counted it.
     pub credits: Option<String>,
+    /// A step the run handed its owner (`yourStep`), read with `try?`: one it can't read is none.
+    pub your_step: Option<Box<crate::waits::YourStep>>,
 }
 
 impl Request {
@@ -112,6 +114,9 @@ impl Request {
                 .map(str::trim)
                 .filter(|w| !w.is_empty())
                 .map(str::to_string),
+            your_step: o
+                .get("your_step")
+                .and_then(|v| serde_json::from_value(v.clone()).ok()),
         })
     }
 }
@@ -366,6 +371,21 @@ mod tests {
             fixes: vec![],
         };
         assert_eq!(panel(&healthy, Some(&home)).health, Some(home));
+    }
+
+    #[test]
+    fn a_request_carries_the_step_it_handed_its_owner() {
+        let step = r#"{"handoff": "h-1", "run": "run-1", "what": "Upload the receipt", "why": "", "words": {"title": "Your step", "done": "Done", "skip": "Skip it"}}"#;
+        let w = read(format!(r#"{{"requests": [{{"id": "r", "at": "2026-11-16T05:00:00Z", "state": "needs_you", "line": "Waiting for you", "your_step": {step}}}]}}"#).as_bytes()).unwrap();
+        let s = w.requests[0].your_step.as_ref().unwrap();
+        assert_eq!(
+            (s.handoff.as_str(), s.what.as_str()),
+            ("h-1", "Upload the receipt")
+        );
+        // One it can't read is none (`try?`), and the request stays.
+        let w = read(br#"{"requests": [{"id": "r", "at": "2026-11-16T05:00:00Z", "your_step": {"what": "no hand-off"}}]}"#).unwrap();
+        assert_eq!(w.requests.len(), 1);
+        assert_eq!(w.requests[0].your_step, None);
     }
 
     #[test]

@@ -33,7 +33,7 @@ pub fn page(
     column.append(&title);
     // In the iPad's order: the steps the tafs handed the person, then Coach's chats waiting on them.
     for step in &n.steps {
-        column.append(&step_card(&w, step));
+        column.append(&step_card(&w, step, false));
     }
     // "Set all aside" above them, then each chat: what's set aside goes once tafs cloud says so.
     let rows: Rc<RefCell<Vec<(String, gtk::Box)>>> = Rc::default();
@@ -135,13 +135,18 @@ fn scroll_to(scroller: &gtk::ScrolledWindow, column: &gtk::Box, card: gtk::Widge
 /// vouched for its link (it opens in the browser, with where it really goes under it), and Done or
 /// Skip it: the answer is signed by the device key, so their tap says this computer can't approve,
 /// under them, and sends nothing.
-fn step_card(w: &Rc<WordBook>, step: &tafs_core::waits::YourStep) -> gtk::Box {
+/// `on_taf`: on the taf's own page, the card doesn't name it.
+pub(crate) fn step_card(
+    w: &Rc<WordBook>,
+    step: &tafs_core::waits::YourStep,
+    on_taf: bool,
+) -> gtk::Box {
     let p = panel(true);
     p.set_spacing(10);
     if !step.title.is_empty() {
         p.append(&crate::widgets::eyebrow(&step.title, false));
     }
-    if let Some((_, name)) = step.taf.as_ref().filter(|(_, n)| !n.is_empty()) {
+    if let Some((_, name)) = step.taf.as_ref().filter(|(_, n)| !on_taf && !n.is_empty()) {
         p.append(&text(name, 14, 600, &["tafs-ink"]));
     }
     p.append(&text(&step.what, 16, 600, &["tafs-ink"]));

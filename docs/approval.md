@@ -74,8 +74,9 @@ gate's line is drawn in the button's place (`approval::gate`), not the button. R
 one (`docs/usage.md`); so is a connection's approval (`docs/connect-apps.md`); an app event's filters before its subscription is signed
 (`AppEventApprovalSheet`, `app_event_sheet.rs`) is another: the sheet is drawn whole, its filters
 as the iPad's `JSONEncoder` writes them, and the gate's line stands where Approve would. It opens
-from Setup › Starts when and the dial, neither on Linux yet; `--app-event item.json` opens it for
-its screenshot.
+from the dial, pressing an app event to approve. From Setup › Starts when it doesn't, as on the
+iPad while the device can't approve: Approve there is disabled (`approvalBlocked`).
+`--app-event item.json` opens it for its screenshot.
 
 Not on Linux: `ReadinessReader` reads again when the app comes back, but this computer's state
 never changes. `openTafsSettings` opens tafs' iOS settings, which don't exist here, and

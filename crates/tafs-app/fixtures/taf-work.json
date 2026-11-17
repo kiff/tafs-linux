@@ -4,6 +4,10 @@
   "oldest_waiting": {"since": "2026-11-16T03:10:00Z", "words": "Oldest case waiting 2 h", "late": false},
   "promise": {"hours": 4},
   "requests": [
+    {"id": "run_4", "at": "2026-11-16T05:20:00Z", "state": "needs_you", "line": "Waiting for you: upload the signed receipt",
+     "your_step": {"handoff": "handoff-4", "run": "run_4", "taf": {"id": "taf-aaaa0000000000000000", "name": "Rae"},
+                   "what": "Upload the signed receipt to the dispute", "why": "The card network asks for it before Friday.",
+                   "words": {"title": "Your step", "done": "Done", "skip": "Skip it"}}},
     {"id": "run_3", "at": "2026-11-16T05:02:00Z", "state": "needs_you", "line": "Waiting for you: refund order 1042 · €150",
      "credits": {"credits": 12, "counted": true, "words": "12 credits"}},
     {"id": "run_2", "at": "2026-11-16T04:31:00Z", "state": "done", "line": "Done: answered maria@… by email",

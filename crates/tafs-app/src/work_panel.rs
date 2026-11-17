@@ -37,6 +37,8 @@ pub struct Opens {
     pub manages: bool,
     /// Coach's fix, for whoever may use Coach and manages the taf.
     pub may_use_coach: bool,
+    /// Home's steps for this taf, by hand-off: a request's own is drawn from here where listed.
+    pub steps: Vec<tafs_core::waits::YourStep>,
 }
 
 /// `HealthLines`: each line in the health's colour, with the fixes it can act on: Coach's opens
@@ -159,7 +161,20 @@ impl Panel {
             Tone::No => "tafs-no",
             Tone::Soft => "tafs-soft",
         };
-        v.append(&text(&r.line, 14, 400, &[class]));
+        // A step the taf handed its owner, in place of its line (`YourStepCard`): Home's, which
+        // carries the vendor's link when tafs cloud vouched for it, else the request's own.
+        match r.your_step.as_deref() {
+            Some(step) => {
+                let step = self
+                    .opens
+                    .steps
+                    .iter()
+                    .find(|s| s.handoff == step.handoff)
+                    .unwrap_or(step);
+                v.append(&crate::needs_you::step_card(&self.w, step, true));
+            }
+            None => v.append(&text(&r.line, 14, 400, &[class])),
+        }
         if let Some(used) = &r.credits {
             v.append(&text(used, 12, 400, &["tafs-dim"]));
         }

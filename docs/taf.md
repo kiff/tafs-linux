@@ -184,7 +184,8 @@ under it, as on the iPad's Doors tab:
 - **The face pressed:** a held call that may be approved once (signed: the can't-approve line);
   Coach for an "Add a door" stop; else, for whoever manages the taf, the chosen stop's act as the
   session: a door opened or closed (`PATCH …/doors/{door}`), a run started (`POST …/run`), a
-  follow-up removed; an app event's Approve is signed at planque (refused here). With nothing
+  follow-up removed; an app event to approve opens its filters (`AppEventApprovalSheet`), where
+  Approve, signed at planque, stands as the gate's line ([approval](approval.md)). With nothing
   chosen, it walks to the first stop.
 - Under it, the stop's words or the dial's caption, the size in force, Needs you while a call may
   be approved once (its face), ‹ Why back to the job; **the remote** (Back, Lower, the power
@@ -219,7 +220,10 @@ iPad's. Under "Its work":
   again; "It couldn't be set. …" when it wasn't. "You're told when a case waits longer." under it;
 - **its requests and skipped firings,** newest first. A request's line is amber when it needs
   you, red when it failed, else soft, with what it used ("34 credits") and where its result went
-  under it. A door reply given up on offers **Send again** to whoever manages the taf
+  under it. A step the run handed its owner (`your_step`) stands in its line's place as its card
+  (`YourStepCard`, [Needs you](needs-you.md)), without the taf's name: Home's copy of it where
+  Home lists it, which carries the vendor's link when tafs cloud vouched for it, else the
+  request's own. Done and Skip it are signed: their tap says this computer can't approve. A door reply given up on offers **Send again** to whoever manages the taf
   (`POST …/requests/{run}/deliveries/{place}/send`, unsigned; "Sending again…" while it goes,
   "It wasn't sent again. …" when it didn't). A skipped firing is dim: nothing ran, which isn't a
   failure.
@@ -256,7 +260,8 @@ After its work, a tafs cloud taf's runs (`crates/tafs-app/src/runs_panel.rs`,
   - for whoever manages the taf, Try the reply now on each delivery that can be sent again
     (`POST …/requests/{run}/deliveries/{place}/send`, unsigned). It turns to "Sending again…",
     and the page is read again. If it fails, "It wasn't sent again." and why.
-  - Ask Coach isn't here: Coach isn't on this computer.
+  - Ask Coach, for someone who may use Coach and manages the taf (`offersAskCoach`), and in the
+    sample: the sheets close, and Coach opens on this taf ([Coach on a taf](coach.md)).
   - What went wrong reading it shows with Try again.
 - **Read as strictly as the iPad's `RunsPage`:** a page without its title, or with a run it
   can't read, isn't one.
@@ -311,7 +316,9 @@ the iPad's order:
   apps. Under it the workflow, folded: its title and summary, each step (green while it runs) and
   Change the workflow with Coach. A node opens its sheet (`ConnectedAppSheet`): where it stands
   (Sign in again: signed, refused here), what it may do, its workflow, its calls (opening the
-  Activity), other connections, Add actions with Coach, and Remove access, whose question's yes is
+  Activity narrowed to them: tafs cloud's `activity_query` after the filter, as it wrote it, left
+  out unless it's a plain query; "All apps" over the list shows every app's again), other
+  connections, Add actions with Coach, and Remove access, whose question's yes is
   signed at planque and refused here.
 - **What it remembers** (`MemorySummaryPanel`): tafs cloud's line for its notes (15 semibold), its
   latest (14, soft, two lines), and See all.
@@ -440,8 +447,4 @@ nothing shows until they're read, or when they can't be. A 401 signs this comput
   to read them again.
 - **In the trial's sheet:** its guide stays above the chat once messages are in (the iPad shows it
   before the first only), and the chat's box is under it, a scroll down.
-- **On a tafs cloud taf's Activity:** "All apps" for a selection (an app's calls open the
-  Activity unfiltered).
-- **The line under the head:** who it's shared with (`ShareLine`) sits under the tabs.
-- **In its work:** a step it handed you as its card (`YourStepCard`): its line for now.
 - Remove, and folding the head while scrolling.

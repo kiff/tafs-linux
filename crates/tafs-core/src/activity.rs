@@ -79,8 +79,10 @@ impl ActivityPage {
     }
 }
 
-/// The page's path (`activityPage`): the taf by its id, the filter, and the cursor, each escaped.
-pub fn path(taf: &str, filter: &str, cursor: Option<&str>) -> String {
+/// The page's path (`activityPage`): the taf by its id, the filter, and the cursor, each escaped,
+/// and an app's calls (`selection`, a connected app's `activity_query` as tafs cloud wrote it)
+/// after the filter. A selection that isn't a plain query is left out.
+pub fn path(taf: &str, filter: &str, cursor: Option<&str>, selection: &str) -> String {
     let escaped = |v: &str| {
         url::form_urlencoded::byte_serialize(v.as_bytes())
             .collect::<String>()
@@ -91,6 +93,14 @@ pub fn path(taf: &str, filter: &str, cursor: Option<&str>) -> String {
         escaped(taf),
         escaped(filter)
     );
+    let plain = |s: &str| {
+        s.chars()
+            .all(|c| c.is_ascii_alphanumeric() || "-_.~=&%+".contains(c))
+    };
+    if !selection.is_empty() && plain(selection) {
+        p.push('&');
+        p.push_str(selection);
+    }
     if let Some(c) = cursor {
         p.push_str(&format!("&cursor={}", escaped(c)));
     }
@@ -232,12 +242,22 @@ mod tests {
     #[test]
     fn paths_are_escaped() {
         assert_eq!(
-            path("taf-1", "all", None),
+            path("taf-1", "all", None, ""),
             "/v1/tafs/taf-1/activity?filter=all"
         );
         assert_eq!(
-            path("a/b", "held", Some("c 1&x")),
+            path("a/b", "held", Some("c 1&x"), ""),
             "/v1/tafs/a%2Fb/activity?filter=held&cursor=c%201%26x"
+        );
+        // An app's calls, as tafs cloud wrote its query, after the filter.
+        assert_eq!(
+            path("taf-1", "all", Some("c2"), "app=stripe&grant=g_1"),
+            "/v1/tafs/taf-1/activity?filter=all&app=stripe&grant=g_1&cursor=c2"
+        );
+        // One that isn't a plain query is left out.
+        assert_eq!(
+            path("taf-1", "all", None, "app=x#/../me"),
+            "/v1/tafs/taf-1/activity?filter=all"
         );
     }
 

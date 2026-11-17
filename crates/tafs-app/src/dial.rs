@@ -211,22 +211,18 @@ impl Dial {
         }
     }
 
-    /// `pressKnob`: what a stop's face does, as the session; approving an app event is signed.
+    /// `pressKnob`: what a stop's face does, as the session. An app event to approve opens its
+    /// filters first (`AppEventApprovalSheet`), where approving, signed, stands as the gate's line.
     fn press(self: &Rc<Self>, item: &Item) {
         let taf = self.knobs.taf().id.clone();
         match item.ok.as_deref() {
             Some("approve") => {
-                if let Some(a) = &item.approval {
-                    crate::approval::refuse(
-                        self.knobs.words(),
-                        tafs_core::sidebar::Mode::Kiff,
-                        &tafs_core::signed::Act::ApproveEvent {
-                            grant: a.grant.clone(),
-                            event: a.event.clone(),
-                        },
-                        &self.slot,
-                    );
-                }
+                crate::app_event_sheet::present(
+                    self.knobs.words(),
+                    tafs_core::sidebar::Mode::Kiff,
+                    &tafs_core::app_event::Item::from(item),
+                    &self.slot,
+                );
             }
             Some("door") => {
                 if let Some(door) = &item.door {
@@ -909,6 +905,12 @@ impl Dial {
             id: self.knobs.taf().id.clone(),
             source: self.knobs.taf().runs.clone(),
             manages: self.manages,
+            coach: tafs_core::runs::offers_ask_coach(
+                false,
+                self.knobs.taf().may_use_coach,
+                self.manages,
+            )
+            .then(|| self.knobs.taf().open_coach.clone()),
         };
         let list = s.column.clone();
         let knobs = self.knobs.clone();

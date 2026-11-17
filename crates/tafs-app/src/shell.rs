@@ -467,8 +467,8 @@ pub fn build(
                                 Rc::new(move || o2(Selection::Coach)),
                                 Rc::new(move || o3(Selection::ConnectApps)),
                             );
-                            // Who it's shared with, and Share, under the head row (`headerLine`'s
-                            // `ShareLine`): the taf's manager's to see, signed in with KIFF.
+                            // Who it's shared with, and Share, under the head row and its version
+                            // (`headerLine`'s `ShareLine`): the taf's manager's to see, signed in with KIFF.
                             if let (Some(source), Some(agent), true) =
                                 (&share, share_agents.get(&t.key), t.manages)
                             {
@@ -484,8 +484,15 @@ pub fn build(
                                     taf.clone(),
                                     tafs_core::sidebar::Mode::Kiff,
                                 );
+                                // After its version line where there's one, as `headerLine` has them.
                                 if let Ok(outer) = page.clone().downcast::<gtk::Box>() {
-                                    outer.insert_child_after(&line, outer.first_child().as_ref());
+                                    let head = outer.first_child();
+                                    let after = head
+                                        .as_ref()
+                                        .and_then(|h| h.next_sibling())
+                                        .filter(|v| v.widget_name() == "taf.versions")
+                                        .or(head);
+                                    outer.insert_child_after(&line, after.as_ref());
                                 }
                                 // `--page share:<key>`: its sheet open, for a screenshot.
                                 if crate::share::OPEN
