@@ -684,6 +684,7 @@ impl Page {
             // A call held: KIFF is read for its card, where the call was made.
             if matches!(e, tafs_core::stream::Event::Held { .. }) {
                 let p = self.clone();
+                crate::shell::reread_home();
                 glib::spawn_future_local(async move {
                     p.reread_held().await;
                     p.draw();
@@ -707,6 +708,7 @@ impl Page {
         // it (`anchorHeld`).
         self.chat.borrow_mut().stream_over(&f, &text);
         self.load_now().await;
+        crate::shell::reread_home();
         self.reread_held().await;
         self.draw();
         let mut c = self.chat.borrow_mut();

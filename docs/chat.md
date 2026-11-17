@@ -222,6 +222,10 @@ As the iPad's `streamingItems`, `anchorHeld` and `placed` (kiff/tafs#206):
   id, which the stream's `held` names, against the cards' (`heldKeys`).
 - **KIFF is read again for this taf** (its `refresh`) when a call is held and when the stream ends,
   so the card is there without the window being drawn again: its pin and scroll stay.
+- **Home is read again too** (`refresh`), when a call is held and when a stream ends, in a taf's
+  chat and in Coach: the sidebar's rows, Needs you's count and NEEDS YOU are drawn anew in place,
+  what's chosen stays chosen, and the screen beside it isn't drawn again (`shell.rs` ›
+  `redraw_sidebar`, `main.rs` › `reread_home`).
 - **Once the answer is recorded,** each held call stays after the recorded words it came after, or
   after the owner's message when it came first (`anchors`, kept while the app runs).
 - The rules are `tafs-core/src/taf_chat.rs` › `items_of`, `placed`, `anchor_held`, with tests.

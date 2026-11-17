@@ -1160,9 +1160,11 @@ impl Page {
         if !here(self, generation) {
             return;
         }
-        // The run is over: the recorded answer first, then the live one goes, with no gap.
+        // The run is over: the recorded answer first, then the live one goes, with no gap. Home
+        // is read again for the sidebar (`refresh`).
         self.conv.borrow_mut().stream_over(&f, &text);
         self.read_thread_now().await;
+        crate::shell::reread_home();
         if !here(self, generation) {
             return;
         }
