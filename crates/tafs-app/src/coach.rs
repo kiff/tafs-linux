@@ -1505,10 +1505,33 @@ fn draw_thread(page: &Rc<Page>, lines: &CoachLines, drawn: &Drawn) {
                 c.set_widget_name(&format!("card.{card_ref}"));
                 c
             }
-            Line::Drive { eyebrow: e, task } => {
+            Line::Drive {
+                eyebrow: e,
+                task,
+                steps,
+                none,
+                ended,
+            } => {
                 let p = panel(false);
                 p.append(&eyebrow_in(e, Tone::Amber));
                 p.append(&text(task, 17, 600, &["tafs-ink"]));
+                if let Some(n) = none {
+                    p.append(&text(n, 14, 400, &["tafs-soft"]));
+                }
+                for step in steps {
+                    let row = gtk::Box::new(gtk::Orientation::Horizontal, 6);
+                    let dot = gtk::Box::new(gtk::Orientation::Vertical, 0);
+                    dot.add_css_class("tafs-step-dot");
+                    dot.set_size_request(5, 5);
+                    dot.set_valign(gtk::Align::Start);
+                    dot.set_margin_top(8);
+                    row.append(&dot);
+                    let l = text(step, 14, 400, &["tafs-ink"]);
+                    l.set_hexpand(true);
+                    row.append(&l);
+                    p.append(&row);
+                }
+                p.append(&text(ended, 13, 400, &["tafs-soft"]));
                 p.upcast()
             }
         });

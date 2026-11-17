@@ -274,10 +274,14 @@ pub enum Line {
         card_ref: String,
         card: Card,
     },
-    /// A drive's end: what Coach did in the app.
+    /// A drive's end: what Coach did in the app, each step, and why it ended.
     Drive {
         eyebrow: String,
         task: String,
+        steps: Vec<String>,
+        /// No step was done.
+        none: Option<String>,
+        ended: String,
     },
 }
 
@@ -1272,6 +1276,54 @@ fn card(
     }))
 }
 
+/// `DriveRecapCard`: "What I did", the task, each step with what it touched, then why it ended:
+/// tafs cloud's words as a caption, else the app's for its reason.
+fn drive_recap(w: &WordBook, d: &crate::coach::DriveRecap) -> Result<Line, WordsError> {
+    let steps = d
+        .steps
+        .iter()
+        .map(|s| match &s.touched {
+            Some((words, taf)) => {
+                let taf = taf.as_ref().map(|t| format!(" · {t}")).unwrap_or_default();
+                format!("{} · {words}{taf}", s.line)
+            }
+            None => s.line.clone(),
+        })
+        .collect();
+    let ended = match d.words.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+        // `DriveSession.sentence`: its first letter a capital.
+        Some(said) => {
+            let mut c = said.chars();
+            c.next()
+                .map(|f| f.to_uppercase().collect::<String>() + c.as_str())
+                .unwrap_or_default()
+        }
+        None => w.line(match d.why.as_deref() {
+            Some("owner_took_over") => "drive.ended.owner_took_over",
+            Some("left_app") => "drive.ended.left_app",
+            Some("stopped") => "drive.ended.stopped",
+            Some("locked") => "drive.ended.locked",
+            Some("signed_out") => "drive.ended.signed_out",
+            Some("halted") => "drive.ended.halted",
+            Some("done") => "drive.ended.done",
+            Some("idle") => "drive.ended.idle",
+            Some("replaced") => "drive.ended.replaced",
+            _ => "drive.ended.other",
+        })?,
+    };
+    Ok(Line::Drive {
+        eyebrow: w.line("drive.what_i_did")?,
+        task: d.task.clone(),
+        none: if d.steps.is_empty() {
+            Some(w.line("drive.no_step_done")?)
+        } else {
+            None
+        },
+        steps,
+        ended,
+    })
+}
+
 /// `gapTime`: a time between parts of the thread an hour or more apart, and at its top: the time
 /// of day today, else the date and the time.
 pub fn gap(language: &str, at: DateTime<Utc>, now: DateTime<Utc>) -> String {
@@ -1401,10 +1453,7 @@ fn lines_while(
                     });
                 }
             }
-            Item::Drive(d) => out.push(Line::Drive {
-                eyebrow: w.line("drive.what_i_did")?,
-                task: d.task.clone(),
-            }),
+            Item::Drive(d) => out.push(drive_recap(w, d)?),
         }
     }
     let say = |l: &crate::coach::CoachLine| format!("{}: {}", l.taf, l.said);
@@ -1740,6 +1789,58 @@ mod tests {
         t.components[0].component.signs.as_mut().unwrap().words = None;
         c.took(t, now());
         assert_eq!(approval_of(&c).draft, None);
+    }
+
+    #[test]
+    fn a_drives_end_says_what_it_did_and_why_it_ended() {
+        let w = book();
+        let recap = |drive: serde_json::Value| {
+            let t = read(&json!({"messages": [], "items": [{"type": "drive", "drive": drive}]}));
+            let l = lines(&w, &t, &[], Mode::Kiff, now()).unwrap();
+            l.lines
+                .into_iter()
+                .find(|l| matches!(l, Line::Drive { .. }))
+                .unwrap()
+        };
+        assert_eq!(
+            recap(
+                json!({"id": "d1", "task": "Open Connect apps", "why": "stopped",
+                "at": "2026-10-16T12:02:00Z", "steps": [
+                    {"at": "2026-10-16T12:01:00Z", "line": "Tapped Connect apps",
+                     "touched": {"words": "Connect apps", "taf": "Refunds"}},
+                    {"at": "2026-10-16T12:01:10Z", "line": "Scrolled down"}]})
+            ),
+            Line::Drive {
+                eyebrow: "What I did".into(),
+                task: "Open Connect apps".into(),
+                steps: vec![
+                    "Tapped Connect apps · Connect apps · Refunds".into(),
+                    "Scrolled down".into()
+                ],
+                none: None,
+                ended: "You stopped Coach".into(),
+            }
+        );
+        // tafs cloud's words as a caption; a step it can't read leaves the steps out.
+        let Line::Drive {
+            steps, none, ended, ..
+        } = recap(
+            json!({"id": "d2", "task": "Look", "why": "halted", "words": " the owner stopped it",
+            "at": "2026-10-16T12:02:00Z", "steps": [{"line": "no time"}]}),
+        )
+        else {
+            unreachable!()
+        };
+        assert!(steps.is_empty());
+        assert_eq!(none.as_deref(), Some("No step was done."));
+        assert_eq!(ended, "The owner stopped it");
+        // A reason it doesn't know.
+        let Line::Drive { ended, .. } = recap(
+            json!({"id": "d3", "task": "Look", "why": "meteor", "at": "2026-10-16T12:02:00Z"}),
+        ) else {
+            unreachable!()
+        };
+        assert_eq!(ended, "Coach stopped");
     }
 
     #[test]

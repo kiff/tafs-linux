@@ -143,7 +143,9 @@ iPad does, and tafs cloud marks no card. The token, the key and the signature ar
   its own-answer field, Send answers once each has an answer, and Chat about this, which puts the
   card away ("Show them again"); an approval; a sign-in; a result (set up, setting up, wasn't set up, a plan needed with
   Choose a plan, or the button that opens the taf once it's on the list; an improvement's new
-  version); a drive's ask; a dial card's title. An answered card folds to one line
+  version); a drive's ask; a drive's end ("What I did": the task, each step with what it
+  touched, and why it ended, in tafs cloud's words or the app's for its reason; its steps are
+  read with `try?`, so one it can't read leaves them all out, as on the iPad); a dial card's title. An answered card folds to one line
   (`OutcomeLine`); an approval's opens again on a click, and Fold puts it back. An approval whose
   Card KIFF took the signature for (`signed`: confirmed or claimed) names that Card on its line,
   with the Card's lines under it.
@@ -230,7 +232,7 @@ For an approval, a sign-in or a drive it gives none, whatever the text, so nothi
 - What the iPad reads beside the thread: planque's grant (its words, terms and profile).
 - The live stream (`LiveWork`, revealing, pinning a sent message, a run that failed part-way with
   Retry), the Needs you bar and ↓, landing on the waiting card (it lands at the latest), New
-  a dial card (`KnobDraftCard`), a drive's steps and why it ended, and a result's
+  a dial card (`KnobDraftCard`), and a result's
   See version.
 - A refused connection's lines are decoded but not drawn: the iPad's Coach doesn't draw them.
 
@@ -253,4 +255,5 @@ read) and `coach-draft-refused` (`coach-drafts-refused.json`: KIFF's refusal, wi
 `--page coach-tools` opens their step: `coach-tools` (`shared/contracts/setup-coach.json` over
 `coach-asks.json`). `--page coach` opens Coach mode at a third of the window over the Overview, and
 `--page coach-full` full screen, keeping nothing: `coach-full` (`coach-card.json` with its draft,
-"Taking shape" beside it).
+"Taking shape" beside it) and `coach-drive` (`crates/tafs-app/fixtures/coach-drive.json`: a drive's
+end and a new ask).

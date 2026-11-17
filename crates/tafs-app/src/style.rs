@@ -107,6 +107,7 @@ button.tafs-account:hover { background-color: alpha(@tafs_ink, 0.04); }
    and its edge's handle, a capsule in the dim colour at 50%. */
 .tafs-scrim { background-color: rgba(0, 0, 0, 0.12); }
 .tafs-coach-mode { box-shadow: -4px 0 24px rgba(0, 0, 0, 0.18); }
+.tafs-step-dot { background-color: @tafs_dim; border-radius: 999px; min-width: 5px; min-height: 5px; }
 .tafs-handle { background-color: alpha(@tafs_dim, 0.5); border-radius: 999px; }
 /* Coach's tools still to give, one line above the conversation (`CoachToolsRow`). */
 button.tafs-tools-row { background: none; border: none; box-shadow: none; border-radius: 0; padding: 0 16px; min-height: 44px; }
