@@ -48,7 +48,6 @@ pub fn page(a: &AccountLines, actions: &Actions) -> gtk::Widget {
         list.add_css_class("tafs-group");
         // Export my chats (`ExportChatsSection`): its row, and what it exports under it.
         if section.slot == Some(Slot::Export) {
-            column.append(&head);
             column.append(&crate::kiff_account::export_section(
                 &actions.words,
                 actions.export.clone(),
@@ -240,7 +239,19 @@ fn row_widget(row: &Row, actions: &Actions) -> gtk::ListBoxRow {
             } else {
                 "amber-text"
             });
-            // Change language opens Account › Language (`LanguagePicker`).
+            // Change language opens Account › Language (`LanguagePicker`), with the chevron of a
+            // row that opens a screen.
+            if *action == Action::ChangeLanguage {
+                if let Some(l) = b.child() {
+                    let face = gtk::Box::new(gtk::Orientation::Horizontal, 12);
+                    b.set_child(None::<&gtk::Widget>);
+                    face.append(&l);
+                    let c = gtk::Image::from_icon_name("go-next-symbolic");
+                    c.add_css_class("tafs-dim");
+                    face.append(&c);
+                    b.set_child(Some(&face));
+                }
+            }
             let (act, open, action, title) = (
                 actions.act.clone(),
                 actions.open.clone(),

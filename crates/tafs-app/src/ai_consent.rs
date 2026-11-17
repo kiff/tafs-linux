@@ -274,7 +274,13 @@ pub fn consent_row(w: Rc<WordBook>, source: Source, into: gtk::Box, shown: Rc<dy
                     given.set_widget_name("settings.ai-consent");
                     into.append(&given);
                     if let Some(words) = now.withdraw() {
+                        // Two rows of the list, a line between them, as the iPad's.
+                        given.set_margin_bottom(6);
+                        let line = gtk::Separator::new(gtk::Orientation::Horizontal);
+                        line.add_css_class("tafs-line");
+                        into.append(&line);
                         let b = crate::account::row_button(words);
+                        b.set_margin_top(6);
                         b.add_css_class("no");
                         b.set_sensitive(!c.busy.get());
                         let c = c.clone();

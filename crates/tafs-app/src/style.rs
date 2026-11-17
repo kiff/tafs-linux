@@ -326,7 +326,7 @@ button.tafs-panel-link { background-color: @tafs_panel; background-image: none; 
 button.tafs-back { background: none; border: none; box-shadow: none; color: @tafs_amber_text; padding: 4px 8px; }
 
 /* Connect apps: the inset list's group, its buttons as rows, the search, a Connect as wide as its words. */
-.tafs-group { background-color: @tafs_panel; border-radius: 18px; padding: 0 16px; }
+.tafs-group { background-color: @tafs_panel; border-radius: 26px; padding: 0 20px; }
 button.tafs-list-button { background-color: @tafs_panel; background-image: none; border: none; border-radius: 18px; padding: 16px; box-shadow: none; color: @tafs_amber_text; font-size: 17px; font-weight: 400; }
 button.tafs-list-button label { font-size: 17px; }
 button.tafs-list-button > label { margin: 0; }
@@ -369,9 +369,11 @@ button.tafs-plain { background: none; border: none; box-shadow: none; padding: 0
 button.tafs-share-button { background-color: @tafs_panel; background-image: none; border: 1px solid @tafs_line; border-radius: 999px; padding: 7px 12px; box-shadow: none; }
 .tafs-person-badge { background-color: @tafs_raised; border-radius: 999px; color: @tafs_ink; font-size: 14px; font-weight: 600; }
 
-button.tafs-row-button { background: none; border: none; box-shadow: none; padding: 12px 0; font-size: 17px; font-weight: 400; }
+button.tafs-row-button { background: none; border: none; box-shadow: none; padding: 14px 0; font-size: 17px; font-weight: 400; }
 button.tafs-row-button.tafs-amber-text { color: @tafs_amber_text; }
+button.tafs-row-button.tafs-amber { color: @tafs_amber; }
 button.tafs-row-button.tafs-no { color: @tafs_no; }
+list.tafs-group > row button.tafs-row-button { padding: 0; min-height: 24px; }
 button.tafs-link.tafs-no { color: @tafs_no; }
 .tafs-strip-bar { background-color: @tafs_line; border-radius: 999px; }
 
