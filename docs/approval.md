@@ -50,7 +50,11 @@ account's time zone (`docs/account.md`); declining a request (`docs/usage.md`).
 
 A button the iPad itself wraps in `ApprovalGate` is the exception: there, as on the iPad, the
 gate's line is drawn in the button's place (`approval::gate`), not the button. Raise the limit is
-one (`docs/usage.md`).
+one (`docs/usage.md`); an app event's filters before its subscription is signed
+(`AppEventApprovalSheet`, `app_event_sheet.rs`) is another: the sheet is drawn whole, its filters
+as the iPad's `JSONEncoder` writes them, and the gate's line stands where Approve would. It opens
+from Setup › Starts when and the dial, neither on Linux yet; `--app-event item.json` opens it for
+its screenshot.
 
 Not on Linux: `ReadinessReader` reads again when the app comes back, but this computer's state
 never changes. `openTafsSettings` opens tafs' iOS settings, which don't exist here, and

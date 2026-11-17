@@ -13,7 +13,7 @@ export XDG_CONFIG_HOME=$(mktemp -d)
 mkdir -p "$XDG_CONFIG_HOME/gtk-4.0"
 printf '[Settings]\ngtk-font-name=Inter 11\ngtk-hint-font-metrics=1\n' > "$XDG_CONFIG_HOME/gtk-4.0/settings.ini"
 missing=0
-for screen in welcome sign-in sign-in-code sign-in-narrow pair connected overview overview-home overview-empty needs-you needs-you-empty needs-you-waits needs-you-happened record taf taf-card taf-home taf-home-card taf-card-lines taf-work taf-run taf-knocks taf-setup taf-units usage usage-kiff usage-kiff-member usage-ask usage-decline connect-apps connect-apps-narrow devices devices-sign-out people people-rename people-add kiff-account account-kiff consent time-zone time-zone-use language alerts calendar calendar-week calendar-compact account sidebar-sample sidebar-others sidebar-setting-up sidebar-plan view-only view-only-paired recipes recipe-sheet gallery-strip gallery halt-all halt-all-halted halt-one record-search record-export record-receipt record-on delete-account pin-sheet coach coach-wider coach-asks coach-chats coach-empty coach-start taf-chat taf-chat-working taf-report brief brief-answer brief-clear overview-labels overview-label mission-log; do
+for screen in welcome sign-in sign-in-code sign-in-narrow pair connected overview overview-home overview-empty needs-you needs-you-empty needs-you-waits needs-you-happened record taf taf-card taf-home taf-home-card taf-card-lines taf-work taf-run taf-knocks taf-setup taf-units usage usage-kiff usage-kiff-member usage-ask usage-decline connect-apps connect-apps-narrow devices devices-sign-out people people-rename people-add kiff-account account-kiff consent time-zone time-zone-use language alerts calendar calendar-week calendar-compact account sidebar-sample sidebar-others sidebar-setting-up sidebar-plan view-only view-only-paired recipes recipe-sheet gallery-strip gallery halt-all halt-all-halted halt-one record-search record-export record-receipt record-on delete-account pin-sheet app-event coach coach-wider coach-asks coach-chats coach-empty coach-start taf-chat taf-chat-working taf-report brief brief-answer brief-clear overview-labels overview-label mission-log; do
   case $screen in
     welcome) opts=(--page welcome) ;;
     sign-in) opts=(--page sign-in) ;;
@@ -78,6 +78,8 @@ for screen in welcome sign-in sign-in-code sign-in-narrow pair connected overvie
     view-only-paired) opts=(--view-only --paired) ;;
     recipes) opts=(--home crates/tafs-app/fixtures/home-empty.json --recipes crates/tafs-app/fixtures/recipes.json) ;;
     pin-sheet) opts=(--home shared/contracts/home.json --page pin-sheet) ;;
+    # An app event's filters before signing (synthetic, the iPad's test's stop): Approve is the gate's line.
+    app-event) opts=(--home shared/contracts/home.json --app-event crates/tafs-app/fixtures/app-event.json) ;;
     delete-account) opts=(--home shared/contracts/home.json --people crates/tafs-app/fixtures/people-kiff.json --page delete-account) ;;
     record-export) opts=(--home shared/contracts/home.json --access crates/tafs-app/fixtures/access.json --record-search crates/tafs-app/fixtures/record-search.json --receipts crates/tafs-app/fixtures/receipts.json --page record-export) ;;
     alerts) opts=(--home shared/contracts/home.json --page alerts) ;;

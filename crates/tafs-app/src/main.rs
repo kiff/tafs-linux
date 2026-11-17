@@ -3,6 +3,7 @@
 mod account;
 mod ai_consent;
 mod alerts;
+mod app_event_sheet;
 mod approval;
 mod brief;
 mod calendar;
@@ -166,13 +167,16 @@ struct Options {
     /// With `--brief`: a mission's log as tafs cloud answers `GET /v1/missions/{id}/log`, for
     /// every mission's Evidence.
     mission_log: Option<String>,
+    /// A dial's stop with its approval, as tafs cloud sends it in the knob's `wakes`: its sheet
+    /// opens over the window, for its screenshot. Nothing is signed or subscribed.
+    app_event: Option<String>,
     /// `--size WxH`: the window's size, for a screenshot of a narrower layout.
     size: Option<(i32, i32)>,
     screenshot: Option<String>,
 }
 
 const USAGE: &str = "tafs [--lang en|de|fr|es|it|pt|nl|pl] [--theme light|dark] [--sample] [--signed-in] [--view-only [--paired]]
-     [--home contract.json] [--usage answers.json] [--people answers.json] [--unproven answers.json] [--recipes answers.json] [--gallery answers.json] [--halt answer.json] [--record-search answers.json] [--access answer.json] [--receipts answer.json] [--activity answer.json] [--calls answer.json] [--receipt answer.json] [--work answer.json] [--doors answer.json] [--account-reads answers.json] [--me answer.json] [--memory answer.json] [--runs answer.json] [--request answer.json] [--balance answer.json] [--coach answer.json] [--coach-chats answer.json] [--chat answer.json [--report]] [--brief answer.json] [--mission-log answer.json] [--size WxH] [--page welcome|sign-in|pair|recipe:<id>|gallery|halt-all|halt:<id>|record-search:<q>|record-export|receipt:<proposal id>|run:<taf id>|pin-sheet|coach|overview|overview-label:<id>|needs-you|brief-answer:<decision id>|mission-log:<mission id>|record|calendar|calendar-week|usage|usage-ask|usage-decline|connect-apps|account|kiff-account|time-zone|time-zone-use|alerts|devices|devices-sign-out|people|people-rename|people-add|taf|taf-card|taf-setup|consent|connected|sign-in-code] [--screenshot out.png]";
+     [--home contract.json] [--usage answers.json] [--people answers.json] [--unproven answers.json] [--recipes answers.json] [--gallery answers.json] [--halt answer.json] [--record-search answers.json] [--access answer.json] [--receipts answer.json] [--activity answer.json] [--calls answer.json] [--receipt answer.json] [--work answer.json] [--doors answer.json] [--account-reads answers.json] [--me answer.json] [--memory answer.json] [--runs answer.json] [--request answer.json] [--balance answer.json] [--coach answer.json] [--coach-chats answer.json] [--chat answer.json [--report]] [--brief answer.json] [--mission-log answer.json] [--app-event item.json] [--size WxH] [--page welcome|sign-in|pair|recipe:<id>|gallery|halt-all|halt:<id>|record-search:<q>|record-export|receipt:<proposal id>|run:<taf id>|pin-sheet|coach|overview|overview-label:<id>|needs-you|brief-answer:<decision id>|mission-log:<mission id>|record|calendar|calendar-week|usage|usage-ask|usage-decline|connect-apps|account|kiff-account|time-zone|time-zone-use|alerts|devices|devices-sign-out|people|people-rename|people-add|taf|taf-card|taf-setup|consent|connected|sign-in-code] [--screenshot out.png]";
 
 fn options() -> Result<Options, String> {
     let mut o = Options::default();
@@ -211,6 +215,7 @@ fn options() -> Result<Options, String> {
             "--report" => o.report = true,
             "--brief" => o.brief = Some(value()?),
             "--mission-log" => o.mission_log = Some(value()?),
+            "--app-event" => o.app_event = Some(value()?),
             "--size" => {
                 let v = value()?;
                 let (w, h) = v.split_once('x').ok_or("--size takes WxH")?;
@@ -599,6 +604,16 @@ fn activate(app: &adw::Application, o: &Options) {
             std::sync::Arc::new(|| {}),
             Rc::new(|_| {}),
         );
+    }
+    // `--app-event`: an app event's filters before signing (`AppEventApprovalSheet`), signed in,
+    // for its screenshot: its Approve is the gate's line, so nothing is ever signed.
+    if let Some(item) = o
+        .app_event
+        .as_deref()
+        .and_then(|p| std::fs::read(p).ok())
+        .and_then(|b| tafs_core::app_event::Item::parse(&b))
+    {
+        app_event_sheet::present(&app_state.words, Mode::Kiff, &item, &window);
     }
     if let Some(path) = o.screenshot.clone() {
         // Saved 1.5 s after the window shows, once it's drawn. On a busy machine the first frame
