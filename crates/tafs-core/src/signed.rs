@@ -159,6 +159,14 @@ pub fn signed_at_cloud(method: &str, path: &str) -> bool {
     let path = path.split(['?', '#']).next().unwrap_or(path);
     let path = path.trim_end_matches('/');
     let p = parts(path);
+    // `discardSettingUp`: signed by the approval key, as a removal is.
+    if method == "POST"
+        && path.starts_with("/v1/home/setting-up/")
+        && p.len() == 6
+        && p[5] == "discard"
+    {
+        return true;
+    }
     if !path.starts_with("/v1/tafs/") || p.len() < 4 || p[3].is_empty() {
         return false;
     }
@@ -231,6 +239,12 @@ pub enum Act {
     MakeLive { taf: String, version: i64 },
     /// `removeTaf`: Remove for good, the `DELETE` to tafs cloud signed by the approval key.
     RemoveTaf { taf: String },
+    /// `resumeHalt`: a halted taf resumed, or every taf with no agent, confirmed by the device
+    /// (`tafs.resume.v1`) and signed.
+    Resume { agent: Option<String> },
+    /// `discardSettingUp`: a taf being set up discarded, its Cards revoked and tafs cloud's
+    /// `POST` signed by the approval key, as a removal is.
+    DiscardSettingUp { agent: String },
     /// `answerYourStep`: Done or Skip it on a step a taf handed its owner.
     AnswerStep { handoff: String },
     /// `approveOnce`: a held call approved once, from the dial's face.
@@ -308,6 +322,17 @@ impl Act {
             ),
             Act::ConnectAgain { grant } => ("POST", format!("grants/{}/approve", escaped(grant))),
             Act::RemoveTaf { taf } => ("DELETE", format!("/v1/tafs/{}", escaped(taf))),
+            Act::Resume { agent } => (
+                "POST",
+                match agent {
+                    Some(a) => format!("/v1/agents/{}/resume", escaped(a)),
+                    None => "/v1/resume".into(),
+                },
+            ),
+            Act::DiscardSettingUp { agent } => (
+                "POST",
+                format!("/v1/home/setting-up/{}/discard", escaped(agent)),
+            ),
             Act::ApproveOnce { call } => (
                 "POST",
                 format!("/v1/me/card-exceptions/{}/approve-once", escaped(call)),
@@ -355,7 +380,10 @@ impl Act {
     /// Whether the device checks the person, or signs with its approval key, before a tafs
     /// cloud call (`useVersion`, `removeTaf`): this computer never sends it.
     pub fn at_device(&self) -> bool {
-        matches!(self, Act::MakeLive { .. } | Act::RemoveTaf { .. })
+        matches!(
+            self,
+            Act::MakeLive { .. } | Act::RemoveTaf { .. } | Act::DiscardSettingUp { .. }
+        )
     }
 
     /// The call goes to planque, which this computer never reaches (`session::may_send_to`).
@@ -467,6 +495,13 @@ mod tests {
                 version: 8,
             },
             Act::RemoveTaf { taf: "t1".into() },
+            Act::DiscardSettingUp {
+                agent: "agt_1".into(),
+            },
+            Act::Resume {
+                agent: Some("agt_1".into()),
+            },
+            Act::Resume { agent: None },
             Act::AnswerStep {
                 handoff: "h1".into(),
             },
@@ -501,6 +536,7 @@ mod tests {
             ("PUT", "/v1/tafs/t1/trial"),
             ("POST", "/v1/tafs/t1/trial/install"),
             ("POST", "/v1/tafs/t1//versions/3/live"),
+            ("POST", "/v1/home/setting-up/agt_1/discard"),
         ] {
             assert!(signed_at_cloud(m, p), "{m} {p}");
         }
@@ -533,8 +569,8 @@ mod tests {
                 continue;
             }
             if act.at_device() {
-                // The device signs or checks first; the app never sends it.
-                assert!(path.starts_with("/v1/tafs/t1"), "{act:?}");
+                // The device signs or checks first; the app never sends it, by path too.
+                assert!(signed_at_cloud(method, &path), "{act:?}");
                 assert!(
                     matches!(method, "POST" | "DELETE"),
                     "{act:?} changes something"

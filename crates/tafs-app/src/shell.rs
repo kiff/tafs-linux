@@ -422,15 +422,16 @@ pub fn build(
                             Selection::Halt(id) => Some(id.clone()),
                             _ => None,
                         };
-                        let name = id.as_ref().and_then(|id| {
+                        let taf = id.as_ref().and_then(|id| {
                             tafs.iter()
                                 .find(|t| t.cloud_id.as_deref() == Some(id.as_str()))
-                                .map(|t| t.name.clone())
                         });
+                        let name = taf.map(|t| t.name.clone());
+                        let agent = taf.and_then(|t| share_agents.get(&t.key).cloned());
                         crate::halt::page(
                             w.clone(),
                             source.clone(),
-                            crate::halt::Whose { id, name },
+                            crate::halt::Whose { id, name, agent },
                         )
                     }
                     None => screen_page(&title).upcast::<gtk::Widget>(),
@@ -449,6 +450,7 @@ pub fn build(
                                         crate::halt::Whose {
                                             id: Some(id.clone()),
                                             name: Some(t.name.clone()),
+                                            agent: share_agents.get(&t.key).cloned(),
                                         },
                                         open.clone(),
                                     ))
@@ -817,15 +819,29 @@ fn sidebar(
                 }
                 None => add(row, None),
             }
-            if let Some(words) = discard {
-                let d = gtk::Button::with_label(words);
+            if let Some(discard) = discard {
+                let d = gtk::Button::with_label(&discard.words.button);
                 d.add_css_class("tafs-outline");
                 d.add_css_class("tafs-soft");
                 d.set_halign(gtk::Align::End);
                 d.set_hexpand(false);
-                d.set_sensitive(false);
                 d.set_widget_name("home.discard-setup");
+                // Its yes is signed behind the approval key, as a removal is: the can't-approve
+                // line under it, and nothing is revoked or sent.
+                let slot = crate::approval::refusal_slot();
+                slot.set_margin_start(8);
+                slot.set_margin_end(8);
+                let (w2, discard2, slot2) = (w.clone(), discard.clone(), slot.clone());
+                d.connect_clicked(move |b| ask_discard(&w2, &discard2, &slot2, b));
                 add(sidebar_row(&d, 0), None);
+                add(sidebar_row(&slot, 0), None);
+                if DISCARD.with(|o| o.replace(false)) {
+                    let d = d.clone();
+                    gtk::glib::timeout_add_local_once(
+                        std::time::Duration::from_millis(400),
+                        move || d.emit_clicked(),
+                    );
+                }
             }
         }
         if let Some(none) = &lines.no_tafs {
@@ -1035,6 +1051,50 @@ fn tone_class(tone: tafs_core::sidebar::Tone) -> &'static str {
         tafs_core::sidebar::Tone::Amber => "amber",
         tafs_core::sidebar::Tone::No => "no",
     }
+}
+
+thread_local! {
+    /// `--page discard-setup`: the first taf being set up's Discard, tapped.
+    pub static DISCARD: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// Discard's ask (`DiscardSettingUpButton`'s confirmation): tafs cloud's title (else the button's
+/// words), its words, its yes (red) and its no (else Cancel). Yes would sign: this computer says
+/// it can't approve, in `slot`.
+fn ask_discard(
+    w: &WordBook,
+    discard: &tafs_core::sidebar::Discard,
+    slot: &gtk::Box,
+    over: &gtk::Button,
+) {
+    use adw::prelude::{AdwDialogExt, AlertDialogExt};
+    let words = &discard.words;
+    let title = if words.title.is_empty() {
+        &words.button
+    } else {
+        &words.title
+    };
+    let ask = adw::AlertDialog::new(Some(title), None);
+    if !words.text.is_empty() {
+        ask.set_body(&words.text);
+    }
+    let no = if words.no.is_empty() {
+        w.line("common.cancel").unwrap_or_default()
+    } else {
+        words.no.clone()
+    };
+    ask.add_response("no", &no);
+    ask.add_response("yes", &words.yes);
+    ask.set_response_appearance("yes", adw::ResponseAppearance::Destructive);
+    ask.set_default_response(Some("no"));
+    ask.set_close_response("no");
+    let (w, act, slot) = (w.clone(), discard.act(), slot.clone());
+    ask.connect_response(None, move |_, answer| {
+        if let (true, Some(act)) = (answer == "yes", &act) {
+            crate::approval::refuse(&w, tafs_core::sidebar::Mode::Kiff, act, &slot);
+        }
+    });
+    ask.present(Some(over));
 }
 
 fn sidebar_row(child: &impl IsA<gtk::Widget>, min_height: i32) -> gtk::ListBoxRow {

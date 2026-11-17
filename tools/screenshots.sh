@@ -17,7 +17,7 @@ missing=0
 held=$(mktemp)
 sed -e "s/__HELD_AT__/$(date -u -d '-30 sec' +%FT%TZ)/" -e "s/__EXPIRES__/$(date -u -d '+10 min' +%FT%TZ)/" \
   crates/tafs-app/fixtures/held-allow.json > "$held"
-for screen in welcome sign-in sign-in-code sign-in-narrow pair connected overview overview-home overview-empty overview-unread needs-you needs-you-kiff needs-you-allow needs-you-empty needs-you-waits needs-you-set-all-aside needs-you-dismiss needs-you-hold needs-you-happened record taf taf-card taf-home taf-home-card taf-card-lines taf-work taf-work-manage taf-next taf-card-manage taf-run taf-knocks doors doors-door taf-dial taf-setup-apps taf-starts taf-results taf-setup taf-units usage usage-kiff usage-kiff-member usage-ask usage-decline connect-apps connect-apps-narrow connect-app connect-connection connect-remove connect-kiff connect-which-taf connect-approve devices devices-sign-out people people-rename people-add share share-step2 kiff-account account-kiff consent time-zone time-zone-use language alerts calendar calendar-week calendar-compact account sidebar-sample sidebar-others sidebar-setting-up sidebar-unreachable sidebar-plan view-only view-only-paired recipes recipe-sheet gallery-strip gallery new-taf coach-hand halt-all halt-all-halted halt-one record-search record-export record-receipt record-on delete-account pin-sheet app-event coach coach-wider coach-asks coach-chats coach-empty coach-start coach-draft coach-draft-refused coach-tools coach-full coach-drive taf-chat taf-chat-working taf-report brief brief-answer brief-clear overview-labels overview-label mission-log; do
+for screen in welcome sign-in sign-in-code sign-in-narrow pair connected overview overview-home overview-empty overview-unread needs-you needs-you-kiff needs-you-allow needs-you-empty needs-you-waits needs-you-set-all-aside needs-you-dismiss needs-you-hold needs-you-happened record taf taf-card taf-home taf-home-card taf-card-lines taf-work taf-work-manage taf-next taf-card-manage taf-run taf-knocks doors doors-door taf-dial taf-setup-apps taf-starts taf-results taf-setup taf-units usage usage-kiff usage-kiff-member usage-ask usage-decline connect-apps connect-apps-narrow connect-app connect-connection connect-remove connect-kiff connect-which-taf connect-approve devices devices-sign-out people people-rename people-add share share-step2 kiff-account account-kiff consent time-zone time-zone-use language alerts calendar calendar-week calendar-compact account sidebar-sample sidebar-others sidebar-setting-up discard-setup sidebar-unreachable sidebar-plan view-only view-only-paired recipes recipe-sheet gallery-strip gallery new-taf coach-hand halt-all halt-all-halted halt-one halt-resume record-search record-export record-receipt record-on delete-account pin-sheet app-event coach coach-wider coach-asks coach-chats coach-empty coach-start coach-draft coach-draft-refused coach-tools coach-full coach-drive taf-chat taf-chat-working taf-report brief brief-answer brief-clear overview-labels overview-label mission-log; do
   case $screen in
     welcome) opts=(--page welcome) ;;
     sign-in) opts=(--page sign-in) ;;
@@ -114,6 +114,9 @@ for screen in welcome sign-in sign-in-code sign-in-narrow pair connected overvie
     taf-card) opts=(--sample --signed-in --page taf-card) ;;
     taf-home-card) opts=(--home shared/contracts/home.json --page taf-card:taf-aaaa0000000000000000) ;;
     sidebar-plan) opts=(--home shared/contracts/home.json --balance crates/tafs-app/fixtures/balance-home-line.json --page overview) ;;
+    # Discard tapped on a taf being set up, then its yes: tafs cloud's ask, then the can't-approve
+    # line under it (its yes is signed, as a removal is), nothing revoked or sent.
+    discard-setup) opts=(--home crates/tafs-app/fixtures/home-setting-up.json --me crates/tafs-app/fixtures/me-manager.json --coach-setup crates/tafs-app/fixtures/setup-coach.json --page discard-setup) ;;
     sidebar-setting-up) opts=(--home crates/tafs-app/fixtures/home-setting-up.json --me crates/tafs-app/fixtures/me-manager.json --coach-setup crates/tafs-app/fixtures/setup-coach.json --page overview) ;;
     # Home couldn't be read: the Unreachable line at the foot, as the app tries again (nothing is read).
     sidebar-unreachable) opts=(--home shared/contracts/home.json --me crates/tafs-app/fixtures/me-manager.json --unreachable network) ;;
@@ -135,6 +138,9 @@ for screen in welcome sign-in sign-in-code sign-in-narrow pair connected overvie
     halt-all) opts=(--home shared/contracts/home.json --halt crates/tafs-app/fixtures/halt-halting.json --page halt-all) ;;
     # Halt all once every part holds it: board 4 over the screen.
     halt-all-halted) opts=(--home shared/contracts/home.json --halt crates/tafs-app/fixtures/halt-halted.json --page halt-all) ;;
+    # Resume tapped on a halted taf: resuming is confirmed and signed by the device, so the
+    # can't-approve line under it, nothing sent.
+    halt-resume) opts=(--home shared/contracts/home.json --halt crates/tafs-app/fixtures/halt-halted.json --page halt-resume:taf-aaaa0000000000000000) ;;
     halt-one) opts=(--home shared/contracts/home.json --halt crates/tafs-app/fixtures/halt-halted.json --page halt:taf-aaaa0000000000000000) ;;
     gallery-strip) opts=(--home shared/contracts/home.json --gallery crates/tafs-app/fixtures/gallery.json) ;;
     gallery) opts=(--home shared/contracts/home.json --gallery crates/tafs-app/fixtures/gallery.json --recipes crates/tafs-app/fixtures/recipes.json --page gallery) ;;
