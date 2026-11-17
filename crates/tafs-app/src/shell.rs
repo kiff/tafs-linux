@@ -485,7 +485,7 @@ pub fn build(
                                     tafs_core::sidebar::Mode::Kiff,
                                 );
                                 // After its version line where there's one, as `headerLine` has them.
-                                if let Ok(outer) = page.clone().downcast::<gtk::Box>() {
+                                if let Some(outer) = crate::taf::column(&page) {
                                     let head = outer.first_child();
                                     let after = head
                                         .as_ref()

@@ -497,30 +497,45 @@ pub enum Screen {
     ResultsGoTo,
 }
 
-/// Opens one of Setup's screens over `parent`, in a sheet with its own navigation.
+/// The name of a taf's page's navigation, where Setup's screens push.
+pub const TAF_NAV: &str = "taf-nav";
+
+/// Opens one of Setup's screens: pushed on the taf's page it's opened from, with Back and its title
+/// in the bar, as the iPad's `NavigationLink`; elsewhere, in a sheet with its own navigation.
 pub fn open(knobs: Knobs, screen: Screen, parent: &impl IsA<gtk::Widget>) {
-    let nav = adw::NavigationView::new();
-    let dialog = adw::Dialog::new();
-    dialog.set_child(Some(&nav));
-    dialog.set_content_width(600);
-    dialog.set_content_height(1000);
     let title = knobs.l(match screen {
         Screen::StartsWhen => "setup.starts_when",
         Screen::ResultsGoTo => "setup.results_go_to",
     });
-    dialog.set_title(&title);
     let column = gtk::Box::new(gtk::Orientation::Vertical, 16);
     column.set_margin_start(16);
     column.set_margin_end(16);
     column.set_margin_top(12);
     column.set_margin_bottom(12);
-    nav.push(&page(&title, &column));
+    let host = parent
+        .ancestor(adw::NavigationView::static_type())
+        .and_downcast::<adw::NavigationView>()
+        .filter(|n| n.widget_name() == TAF_NAV);
+    let (nav, dialog) = match &host {
+        Some(nav) => (nav.clone(), None),
+        None => {
+            let nav = adw::NavigationView::new();
+            let dialog = adw::Dialog::new();
+            dialog.set_child(Some(&nav));
+            dialog.set_content_width(600);
+            dialog.set_content_height(1000);
+            dialog.set_title(&title);
+            (nav, Some(dialog))
+        }
+    };
+    let shown = page(&title, &column);
+    nav.push(&shown);
     let ctx = Rc::new(Screens {
         knobs: knobs.clone(),
         screen,
         column,
         nav: nav.downgrade(),
-        dialog: dialog.downgrade(),
+        dialog: dialog.as_ref().map(|d| d.downgrade()).unwrap_or_default(),
         slot: crate::approval::refusal_slot(),
         doors: RefCell::new(None),
     });
@@ -532,20 +547,42 @@ pub fn open(knobs: Knobs, screen: Screen, parent: &impl IsA<gtk::Widget>) {
             }
         }))
     };
+    // Gone (the sheet closed, or Back past it): it stops listening, and its state goes.
     let keep = RefCell::new(Some(ctx.clone()));
-    {
+    let done = {
         let knobs = knobs.clone();
-        dialog.connect_closed(move |_| {
-            knobs.unlisten(listening);
-            keep.borrow_mut().take();
-        });
-    }
+        move || {
+            if keep.borrow_mut().take().is_some() {
+                knobs.unlisten(listening);
+            }
+        }
+    };
     ctx.draw();
     knobs.reload();
     if screen == Screen::ResultsGoTo {
         knobs.load_work();
     }
-    dialog.present(Some(parent));
+    match dialog {
+        Some(dialog) => {
+            dialog.connect_closed(move |_| done());
+            dialog.present(Some(parent));
+        }
+        None => {
+            let handler: Rc<RefCell<Option<glib::SignalHandlerId>>> = Rc::default();
+            let id = {
+                let handler = handler.clone();
+                nav.connect_popped(move |nav, popped| {
+                    if popped == &shown {
+                        done();
+                        if let Some(id) = handler.borrow_mut().take() {
+                            nav.disconnect(id);
+                        }
+                    }
+                })
+            };
+            *handler.borrow_mut() = Some(id);
+        }
+    }
 }
 
 fn page(title: &str, content: &gtk::Box) -> adw::NavigationPage {
@@ -554,7 +591,12 @@ fn page(title: &str, content: &gtk::Box) -> adw::NavigationPage {
     scroller.set_child(Some(content));
     scroller.set_vexpand(true);
     let toolbar = adw::ToolbarView::new();
-    toolbar.add_top_bar(&adw::HeaderBar::new());
+    let bar = adw::HeaderBar::new();
+    bar.set_show_end_title_buttons(false);
+    bar.set_show_start_title_buttons(false);
+    toolbar.add_top_bar(&bar);
+    // Back as the window's other screens draw it: round, on the panel's white.
+    toolbar.add_css_class("tafs-pushed");
     toolbar.set_content(Some(&scroller));
     crate::widgets::ground(&toolbar);
     adw::NavigationPage::new(&toolbar, title)
@@ -769,9 +811,11 @@ impl Screens {
         self.column.append(&p);
     }
 
-    /// `SizeStepper`: − and + through the stop's choices, its value between them.
+    /// `SizeStepper`: − and + through the stop's choices, its value between them; the three share
+    /// the row, as the iPad's outlined buttons and value do.
     fn stepper(self: &Rc<Self>, item: &Item, label: &str, may: bool) -> gtk::Box {
         let row = gtk::Box::new(gtk::Orientation::Horizontal, 12);
+        row.set_homogeneous(true);
         for (direction, icon, words) in [
             (-1, "list-remove-symbolic", "common.less"),
             (1, "list-add-symbolic", "common.more"),
@@ -779,6 +823,7 @@ impl Screens {
             let b = gtk::Button::from_icon_name(icon);
             b.add_css_class("tafs-outline");
             b.set_size_request(44, 36);
+            b.set_hexpand(true);
             b.set_sensitive(may && self.knobs.can_move(item, direction));
             b.update_property(&[gtk::accessible::Property::Label(&self.l(words))]);
             let (knobs, item) = (self.knobs.clone(), item.clone());
@@ -894,7 +939,12 @@ impl Screens {
             row.append(&edit);
             p.append(&row);
         }
-        let add = gtk::Button::with_label(&self.l("setup.add_door"));
+        // `Label(addDoor, systemImage: "plus")`: the + before its words.
+        let add = gtk::Button::new();
+        let face = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+        face.append(&crate::widgets::symbol("list-add-symbolic", 16));
+        face.append(&gtk::Label::new(Some(&self.l("setup.add_door"))));
+        add.set_child(Some(&face));
         add.add_css_class("tafs-link");
         add.set_halign(gtk::Align::Start);
         add.set_sensitive(model.loaded() && !model.addable().is_empty());

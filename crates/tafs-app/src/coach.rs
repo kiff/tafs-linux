@@ -3558,6 +3558,9 @@ fn sheet_page(
     let d = gtk::Button::with_label(done);
     d.add_css_class("tafs-unsent-act");
     d.add_css_class("strong");
+    // In Coach's blue, as Coach's own sheets are on the iPad.
+    d.add_css_class("tafs-coach-tint");
+    d.set_margin_end(8);
     let dialog = dialog.downgrade();
     d.connect_clicked(move |_| {
         if let Some(dialog) = dialog.upgrade() {
