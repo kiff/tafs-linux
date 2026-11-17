@@ -189,6 +189,7 @@ pub fn page(
     outer.append(&tabs);
 
     // The Card in front, one line above the activity.
+    let mut card_bar_box: Option<gtk::Box> = None;
     if let Some(card) = &t.card {
         let meta = CardMeta {
             title: &t.card_title,
@@ -205,8 +206,7 @@ pub fn page(
             bar.add_controller(click);
             bar.set_cursor_from_name(Some("pointer"));
             outer.append(&bar);
-            let bar2 = bar.clone();
-            card_tab.connect_toggled(move |b| bar2.set_visible(!b.is_active()));
+            card_bar_box = Some(bar);
         }
     }
 
@@ -222,15 +222,9 @@ pub fn page(
             t.doors.clone(),
         ));
     }
-    if !t.held.is_empty() {
-        body.append(&eyebrow(
-            &w.line("needs_you.title").unwrap_or_default(),
-            true,
-        ));
-        for card in &t.held {
-            body.append(&crate::needs_you::held_card(&w, card));
-        }
-    }
+    // Its held calls: here, or in the side column beside it on a wide window.
+    let held_here = held_box(&w, &t.held);
+    body.append(&held_here);
     if !t.sample {
         if let Some(id) = &t.cloud_id {
             // `TafActivityList.parts`: its held calls, its Card unit requests, its work, then the
@@ -511,7 +505,51 @@ pub fn page(
             }
         });
     }
-    outer.append(&panes);
+    // `sideColumn`: beside the chat or the activity, on a wide window, the calls waiting and the
+    // Cards, 360 wide; the page keeps an iPhone's width (430) for the chat beside it, and is wider
+    // than tall. Without it, the Card bar above, and the held calls in the activity.
+    let row = gtk::Box::new(gtk::Orientation::Horizontal, 16);
+    panes.set_hexpand(true);
+    row.append(&panes);
+    let side_scroller = gtk::ScrolledWindow::new();
+    side_scroller.set_hscrollbar_policy(gtk::PolicyType::Never);
+    side_scroller.set_size_request(SIDE_WIDTH, -1);
+    side_scroller.set_child(Some(&side(&w, t, &card_tab)));
+    side_scroller.set_visible(false);
+    side_scroller.set_widget_name("taf.side");
+    row.append(&side_scroller);
+    outer.append(&row);
+    {
+        let (side, bar, held, card_tab, setup_tab) = (
+            side_scroller.clone(),
+            card_bar_box.clone(),
+            held_here.clone(),
+            card_tab.clone(),
+            setup_tab.clone(),
+        );
+        let has_cards = !t.cards.is_empty();
+        outer.add_tick_callback(move |o, _| {
+            let (width, height) = (o.width(), o.height());
+            let section_lt_card = !card_tab.is_active() && !setup_tab.is_active();
+            let wide = has_cards
+                && section_lt_card
+                && width > height
+                && width - SIDE_WIDTH - 32 >= CHAT_AT_LEAST;
+            if side.is_visible() != wide {
+                side.set_visible(wide);
+            }
+            if let Some(bar) = &bar {
+                let shown = !wide && !card_tab.is_active();
+                if bar.is_visible() != shown {
+                    bar.set_visible(shown);
+                }
+            }
+            if held.is_visible() == wide {
+                held.set_visible(!wide);
+            }
+            gtk::glib::ControlFlow::Continue
+        });
+    }
     {
         let panes = panes.clone();
         activity_tab.connect_toggled(move |b| {
@@ -938,6 +976,67 @@ const EDGE: i32 = 26;
 
 /// `TafCardFace`: its title and environment, its figure and words, its facts, who issued it and
 /// until when, white on the taf's colour (the dim colour when it isn't live).
+/// The side column's width, and the chat's least width beside it (`sideWidth`, `chatAtLeast`).
+const SIDE_WIDTH: i32 = 360;
+const CHAT_AT_LEAST: i32 = 430;
+
+/// A taf's held calls under NEEDS YOU in amber; nothing when none waits.
+fn held_box(w: &Rc<WordBook>, held: &[tafs_core::needs_you::CardLines]) -> gtk::Box {
+    let b = gtk::Box::new(gtk::Orientation::Vertical, 16);
+    if !held.is_empty() {
+        b.append(&eyebrow(
+            &w.line("needs_you.title").unwrap_or_default(),
+            true,
+        ));
+        for card in held {
+            b.append(&crate::needs_you::held_card(w, card));
+        }
+    }
+    b
+}
+
+/// `side`: the calls waiting, then CARDS with their stack, and All N Cards, which opens the Card
+/// tab.
+fn side(w: &Rc<WordBook>, t: &TafPage, card_tab: &gtk::ToggleButton) -> gtk::Box {
+    let v = gtk::Box::new(gtk::Orientation::Vertical, 16);
+    v.set_margin_top(4);
+    v.set_margin_bottom(12);
+    v.append(&held_box(w, &t.held));
+    let n = t.cards.len() as i64;
+    v.append(&eyebrow(
+        &w.count("card.heading", n, &[]).unwrap_or_default(),
+        false,
+    ));
+    let order = tafs_core::cards::stack(&t.cards, None);
+    let overlay = gtk::Overlay::new();
+    let base = gtk::Box::new(gtk::Orientation::Vertical, 0);
+    base.set_size_request(
+        FACE_WIDTH,
+        FACE_HEIGHT + (order.len() as i32 - 1).max(0) * EDGE,
+    );
+    overlay.set_child(Some(&base));
+    for (i, (index, depth)) in order.iter().enumerate() {
+        let f = face(
+            w,
+            &t.cards[*index],
+            t.color,
+            &t.issued_by,
+            t.revoked,
+            *depth,
+        );
+        f.set_margin_top(i as i32 * EDGE);
+        f.set_valign(gtk::Align::Start);
+        overlay.add_overlay(&f);
+    }
+    overlay.set_halign(gtk::Align::Center);
+    v.append(&overlay);
+    let all = crate::widgets::outline(&w.count("card.all_of", n, &[]).unwrap_or_default());
+    let tab = card_tab.clone();
+    all.connect_clicked(move |_| tab.set_active(true));
+    v.append(&all);
+    v
+}
+
 fn face(
     w: &WordBook,
     card: &tafs_core::cards::FullCard,

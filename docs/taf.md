@@ -17,6 +17,10 @@ the page is `crates/tafs-app/src/taf.rs`.
   left today of €2,000", else its title), and under it its name, its environment when it isn't
   production, and how many Cards ("Refunds · Test · 3 Cards"); a chevron at its end.
 - **Its held calls**, under NEEDS YOU in the amber, as Needs you's cards.
+- **The side column** (`sideColumn`), on Chat and Activity when the page is wider than tall and
+  keeps 430 for the chat beside a 360-wide column: the held calls, CARDS (or CARD) with their stack,
+  and All of the Card (or All N Cards), which opens the Card tab. Meanwhile the Card bar and the
+  held calls in the activity step aside, as on the iPad in landscape.
 - **Activity** (the sample's, `activity(_:)`): All, Done, Held, Refused (Done is the iPad's
   `taf.halt.part_held`), then its lines by day, newest first, each day's heading with what was
   spent, each line as the Record's without its taf. "Nothing yet." with All, else "Nothing here."
@@ -439,4 +443,4 @@ nothing shows until they're read, or when they can't be. A 401 signs this comput
   Activity unfiltered).
 - **The line under the head:** who it's shared with (`ShareLine`) sits under the tabs.
 - **In its work:** a step it handed you as its card (`YourStepCard`): its line for now.
-- **The side column** on a wide window, Remove, and folding the head while scrolling.
+- Remove, and folding the head while scrolling.
