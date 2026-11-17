@@ -209,9 +209,9 @@ pub struct ResultLines {
     pub lines: Vec<(String, Tone)>,
     /// The new version is being made: its button, dimmed.
     pub preparing: Option<String>,
-    /// The new version, made, of a taf listed here: its button's words ("See version 3") and the
-    /// taf's key, whose Versions it opens.
-    pub see_version: Option<(String, String)>,
+    /// The new version, made, of a taf listed here: its button's words ("See version 3"), and
+    /// the taf's key and name, whose Versions it opens.
+    pub see_version: Option<(String, String, String)>,
 }
 
 /// A card, by its kind.
@@ -1204,6 +1204,7 @@ fn result(
                     out.see_version = Some((
                         w.get("coach.result.see_version", &[("version", &n.to_string())])?,
                         l.key.clone(),
+                        l.name.clone(),
                     ))
                 }
                 None => out.lines.push((
@@ -2299,7 +2300,7 @@ mod tests {
         let r = result(&listed);
         assert_eq!(
             r.see_version,
-            Some(("See version 3".into(), "taf-1".into()))
+            Some(("See version 3".into(), "taf-1".into(), "Refunds".into()))
         );
         assert!(r.lines.is_empty());
         // Not listed here: that it's made, in words.

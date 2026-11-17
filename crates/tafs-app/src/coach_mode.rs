@@ -39,6 +39,8 @@ pub struct CoachMode {
     drag: Cell<f64>,
     /// Makes Coach's page, with the panel's title row.
     make: RefCell<Option<MakePage>>,
+    /// Coach's name, for its page in the panel's navigation.
+    title: String,
 }
 
 impl CoachMode {
@@ -96,6 +98,7 @@ impl CoachMode {
             }),
             drag: Cell::new(0.0),
             make: RefCell::new(None),
+            title: w.line("coach.title").unwrap_or_default(),
         });
         {
             // The panel at the window's right, its width as chosen; the shade over all of it.
@@ -217,6 +220,8 @@ impl CoachMode {
         }
     }
 
+    /// Coach's page, in the panel's own navigation: a screen Coach opens (a new version's
+    /// Versions) is pushed there, with Back, as the iPad's.
     fn fill(self: &Rc<Self>) {
         while let Some(c) = self.slot.first_child() {
             self.slot.remove(&c);
@@ -239,8 +244,11 @@ impl CoachMode {
             }),
             full: self.width.get().full,
         });
-        page.set_hexpand(true);
-        self.slot.append(&page);
+        let nav = adw::NavigationView::new();
+        nav.set_widget_name(COACH_NAV);
+        nav.add(&adw::NavigationPage::new(&page, &self.title));
+        nav.set_hexpand(true);
+        self.slot.append(&nav);
     }
 
     /// Closes it: the conversation stays where it is at tafs cloud, and its page goes, so its
@@ -252,6 +260,16 @@ impl CoachMode {
             self.slot.remove(&c);
         }
     }
+}
+
+/// The name of Coach's panel's navigation.
+const COACH_NAV: &str = "coach-nav";
+
+/// The navigation of Coach's panel `w` is in, if it's in one: where Coach's screens push.
+pub fn coach_nav(w: &impl IsA<gtk::Widget>) -> Option<adw::NavigationView> {
+    w.ancestor(adw::NavigationView::static_type())
+        .and_downcast::<adw::NavigationView>()
+        .filter(|n| n.widget_name() == COACH_NAV)
 }
 
 /// The title row's leading buttons, in the iPad's order: ⤢ (full screen, or back to its width),

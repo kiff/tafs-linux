@@ -2506,7 +2506,7 @@ fn card_view(page: &Rc<Page>, card_ref: &str, card: &Card) -> gtk::Widget {
         Card::Questions { .. } => questions_card(page, card_ref, card),
         Card::Approval(a) => approval(page, a),
         Card::SignIn(s) => sign_in(s),
-        Card::Result(r) => result(r, open),
+        Card::Result(r) => result(page, r, open),
         Card::Drive {
             eyebrow: e,
             task,
@@ -2754,8 +2754,25 @@ fn sign_in(s: &SignInLines) -> gtk::Widget {
     p.upcast()
 }
 
+/// Where a taf's versions are read from Coach: tafs cloud as Coach's session; none from a file
+/// (a screenshot's versions come from `--versions`).
+fn versions_chat(source: &CoachSource) -> crate::taf_chat::ChatSource {
+    match source {
+        CoachSource::Cloud {
+            kept,
+            languages,
+            signed_out,
+        } => crate::taf_chat::ChatSource::Cloud {
+            token: kept.token.clone(),
+            languages: languages.clone(),
+            signed_out: signed_out.clone(),
+        },
+        _ => crate::taf_chat::ChatSource::None,
+    }
+}
+
 /// A result: the taf set up, or its new version.
-fn result(r: &ResultLines, open: &Rc<dyn Fn(Selection)>) -> gtk::Widget {
+fn result(page: &Rc<Page>, r: &ResultLines, open: &Rc<dyn Fn(Selection)>) -> gtk::Widget {
     let p = card_panel(Tone::Ok);
     p.append(&eyebrow_in(&r.eyebrow, Tone::Ok));
     p.append(&text(&r.text, 15, 400, &["tafs-ink"]));
@@ -2778,12 +2795,24 @@ fn result(r: &ResultLines, open: &Rc<dyn Fn(Selection)>) -> gtk::Widget {
     for (words, tone) in &r.lines {
         p.append(&text(words, 13, 400, &[tone_class(*tone)]));
     }
-    if let Some((words, key)) = &r.see_version {
-        // The taf's page, its Versions open.
+    if let Some((words, key, name)) = &r.see_version {
+        // Its Versions, pushed in Coach's panel as the iPad's; elsewhere, the taf's page with its
+        // Versions open.
         let b = primary(words);
         b.set_widget_name("coach.see-version");
-        let (open, key) = (open.clone(), key.clone());
-        b.connect_clicked(move |_| {
+        let (open, key, name) = (open.clone(), key.clone(), name.clone());
+        let (w, chat) = (page.w.clone(), versions_chat(&page.source));
+        b.connect_clicked(move |b| {
+            let taf = crate::versions::VersionsTaf {
+                id: key.clone(),
+                name: name.clone(),
+                chat: chat.clone(),
+            };
+            if let Some(nav) = crate::coach_mode::coach_nav(b) {
+                if crate::versions::push(w.clone(), taf, &nav) {
+                    return;
+                }
+            }
             crate::versions::OPEN.with(|o| *o.borrow_mut() = Some("versions"));
             open(Selection::Taf(key.clone()));
         });

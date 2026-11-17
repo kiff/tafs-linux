@@ -1027,6 +1027,12 @@ fn counted_sheet(
         }
         column.append(&p);
     }
+    // Pushed on the taf's page with Back and its title in the bar, as the iPad's `PanelLink`;
+    // a sheet only off a taf's page.
+    if let Some(nav) = crate::starts_when::taf_nav(parent) {
+        nav.push(&crate::starts_when::page(title, &column));
+        return;
+    }
     let scroller = gtk::ScrolledWindow::new();
     scroller.set_hscrollbar_policy(gtk::PolicyType::Never);
     scroller.set_child(Some(&column));
