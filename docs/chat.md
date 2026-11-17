@@ -79,6 +79,13 @@ All at tafs cloud, as the session, unsigned; a 401 on any of them signs this com
   Stopped at its own cap, the chat says why. A run that ended with `ERROR` says what went through
   before it stopped (`failedWords`, in tafs cloud's words when it gave some), with Retry, which
   sends its message again. Stop stops the streamed message's own chat first.
+- **A run picked back up** (`resumeChat`): when the chat opens, and at each read after, a run
+  tafs cloud says is at work while nothing here follows it (the owner left the chat or the app and
+  came back) is followed from its first step, `GET /v1/tafs/{id}/runs/{run}/stream?after=0` at the
+  stream host, the second of the two routes the session may take there. Once per run: one whose
+  stream can't open is left to the reads; never one the owner stopped, while a message is on its
+  way, or in a trial's chat. Its answer sits under the owner's last message, which Retry sends
+  again should the run fail.
 
 ## What's drawn
 
@@ -182,8 +189,7 @@ answer that can be reported; its Send sends nothing.
 
 ## Not yet
 
-- **Picking a run back up** (`resumeChat`, `GET …/runs/{run}/stream?after=`) when the chat opens
-  on a taf at work: the reads show it instead. `SteadyMarkdown`.
+- `SteadyMarkdown`.
 - **A held call made in a streamed answer** is placed where Needs you's list places it, not where
   it was made in the answer, and KIFF isn't read again at once when it's held or the run ends;
   what went through before a failure has no amount from the Record.

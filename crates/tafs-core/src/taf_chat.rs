@@ -176,6 +176,8 @@ pub struct TafChat {
     pub went_through: Vec<DoneCall>,
     /// tafs cloud's words for why that run stopped (`failedWhy`).
     pub failed_why: Option<String>,
+    /// The runs picked back up here, each once (`resumedRuns`).
+    resumed: HashSet<String>,
 }
 
 /// A taf's stream followed (`followChatStream`'s own): how the run ended, once it says, what
@@ -532,6 +534,37 @@ impl TafChat {
             }
             Event::Component | Event::Broken => Then::Draw,
         })
+    }
+
+    /// `resumeChat`'s check: the run tafs cloud says is at work while nothing here follows it (the
+    /// owner left the chat, or the app, and came back), with its chat; once per run. None while a
+    /// message is on its way, an answer streams, or the owner stopped that chat.
+    pub fn to_resume(&mut self) -> Option<(String, String)> {
+        if self.sending || self.live.is_some() || self.taf.is_none() {
+            return None;
+        }
+        let run = self.thread.working_run.clone()?;
+        let session = self.thread.working.clone()?;
+        if self.stopped.as_ref() == Some(&session) || !self.resumed.insert(run.clone()) {
+            return None;
+        }
+        Some((run, session))
+    }
+
+    /// A run picked back up: its answer streams from what it did so far, under the owner's last
+    /// message, which is what Retry sends again should it fail.
+    pub fn resuming(&mut self, run: &str, session: &str, now: DateTime<Utc>) -> String {
+        let asked = self
+            .thread
+            .messages
+            .iter()
+            .rev()
+            .find(|m| m.from == From::Owner);
+        let mut live = LiveAnswer::new(asked.map_or(now, |m| m.at).timestamp());
+        live.run = Some(run.into());
+        live.session = Some(session.into());
+        self.live = Some(live);
+        asked.map(|m| m.text.clone()).unwrap_or_default()
     }
 
     /// The stream is over, ended or dropped: nothing is at work once the run ended, and how it

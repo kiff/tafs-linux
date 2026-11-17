@@ -1138,3 +1138,44 @@ fn a_run_stopped_at_its_cap_says_why_and_words_already_recorded_show_once() {
             .unwrap()
     );
 }
+
+#[test]
+fn a_run_at_work_is_picked_back_up_once_unless_stopped_or_followed() {
+    let now = at("2026-11-16T10:03:00Z");
+    let working = || {
+        let mut c = TafChat::new("taf-1");
+        c.took(
+            &en(),
+            TafThread::read(&fixture("taf-chat-working.json")).unwrap(),
+            now,
+        );
+        c
+    };
+    let mut c = working();
+    assert_eq!(c.to_resume(), Some(("run8".into(), "sesn_9".into())));
+    // Once per run.
+    assert_eq!(c.to_resume(), None);
+    let asked = c
+        .thread
+        .messages
+        .iter()
+        .rev()
+        .find(|m| m.from == From::Owner)
+        .unwrap()
+        .clone();
+    let text = c.resuming("run8", "sesn_9", now);
+    assert_eq!(text, asked.text);
+    let live = c.live.as_ref().unwrap();
+    assert_eq!(live.run.as_deref(), Some("run8"));
+    assert_eq!(live.started, asked.at.timestamp());
+    // The owner stopped it, or a message is on its way, or an answer streams: not picked up.
+    let mut stopped = working();
+    stopped.stopped("sesn_9");
+    assert_eq!(stopped.to_resume(), None);
+    let mut sending = working();
+    sending.sending = true;
+    assert_eq!(sending.to_resume(), None);
+    let mut streaming = working();
+    streaming.streaming(now);
+    assert_eq!(streaming.to_resume(), None);
+}

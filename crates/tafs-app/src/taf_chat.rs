@@ -252,6 +252,7 @@ pub fn pane(w: Rc<WordBook>, taf: ChatTaf, source: ChatSource) -> gtk::Widget {
             let p = page.clone();
             glib::spawn_future_local(async move {
                 p.load().await;
+                p.resume().await;
                 p.follow_chat().await;
             });
         }
@@ -386,6 +387,10 @@ impl Page {
             }
             // A stream shows what the taf does, and reads the thread itself.
             if self.reading.get() || self.chat.borrow().live.is_some() {
+                continue;
+            }
+            self.resume().await;
+            if self.chat.borrow().live.is_some() {
                 continue;
             }
             let read = self.polls.borrow_mut().read_now(&self.chat.borrow());
@@ -547,7 +552,7 @@ impl Page {
                 let p = self.clone();
                 let (text, local) = (d.text.clone(), d.local.clone());
                 glib::spawn_future_local(async move {
-                    p.follow_stream(events, text, local).await;
+                    p.follow_stream(events, text, Some(local)).await;
                 });
                 return true;
             }
@@ -619,7 +624,7 @@ impl Page {
         self: &Rc<Self>,
         events: async_channel::Receiver<tafs_core::stream::Event>,
         text: String,
-        sent: String,
+        sent: Option<String>,
     ) {
         let mut f = taf_chat::Following::default();
         while let Ok(e) = events.recv().await {
@@ -630,7 +635,7 @@ impl Page {
             let then = self
                 .chat
                 .borrow_mut()
-                .stream_event(&self.w, &e, Some(&sent), &mut f);
+                .stream_event(&self.w, &e, sent.as_deref(), &mut f);
             // Words come many a second: drawn once the ones already here are taken.
             if matches!(then, Ok(coach_send::Then::Draw)) && !events.is_empty() {
                 continue;
@@ -669,6 +674,45 @@ impl Page {
                 let _ = c.stream_event(&self.w, &e, None, &mut f);
             }
         }
+    }
+
+    /// `resumeChat`: a run of the person's that tafs cloud says is at work while nothing here
+    /// follows it is picked back up (`GET …/runs/{run}/stream?after=0`): its steps so far, then
+    /// the rest as it goes, and its end reads the thread, as a message's stream does. Once per
+    /// run: one whose stream can't open is left to the reads. Never a trial's.
+    async fn resume(self: &Rc<Self>) {
+        let ChatSource::Cloud {
+            token, languages, ..
+        } = self.source.clone()
+        else {
+            return;
+        };
+        if self.taf.trial {
+            return;
+        }
+        let Some((run, session)) = self.chat.borrow_mut().to_resume() else {
+            return;
+        };
+        let path = tafs_core::stream::resume_path(&self.taf.id, &run, 0);
+        let opened = gtk::gio::spawn_blocking(move || {
+            crate::kiff::cloud_stream(&token, &languages, "GET", &path, None)
+        })
+        .await;
+        let Ok(Ok(crate::kiff::Opened::Events(events))) = opened else {
+            return;
+        };
+        if !self.open() || self.chat.borrow().live.is_some() {
+            return;
+        }
+        let text = self
+            .chat
+            .borrow_mut()
+            .resuming(&run, &session, chrono::Utc::now());
+        self.draw();
+        let p = self.clone();
+        glib::spawn_future_local(async move {
+            p.follow_stream(events, text, None).await;
+        });
     }
 
     /// The thread read now, after a read already going ends.
