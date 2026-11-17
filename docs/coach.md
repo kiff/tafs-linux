@@ -182,9 +182,10 @@ iPad does, and tafs cloud marks no card. The token, the key and the signature ar
   its own-answer field, Send answers once each has an answer, and Chat about this, which puts the
   card away ("Show them again"); an approval; a sign-in; a result (set up, setting up, wasn't set up, a plan needed with
   Choose a plan, or the button that opens the taf once it's on the list; an improvement's new
-  version, with See version once it's made, which opens the taf it improves (`improvedTaf`: by its
-  id at tafs cloud, else its agent) on its Versions, or that it's made, in words, for a taf not
-  listed here); a drive's ask; a drive's end ("What I did": the task, each step with what it
+  version, with See version once it's made, which opens the Versions of the taf it improves
+  (`improvedTaf`: by its id at tafs cloud, else its agent), pushed in Coach's panel with Back and
+  its title in the bar, as the iPad's (Coach's page is in the panel's own navigation); or that
+  it's made, in words, for a taf not listed here); a drive's ask; a drive's end ("What I did": the task, each step with what it
   touched, and why it ended, in tafs cloud's words or the app's for its reason; its steps are
   read with `try?`, so one it can't read leaves them all out, as on the iPad); a dial card's title. An answered card folds to one line
   (`OutcomeLine`); an approval's opens again on a click, and Fold puts it back. An approval whose

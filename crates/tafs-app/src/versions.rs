@@ -137,6 +137,34 @@ async fn read(w: &WordBook, source: &Source, taf: &str) -> Read {
     .unwrap_or(Read::Failed(String::new()))
 }
 
+/// `VersionsScreen` pushed on `nav`: Coach's panel's own navigation, when a new version's card
+/// opens it there, as the iPad's (with Back and its title in the bar). False when the versions
+/// can't be read from here.
+pub fn push(w: Rc<WordBook>, taf: VersionsTaf, nav: &adw::NavigationView) -> bool {
+    let Some(source) = Source::of(&taf.chat) else {
+        return false;
+    };
+    let me = Rc::new(Opener { w, source, taf });
+    let body = gtk::Box::new(gtk::Orientation::Vertical, 12);
+    me.fill(&body);
+    nav.push(&crate::starts_when::page(
+        &me.l("version.title"),
+        &column_of(&body),
+    ));
+    true
+}
+
+/// A pushed screen's column, at the panel's margins.
+fn column_of(body: &gtk::Box) -> gtk::Box {
+    let column = gtk::Box::new(gtk::Orientation::Vertical, 12);
+    column.set_margin_start(16);
+    column.set_margin_end(16);
+    column.set_margin_top(12);
+    column.set_margin_bottom(12);
+    column.append(body);
+    column
+}
+
 /// The link under a tafs cloud taf's name: its versions, and its trial while one is open. Drawn
 /// once both are read; nothing while they're read, and nothing when they can't be.
 pub fn link(w: Rc<WordBook>, taf: VersionsTaf) -> gtk::Box {
@@ -281,13 +309,10 @@ impl Opener {
         let me = Rc::new(self.clone());
         me.fill(&body);
         if let Some(nav) = crate::starts_when::taf_nav(over) {
-            let column = gtk::Box::new(gtk::Orientation::Vertical, 12);
-            column.set_margin_start(16);
-            column.set_margin_end(16);
-            column.set_margin_top(12);
-            column.set_margin_bottom(12);
-            column.append(&body);
-            nav.push(&crate::starts_when::page(&self.l("version.title"), &column));
+            nav.push(&crate::starts_when::page(
+                &self.l("version.title"),
+                &column_of(&body),
+            ));
             return;
         }
         let sheet = crate::sheet::new(&self.l("version.title"), &self.l("common.done"), None, 560);
