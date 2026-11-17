@@ -38,10 +38,23 @@ cp -R /usr/share/icons/Adwaita/index.theme /usr/share/icons/Adwaita/symbolic /us
 
 # Without FUSE, as CI runners and containers have none.
 export APPIMAGE_EXTRACT_AND_RUN=1 DEPLOY_GTK_VERSION=4 LINUXDEPLOY_OUTPUT_VERSION="$version"
+# First the AppDir: the binary, GTK 4 and libadwaita with what they need, and the GTK plugin's
+# image loaders.
 PATH="$PWD/$tools:$PATH" "$tools/linuxdeploy-x86_64.AppImage" \
   --appdir "$appdir" \
   --plugin gtk \
   --desktop-file "$appdir/usr/share/applications/dev.kiff.tafs.desktop" \
-  --icon-file "$appdir/usr/share/icons/hicolor/192x192/apps/dev.kiff.tafs.png" \
-  --output appimage
+  --icon-file "$appdir/usr/share/icons/hicolor/192x192/apps/dev.kiff.tafs.png"
+# The plugin copies the image loaders as they are on this system, with no RUNPATH. GTK opens them
+# at run time, and the SVG one, which draws every icon, then looks for librsvg on the system
+# only: where there's none, every icon is a missing-image placeholder. Each loader is told to
+# look in the AppImage's usr/lib, three levels up from it, first.
+loaders="$appdir/usr/lib/gdk-pixbuf-2.0/2.10.0/loaders"
+test -f "$loaders/libpixbufloader-svg.so"
+for loader in "$loaders"/*.so; do
+  patchelf --set-rpath '$ORIGIN/../../..' "$loader"
+done
+test "$(patchelf --print-rpath "$loaders/libpixbufloader-svg.so")" = '$ORIGIN/../../..'
+# Then the AppImage, from that AppDir.
+PATH="$PWD/$tools:$PATH" "$tools/linuxdeploy-x86_64.AppImage" --appdir "$appdir" --output appimage
 ls -la tafs-*-x86_64.AppImage
