@@ -46,6 +46,7 @@ pub fn held(w: &WordBook, held_at: DateTime<Local>) -> Result<Vec<HeldCall>, Wor
         details: vec![],
         taf_about: None,
         taf_reason: None,
+        breach_outcomes: Vec::new(),
     };
     Ok(vec![
         call(

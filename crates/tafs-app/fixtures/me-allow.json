@@ -1,0 +1,9 @@
+{
+  "tenant_id": "tenant_fixture",
+  "tenant_slug": "acme",
+  "tenant_display_name": "Acme",
+  "email": "owner@acme.example",
+  "time_zone": "Europe/Paris",
+  "capabilities": ["members.manage", "cards.manage", "holds.answer", "account.settings", "holds.allow"],
+  "approval_mode": "view"
+}

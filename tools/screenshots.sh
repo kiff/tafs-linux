@@ -13,7 +13,11 @@ export XDG_CONFIG_HOME=$(mktemp -d)
 mkdir -p "$XDG_CONFIG_HOME/gtk-4.0"
 printf '[Settings]\ngtk-font-name=Inter 11\ngtk-hint-font-metrics=1\n' > "$XDG_CONFIG_HOME/gtk-4.0/settings.ini"
 missing=0
-for screen in welcome sign-in sign-in-code sign-in-narrow pair connected overview overview-home overview-empty overview-unread needs-you needs-you-empty needs-you-waits needs-you-happened record taf taf-card taf-home taf-home-card taf-card-lines taf-work taf-work-manage taf-next taf-card-manage taf-run taf-knocks doors doors-door taf-dial taf-setup-apps taf-starts taf-results taf-setup taf-units usage usage-kiff usage-kiff-member usage-ask usage-decline connect-apps connect-apps-narrow connect-app connect-connection connect-remove connect-kiff connect-which-taf connect-approve devices devices-sign-out people people-rename people-add share share-step2 kiff-account account-kiff consent time-zone time-zone-use language alerts calendar calendar-week calendar-compact account sidebar-sample sidebar-others sidebar-setting-up sidebar-unreachable sidebar-plan view-only view-only-paired recipes recipe-sheet gallery-strip gallery new-taf coach-hand halt-all halt-all-halted halt-one record-search record-export record-receipt record-on delete-account pin-sheet app-event coach coach-wider coach-asks coach-chats coach-empty coach-start coach-draft coach-draft-refused coach-tools coach-full coach-drive taf-chat taf-chat-working taf-report brief brief-answer brief-clear overview-labels overview-label mission-log; do
+# A held call from KIFF, held a moment ago and lapsing in ten minutes, as the iPad's card counts it.
+held=$(mktemp)
+sed -e "s/__HELD_AT__/$(date -u -d '-30 sec' +%FT%TZ)/" -e "s/__EXPIRES__/$(date -u -d '+10 min' +%FT%TZ)/" \
+  crates/tafs-app/fixtures/held-allow.json > "$held"
+for screen in welcome sign-in sign-in-code sign-in-narrow pair connected overview overview-home overview-empty overview-unread needs-you needs-you-kiff needs-you-allow needs-you-empty needs-you-waits needs-you-happened record taf taf-card taf-home taf-home-card taf-card-lines taf-work taf-work-manage taf-next taf-card-manage taf-run taf-knocks doors doors-door taf-dial taf-setup-apps taf-starts taf-results taf-setup taf-units usage usage-kiff usage-kiff-member usage-ask usage-decline connect-apps connect-apps-narrow connect-app connect-connection connect-remove connect-kiff connect-which-taf connect-approve devices devices-sign-out people people-rename people-add share share-step2 kiff-account account-kiff consent time-zone time-zone-use language alerts calendar calendar-week calendar-compact account sidebar-sample sidebar-others sidebar-setting-up sidebar-unreachable sidebar-plan view-only view-only-paired recipes recipe-sheet gallery-strip gallery new-taf coach-hand halt-all halt-all-halted halt-one record-search record-export record-receipt record-on delete-account pin-sheet app-event coach coach-wider coach-asks coach-chats coach-empty coach-start coach-draft coach-draft-refused coach-tools coach-full coach-drive taf-chat taf-chat-working taf-report brief brief-answer brief-clear overview-labels overview-label mission-log; do
   case $screen in
     welcome) opts=(--page welcome) ;;
     sign-in) opts=(--page sign-in) ;;
@@ -28,6 +32,11 @@ for screen in welcome sign-in sign-in-code sign-in-narrow pair connected overvie
     # Home couldn't be read yet: the mascot and "Couldn't load your tafs.", the Unreachable line.
     overview-unread) opts=(--view-only --unreachable network) ;;
     needs-you) opts=(--sample --signed-in --page needs-you) ;;
+    # A held call from KIFF a Card change can lift, for someone who manages Cards: "Allow this from
+    # now on" under answering in KIFF; tapped, its sheet says why this computer can't approve, and
+    # nothing is asked of tafs cloud.
+    needs-you-kiff) opts=(--home shared/contracts/home.json --me crates/tafs-app/fixtures/me-allow.json --held "$held" --page needs-you) ;;
+    needs-you-allow) opts=(--home shared/contracts/home.json --me crates/tafs-app/fixtures/me-allow.json --held "$held" --page needs-you-allow) ;;
     # Nothing waiting: board 6 over its words.
     needs-you-empty) opts=(--home shared/contracts/home.json --page needs-you) ;;
     needs-you-waits) opts=(--home crates/tafs-app/fixtures/home-waits.json --page needs-you) ;;

@@ -186,6 +186,7 @@ fn a_held_call_from_kiff_reads_as_the_ipad_shows_it() {
         name: "Rae",
         initial: "R",
         color: 0,
+        allow: true,
     }];
     let n = lines(
         &w,
@@ -204,9 +205,41 @@ fn a_held_call_from_kiff_reads_as_the_ipad_shows_it() {
         }
         other => panic!("{other:?}"),
     }
+    // Over a per-call cap a Card change can lift: "Allow this from now on" is offered
+    // (`HoldAllow.allowable`, `offersAllow`), here where its taf's calls may offer it.
+    assert_eq!(call.breach_outcomes, ["per_action_exceeded"]);
+    assert!(tafs_core::held::allowable(&call));
+    assert_eq!(n.cards[0].allow.as_deref(), Some("Allow this from now on"));
+    // Not where the taf's calls may not offer it, nor for someone who can't answer.
+    let no_offer = [Holder {
+        allow: false,
+        ..rae[0]
+    }];
+    let at = call.expires_at - chrono::Duration::seconds(60);
+    let one = std::slice::from_ref(&call);
+    assert_eq!(
+        lines(&w, one, &no_offer, true, at).unwrap().cards[0].allow,
+        None
+    );
+    assert_eq!(
+        lines(&w, one, &rae, false, at).unwrap().cards[0].allow,
+        None
+    );
+    // A breach no Card change lifts, or none listed, offers nothing.
+    let mut mixed = call.clone();
+    mixed.breach_outcomes.push("currency_mismatch".into());
+    assert!(!tafs_core::held::allowable(&mixed));
+    assert_eq!(
+        lines(&w, &[mixed], &rae, true, at).unwrap().cards[0].allow,
+        None
+    );
+    let mut none = call.clone();
+    none.breach_outcomes.clear();
+    assert!(!tafs_core::held::allowable(&none));
     // Lapsed: words, not buttons that can't work.
     let late = lines(&w, std::slice::from_ref(&call), &rae, true, call.expires_at).unwrap();
     assert!(matches!(late.cards[0].answers, Answers::Expired(_)));
+    assert_eq!(late.cards[0].allow, None);
     assert_eq!(late.cards[0].remaining, "expired");
     // A held call missing a field the iPad requires fails the read.
     assert!(read_held(br#"{"exceptions":[{"id":"x"}]}"#).is_none());

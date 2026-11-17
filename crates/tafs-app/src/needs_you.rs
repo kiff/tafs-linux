@@ -5,8 +5,10 @@
 use std::rc::Rc;
 
 use gtk::prelude::*;
+use tafs_core::approval::{self, Gate};
 use tafs_core::held::remaining;
 use tafs_core::needs_you::{Answers, CardLines, NeedsYouLines};
+use tafs_core::sidebar::Mode;
 use tafs_core::signin::is_kiff_link;
 use tafs_core::words::WordBook;
 
@@ -365,5 +367,38 @@ pub fn held_card(w: &Rc<WordBook>, c: &CardLines) -> gtk::Box {
             p.append(&row);
         }
     }
+    // A third answer, for someone who manages Cards (`held.allow`): change the Card so calls like
+    // this go on their own.
+    if let Some(allow) = &c.allow {
+        let b = outline(allow);
+        b.set_widget_name("held.allow");
+        let w2 = w.clone();
+        b.connect_clicked(move |b| open_allow(&w2, b));
+        p.append(&b);
+        if OPEN_ALLOW.with(|o| o.replace(false)) {
+            gtk::glib::idle_add_local_once(move || b.emit_clicked());
+        }
+    }
     p
+}
+
+thread_local! {
+    /// `--page needs-you-allow`: the first card's "Allow this from now on", tapped.
+    pub static OPEN_ALLOW: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// "Allow this from now on" (`AllowSheetView`): its title, then why this computer can't approve
+/// in the place of the one signature. tafs cloud's offer isn't asked for: it makes KIFF a draft
+/// that only the approval key confirms, which this computer has none of.
+fn open_allow(w: &WordBook, over: &gtk::Button) {
+    let l = |k: &str| w.line(k).unwrap_or_default();
+    let sheet = crate::sheet::new("", &l("common.cancel"), None, 520);
+    let title = text(&l("needs_you.allow_title"), 22, 700, &["tafs-ink"]);
+    title.set_widget_name("allow.title");
+    title.set_accessible_role(gtk::AccessibleRole::Heading);
+    sheet.column.append(&title);
+    if let Ok(Gate::NotReady(n)) = approval::gate(w, Mode::Kiff, approval::THIS_COMPUTER) {
+        sheet.column.append(&crate::approval::not_ready(&n));
+    }
+    adw::prelude::AdwDialogExt::present(&sheet.dialog, Some(over));
 }

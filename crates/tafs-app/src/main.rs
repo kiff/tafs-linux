@@ -162,6 +162,8 @@ struct Options {
     /// With `--home`: the KIFF account as `GET /v1/me` answers it, for screens drawn by who may
     /// do what.
     me: Option<String>,
+    /// KIFF's held calls (`GET /v1/me/card-exceptions?status=held`), beside `--home`.
+    held: Option<String>,
     /// With `--home`: a taf's notes as tafs cloud answers `GET /v1/tafs/{id}/memory`, for See all.
     memory: Option<String>,
     /// With `--home`: a page of a taf's runs as tafs cloud answers `GET /v1/tafs/{id}/work/runs`.
@@ -204,7 +206,7 @@ struct Options {
 }
 
 const USAGE: &str = "tafs [--lang en|de|fr|es|it|pt|nl|pl] [--theme light|dark] [--sample] [--signed-in] [--view-only [--paired]]
-     [--home contract.json] [--usage answers.json] [--people answers.json] [--connect answers.json] [--knob answer.json] [--setup answer.json] [--taf-activity answer.json] [--unproven answers.json] [--recipes answers.json] [--gallery answers.json] [--halt answer.json] [--record-search answers.json] [--access answer.json] [--receipts answer.json] [--activity answer.json] [--calls answer.json] [--receipt answer.json] [--work answer.json] [--doors answer.json] [--account-reads answers.json] [--me answer.json] [--memory answer.json] [--runs answer.json] [--request answer.json] [--balance answer.json] [--coach answer.json] [--coach-chats answer.json] [--coach-drafts answers.json] [--chat answer.json [--report]] [--brief answer.json] [--mission-log answer.json] [--coach-setup answer.json] [--unreachable network|error] [--app-event item.json] [--size WxH] [--page welcome|sign-in|pair|recipe:<id>|gallery|new-taf|halt-all|halt:<id>|record-search:<q>|record-export|receipt:<proposal id>|run:<taf id>|pin-sheet|share:<key>|share-step2:<key>|coach|coach-tools|coach-full|coach-hand:<id>|overview|overview-label:<id>|needs-you|brief-answer:<decision id>|mission-log:<mission id>|record|calendar|calendar-week|usage|usage-ask|usage-decline|connect-apps|connect-app|connect-connection|connect-remove|connect-which-taf|connect-approve|account|kiff-account|time-zone|time-zone-use|alerts|devices|devices-sign-out|people|people-rename|people-add|taf|taf-card|taf-setup|taf-setup:<id>|starts:<id>|results:<id>|doors:<id>[:<door>]|consent|connected|sign-in-code] [--screenshot out.png]";
+     [--home contract.json] [--usage answers.json] [--people answers.json] [--connect answers.json] [--knob answer.json] [--setup answer.json] [--taf-activity answer.json] [--unproven answers.json] [--recipes answers.json] [--gallery answers.json] [--halt answer.json] [--record-search answers.json] [--access answer.json] [--receipts answer.json] [--activity answer.json] [--calls answer.json] [--receipt answer.json] [--work answer.json] [--doors answer.json] [--account-reads answers.json] [--me answer.json] [--held answers.json] [--memory answer.json] [--runs answer.json] [--request answer.json] [--balance answer.json] [--coach answer.json] [--coach-chats answer.json] [--coach-drafts answers.json] [--chat answer.json [--report]] [--brief answer.json] [--mission-log answer.json] [--coach-setup answer.json] [--unreachable network|error] [--app-event item.json] [--size WxH] [--page welcome|sign-in|pair|recipe:<id>|gallery|new-taf|halt-all|halt:<id>|record-search:<q>|record-export|receipt:<proposal id>|run:<taf id>|pin-sheet|share:<key>|share-step2:<key>|coach|coach-tools|coach-full|coach-hand:<id>|overview|overview-label:<id>|needs-you|needs-you-allow|brief-answer:<decision id>|mission-log:<mission id>|record|calendar|calendar-week|usage|usage-ask|usage-decline|connect-apps|connect-app|connect-connection|connect-remove|connect-which-taf|connect-approve|account|kiff-account|time-zone|time-zone-use|alerts|devices|devices-sign-out|people|people-rename|people-add|taf|taf-card|taf-setup|taf-setup:<id>|starts:<id>|results:<id>|doors:<id>[:<door>]|consent|connected|sign-in-code] [--screenshot out.png]";
 
 fn options() -> Result<Options, String> {
     let mut o = Options::default();
@@ -237,6 +239,7 @@ fn options() -> Result<Options, String> {
             "--taf-activity" => o.taf_activity = Some(value()?),
             "--account-reads" => o.account_reads = Some(value()?),
             "--me" => o.me = Some(value()?),
+            "--held" => o.held = Some(value()?),
             "--memory" => o.memory = Some(value()?),
             "--runs" => o.runs = Some(value()?),
             "--balance" => o.balance = Some(value()?),
@@ -296,7 +299,7 @@ fn main() -> glib::ExitCode {
 /// The page a screenshot or `--page` opens beside the sidebar.
 fn selection_of(page: Option<&str>) -> Selection {
     match page {
-        Some("needs-you") => Selection::NeedsYou,
+        Some("needs-you" | "needs-you-allow") => Selection::NeedsYou,
         Some(other) if other.starts_with("brief-answer:") => Selection::NeedsYou,
         Some(other) if other.starts_with("mission-log:") => Selection::NeedsYou,
         Some("record") => Selection::Record,
@@ -577,6 +580,7 @@ fn activate(app: &adw::Application, o: &Options) {
         Some("devices-sign-out") => devices::OPEN_SIGN_OUT.with(|d| d.set(true)),
         Some("time-zone-use") => zones::TAP_USE_HERE.with(|t| t.set(true)),
         Some("usage-ask") => usage::OPEN.with(|u| u.set(Some("ask"))),
+        Some("needs-you-allow") => needs_you::OPEN_ALLOW.with(|a| a.set(true)),
         Some("coach-tools") => coach::OPEN_TOOLS.with(|t| t.set(true)),
         Some("coach-full") => coach_mode::START_FULL.with(|f| f.set(true)),
         Some("usage-decline") => usage::OPEN.with(|u| u.set(Some("decline-tapped"))),
@@ -606,7 +610,7 @@ fn activate(app: &adw::Application, o: &Options) {
     let from_file = o.home.as_deref().map(|path| match read_contract(path) {
         Some(home) => Rc::new(Cloud {
             home,
-            held: vec![],
+            held: held_file(o.held.as_deref()),
             account: o.me.as_deref().map(|path| {
                 std::fs::read(path)
                     .ok()
@@ -1259,6 +1263,7 @@ impl App {
                 name: &t.name,
                 initial: &t.initial,
                 color: t.color_index,
+                allow: offers_allow(cloud, &t.key),
             })
             .collect();
         // A taf's held calls, as Needs you draws them.
@@ -1984,6 +1989,7 @@ impl App {
                 name: &t.name,
                 initial: &t.initial,
                 color: t.color_index,
+                allow: offers_allow(cloud.as_deref(), &t.key),
             })
             .collect();
         let may_answer = account.as_ref().is_none_or(|a| a.allows("holds.answer"));
@@ -2526,6 +2532,15 @@ fn read_contract(path: &str) -> Option<Home> {
     Home::read(&serde_json::to_vec(file.get("answer")?).ok()?)
 }
 
+/// `offersAllow`: signed in with KIFF, whose capabilities say "Allow this from now on" is live,
+/// by someone who manages Cards, for a taf tafs cloud lists (`cloudTaf`).
+fn offers_allow(cloud: Option<&Cloud>, key: &str) -> bool {
+    cloud.is_some_and(|c| {
+        c.account.as_ref().is_some_and(Account::offers_allow)
+            && c.home.tafs.iter().any(|t| t.id.is_some() && t.key() == key)
+    })
+}
+
 /// The account's sidebar and Overview from Home, KIFF's held calls and its activity: the tafs a
 /// call waits on first, then the one with the newest call in the Record, then tafs cloud's order
 /// (`listedTafs`, `byRecent`); Your tafs those relevant now, and tafs cloud's count of what waits.
@@ -2907,6 +2922,23 @@ fn access_file(
 
 /// `--unproven`'s file, as KIFF answers `GET /v1/me/did-this-happen`. None given, none waiting;
 /// a file that can't be read stops the app, as a broken `--home` does.
+/// KIFF's held calls from a file, as `GET /v1/me/card-exceptions?status=held` answers.
+fn held_file(path: Option<&str>) -> Vec<CardException> {
+    let Some(path) = path else {
+        return vec![];
+    };
+    match std::fs::read(path)
+        .ok()
+        .and_then(|b| tafs_core::held::read_held(&b))
+    {
+        Some(calls) => calls,
+        None => {
+            eprintln!("{path} isn't KIFF's held calls as it answers them");
+            std::process::exit(2);
+        }
+    }
+}
+
 fn unproven_file(path: Option<&str>) -> Vec<tafs_core::unproven::Unproven> {
     let Some(path) = path else {
         return vec![];
