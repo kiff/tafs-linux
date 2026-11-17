@@ -8,6 +8,7 @@ mod brief;
 mod calendar;
 mod chat;
 mod coach;
+mod coach_start;
 mod connect;
 mod connected;
 mod devices;
@@ -172,7 +173,7 @@ struct Options {
 }
 
 const USAGE: &str = "tafs [--lang en|de|fr|es|it|pt|nl|pl] [--theme light|dark] [--sample] [--signed-in] [--view-only [--paired]]
-     [--home contract.json] [--usage answers.json] [--people answers.json] [--unproven answers.json] [--recipes answers.json] [--gallery answers.json] [--halt answer.json] [--record-search answers.json] [--access answer.json] [--receipts answer.json] [--activity answer.json] [--calls answer.json] [--receipt answer.json] [--work answer.json] [--doors answer.json] [--account-reads answers.json] [--me answer.json] [--memory answer.json] [--runs answer.json] [--request answer.json] [--balance answer.json] [--coach answer.json] [--coach-chats answer.json] [--chat answer.json [--report]] [--brief answer.json] [--mission-log answer.json] [--size WxH] [--page welcome|sign-in|pair|recipe:<id>|gallery|halt-all|halt:<id>|record-search:<q>|record-export|receipt:<proposal id>|run:<taf id>|pin-sheet|coach|overview|overview-label:<id>|needs-you|brief-answer:<decision id>|mission-log:<mission id>|record|calendar|calendar-week|usage|usage-ask|usage-decline|connect-apps|account|kiff-account|time-zone|time-zone-use|alerts|devices|devices-sign-out|people|people-rename|people-add|taf|taf-card|taf-setup|consent|connected|sign-in-code] [--screenshot out.png]";
+     [--home contract.json] [--usage answers.json] [--people answers.json] [--unproven answers.json] [--recipes answers.json] [--gallery answers.json] [--halt answer.json] [--record-search answers.json] [--access answer.json] [--receipts answer.json] [--activity answer.json] [--calls answer.json] [--receipt answer.json] [--work answer.json] [--doors answer.json] [--account-reads answers.json] [--me answer.json] [--memory answer.json] [--runs answer.json] [--request answer.json] [--balance answer.json] [--coach answer.json] [--coach-chats answer.json] [--chat answer.json [--report]] [--brief answer.json] [--mission-log answer.json] [--size WxH] [--page welcome|sign-in|pair|recipe:<id>|gallery|new-taf|halt-all|halt:<id>|record-search:<q>|record-export|receipt:<proposal id>|run:<taf id>|pin-sheet|coach|coach-hand:<id>|overview|overview-label:<id>|needs-you|brief-answer:<decision id>|mission-log:<mission id>|record|calendar|calendar-week|usage|usage-ask|usage-decline|connect-apps|account|kiff-account|time-zone|time-zone-use|alerts|devices|devices-sign-out|people|people-rename|people-add|taf|taf-card|taf-setup|consent|connected|sign-in-code] [--screenshot out.png]";
 
 fn options() -> Result<Options, String> {
     let mut o = Options::default();
@@ -271,6 +272,7 @@ fn selection_of(page: Option<&str>) -> Selection {
         Some("alerts") => Selection::Alerts,
         Some("language") => Selection::Language,
         Some("coach") => Selection::Coach,
+        Some(other) if other.starts_with("coach-hand:") => Selection::Coach,
         // The sample's Refunds, as the reference set's taf.png opens it.
         Some("taf") | Some("taf-card") => Selection::Taf("refunds".into()),
         // With `--home`, the contract's first taf.
@@ -443,6 +445,15 @@ fn activate(app: &adw::Application, o: &Options) {
     {
         brief::ANSWERED.with(|a| *a.borrow_mut() = Some(id.to_string()));
     }
+    // `--page coach-hand:<recipe id>`: a job handed to Coach from its sheet, its words in Coach's
+    // box (`handRecipeToCoach`); nothing is sent.
+    if let Some(id) = o.page.as_deref().and_then(|p| p.strip_prefix("coach-hand:")) {
+        if let Some(r) = recipes_file(o.recipes.as_deref())
+            .and_then(|r| r.recipes.into_iter().find(|x| x.id == id))
+        {
+            coach::set_draft(&r.say);
+        }
+    }
     if o.page.as_deref() == Some("delete-account") {
         kiff_account::OPEN_DELETE.with(|d| d.set(true));
     }
@@ -534,8 +545,13 @@ fn activate(app: &adw::Application, o: &Options) {
                     );
                 }
             }
-            // `--page gallery`: the jobs' gallery, browsing, for its screenshot.
-            if o.page.as_deref() == Some("gallery") {
+            // `--page gallery`: the jobs' gallery, browsing, for its screenshot; `new-taf`, as
+            // + New opens it.
+            if let Some(mode) = match o.page.as_deref() {
+                Some("gallery") => Some(recipes::GalleryMode::Browse),
+                Some("new-taf") => Some(recipes::GalleryMode::Create),
+                _ => None,
+            } {
                 if let Some(g) = from_file.as_deref().and_then(|c| c.gallery.clone()) {
                     let pane = recipes::GalleryPane {
                         labels: from_file
@@ -545,7 +561,7 @@ fn activate(app: &adw::Application, o: &Options) {
                         gallery: g,
                         may_use_coach: true,
                     };
-                    recipes::gallery(&pane, &window);
+                    recipes::gallery(&pane, mode, &window);
                 }
             }
             // `--page recipe:<id>`: Home's recipe opens its sheet, for its screenshot.
@@ -736,6 +752,7 @@ impl App {
         ai_consent::forget();
         // Signed out: nothing written to Coach for the last account stays.
         coach::forget();
+        coach_start::forget();
         // And nothing written to a taf.
         taf_chat::forget();
         // Signed out: no account, so this computer's zone.

@@ -35,18 +35,53 @@ fn tint(r: &Recipes, category: &str) -> Option<String> {
     ))
 }
 
+/// How wide the list is drawn, and its room: Home's pane (720, 24 by 20, 12 apart) or the
+/// gallery's sheet (640, 20 by 16, 16 apart).
+#[derive(Clone, Copy)]
+struct Measure {
+    width: i32,
+    side: i32,
+    top: i32,
+    spacing: i32,
+}
+
+const HOME: Measure = Measure {
+    width: 720,
+    side: 24,
+    top: 20,
+    spacing: 12,
+};
+
+const GALLERY: Measure = Measure {
+    width: 640,
+    side: 20,
+    top: 16,
+    spacing: 16,
+};
+
+/// Home with no taf: the recipes take the pane beside the sidebar.
 pub fn page(pane: Rc<RecipesPane>) -> gtk::Widget {
+    list_page(pane, HOME, &[])
+}
+
+/// The list in a scroller, `head` over it: what the gallery leads with.
+fn list_page(pane: Rc<RecipesPane>, m: Measure, head: &[gtk::Widget]) -> gtk::Widget {
     let picked: Rc<RefCell<Option<String>>> = Rc::new(RefCell::new(None));
+    let outer = gtk::Box::new(gtk::Orientation::Vertical, m.spacing);
+    outer.set_margin_start(m.side);
+    outer.set_margin_end(m.side);
+    outer.set_margin_top(m.top);
+    outer.set_margin_bottom(m.top);
+    for w in head {
+        outer.append(w);
+    }
     let column = gtk::Box::new(gtk::Orientation::Vertical, 12);
-    column.set_margin_start(24);
-    column.set_margin_end(24);
-    column.set_margin_top(20);
-    column.set_margin_bottom(20);
-    // At most 720 wide, in the middle of the pane, as the iPad's.
+    outer.append(&column);
+    // At most 720 wide (640 in the gallery), in the middle of the pane, as the iPad's.
     let clamp = adw::Clamp::new();
-    clamp.set_maximum_size(720);
-    clamp.set_tightening_threshold(720);
-    clamp.set_child(Some(&column));
+    clamp.set_maximum_size(m.width);
+    clamp.set_tightening_threshold(m.width);
+    clamp.set_child(Some(&outer));
 
     let list = gtk::Box::new(gtk::Orientation::Vertical, 12);
     let draw_list: Rc<dyn Fn()> = {
@@ -67,11 +102,11 @@ pub fn page(pane: Rc<RecipesPane>) -> gtk::Widget {
     if let Some(words) = pane.recipes.home_words() {
         column.append(&text(words, 17, 600, &["tafs-ink"]));
     }
-    // "Say it in your own words" opens Coach with nothing in its box: there, dimmed, until Coach
-    // is ported; only for someone who may use Coach.
+    // "Say it in your own words": Coach, in a new conversation (`startNewTaf`); only for someone
+    // who may use Coach.
     if let (true, Some(own)) = (pane.may_use_coach, pane.recipes.home_own_words()) {
         let b = own_words_row(&own.title, &own.line);
-        b.set_sensitive(false);
+        b.connect_clicked(|_| crate::coach_start::new_taf());
         column.append(&b);
     }
     let all = pane.recipes.by_category();
@@ -126,8 +161,9 @@ pub fn page(pane: Rc<RecipesPane>) -> gtk::Widget {
     scroller.upcast()
 }
 
-/// `OwnWordsRow`: its title (16 semibold), its line (14, soft) and a chevron, in a panel.
-fn own_words_row(title: &str, line: &str) -> gtk::Button {
+/// `OwnWordsRow`: its title (16 semibold), its line (14, soft) and a chevron, in a panel. It
+/// opens Coach with nothing in its box.
+pub fn own_words_row(title: &str, line: &str) -> gtk::Button {
     let p = panel(false);
     let h = gtk::Box::new(gtk::Orientation::Horizontal, 12);
     let v = gtk::Box::new(gtk::Orientation::Vertical, 4);
@@ -237,7 +273,9 @@ fn row(pane: &Rc<RecipesPane>, recipe: &Recipe) -> gtk::Button {
 
 /// `RecipeSheet`: the problem it ends (24 bold), its line (15), what it costs today (14, soft),
 /// each zone of its Card in a panel, the proof run's line and what it reported, and the button
-/// that hands it to Coach, for someone who may use Coach: there, dimmed, until Coach is ported.
+/// that hands it to Coach, for someone who may use Coach (`handRecipeToCoach`): the sheet closes,
+/// and the gallery under it, and Coach opens over Home in a new conversation with the job's words
+/// in its box. Nothing is sent.
 pub fn sheet(pane: &RecipesPane, recipe: &Recipe, parent: &impl IsA<gtk::Widget>) {
     let column = gtk::Box::new(gtk::Orientation::Vertical, 12);
     column.set_margin_start(20);
@@ -281,9 +319,27 @@ pub fn sheet(pane: &RecipesPane, recipe: &Recipe, parent: &impl IsA<gtk::Widget>
         .hand_words
         .as_deref()
         .or_else(|| pane.recipes.hand_words());
+    let dialog = adw::Dialog::new();
     if let (true, Some(words)) = (pane.may_use_coach, words) {
         let hand = primary(words);
-        hand.set_sensitive(false);
+        hand.set_widget_name("recipe.hand");
+        let (say, sheet, under) = (
+            recipe.say.clone(),
+            dialog.downgrade(),
+            parent
+                .ancestor(adw::Dialog::static_type())
+                .and_then(|d| d.downcast::<adw::Dialog>().ok()),
+        );
+        // Coach opens over Home, not over a sheet: the gallery under this one closes too.
+        hand.connect_clicked(move |_| {
+            if let Some(sheet) = sheet.upgrade() {
+                sheet.close();
+            }
+            if let Some(gallery) = &under {
+                gallery.close();
+            }
+            crate::coach_start::hand(&say);
+        });
         column.append(&hand);
     }
     let clamp = adw::Clamp::new();
@@ -299,7 +355,6 @@ pub fn sheet(pane: &RecipesPane, recipe: &Recipe, parent: &impl IsA<gtk::Widget>
     toolbar.add_top_bar(&header);
     toolbar.set_content(Some(&scroller));
     crate::widgets::ground(&toolbar);
-    let dialog = adw::Dialog::new();
     dialog.set_child(Some(&toolbar));
     dialog.set_content_width(560);
     dialog.set_content_height(640);
@@ -307,8 +362,7 @@ pub fn sheet(pane: &RecipesPane, recipe: &Recipe, parent: &impl IsA<gtk::Widget>
     dialog.present(Some(parent));
 }
 
-/// The jobs' gallery and how it was opened (`RecipeGallerySheet`): browsing ("Explore jobs", and
-/// the row under the strip), the only way Linux opens it until + New starts a taf with Coach.
+/// The jobs' gallery (`RecipeGallerySheet`), and what it draws from.
 pub struct GalleryPane {
     pub gallery: tafs_core::recipes::Gallery,
     /// The sheet's words from `/v1/recipes`, for a gallery that sends none.
@@ -316,54 +370,98 @@ pub struct GalleryPane {
     pub may_use_coach: bool,
 }
 
+/// Why the gallery is open (`GalleryMode`): from + New, to start a taf; or to browse the jobs
+/// (Home's "Explore jobs" and the row under the strip), with nothing created until "Try it with
+/// Coach" is tapped on one.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GalleryMode {
+    Create,
+    Browse,
+}
+
 impl GalleryPane {
-    /// The gallery as Home's list, browsing: each job's sheet read only, with "Try it with Coach"
-    /// as its one action.
-    fn browsing(&self) -> RecipesPane {
+    /// The gallery as Home's list: browsing, each job's sheet with "Try it with Coach" as its one
+    /// action; from + New, with the sheet's own words.
+    fn list(&self, mode: GalleryMode) -> RecipesPane {
         let recipes = self.gallery.as_recipes(self.labels.as_ref());
         RecipesPane {
             hand_words: self
                 .gallery
-                .hand_words(true, recipes.labels.as_ref())
+                .hand_words(mode == GalleryMode::Browse, recipes.labels.as_ref())
                 .map(str::to_string),
             sample_label: self.gallery.sample_label().map(str::to_string),
             recipes,
             may_use_coach: self.may_use_coach,
         }
     }
+
+    /// The own-words row's words, from + New, for someone who may use Coach; none otherwise.
+    fn own_words(&self, mode: GalleryMode) -> Option<(&str, &str)> {
+        let w = &self.gallery.words;
+        (mode == GalleryMode::Create && self.may_use_coach && !w.own_words.is_empty())
+            .then_some((w.own_words.as_str(), w.own_words_line.as_str()))
+    }
 }
 
-/// `RecipeGallerySheet`, browsing: its title ("Explore jobs"), "All jobs" over every job, and
-/// Home's list of them; Close at the top.
-pub fn gallery(pane: &GalleryPane, parent: &impl IsA<gtk::Widget>) {
-    let browsing = Rc::new(pane.browsing());
-    let column = gtk::Box::new(gtk::Orientation::Vertical, 0);
-    if let Some(all) = Some(pane.gallery.words.all.trim()).filter(|a| !a.is_empty()) {
-        let heading = eyebrow(all, false);
-        heading.set_margin_start(24);
-        heading.set_margin_top(16);
-        column.append(&heading);
+/// `RecipeGallerySheet`: its title ("Explore jobs" browsing, else the gallery's own); from + New,
+/// "Say it in your own words" with board 8 (a new taf) beside it; "All jobs" over every job, and
+/// Home's list of them; Close at the top. A job's sheet hands it to Coach, and the own
+/// words open Coach in a new conversation, once the gallery has closed: Coach opens over Home.
+pub fn gallery(pane: &GalleryPane, mode: GalleryMode, parent: &impl IsA<gtk::Widget>) {
+    let dialog = adw::Dialog::new();
+    let mut head: Vec<gtk::Widget> = vec![];
+    if let Some((title, line)) = pane.own_words(mode) {
+        let row = gtk::Box::new(gtk::Orientation::Horizontal, 12);
+        let board = crate::illustrations::new_taf();
+        board.set_hexpand(false);
+        board.set_valign(gtk::Align::Center);
+        row.append(&board);
+        let own = own_words_row(title, line);
+        own.set_hexpand(true);
+        let gallery = dialog.downgrade();
+        own.connect_clicked(move |_| {
+            if let Some(gallery) = gallery.upgrade() {
+                gallery.close();
+            }
+            crate::coach_start::new_taf();
+        });
+        row.append(&own);
+        head.push(row.upcast());
     }
-    let list = page(browsing);
+    if let Some(all) = Some(pane.gallery.words.all.trim()).filter(|a| !a.is_empty()) {
+        head.push(eyebrow(all, false).upcast());
+    }
+    let list = list_page(Rc::new(pane.list(mode)), GALLERY, &head);
     list.set_vexpand(true);
-    column.append(&list);
+    let title = pane.gallery.title(mode == GalleryMode::Browse);
     let header = adw::HeaderBar::new();
-    header.set_title_widget(Some(&gtk::Label::new(Some(pane.gallery.title(true)))));
+    header.set_title_widget(Some(&gtk::Label::new(Some(title))));
     let toolbar = adw::ToolbarView::new();
     toolbar.add_top_bar(&header);
-    toolbar.set_content(Some(&column));
+    toolbar.set_content(Some(&list));
     crate::widgets::ground(&toolbar);
-    let dialog = adw::Dialog::new();
     dialog.set_child(Some(&toolbar));
     dialog.set_content_width(680);
     dialog.set_content_height(720);
-    dialog.set_title(pane.gallery.title(true));
+    dialog.set_title(title);
+    dialog.set_widget_name(match mode {
+        GalleryMode::Create => "gallery.create",
+        GalleryMode::Browse => "gallery.browse",
+    });
     dialog.present(Some(parent));
 }
 
-/// A job from the strip opens its sheet, browsing.
+/// A job from the strip opens its sheet (`openRecipe`): the gallery's jobs, with the sheet's own
+/// words to hand it to Coach.
 pub fn strip_sheet(pane: &GalleryPane, recipe: &Recipe, parent: &impl IsA<gtk::Widget>) {
-    sheet(&pane.browsing(), recipe, parent);
+    let recipes = pane.gallery.as_recipes(pane.labels.as_ref());
+    let sheet_pane = RecipesPane {
+        recipes,
+        may_use_coach: pane.may_use_coach,
+        hand_words: None,
+        sample_label: pane.gallery.sample_label().map(str::to_string),
+    };
+    sheet(&sheet_pane, recipe, parent);
 }
 
 /// The category colour of a strip's job, for its 4-wide bar; the line's colour without one.

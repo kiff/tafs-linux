@@ -36,12 +36,12 @@ skips them. The sign-in's drawings (`connected.rs`) are made of the same pieces.
 | 4, every taf halted | Cards at rest under a pause | Halt all, once every part holds it, above its panel |
 | 6, nothing waiting | An empty tray under a calm check | Needs you with nothing waiting, above "Nothing is waiting." |
 | 7, Coach with no taf or one | Its spark beside one card, room for more | Coach's empty chat, at its leading edge above "Ask anything about your tafs", while the account has no taf or one |
+| 8, a new taf | Words in a bubble becoming a card | + New's gallery, small, beside "Say it in your own words" |
 | 9, Coach starting | Its spark in rings filling, its first steps under it | Coach before it's started, above "Coach mode" (a wide window, as an iPad's or a Mac's) |
 | 10, the overview | A ring, a gentle line and cards in a row | The Overview, under its title |
 
 Not drawn yet, as their screens aren't on Linux: 5 (a key's
-receipt, after connecting an app), 8 (beside + New's own-words row in the
-gallery), 11 and 12 (a watch's).
+receipt, after connecting an app), 11 and 12 (a watch's).
 
 The colours are the palette's by the iPad's own names: `Theme.amber` is `amber`, `amberText`
 `amber_text`, `amberInk` `amber_ink`, `ink`, `panel`, `onFill` `on_fill`, `ok`, `blue`, `pink`;
@@ -90,7 +90,7 @@ time), so does Linux, when the account's clock isn't this computer's at that mom
 | `--brief answer.json` | with `--home`: "Your brief" as tafs cloud answers `GET /v1/brief`, in Needs you's place; every read is it, a label's too, and Later sends nothing ([Your brief](brief.md)) |
 | `--mission-log answer.json` | with `--brief`: a mission's log as tafs cloud answers `GET /v1/missions/{id}/log`, for every mission's Evidence |
 | `--paired` | with `--view-only`: a computer already added with the phone, whose notice says approvals go to the phone |
-| `--page …` | `welcome`, `sign-in`, `pair` (adding this computer with a phone), `recipe:<id>` (with `--home` and `--recipes`: that recipe's sheet), `gallery` (with `--home` and `--gallery`: the gallery), `halt-all` or `halt:<id>` (a halt's screen), `record-search:<q>` (the Record with that search), `record-export` (the Record with the receipts' days open), `receipt:<proposal id>` (with `--activity` and `--receipt`: that line's receipt), `run:<taf id>` (with `--runs` and `--request`: that taf's first kept run's own page), `brief-answer:<decision id>` (with `--brief`: Your brief with that decision's signed answer tapped), `overview-label:<id>` (the Overview filtered to Home's label by its id), `mission-log:<mission id>` (with `--brief` and `--mission-log`: that mission's log over the brief), `delete-account` (with `--people`: the KIFF account's Delete account sheet), `pin-sheet` (the security key's PIN sheet, with canned answers; no key is asked), or a screen beside the sidebar: `needs-you`, `record`, `calendar`, `usage`, `connect-apps`, `account`, `alerts`, `taf` (the sample's Refunds), `taf:<id>` (a taf by its key), or `coach` (with `--coach`: Coach's conversation) |
+| `--page …` | `welcome`, `sign-in`, `pair` (adding this computer with a phone), `recipe:<id>` (with `--home` and `--recipes`: that recipe's sheet), `gallery` (with `--home` and `--gallery`: the gallery), `new-taf` (the gallery as + New opens it), `coach-hand:<recipe id>` (with `--recipes` and `--coach`: Coach with that recipe's words in its box), `halt-all` or `halt:<id>` (a halt's screen), `record-search:<q>` (the Record with that search), `record-export` (the Record with the receipts' days open), `receipt:<proposal id>` (with `--activity` and `--receipt`: that line's receipt), `run:<taf id>` (with `--runs` and `--request`: that taf's first kept run's own page), `brief-answer:<decision id>` (with `--brief`: Your brief with that decision's signed answer tapped), `overview-label:<id>` (the Overview filtered to Home's label by its id), `mission-log:<mission id>` (with `--brief` and `--mission-log`: that mission's log over the brief), `delete-account` (with `--people`: the KIFF account's Delete account sheet), `pin-sheet` (the security key's PIN sheet, with canned answers; no key is asked), or a screen beside the sidebar: `needs-you`, `record`, `calendar`, `usage`, `connect-apps`, `account`, `alerts`, `taf` (the sample's Refunds), `taf:<id>` (a taf by its key), or `coach` (with `--coach`: Coach's conversation) |
 | `--screenshot out.png` | save the window (1280×800, at 2×) as a PNG and quit. It never reads or writes the keyring, and its sign-in and pairing show a code without reaching KIFF |
 
 CI builds the app and saves the welcome, the sign-in, the pairing, the Overview beside the sidebar (with the
@@ -98,9 +98,9 @@ account's items), the Overview from the `home.json` contract, Needs you (and wit
 page and its Card tab, Plan & usage and Account over the sample, Plan & usage signed in with
 KIFF from synthetic answers (managing billing, and as a member), Connect apps, Devices, People & groups, the KIFF account and its time zone picker (from synthetic answers), Alerts, the
 calendar's Day and Week (and Day at an upright iPad's size, `--size 1032x1376`), a tafs cloud
-taf's page and its Card tab from the contracts (and with its Card's own lines) (and with its work and runs, and a run's own page), the sidebar over the plain sample (and with an agent not run by tafs, and with the plan's line), and Home with no taf and a recipe's sheet, the strip and the gallery, the halt screens, a Record search, the receipts export open, a Record line's receipt, the Delete account sheet, the security key's PIN sheet,
+taf's page and its Card tab from the contracts (and with its Card's own lines) (and with its work and runs, and a run's own page), the sidebar over the plain sample (and with an agent not run by tafs, and with the plan's line), and Home with no taf and a recipe's sheet, the strip and the gallery (and as + New opens it, and Coach with a job handed to it), the halt screens, a Record search, the receipts export open, a Record line's receipt, the Delete account sheet, the security key's PIN sheet,
 Coach's conversation from the contract (and with an approval waiting under tafs cloud's wider line, with a confirm and a questions card waiting and a message not sent, with Previous conversations open, empty, and before it's started), a taf's chat (and while it works, and with Report this answer open), Your brief (and with a signed answer tapped, with nothing to decide, and a mission's log), the Overview with Home's label chips (and filtered to one), the
-view-only notice (and once paired), and the boards' empty states (the Overview with no taf, Needs you with nothing waiting, Halt all once halted, the brief with nothing to decide) in en, fr and pt, light and dark: 486 pictures, as the `screenshots`
+view-only notice (and once paired), and the boards' empty states (the Overview with no taf, Needs you with nothing waiting, Halt all once halted, the brief with nothing to decide) in en, fr and pt, light and dark: 498 pictures, as the `screenshots`
 artifact of the run. The job fails if any is missing.
 
 ## The AppImage

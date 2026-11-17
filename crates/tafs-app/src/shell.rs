@@ -101,6 +101,7 @@ pub fn build(
         coach_listed,
         brief,
     } = screens;
+    let has_coach = !matches!(coach, crate::coach::CoachSource::None);
     let entries = Rc::new(record.entries.clone());
     let lines = model.lines(&w).unwrap_or_else(|e| panic!("{e}"));
     let root = gtk::Box::new(gtk::Orientation::Horizontal, 0);
@@ -447,6 +448,17 @@ pub fn build(
         plan.connect_clicked(move |_| select(Selection::Usage));
     }
     *holder.borrow_mut() = Some(select.clone());
+    // Coach opened from elsewhere (a new taf, a job handed over, a setup to finish): afresh, even
+    // when it's open already, so it opens on what was asked.
+    if has_coach {
+        let (select, selection) = (select.clone(), selection.clone());
+        crate::coach_start::set_opener(Some(Rc::new(move || {
+            *selection.borrow_mut() = None;
+            select(Selection::Coach);
+        })));
+    } else {
+        crate::coach_start::set_opener(None);
+    }
     select(first);
     Shell { root }
 }
@@ -664,7 +676,9 @@ fn sidebar(
             b.add_css_class("tafs-plain");
             b.set_widget_name("home.explore");
             let pane = pane.clone();
-            b.connect_clicked(move |b| crate::recipes::gallery(&pane, b));
+            b.connect_clicked(move |b| {
+                crate::recipes::gallery(&pane, crate::recipes::GalleryMode::Browse, b)
+            });
             add(sidebar_row(&b, 44), None);
         }
         // A few jobs the account doesn't run yet, where tafs cloud shows them (`RecipeStrip`):
@@ -702,7 +716,9 @@ fn sidebar(
                 b.add_css_class("tafs-plain");
                 b.set_widget_name("home.recipe-strip.all");
                 let pane = pane.clone();
-                b.connect_clicked(move |b| crate::recipes::gallery(&pane, b));
+                b.connect_clicked(move |b| {
+                    crate::recipes::gallery(&pane, crate::recipes::GalleryMode::Browse, b)
+                });
                 add(sidebar_row(&b, 44), None);
             }
         }

@@ -13,7 +13,7 @@ export XDG_CONFIG_HOME=$(mktemp -d)
 mkdir -p "$XDG_CONFIG_HOME/gtk-4.0"
 printf '[Settings]\ngtk-font-name=Inter 11\ngtk-hint-font-metrics=1\n' > "$XDG_CONFIG_HOME/gtk-4.0/settings.ini"
 missing=0
-for screen in welcome sign-in sign-in-code sign-in-narrow pair connected overview overview-home overview-empty needs-you needs-you-empty needs-you-waits needs-you-happened record taf taf-card taf-home taf-home-card taf-card-lines taf-work taf-run taf-knocks taf-setup taf-units usage usage-kiff usage-kiff-member usage-ask usage-decline connect-apps connect-apps-narrow devices devices-sign-out people people-rename people-add kiff-account account-kiff consent time-zone time-zone-use language alerts calendar calendar-week calendar-compact account sidebar-sample sidebar-others sidebar-setting-up sidebar-plan view-only view-only-paired recipes recipe-sheet gallery-strip gallery halt-all halt-all-halted halt-one record-search record-export record-receipt record-on delete-account pin-sheet coach coach-wider coach-asks coach-chats coach-empty coach-start taf-chat taf-chat-working taf-report brief brief-answer brief-clear overview-labels overview-label mission-log; do
+for screen in welcome sign-in sign-in-code sign-in-narrow pair connected overview overview-home overview-empty needs-you needs-you-empty needs-you-waits needs-you-happened record taf taf-card taf-home taf-home-card taf-card-lines taf-work taf-run taf-knocks taf-setup taf-units usage usage-kiff usage-kiff-member usage-ask usage-decline connect-apps connect-apps-narrow devices devices-sign-out people people-rename people-add kiff-account account-kiff consent time-zone time-zone-use language alerts calendar calendar-week calendar-compact account sidebar-sample sidebar-others sidebar-setting-up sidebar-plan view-only view-only-paired recipes recipe-sheet gallery-strip gallery new-taf coach-hand halt-all halt-all-halted halt-one record-search record-export record-receipt record-on delete-account pin-sheet coach coach-wider coach-asks coach-chats coach-empty coach-start taf-chat taf-chat-working taf-report brief brief-answer brief-clear overview-labels overview-label mission-log; do
   case $screen in
     welcome) opts=(--page welcome) ;;
     sign-in) opts=(--page sign-in) ;;
@@ -108,6 +108,10 @@ for screen in welcome sign-in sign-in-code sign-in-narrow pair connected overvie
     # Home's labels as chips over the Overview's grid and on each taf's line, and filtered to one.
     overview-labels) opts=(--home crates/tafs-app/fixtures/home-missions.json) ;;
     overview-label) opts=(--home crates/tafs-app/fixtures/home-missions.json --page overview-label:l_clients) ;;
+    # + New's gallery: "Say it in your own words" with board 8 beside it, then every job.
+    new-taf) opts=(--home shared/contracts/home.json --me crates/tafs-app/fixtures/me-manager.json --gallery crates/tafs-app/fixtures/gallery.json --recipes crates/tafs-app/fixtures/recipes.json --page new-taf) ;;
+    # A job handed to Coach from its sheet: a new conversation, the job's words in the box, nothing sent.
+    coach-hand) opts=(--home crates/tafs-app/fixtures/home-empty.json --me crates/tafs-app/fixtures/me-manager.json --recipes crates/tafs-app/fixtures/recipes.json --coach crates/tafs-app/fixtures/coach-empty.json --page coach-hand:refunds) ;;
     recipe-sheet) opts=(--home crates/tafs-app/fixtures/home-empty.json --recipes crates/tafs-app/fixtures/recipes.json --page recipe:refunds) ;;
   esac
   for lang in en fr pt; do

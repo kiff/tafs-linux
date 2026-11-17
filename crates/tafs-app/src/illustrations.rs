@@ -635,6 +635,53 @@ pub fn coach_first() -> Board {
     })
 }
 
+/// A speech bubble in `x`, `y`, `w`, `h`: round corners, its bottom leading one nearly square.
+fn bubble(cr: &cairo::Context, x: f64, y: f64, w: f64, h: f64) {
+    let (round, tail) = (24.0_f64.min(w / 2.0).min(h / 2.0), 6.0);
+    cr.new_sub_path();
+    cr.arc(x + w - round, y + round, round, -PI / 2.0, 0.0);
+    cr.arc(x + w - round, y + h - round, round, 0.0, PI / 2.0);
+    cr.arc(x + tail, y + h - tail, tail, PI / 2.0, PI);
+    cr.arc(x + round, y + round, round, PI, 3.0 * PI / 2.0);
+    cr.close_path();
+}
+
+/// Board 8, a new taf, small: words in a bubble becoming a card. Beside "Say it in your own
+/// words", in the gallery from + New.
+pub fn new_taf() -> Board {
+    board(320.0, 235.0, 100.0, |cr| {
+        halo(cr, 60.0, 5.0, 220.0);
+        // The bubble, 150 × 96, lifted, its three lines 20 in.
+        glow(cr, (10.0, 55.0, 150.0, 96.0, 24.0), 14.0, 0x000000, 0.14);
+        bubble(cr, 10.0, 55.0, 150.0, 96.0);
+        rgb(cr, tone("panel"), 1.0);
+        let _ = cr.fill();
+        bar(cr, 30.0, 75.0, 100.0, 0.7);
+        bar(cr, 30.0, 95.0, 70.0, 0.2);
+        bar(cr, 30.0, 115.0, 86.0, 0.2);
+        // The dotted way from the words to the card.
+        cr.move_to(168.0, 102.0);
+        cr.line_to(204.0, 102.0);
+        rgb(cr, tone("amber"), 1.0);
+        cr.set_line_width(4.0);
+        cr.set_line_cap(cairo::LineCap::Round);
+        cr.set_dash(&[0.0, 7.2], 0.0);
+        let _ = cr.stroke();
+        cr.set_dash(&[], 0.0);
+        cr.set_line_cap(cairo::LineCap::Butt);
+        // The card, 90 × 116, its pieces 14 in, its lines 8 high.
+        sheet(cr, 210.0, 55.0, 90.0, 116.0, 22.0);
+        let (x, y) = (224.0, 69.0);
+        mark(cr, x, y, 28.0, 9.0);
+        let ink = tone("ink");
+        capsule(cr, x, y + 40.0, 52.0, 8.0, ink, 0.8);
+        capsule(cr, x, y + 56.0, 40.0, 8.0, ink, 0.18);
+        spark(cr, 280.0, 37.0, 34.0);
+        rgb(cr, tone("amber"), 1.0);
+        let _ = cr.fill();
+    })
+}
+
 /// Board 9, a wide window: Coach starting for the first time, its spark in rings filling. Coach
 /// before it's started.
 pub fn coach_starting() -> Board {

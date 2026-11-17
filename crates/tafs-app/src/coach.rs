@@ -215,6 +215,8 @@ pub fn page(
         error,
         composer,
     });
+    // Opened for a new taf, a job handed over or a setup to finish: that conversation.
+    crate::coach_start::apply(&mut page.conv.borrow_mut());
     wire_composer(&page);
     {
         let p = Rc::downgrade(&page);
