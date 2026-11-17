@@ -191,6 +191,8 @@ entry.tafs-own-answer { background-color: @tafs_panel; border: 1px solid @tafs_c
 /* A message not sent, or held to go later: its bubble at 60%. */
 .tafs-unsent .tafs-owner-bubble { opacity: 0.6; }
 button.tafs-unsent-act { background: none; border: none; box-shadow: none; padding: 0; min-height: 0; font-size: 14px; color: @tafs_soft; }
+/* A sheet's bar buttons (Close, Done, Cancel): the app's accent, as the iPad's toolbar tint. */
+button.tafs-unsent-act.tafs-bar-text { color: @tafs_amber_text; }
 button.tafs-unsent-act.strong { color: @tafs_ink; font-weight: 600; }
 /* The composer: the bar on the background with a soft shadow above it (`barBackground`), the field on the panel with a 1-point edge, corners of 20;
    Send the coach colour, Stop the ink, each a 40-point circle. */

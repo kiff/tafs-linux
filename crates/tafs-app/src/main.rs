@@ -816,6 +816,7 @@ fn activate(app: &adw::Application, o: &Options) {
                             .and_then(|r| r.labels.clone()),
                         gallery: g,
                         may_use_coach: true,
+                        close: app_state.words.line("common.close").unwrap_or_default(),
                     };
                     recipes::gallery(&pane, mode, &window);
                 }
@@ -2381,6 +2382,7 @@ impl App {
                         gallery,
                         labels: c.recipes.as_ref().and_then(|r| r.labels.clone()),
                         may_use_coach: model.may_use_coach,
+                        close: self.words.line("common.close").unwrap_or_default(),
                     })
                 }),
                 _ => None,
