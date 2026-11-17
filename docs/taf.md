@@ -447,5 +447,4 @@ nothing shows until they're read, or when they can't be. A 401 signs this comput
   to read them again.
 - **In the trial's sheet:** its guide stays above the chat once messages are in (the iPad shows it
   before the first only), and the chat's box is under it, a scroll down.
-- **The line under the head:** who it's shared with (`ShareLine`) sits under the tabs.
 - Remove, and folding the head while scrolling.
