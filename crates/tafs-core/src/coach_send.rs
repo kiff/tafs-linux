@@ -670,6 +670,10 @@ pub struct Conversation {
     /// What the thread has drawn, in its order (`SteadyOrder`); another conversation starts from
     /// nothing.
     pub drawn: Vec<crate::coach::Entry>,
+    /// KIFF's drafts the approval cards name, by id, as last read (`setupDrafts`).
+    pub drafts: HashMap<String, crate::drafts::AgentDraft>,
+    /// Why KIFF's draft wasn't read, by id, until a read gives it (`setupDraftErrors`).
+    pub draft_errors: HashMap<String, String>,
 }
 
 impl Conversation {
@@ -697,6 +701,38 @@ impl Conversation {
     /// Answered here (`isAnswered`).
     pub fn is_answered(&self, id: &str) -> bool {
         self.answered.contains(&self.card_ref(id))
+    }
+
+    /// The drafts to read after a thread read (`loadSetupThread`'s last step): each one an
+    /// approval or a sign-in names that isn't read as confirmed, once each, in the thread's order.
+    pub fn drafts_to_read(&self) -> Vec<String> {
+        let mut out: Vec<String> = Vec::new();
+        for c in &self.thread.components {
+            let c = &c.component;
+            if !matches!(c.kind, Kind::Approval | Kind::SignIn) {
+                continue;
+            }
+            let Some(d) = &c.draft else { continue };
+            if self.drafts.get(d).is_some_and(|x| x.confirmed()) || out.contains(d) {
+                continue;
+            }
+            out.push(d.clone());
+        }
+        out
+    }
+
+    /// `readCardDraft`'s answer: the draft, kept and its error gone; or KIFF's reason, kept for
+    /// the card while a draft read before stays drawn.
+    pub fn took_draft(&mut self, id: &str, read: Result<crate::drafts::AgentDraft, String>) {
+        match read {
+            Ok(d) => {
+                self.drafts.insert(id.to_string(), d);
+                self.draft_errors.remove(id);
+            }
+            Err(why) => {
+                self.draft_errors.insert(id.to_string(), why);
+            }
+        }
     }
 
     /// tafs cloud's thread read (`loadSetupThread`): with what was sent from here that it doesn't

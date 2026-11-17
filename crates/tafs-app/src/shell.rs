@@ -152,6 +152,13 @@ pub fn build(
     let lines = model.lines(&w).unwrap_or_else(|e| panic!("{e}"));
     let root = gtk::Box::new(gtk::Orientation::Horizontal, 0);
     crate::widgets::ground(&root);
+    let screens = gtk::Box::new(gtk::Orientation::Horizontal, 0);
+    screens.set_hexpand(true);
+    screens.set_vexpand(true);
+    // Coach mode over whatever is open (`CoachPanel`), signed in with KIFF.
+    let mode = crate::coach_mode::CoachMode::new(&w, &screens);
+    root.append(&mode.widget());
+    let has_coach = !matches!(coach, crate::coach::CoachSource::None);
 
     let detail = gtk::Box::new(gtk::Orientation::Vertical, 0);
     detail.set_hexpand(true);
@@ -180,8 +187,8 @@ pub fn build(
         plan: plan_button,
         unreachable,
     } = foot;
-    root.append(&sidebar);
-    root.append(&detail);
+    screens.append(&sidebar);
+    screens.append(&detail);
 
     // What a screen opens goes through the sidebar's own choice, once it exists.
     let holder: Rc<RefCell<Option<Opener>>> = Rc::new(RefCell::new(None));
@@ -194,6 +201,19 @@ pub fn build(
             }
         })
     };
+    {
+        let (w, coach, coach_listed, open) =
+            (w.clone(), coach.clone(), coach_listed.clone(), open.clone());
+        mode.set_page(Rc::new(move |chrome| {
+            crate::coach::page(
+                w.clone(),
+                coach.clone(),
+                coach_listed.clone(),
+                open.clone(),
+                Some(chrome),
+            )
+        }));
+    }
     let overview = Rc::new(overview);
     let needs_you = Rc::new(needs_you);
     let account = Rc::new(account);
@@ -372,7 +392,13 @@ pub fn build(
                 }
                 // Coach, read only, signed in with KIFF; the sample has none, so its title alone.
                 Selection::Coach if !matches!(coach, crate::coach::CoachSource::None) => {
-                    crate::coach::page(w.clone(), coach.clone(), coach_listed.clone(), open.clone())
+                    crate::coach::page(
+                        w.clone(),
+                        coach.clone(),
+                        coach_listed.clone(),
+                        open.clone(),
+                        None,
+                    )
                 }
                 // A halt: every taf's, or one taf's by tafs cloud's id.
                 Selection::HaltAll | Selection::Halt(_) => match &halt {
@@ -540,28 +566,46 @@ pub fn build(
         let select = select.clone();
         account_button.connect_clicked(move |_| select(Selection::Account));
     }
-    // Coach opens its conversation, read only; in the sample, its title.
+    // Coach, signed in with KIFF, opens Coach mode over what's on screen; anything else is a
+    // screen beside the sidebar. In the sample, Coach is its title.
+    let route: Rc<dyn Fn(Selection)> = {
+        let (select, mode, selection) = (select.clone(), mode.clone(), selection.clone());
+        Rc::new(move |s: Selection| {
+            if s == Selection::Coach && has_coach {
+                // Nothing on screen yet: the Overview behind it.
+                if selection.borrow().is_none() {
+                    select(Selection::Overview);
+                }
+                mode.open();
+            } else {
+                select(s);
+            }
+        })
+    };
     if let Some(coach) = coach_button {
-        let select = select.clone();
-        coach.connect_clicked(move |_| select(Selection::Coach));
+        let route = route.clone();
+        coach.connect_clicked(move |_| route(Selection::Coach));
     }
     if let Some(plan) = plan_button {
         let select = select.clone();
         plan.connect_clicked(move |_| select(Selection::Usage));
     }
-    *holder.borrow_mut() = Some(select.clone());
-    // Coach opened from elsewhere (a new taf, a job handed over, a setup to finish): afresh, even
-    // when it's open already, so it opens on what was asked.
+    *holder.borrow_mut() = Some(route.clone());
+    // Coach opened from elsewhere (a new taf, a job handed over, a setup to finish): Coach mode
+    // afresh, even when it's open already, so it opens on what was asked.
     if has_coach {
-        let (select, selection) = (select.clone(), selection.clone());
+        let (select, mode, selection) = (select.clone(), mode.clone(), selection.clone());
         crate::coach_start::set_opener(Some(Rc::new(move || {
-            *selection.borrow_mut() = None;
-            select(Selection::Coach);
+            // Nothing on screen yet: the Overview behind it.
+            if selection.borrow().is_none() {
+                select(Selection::Overview);
+            }
+            mode.open_afresh();
         })));
     } else {
         crate::coach_start::set_opener(None);
     }
-    select(first);
+    route(first);
     Shell {
         root,
         selection,

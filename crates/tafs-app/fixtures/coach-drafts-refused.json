@@ -1,0 +1,8 @@
+{
+  "drf_refunds": {
+    "status": 503,
+    "answer": {
+      "error": "KIFF is busy right now."
+    }
+  }
+}

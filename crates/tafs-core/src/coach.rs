@@ -814,7 +814,36 @@ pub struct DriveRecap {
     pub task: String,
     pub why: Option<String>,
     pub words: Option<String>,
+    /// What it did, from tafs cloud's record (`steps`, read with `try?`: none when any can't be
+    /// read).
+    pub steps: Vec<DriveStep>,
     pub at: DateTime<Utc>,
+}
+
+/// One step a drive did (`TafsCloud.DriveStep`), and what it touched (`DriveTouched`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DriveStep {
+    pub at: String,
+    pub line: String,
+    pub touched: Option<(String, Option<String>)>,
+}
+
+impl DriveStep {
+    fn read(v: &Value) -> Read<DriveStep> {
+        let s = object(v)?;
+        let touched = match field(s, "touched") {
+            None => None,
+            Some(t) => {
+                let t = object(t)?;
+                Some((text(t, "words")?, text_if(t, "taf")?))
+            }
+        };
+        Ok(DriveStep {
+            at: text(s, "at")?,
+            line: text(s, "line")?,
+            touched,
+        })
+    }
 }
 
 /// A message written to Coach's run (`Steering.Message`).
@@ -1027,6 +1056,10 @@ impl SetupThread {
                     task: text(d, "task").ok()?,
                     why: text_if(d, "why").ok()?,
                     words: text_if(d, "words").ok()?,
+                    steps: array_if(d, "steps", DriveStep::read)
+                        .ok()
+                        .flatten()
+                        .unwrap_or_default(),
                     at: date(d, "at").ok()?,
                 })
             })())

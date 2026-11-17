@@ -170,6 +170,23 @@ pub fn set_alert_sound(on: bool) {
     set_flag("alert-sound", on);
 }
 
+/// Coach mode's width (`coach.width`, `coach.full`), as last chosen; a third of the window at first.
+pub fn coach_width() -> tafs_core::coach_mode::Width {
+    std::fs::read_to_string(
+        gtk::glib::user_config_dir()
+            .join("tafs")
+            .join("coach-width"),
+    )
+    .map(|s| tafs_core::coach_mode::Width::read(&s))
+    .unwrap_or_default()
+}
+
+pub fn set_coach_width(w: &tafs_core::coach_mode::Width) {
+    let dir = gtk::glib::user_config_dir().join("tafs");
+    let _ = std::fs::create_dir_all(&dir);
+    let _ = std::fs::write(dir.join("coach-width"), w.kept());
+}
+
 fn flag(name: &str, default: bool) -> bool {
     match std::fs::read_to_string(gtk::glib::user_config_dir().join("tafs").join(name)) {
         Ok(s) if s.trim() == "off" => false,

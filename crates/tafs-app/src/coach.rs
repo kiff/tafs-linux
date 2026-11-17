@@ -1,4 +1,4 @@
-//! Coach beside the sidebar (`SetupChatView` at a regular width): Coach's conversation as tafs
+//! Coach in Coach mode's panel (`SetupChatView` at a regular width, `coach_mode.rs`): Coach's conversation as tafs
 //! cloud reads it with this computer's proof, drawn as the iPad draws it, with its message box.
 //! The owner writes to Coach, unsigned, as the session (`TafsCloud.sendMessage`, `steer`, `stop`);
 //! the sent message shows at once until tafs cloud's copy takes its place, and the thread is read
@@ -16,19 +16,20 @@ use adw::prelude::*;
 use gtk::glib;
 use tafs_core::coach::{self, Kind, SetupThread};
 use tafs_core::coach_lines::{
-    ApprovalLines, Card, CoachLines, ComposerLines, Line, Listed, Mark, Outcome, PlanLines,
-    PlanStep, ResultLines, SignInLines, Tone, UnsentLines,
+    ApprovalLines, Card, CoachLines, ComposerLines, DraftShown, Line, Listed, Mark, Outcome,
+    PlanLines, PlanStep, ResultLines, SignInLines, Tone, UnsentLines,
 };
 use tafs_core::coach_send::{
     self, CardSend, Conversation, Delivery, Polls, QuestionSelection, Refusal, Steered, Submit,
 };
+use tafs_core::coach_tools::CoachTools;
 use tafs_core::session::KeptSession;
 use tafs_core::sidebar::{Mode, Selection};
 use tafs_core::signin::Answer;
 use tafs_core::words::WordBook;
 
 use crate::chat::{owner, Composer, Sent};
-use crate::widgets::{eyebrow, outline, panel, primary, symbol, text};
+use crate::widgets::{eyebrow, one_line, outline, panel, primary, symbol, text};
 
 /// Where Coach's conversation is read from, and where what's written goes.
 #[derive(Clone)]
@@ -38,6 +39,10 @@ pub enum CoachSource {
     File {
         thread: std::path::PathBuf,
         chats: Option<std::path::PathBuf>,
+        /// KIFF's answers to the drafts the approvals name, by id (`{"status", "answer"}`).
+        drafts: Option<std::path::PathBuf>,
+        /// tafs cloud's `GET /v1/setup` answer, for Coach's tools.
+        setup: Option<std::path::PathBuf>,
     },
     /// tafs cloud, as the session, with this device's proof when it has a key and KIFF names
     /// this computer. `signed_out` is called when tafs cloud says the session is over.
@@ -51,6 +56,8 @@ pub enum CoachSource {
 }
 
 thread_local! {
+    /// A screenshot opens Coach's tools step over the conversation.
+    pub static OPEN_TOOLS: Cell<bool> = const { Cell::new(false) };
     /// What the owner is typing to Coach, not sent yet (`setupDraft`): kept while the app runs, so
     /// leaving Coach and coming back keeps it. Signing out forgets it.
     static DRAFT: RefCell<String> = const { RefCell::new(String::new()) };
@@ -103,6 +110,16 @@ struct Page {
     scroller: gtk::ScrolledWindow,
     error: gtk::Label,
     composer: Composer,
+    /// The window is wide enough for the panel beside the conversation.
+    wide: Cell<bool>,
+    /// Coach's tools as tafs cloud last read them (`coachTools`), and their row above the
+    /// conversation (`CoachToolsRow`).
+    coach_tools: RefCell<Option<CoachTools>>,
+    tools_row: gtk::Button,
+    /// "Taking shape" beside the conversation, and what it holds.
+    side: gtk::Box,
+    shape: gtk::Box,
+    shape_drawn: RefCell<Option<tafs_core::setup_shape::ShapeLines>>,
 }
 
 /// What a draw shows, to compare with the last.
@@ -123,6 +140,7 @@ pub fn page(
     source: CoachSource,
     listed: Rc<Vec<Listed>>,
     open: Rc<dyn Fn(Selection)>,
+    chrome: Option<crate::coach_mode::Chrome>,
 ) -> gtk::Widget {
     let root = gtk::Box::new(gtk::Orientation::Vertical, 0);
     root.add_css_class("tafs-coach-wash");
@@ -167,9 +185,22 @@ pub fn page(
     tools.append(&menu);
     tools.set_visible(false);
     bar.set_end_widget(Some(&tools));
+    // In Coach mode's panel: Back, and ⤢ at the leading edge (`CoachView`).
+    if let Some(chrome) = &chrome {
+        bar.set_start_widget(Some(&crate::coach_mode::chrome_buttons(&w, chrome)));
+    }
     root.append(&bar);
+    // A wide window (`shaping`): the conversation, and beside it what it has made so far.
+    let chat = gtk::Box::new(gtk::Orientation::Vertical, 0);
+    chat.set_hexpand(true);
+    // Coach's tools still to give: one line, which opens the step.
+    let tools_row = gtk::Button::new();
+    tools_row.add_css_class("tafs-tools-row");
+    tools_row.set_widget_name("coach-tools-row");
+    tools_row.set_visible(false);
+    chat.append(&tools_row);
     let plan_slot = gtk::Box::new(gtk::Orientation::Vertical, 0);
-    root.append(&plan_slot);
+    chat.append(&plan_slot);
     let column = gtk::Box::new(gtk::Orientation::Vertical, 12);
     column.set_margin_start(16);
     column.set_margin_end(16);
@@ -181,16 +212,39 @@ pub fn page(
     scroller.set_vexpand(true);
     scroller.set_child(Some(&column));
     scroller.add_css_class("tafs-coach-wash");
-    root.append(&scroller);
+    chat.append(&scroller);
     let error = text("", 13, 400, &["tafs-no"]);
     error.set_margin_start(16);
     error.set_margin_end(16);
     error.set_margin_bottom(4);
     error.set_visible(false);
-    root.append(&error);
+    chat.append(&error);
     let composer = crate::chat::composer(crate::chat::Whose::Coach);
     composer.bar.set_visible(false);
-    root.append(&composer.bar);
+    chat.append(&composer.bar);
+    let side = gtk::Box::new(gtk::Orientation::Horizontal, 0);
+    side.append(&gtk::Separator::new(gtk::Orientation::Vertical));
+    let shape = gtk::Box::new(gtk::Orientation::Vertical, 22);
+    shape.set_margin_start(20);
+    shape.set_margin_end(20);
+    shape.set_margin_top(20);
+    shape.set_margin_bottom(20);
+    shape.set_valign(gtk::Align::Start);
+    let shape_scroller = gtk::ScrolledWindow::new();
+    shape_scroller.set_hscrollbar_policy(gtk::PolicyType::Never);
+    shape_scroller.set_size_request(tafs_core::setup_shape::PANEL_WIDTH, -1);
+    shape_scroller.set_child(Some(&shape));
+    shape_scroller.add_css_class("tafs-coach-panel");
+    shape_scroller.set_widget_name("coach.shape");
+    shape_scroller.set_hexpand(false);
+    side.append(&shape_scroller);
+    side.set_hexpand(false);
+    side.set_visible(false);
+    let body = gtk::Box::new(gtk::Orientation::Horizontal, 0);
+    body.set_vexpand(true);
+    body.append(&chat);
+    body.append(&side);
+    root.append(&body);
 
     let page = Rc::new(Page {
         w,
@@ -214,10 +268,47 @@ pub fn page(
         scroller,
         error,
         composer,
+        wide: Cell::new(false),
+        coach_tools: RefCell::new(None),
+        tools_row,
+        side,
+        shape,
+        shape_drawn: RefCell::new(None),
     });
     // Opened for a new taf, a job handed over or a setup to finish: that conversation.
     crate::coach_start::apply(&mut page.conv.borrow_mut());
     wire_composer(&page);
+    {
+        let p = Rc::downgrade(&page);
+        page.tools_row.connect_clicked(move |_| {
+            if let Some(p) = p.upgrade() {
+                p.open_tools();
+            }
+        });
+    }
+    // The page's width (`GeometryReader`): side by side from 780, else the conversation alone.
+    // Only a change of side draws again. The callback holds the page while it's on screen, and
+    // goes with it.
+    {
+        let p = page.clone();
+        let id = page.root.add_tick_callback(move |widget, _| {
+            let width = widget.width();
+            if width > 0 {
+                let wide = width >= tafs_core::setup_shape::SIDE_BY_SIDE;
+                if p.wide.replace(wide) != wide {
+                    *p.drawn.borrow_mut() = None;
+                    p.draw();
+                }
+            }
+            glib::ControlFlow::Continue
+        });
+        let id = RefCell::new(Some(id));
+        page.root.connect_unmap(move |_| {
+            if let Some(id) = id.borrow_mut().take() {
+                id.remove();
+            }
+        });
+    }
     {
         let p = Rc::downgrade(&page);
         new_chat.connect_clicked(move |_| {
@@ -239,7 +330,16 @@ pub fn page(
         CoachSource::File {
             thread: path,
             chats,
+            drafts,
+            setup,
         } => {
+            if let Some(setup) = setup {
+                *page.coach_tools.borrow_mut() = std::fs::read(&setup)
+                    .ok()
+                    .and_then(|b| serde_json::from_slice::<serde_json::Value>(&b).ok())
+                    .and_then(|v| serde_json::to_vec(v.get("answer").unwrap_or(&v)).ok())
+                    .and_then(|b| CoachTools::read(&b));
+            }
             let read = std::fs::read(&path)
                 .ok()
                 .and_then(|b| serde_json::from_slice::<serde_json::Value>(&b).ok())
@@ -253,7 +353,14 @@ pub fn page(
                         c.chat = t.session();
                         c.took(t, chrono::Utc::now());
                     }
+                    if let Some(drafts) = drafts {
+                        page.drafts_from(&drafts);
+                    }
                     page.draw();
+                    if OPEN_TOOLS.with(|t| t.replace(false)) {
+                        let p = page.clone();
+                        glib::idle_add_local_once(move || p.open_tools());
+                    }
                     if let Some(chats) = chats {
                         page.conv.borrow_mut().chats = std::fs::read(&chats)
                             .ok()
@@ -374,12 +481,13 @@ impl Page {
             .await
             .unwrap_or_else(|_| Err(Fail::Why(String::new())));
         match read {
-            Ok(Some(id)) => {
+            Ok((Some(id), tools)) => {
                 self.conv.borrow_mut().setup = Some(id);
+                *self.coach_tools.borrow_mut() = tools;
                 self.load_thread().await;
             }
             // No Coach yet: its start, which is signed, on the phone.
-            Ok(None) => {
+            Ok((None, _)) => {
                 self.no_coach.set(true);
                 *self.drawn.borrow_mut() = None;
                 self.draw();
@@ -456,6 +564,65 @@ impl Page {
             }
         }
         self.draw();
+        // What an approval needs to be shown: KIFF's draft, read again until it's confirmed.
+        let wanted = self.conv.borrow().drafts_to_read();
+        if !wanted.is_empty() {
+            self.read_drafts(wanted).await;
+            self.draw();
+        }
+    }
+
+    /// A screenshot's drafts, from its file: each KIFF's answer, as a read would take it.
+    fn drafts_from(&self, path: &std::path::Path) {
+        let Some(map) = std::fs::read(path)
+            .ok()
+            .and_then(|b| serde_json::from_slice::<serde_json::Value>(&b).ok())
+            .and_then(|v| v.as_object().cloned())
+        else {
+            eprintln!("{} isn't KIFF's drafts by id", path.display());
+            std::process::exit(2);
+        };
+        for (id, a) in map {
+            let answer = Answer {
+                status: a.get("status").and_then(|s| s.as_u64()).unwrap_or(200) as u16,
+                body: serde_json::to_vec(a.get("answer").unwrap_or(&a)).unwrap_or_default(),
+            };
+            let read = if (200..300).contains(&answer.status) {
+                tafs_core::drafts::AgentDraft::read(&answer.body)
+                    .ok_or_else(|| tafs_core::signin::plain_words(&self.w, 200).unwrap_or_default())
+            } else {
+                Err(refusal(&self.w, &answer))
+            };
+            self.conv.borrow_mut().took_draft(&id, read);
+        }
+    }
+
+    /// `readCardDraft`, for each: KIFF's draft as the session, or KIFF's reason kept for the card.
+    /// A screenshot's drafts come from its file, and nothing is read.
+    async fn read_drafts(self: &Rc<Self>, ids: Vec<String>) {
+        let CoachSource::Cloud {
+            kept, languages, ..
+        } = self.source.clone()
+        else {
+            return;
+        };
+        for id in ids {
+            let words = (*self.w).clone();
+            let (token, languages) = (kept.token.clone(), languages.clone());
+            let read_id = id.clone();
+            let read =
+                gtk::gio::spawn_blocking(move || read_draft(&words, &token, &languages, &read_id))
+                    .await
+                    .unwrap_or_else(|_| Err(Fail::Why(String::new())));
+            if !self.open() {
+                return;
+            }
+            match read {
+                Ok(d) => self.conv.borrow_mut().took_draft(&id, Ok(d)),
+                Err(Fail::SignedOut) => return self.signed_out(),
+                Err(Fail::Why(why)) => self.conv.borrow_mut().took_draft(&id, Err(why)),
+            }
+        }
     }
 
     /// `followSetup`: the thread read again while the page is open, every second while Coach
@@ -877,6 +1044,158 @@ impl Page {
         self.composer.show(&placeholder, &send, &stop, thinking);
     }
 
+    /// `CoachToolsRow`: tafs cloud's line, and a chevron, above the conversation while Coach's
+    /// tools are still to give; nothing once they're given, or before tafs cloud has said.
+    fn draw_tools_row(&self) {
+        let shown = self.conv.borrow().setup.is_some();
+        let words = tafs_core::coach_tools::row(&self.w, self.coach_tools.borrow().as_ref())
+            .ok()
+            .flatten()
+            .filter(|_| shown);
+        let Some(words) = words else {
+            self.tools_row.set_visible(false);
+            return;
+        };
+        let h = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+        let l = one_line(&words, 14, 600, &["tafs-amber-text"]);
+        l.set_hexpand(true);
+        h.append(&l);
+        let chevron = symbol("go-next-symbolic", 13);
+        chevron.add_css_class("tafs-dim");
+        chevron.set_accessible_role(gtk::AccessibleRole::Presentation);
+        h.append(&chevron);
+        self.tools_row.set_child(Some(&h));
+        self.tools_row.set_visible(true);
+    }
+
+    /// `CoachToolsSheet`: the step in tafs cloud's words, each tool under a few groups and folded,
+    /// Coach's Cards in KIFF's words, then the one confirmation that gives them: signed on the
+    /// iPad, behind `ApprovalGate`, so here the gate's line stands in its place and nothing is
+    /// sent. Not now closes it.
+    fn open_tools(self: &Rc<Self>) {
+        let Some(tools) = self.coach_tools.borrow().clone() else {
+            return;
+        };
+        let Ok(l) = tafs_core::coach_tools::sheet(&self.w, &tools) else {
+            return;
+        };
+        let said = |s: &tafs_core::coach_tools::Said| {
+            text(
+                &s.words,
+                s.size,
+                s.weight,
+                &[if s.soft { "tafs-soft" } else { "tafs-ink" }],
+            )
+        };
+        let column = gtk::Box::new(gtk::Orientation::Vertical, 10);
+        column.set_margin_start(20);
+        column.set_margin_end(20);
+        column.set_margin_top(20);
+        column.set_margin_bottom(20);
+        for s in &l.lines {
+            column.append(&said(s));
+        }
+        if let Some(details) = &l.details {
+            let fold = gtk::Box::new(gtk::Orientation::Vertical, 2);
+            for s in &l.folded {
+                fold.append(&said(s));
+            }
+            fold.set_visible(false);
+            let label = gtk::Box::new(gtk::Orientation::Horizontal, 6);
+            label.append(&text(details, 14, 600, &["tafs-amber-text"]));
+            let chevron = symbol("pan-down-symbolic", 12);
+            chevron.add_css_class("tafs-amber-text");
+            label.append(&chevron);
+            let b = gtk::Button::new();
+            b.add_css_class("tafs-plain");
+            b.set_child(Some(&label));
+            b.set_halign(gtk::Align::Start);
+            b.set_widget_name("coach-tools-details");
+            {
+                let fold = fold.clone();
+                b.connect_clicked(move |_| {
+                    let open = !fold.is_visible();
+                    fold.set_visible(open);
+                    chevron.set_icon_name(Some(if open {
+                        "pan-up-symbolic"
+                    } else {
+                        "pan-down-symbolic"
+                    }));
+                });
+            }
+            column.append(&b);
+            column.append(&fold);
+        }
+        if let Some(ask) = &l.ask {
+            let a = said(ask);
+            a.set_margin_top(6);
+            column.append(&a);
+        }
+        if l.gives {
+            // The one confirmation, the person's: why this computer can't, in its place.
+            let give = primary(
+                &tools
+                    .step
+                    .as_ref()
+                    .map(|s| s.give.clone())
+                    .filter(|g| !g.trim().is_empty())
+                    .unwrap_or_else(|| self.w.line("coach.tools.give").unwrap_or_default()),
+            );
+            give.set_widget_name("coach-tools-give");
+            column.append(&crate::approval::gate(&self.w, Mode::Kiff, &give));
+        }
+        let not_now = outline(&l.not_now);
+        not_now.set_widget_name("coach-tools-not-now");
+        column.append(&not_now);
+        let scroller = gtk::ScrolledWindow::new();
+        scroller.set_hscrollbar_policy(gtk::PolicyType::Never);
+        scroller.set_vexpand(true);
+        scroller.set_child(Some(&column));
+        let header = adw::HeaderBar::new();
+        let toolbar = adw::ToolbarView::new();
+        toolbar.add_top_bar(&header);
+        toolbar.set_content(Some(&scroller));
+        crate::widgets::ground(&toolbar);
+        let dialog = adw::Dialog::new();
+        dialog.set_title(&l.title);
+        dialog.set_content_width(520);
+        dialog.set_content_height(640);
+        dialog.set_child(Some(&toolbar));
+        {
+            let d = dialog.downgrade();
+            not_now.connect_clicked(move |_| {
+                if let Some(d) = d.upgrade() {
+                    d.close();
+                }
+            });
+        }
+        dialog.present(Some(&self.root));
+    }
+
+    /// `shaping`: a wide window with Coach's conversation shows what it has made so far beside
+    /// it (`SetupShapePanel`), drawn again only when it changed. Whether it shows.
+    fn draw_shape(&self) -> bool {
+        let shaping = self.wide.get() && self.conv.borrow().setup.is_some();
+        self.side.set_visible(shaping);
+        if !shaping {
+            return false;
+        }
+        let Ok(lines) = tafs_core::setup_shape::SetupShape::new(&self.w, &self.conv.borrow())
+            .and_then(|s| tafs_core::setup_shape::lines(&self.w, &s))
+        else {
+            return true;
+        };
+        if self.shape_drawn.borrow().as_ref() == Some(&lines) {
+            return true;
+        }
+        while let Some(c) = self.shape.first_child() {
+            self.shape.remove(&c);
+        }
+        shape_panel(&self.shape, &lines);
+        *self.shape_drawn.borrow_mut() = Some(lines);
+        true
+    }
+
     /// Draws what the conversation holds now, unless it's what's drawn already.
     fn draw(self: &Rc<Self>) {
         self.composer_state();
@@ -930,6 +1249,8 @@ impl Page {
             selections,
         };
         drop(c);
+        self.draw_tools_row();
+        let shaping = self.draw_shape();
         if self.drawn.borrow().as_ref() == Some(&now) {
             return;
         }
@@ -945,7 +1266,8 @@ impl Page {
         }
         match &now.lines {
             Ok(lines) => {
-                if let Some(plan) = &lines.plan {
+                // Beside the conversation, the plan is in the panel.
+                if let Some(plan) = lines.plan.as_ref().filter(|_| !shaping) {
                     let p = plan_panel(plan);
                     p.set_margin_start(12);
                     p.set_margin_end(12);
@@ -983,7 +1305,7 @@ fn read_setup(
     w: &WordBook,
     kept: &KeptSession,
     languages: &[&'static str],
-) -> Result<Option<String>, Fail> {
+) -> Result<(Option<String>, Option<CoachTools>), Fail> {
     let a = crate::kiff::cloud(&kept.token, languages, coach::SETUP_PATH)
         .map_err(|e| Fail::Why(e.words(w).unwrap_or_default()))?;
     if a.status == 401 {
@@ -992,8 +1314,10 @@ fn read_setup(
     if !(200..300).contains(&a.status) {
         return Err(Fail::Why(refusal(w, &a)));
     }
-    coach::setup_id(&a.body)
-        .map_err(|_| Fail::Why(tafs_core::signin::plain_words(w, 200).unwrap_or_default()))
+    let id = coach::setup_id(&a.body)
+        .map_err(|_| Fail::Why(tafs_core::signin::plain_words(w, 200).unwrap_or_default()))?;
+    // Coach's tools as KIFF has them, from the same read (`setupRead().tools`).
+    Ok((id, CoachTools::read(&a.body)))
 }
 
 /// What a thread read brought: the chats when they were read, the one chosen, and the thread.
@@ -1053,6 +1377,27 @@ fn read_thread(
         thread,
         device,
     })
+}
+
+/// `kiff.draft(id:)`: KIFF's draft as the session, unsigned. Why it wasn't read, in KIFF's words
+/// or the app's.
+fn read_draft(
+    w: &WordBook,
+    token: &str,
+    languages: &[&'static str],
+    id: &str,
+) -> Result<tafs_core::drafts::AgentDraft, Fail> {
+    let call = tafs_core::drafts::draft_read(id).ok_or(Fail::Why(String::new()))?;
+    let a = crate::kiff::kiff_get(token, languages, call.path())
+        .map_err(|e| Fail::Why(e.words(w).unwrap_or_default()))?;
+    if a.status == 401 {
+        return Err(Fail::SignedOut);
+    }
+    if !(200..300).contains(&a.status) {
+        return Err(Fail::Why(refusal(w, &a)));
+    }
+    tafs_core::drafts::AgentDraft::read(&a.body)
+        .ok_or_else(|| Fail::Why(tafs_core::signin::plain_words(w, 200).unwrap_or_default()))
 }
 
 /// tafs cloud's words for a refusal, or the app's plain words for what went wrong.
@@ -1162,10 +1507,33 @@ fn draw_thread(page: &Rc<Page>, lines: &CoachLines, drawn: &Drawn) {
                 c.set_widget_name(&format!("card.{card_ref}"));
                 c
             }
-            Line::Drive { eyebrow: e, task } => {
+            Line::Drive {
+                eyebrow: e,
+                task,
+                steps,
+                none,
+                ended,
+            } => {
                 let p = panel(false);
                 p.append(&eyebrow_in(e, Tone::Amber));
                 p.append(&text(task, 17, 600, &["tafs-ink"]));
+                if let Some(n) = none {
+                    p.append(&text(n, 14, 400, &["tafs-soft"]));
+                }
+                for step in steps {
+                    let row = gtk::Box::new(gtk::Orientation::Horizontal, 6);
+                    let dot = gtk::Box::new(gtk::Orientation::Vertical, 0);
+                    dot.add_css_class("tafs-step-dot");
+                    dot.set_size_request(5, 5);
+                    dot.set_valign(gtk::Align::Start);
+                    dot.set_margin_top(8);
+                    row.append(&dot);
+                    let l = text(step, 14, 400, &["tafs-ink"]);
+                    l.set_hexpand(true);
+                    row.append(&l);
+                    p.append(&row);
+                }
+                p.append(&text(ended, 13, 400, &["tafs-soft"]));
                 p.upcast()
             }
         });
@@ -1417,6 +1785,11 @@ fn plan_panel(plan: &PlanLines) -> gtk::Box {
 
 /// `OutcomeLine`: an answered card in one line, its mark in its colour.
 fn outcome(o: &Outcome) -> gtk::Box {
+    outcome_with(o, &[])
+}
+
+/// `OutlineLine` with its `detail`: what was approved, the signed Card's lines under the line.
+fn outcome_with(o: &Outcome, detail: &[String]) -> gtk::Box {
     let h = gtk::Box::new(gtk::Orientation::Horizontal, 8);
     h.add_css_class("tafs-outcome");
     let (icon, class) = match o.mark {
@@ -1430,8 +1803,19 @@ fn outcome(o: &Outcome) -> gtk::Box {
     m.set_margin_top(1);
     h.append(&m);
     let l = text(&o.text, 14, 400, &["tafs-soft"]);
-    l.set_hexpand(true);
-    h.append(&l);
+    if detail.is_empty() {
+        l.set_hexpand(true);
+        h.append(&l);
+    } else {
+        let v = gtk::Box::new(gtk::Orientation::Vertical, 2);
+        v.set_hexpand(true);
+        v.append(&l);
+        for line in detail {
+            let d = text(line, 12, 400, &["tafs-dim", "tafs-mono"]);
+            v.append(&d);
+        }
+        h.append(&v);
+    }
     if o.more {
         let c = symbol("pan-down-symbolic", 11);
         c.add_css_class("tafs-dim");
@@ -1508,7 +1892,7 @@ fn card_view(page: &Rc<Page>, card_ref: &str, card: &Card) -> gtk::Widget {
             v.upcast()
         }
         Card::Questions { .. } => questions_card(page, card_ref, card),
-        Card::Approval(a) => approval(a),
+        Card::Approval(a) => approval(page, a),
         Card::SignIn(s) => sign_in(s),
         Card::Result(r) => result(r, open),
         Card::Drive {
@@ -1541,8 +1925,130 @@ fn wider_line(words: &str) -> gtk::Label {
     l
 }
 
+/// The taf's Card on an approval: KIFF's draft, its title (or tafs cloud's words for the one
+/// approved next) over its lines in monospace on the raised colour; or why it isn't drawn yet,
+/// with Try again when KIFF wouldn't give it.
+fn draft_shown(page: &Rc<Page>, d: &DraftShown) -> gtk::Widget {
+    match d {
+        DraftShown::Card {
+            title,
+            next_words,
+            lines,
+        } => {
+            let v = gtk::Box::new(gtk::Orientation::Vertical, 6);
+            v.add_css_class("tafs-card-words");
+            v.set_widget_name("approval.card");
+            if let Some(words) = next_words {
+                let l = text(words, 13, 600, &["tafs-soft"]);
+                l.set_widget_name("approval.card-next");
+                v.append(&l);
+            } else if let Some(t) = title {
+                v.append(&eyebrow(t, false));
+            }
+            let tone = if next_words.is_some() {
+                "tafs-dim"
+            } else {
+                "tafs-ink"
+            };
+            for line in lines {
+                v.append(&text(line, 12, 400, &[tone, "tafs-mono"]));
+            }
+            v.upcast()
+        }
+        DraftShown::NotRead { id, why, try_again } => {
+            let v = gtk::Box::new(gtk::Orientation::Vertical, 6);
+            v.append(&text(why, 13, 400, &["tafs-no"]));
+            let b = gtk::Button::with_label(try_again);
+            b.add_css_class("tafs-coach-link");
+            b.add_css_class("small");
+            b.set_halign(gtk::Align::Start);
+            b.set_widget_name("approval.draft-try-again");
+            let (p, id) = (Rc::downgrade(page), id.clone());
+            b.connect_clicked(move |_| {
+                if let Some(p) = p.upgrade() {
+                    let p2 = p.clone();
+                    let id = id.clone();
+                    glib::spawn_future_local(async move {
+                        p2.read_drafts(vec![id]).await;
+                        p2.draw();
+                    });
+                }
+            });
+            v.append(&b);
+            v.upcast()
+        }
+        DraftShown::Reading(words) => text(words, 13, 400, &["tafs-dim"]).upcast(),
+    }
+}
+
+/// `SetupShapePanel`: "Taking shape", the taf's name or the plan's title, then the plan with
+/// each step's mark, and the Card KIFF drafted, dashed until it's confirmed.
+fn shape_panel(into: &gtk::Box, l: &tafs_core::setup_shape::ShapeLines) {
+    let head = gtk::Box::new(gtk::Orientation::Vertical, 6);
+    head.append(&eyebrow(&l.eyebrow, false));
+    if let Some(h) = &l.heading {
+        head.append(&text(h, 26, 700, &["tafs-ink"]));
+    }
+    if let Some(e) = &l.empty {
+        head.append(&text(e, 14, 400, &["tafs-soft"]));
+    }
+    into.append(&head);
+    if let Some((progress, steps)) = &l.plan {
+        let v = gtk::Box::new(gtk::Orientation::Vertical, 10);
+        v.append(&eyebrow(progress, false));
+        for step in steps {
+            let row = gtk::Box::new(gtk::Orientation::Horizontal, 10);
+            let m = plan_mark(&step.mark);
+            m.set_valign(gtk::Align::Start);
+            m.set_halign(gtk::Align::Start);
+            m.set_hexpand(false);
+            m.set_margin_top(1);
+            row.append(&m);
+            let words = gtk::Box::new(gtk::Orientation::Vertical, 2);
+            words.set_hexpand(true);
+            let label = text(
+                &step.mark.label,
+                14,
+                if step.strong { 600 } else { 400 },
+                &[if step.dim { "tafs-dim" } else { "tafs-ink" }],
+            );
+            if step.struck {
+                if let Some(attrs) = label.attributes() {
+                    attrs.insert(gtk::pango::AttrInt::new_strikethrough(true));
+                    label.set_attributes(Some(&attrs));
+                }
+            }
+            words.append(&label);
+            if let Some(n) = &step.needs_you {
+                words.append(&text(n, 12, 600, &["tafs-amber-text"]));
+            }
+            row.append(&words);
+            v.append(&row);
+        }
+        into.append(&v);
+    }
+    if let Some(card) = &l.card {
+        let v = gtk::Box::new(gtk::Orientation::Vertical, 10);
+        v.append(&eyebrow(&card.eyebrow, false));
+        let face = gtk::Box::new(gtk::Orientation::Vertical, 6);
+        face.add_css_class("tafs-shape-card");
+        if card.confirmed {
+            face.add_css_class("confirmed");
+        }
+        face.append(&text(&card.title, 13, 600, &["tafs-ink", "tafs-mono"]));
+        for line in &card.lines {
+            face.append(&text(line, 12, 400, &["tafs-ink", "tafs-mono"]));
+        }
+        v.append(&face);
+        if let Some(u) = &card.until {
+            v.append(&text(u, 12, 400, &["tafs-dim"]));
+        }
+        into.append(&v);
+    }
+}
+
 /// `SetupApproval`, read only.
-fn approval(a: &ApprovalLines) -> gtk::Widget {
+fn approval(page: &Rc<Page>, a: &ApprovalLines) -> gtk::Widget {
     let p = card_panel(a.stroke);
     let head = gtk::Box::new(gtk::Orientation::Horizontal, 8);
     let e = eyebrow_in(&a.eyebrow, a.eyebrow_tone);
@@ -1570,6 +2076,9 @@ fn approval(a: &ApprovalLines) -> gtk::Widget {
     if let Some(t) = &a.text {
         p.append(&text(t, 15, 400, &["tafs-ink"]));
     }
+    if let Some(d) = &a.draft {
+        p.append(&draft_shown(page, d));
+    }
     if let Some(next) = &a.card_next {
         p.append(&text(next, 13, 600, &["tafs-soft"]));
     }
@@ -1596,7 +2105,7 @@ fn approval(a: &ApprovalLines) -> gtk::Widget {
     stack.set_transition_duration(200);
     let line = gtk::Button::new();
     line.add_css_class("tafs-outcome-button");
-    line.set_child(Some(&outcome(folded)));
+    line.set_child(Some(&outcome_with(folded, &a.signed_lines)));
     if let Some(hint) = &folded.hint {
         line.update_property(&[gtk::accessible::Property::Description(hint)]);
     }
