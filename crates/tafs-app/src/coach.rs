@@ -108,6 +108,8 @@ struct Page {
     column: gtk::Box,
     plan_slot: gtk::Box,
     scroller: gtk::ScrolledWindow,
+    /// ↓ and the Needs you bar over the conversation.
+    jump: Rc<crate::chat::Jump>,
     error: gtk::Label,
     composer: Composer,
     /// The window is wide enough for the panel beside the conversation.
@@ -214,7 +216,8 @@ pub fn page(
     scroller.set_vexpand(true);
     scroller.set_child(Some(&column));
     scroller.add_css_class("tafs-coach-wash");
-    chat.append(&scroller);
+    let jump = crate::chat::Jump::new(&w, &scroller);
+    chat.append(&jump.overlay);
     let error = text("", 13, 400, &["tafs-no"]);
     error.set_margin_start(16);
     error.set_margin_end(16);
@@ -271,6 +274,7 @@ pub fn page(
         column,
         plan_slot,
         scroller,
+        jump,
         error,
         composer,
         wide: Cell::new(false),
@@ -1314,16 +1318,26 @@ impl Page {
             chatting,
             selections,
         };
+        // The card waiting for the owner (`setupWaiting`), for its bar.
+        let waiting = tafs_core::setup_shape::waiting(&c).and_then(|s| {
+            tafs_core::coach_lines::needs_you_bar(w, &s.component)
+                .ok()
+                .map(|words| (s.card_ref(), words))
+        });
+        let ready = !c.thread.items().is_empty();
         drop(c);
         self.draw_tools_row();
         let shaping = self.draw_shape();
         if self.drawn.borrow().as_ref() == Some(&now) {
             return;
         }
-        let adj = self.scroller.vadjustment();
-        let first = self.drawn.borrow().is_none();
-        let at_bottom = adj.value() + adj.page_size() >= adj.upper() - 24.0;
-        let keep = adj.value();
+        let keep = self.scroller.vadjustment().value();
+        let before = self
+            .drawn
+            .borrow()
+            .as_ref()
+            .and_then(|d| d.lines.as_ref().ok().map(|l| l.order.len()));
+        self.jump.hold();
         while let Some(child) = self.column.first_child() {
             self.column.remove(&child);
         }
@@ -1351,19 +1365,40 @@ impl Page {
         if let Ok(lines) = &now.lines {
             self.conv.borrow_mut().drawn = lines.order.clone();
         }
+        let grew = matches!(
+            (before, now.lines.as_ref().ok().map(|l| l.order.len())),
+            (Some(b), Some(n)) if n > b
+        );
         *self.drawn.borrow_mut() = Some(now);
-        // The thread follows what arrives while its latest is in view, and lands there first.
-        let follow = first || at_bottom || self.follow.replace(false);
-        let scroller = self.scroller.clone();
-        glib::idle_add_local_once(move || {
-            let adj = scroller.vadjustment();
-            adj.set_value(if follow {
-                adj.upper() - adj.page_size()
-            } else {
-                keep
-            });
+        // The bar for the card that waits, while it's out of view (`NeedsYouBar`).
+        let card = waiting.as_ref().and_then(|(r, words)| {
+            named(self.column.upcast_ref(), &format!("card.{r}")).map(|c| (words.as_str(), c))
         });
+        self.jump.waiting(card);
+        // Something new below while the owner reads back: ↓'s dot.
+        if grew {
+            self.jump.arrived();
+        }
+        // The thread follows what arrives while its latest is in view (a message sent brings it
+        // there), and lands first on the card waiting, or at the latest.
+        if self.follow.replace(false) {
+            self.jump.following.set(true);
+        }
+        let jump = self.jump.clone();
+        glib::idle_add_local_once(move || jump.put(keep, ready, false));
     }
+}
+
+/// The widget named `name` under `root`, if it's drawn.
+pub(crate) fn named(root: &gtk::Widget, name: &str) -> Option<gtk::Widget> {
+    let mut stack = vec![root.clone()];
+    while let Some(w) = stack.pop() {
+        if w.widget_name() == name {
+            return Some(w);
+        }
+        stack.extend(std::iter::successors(w.first_child(), |c| c.next_sibling()));
+    }
+    None
 }
 
 /// `setupRead`'s Coach: its id at tafs cloud, or none before it's started.
@@ -2600,6 +2635,7 @@ impl Page {
 
     /// Forgets what was drawn and picked: another conversation is drawn from nothing.
     fn redraw_from_nothing(self: &Rc<Self>) {
+        self.jump.reland();
         self.selections.borrow_mut().clear();
         self.chatting.borrow_mut().clear();
         *self.typing.borrow_mut() = None;

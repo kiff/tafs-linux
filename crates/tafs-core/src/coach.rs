@@ -586,7 +586,7 @@ fn words_of(s: Option<String>) -> Option<String> {
 impl Component {
     /// The synthesized decoder: every declared field as its type, or the card fails; `signs` and
     /// `wider` as their own lenient decoders.
-    fn read(v: &Value) -> Read<Component> {
+    pub(crate) fn read(v: &Value) -> Read<Component> {
         let c = object(v)?;
         let kind = Kind::from_raw(&text(c, "type")?).ok_or(())?;
         let id = text(c, "id")?;

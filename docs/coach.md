@@ -162,6 +162,14 @@ iPad does, and tafs cloud marks no card. The token, the key and the signature ar
   go, then why this computer can't approve (`ApprovalGate`'s line) in the buttons' place.
 - **After the thread:** "While you were away" and how the tasks Coach handed out went, the dots
   while Coach is at work, and what was written to its run that it hasn't read yet.
+- **Where it opens, and ↓:** opened, the conversation lands on the card waiting for the owner
+  (`setupWaiting`), in the middle, else at the latest; it follows what arrives while its latest is
+  in view. Read back, ↓ over its foot goes to the latest, with the amber dot when something
+  arrived below ("Jump to the latest, something new"). While the card waiting is out of view, the
+  Needs you bar over the foot names it ("Needs you · approve Stripe", "Needs you · sign in at
+  Gmail", "Needs you · let Coach drive", "Needs you · a question": the app is the card's own
+  service, since planque's grants aren't read here), and shows it (`NeedsYouBar`,
+  `crates/tafs-app/src/chat.rs` › `Jump`).
 
 ## Coach mode
 
@@ -233,9 +241,7 @@ For an approval, a sign-in or a drive it gives none, whatever the text, so nothi
   (`improve`).
 - What the iPad reads beside the thread: planque's grant (its words, terms and profile).
 - The live stream (`LiveWork`, revealing, pinning a sent message, a run that failed part-way with
-  Retry), the Needs you bar and ↓, landing on the waiting card (it lands at the latest), New
-  a dial card (`KnobDraftCard`), and a result's
-  See version.
+  Retry); a dial card (`KnobDraftCard`); and a result's See version.
 - A refused connection's lines are decoded but not drawn: the iPad's Coach doesn't draw them.
 
 ## Screenshots

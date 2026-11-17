@@ -337,6 +337,31 @@ pub fn composer(w: &WordBook, thinking: bool) -> Result<ComposerLines, WordsErro
     })
 }
 
+/// `NeedsYouBar`'s words for the card waiting while it's out of view: an approval with its app,
+/// a sign-in at its app, a drive, or a question. The app is the card's own service: planque's
+/// grants, which name it first on the iPad, aren't read here.
+pub fn needs_you_bar(w: &WordBook, c: &crate::coach::Component) -> Result<String, WordsError> {
+    let vendor = c.service.as_deref().filter(|s| !s.is_empty());
+    Ok(match c.kind {
+        Kind::Approval => {
+            let words = w.line("coach.needs_you_approve")?;
+            match vendor {
+                Some(v) => format!("{words} {v}"),
+                None => words,
+            }
+        }
+        Kind::SignIn => {
+            let words = w.line("coach.sign_in.eyebrow")?;
+            match vendor {
+                Some(v) => format!("{words} at {v}"),
+                None => words,
+            }
+        }
+        Kind::Drive => w.line("drive.needs_you_let_coach_drive")?,
+        _ => w.line("coach.needs_you_question")?,
+    })
+}
+
 /// A message that didn't go through (`UnsentBubble`): the owner's words, dimmed, "Not sent · why",
 /// then Edit and Retry, or Resume and Retry for a send refused because the account is halted.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1653,6 +1678,35 @@ mod tests {
 
     fn book() -> WordBook {
         WordBook::load(&WordBook::default_root(), "en").unwrap()
+    }
+
+    #[test]
+    fn the_needs_you_bar_says_what_waits() {
+        let w = book();
+        let bar = |v: Value| {
+            let c = crate::coach::Component::read(&v).unwrap();
+            needs_you_bar(&w, &c).unwrap()
+        };
+        assert_eq!(
+            bar(json!({"type": "approval", "id": "a", "service": "Stripe"})),
+            "Needs you · approve Stripe"
+        );
+        assert_eq!(
+            bar(json!({"type": "approval", "id": "a"})),
+            "Needs you · approve"
+        );
+        assert_eq!(
+            bar(json!({"type": "sign_in", "id": "s", "service": "Gmail"})),
+            "Needs you · sign in at Gmail"
+        );
+        assert_eq!(
+            bar(json!({"type": "drive", "id": "d"})),
+            "Needs you · let Coach drive"
+        );
+        assert_eq!(
+            bar(json!({"type": "questions", "id": "q"})),
+            "Needs you · a question"
+        );
     }
 
     fn contract() -> Value {

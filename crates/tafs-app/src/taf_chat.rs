@@ -100,6 +100,8 @@ struct Page {
     root: gtk::Box,
     column: gtk::Box,
     scroller: gtk::ScrolledWindow,
+    /// ↓ and the Needs you pill over the thread.
+    jump: Rc<crate::chat::Jump>,
     error: gtk::Label,
     composer: Composer,
     /// The files picked for the next message (`chatFiles[taf]`).
@@ -124,7 +126,8 @@ pub fn pane(w: Rc<WordBook>, taf: ChatTaf, source: ChatSource) -> gtk::Widget {
     scroller.set_hscrollbar_policy(gtk::PolicyType::Never);
     scroller.set_vexpand(true);
     scroller.set_child(Some(&clamp));
-    root.append(&scroller);
+    let jump = crate::chat::Jump::new(&w, &scroller);
+    root.append(&jump.overlay);
     let error = text("", 13, 400, &["tafs-no"]);
     error.set_margin_start(16);
     error.set_margin_end(16);
@@ -175,6 +178,7 @@ pub fn pane(w: Rc<WordBook>, taf: ChatTaf, source: ChatSource) -> gtk::Widget {
         root: root.clone(),
         column,
         scroller,
+        jump,
         error,
         composer,
         attach,
@@ -791,26 +795,53 @@ impl Page {
         if self.drawn.borrow().as_ref() == Some(&lines) {
             return;
         }
-        let adj = self.scroller.vadjustment();
-        let first = self.drawn.borrow().is_none();
-        let at_bottom = adj.value() + adj.page_size() >= adj.upper() - 24.0;
-        let keep = adj.value();
+        let keep = self.scroller.vadjustment().value();
+        let before = self.drawn.borrow().as_ref().map(|d| d.lines.len());
+        self.jump.hold();
         while let Some(child) = self.column.first_child() {
             self.column.remove(&child);
         }
         self.draw_lines(&lines);
-        *self.drawn.borrow_mut() = Some(lines);
-        // The thread follows what arrives while its latest is in view, and opens at its newest.
-        let follow = first || at_bottom || self.follow.replace(false);
-        let scroller = self.scroller.clone();
-        glib::idle_add_local_once(move || {
-            let adj = scroller.vadjustment();
-            adj.set_value(if follow {
-                adj.upper() - adj.page_size()
-            } else {
-                keep
-            });
+        // The held call waiting for the owner (`chatWaiting`): the taf's latest, where the
+        // thread shows it, and whether it's among its last few items.
+        let waiting = self
+            .taf
+            .held
+            .iter()
+            .filter_map(|h| {
+                let at = lines
+                    .lines
+                    .iter()
+                    .position(|l| matches!(l, Line::Held(k) if k == &h.id))?;
+                Some((h, at))
+            })
+            .max_by_key(|(h, _)| h.held_at);
+        let near_end = waiting.is_none_or(|(_, at)| lines.lines.len() - at <= 3);
+        let pill = waiting.and_then(|(h, _)| {
+            let card = crate::coach::named(self.column.upcast_ref(), &format!("held.{}", h.id))?;
+            let words = self.w.get("chat.needs_you", &[]).ok()? + &h.summary;
+            Some((words, card))
         });
+        self.jump.waiting(
+            pill.as_ref()
+                .map(|(words, card)| (words.as_str(), card.clone())),
+        );
+        let (ready, grew) = (
+            !lines.lines.is_empty(),
+            before.is_some_and(|b| lines.lines.len() > b),
+        );
+        *self.drawn.borrow_mut() = Some(lines);
+        // Something new below while the owner reads back: ↓'s dot.
+        if grew {
+            self.jump.arrived();
+        }
+        // The thread follows what arrives while its latest is in view (a message sent brings it
+        // there), and lands first on the held call waiting, or at the newest.
+        if self.follow.replace(false) {
+            self.jump.following.set(true);
+        }
+        let jump = self.jump.clone();
+        glib::idle_add_local_once(move || jump.put(keep, ready, near_end));
     }
 
     fn draw_lines(self: &Rc<Self>, lines: &ChatLines) {
@@ -889,7 +920,11 @@ impl Page {
                     v.upcast()
                 }
                 Line::Held(key) => match self.taf.held.iter().find(|h| &h.id == key) {
-                    Some(card) => crate::needs_you::held_card(&self.w, card).upcast(),
+                    Some(card) => {
+                        let c = crate::needs_you::held_card(&self.w, card);
+                        c.set_widget_name(&format!("held.{key}"));
+                        c.upcast()
+                    }
                     None => continue,
                 },
                 Line::AskCoach { text: words, ask } => {

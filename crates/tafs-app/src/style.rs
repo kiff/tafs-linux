@@ -100,6 +100,13 @@ button.tafs-link { background: none; box-shadow: none; border: none; color: @taf
 .tafs-sidebar .taf-now.no { color: @tafs_no; }
 .tafs-sidebar .brand { font-size: 22px; font-weight: 700; color: @tafs_ink; }
 .tafs-dot { background-color: @tafs_amber; border-radius: 4px; min-width: 8px; min-height: 8px; }
+/* Over a thread (`NeedsYouPill`, ↓): the pill on the panel in a capsule edged in the amber at 60%,
+   and ↓ a 38 circle on the panel, edged in the line, its dot the amber, both with a soft shadow. */
+button.tafs-needs-pill { background-color: @tafs_panel; border: 1px solid alpha(@tafs_amber, 0.6); border-radius: 999px;
+  padding: 10px 14px; box-shadow: 0 2px 6px alpha(@tafs_ink, 0.12); }
+button.tafs-jump { background-color: @tafs_panel; border: 1px solid @tafs_line; border-radius: 999px;
+  min-width: 38px; min-height: 38px; padding: 0; box-shadow: 0 2px 6px alpha(@tafs_ink, 0.12); }
+.tafs-jump-dot { background-color: @tafs_amber; border-radius: 999px; min-width: 10px; min-height: 10px; }
 button.tafs-unreachable-status { padding: 0 2px; min-height: 0; font-size: 12px; font-weight: 600; }
 
 /* Coach: the ink button, the dark ground's colour on it, 44 high, corners of 14. */
