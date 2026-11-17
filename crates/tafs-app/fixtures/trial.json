@@ -1,0 +1,10 @@
+{
+  "trial": {
+    "id": "trial_1", "n": 3, "draft": "drf_t3", "session": "sess_t3",
+    "started": "2026-11-16T09:00:00Z", "used": "2026-11-16T10:00:00Z",
+    "label": "Trial", "title": "Trying version 3",
+    "changed": "It asks before shipping a replacement.",
+    "try": "Ask it to replace order 4410's broken mug.",
+    "ends": "2026-11-23T10:00:00Z"
+  }
+}

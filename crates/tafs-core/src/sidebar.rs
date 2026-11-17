@@ -95,6 +95,26 @@ pub enum Tone {
     No,
 }
 
+/// Discard on a taf being set up (`DiscardSettingUpButton`): tafs cloud's words, and the KIFF agent
+/// it's for, which names the route (`discardPath`). One whose agent is a placeholder
+/// (`setting-up:`) or none is drawn, and its yes does nothing, as on the iPad.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Discard {
+    pub agent: String,
+    pub words: crate::home::DiscardWords,
+}
+
+impl Discard {
+    /// The signed act its yes would be, when it has a real agent.
+    pub fn act(&self) -> Option<crate::signed::Act> {
+        (!self.agent.is_empty() && !self.agent.starts_with("setting-up:")).then(|| {
+            crate::signed::Act::DiscardSettingUp {
+                agent: self.agent.clone(),
+            }
+        })
+    }
+}
+
 /// The sidebar's state, from the app's model.
 #[derive(Debug, Clone)]
 pub struct SidebarModel {
@@ -122,9 +142,9 @@ pub struct SidebarModel {
     pub shared: std::collections::BTreeSet<String>,
     /// Agents made through KIFF's API, not run by tafs (`otherAgents`): their Cards, apart.
     pub others: Vec<TafRow>,
-    /// The tafs being set up (`settingUp`), among Your tafs: each row, and Discard's button words
-    /// for the person whose setup it was.
-    pub setting_up: Vec<(TafRow, Option<String>)>,
+    /// The tafs being set up (`settingUp`), among Your tafs: each row, and Discard for the person
+    /// whose setup it was.
+    pub setting_up: Vec<(TafRow, Option<Discard>)>,
     /// tafs cloud's line for the plan, only when it needs the owner, and its tone (the balance
     /// read's `home_line`, `plan_tone`).
     pub plan: Option<(String, String)>,
@@ -208,8 +228,8 @@ pub struct SidebarLines {
     /// YOUR TAFS, with its rows, when the section shows.
     pub your_tafs_label: Option<String>,
     pub your_tafs: Vec<TafRow>,
-    /// The tafs being set up, after them: no page to open, and Discard's words when it's offered.
-    pub setting_up: Vec<(TafRow, Option<String>)>,
+    /// The tafs being set up, after them: no page to open, and Discard when it's offered.
+    pub setting_up: Vec<(TafRow, Option<Discard>)>,
     /// The line under Your tafs with no taf at all.
     pub no_tafs: Option<String>,
     /// SHARED WITH YOU, with the tafs shared with this person that are relevant now.
@@ -593,7 +613,17 @@ mod tests {
         let w = WordBook::load(&WordBook::default_root(), "en").unwrap();
         // None relevant now, but one being set up: Your tafs shows, with it.
         let mut m = signed_in(vec![(row("a"), false)]);
-        m.setting_up = vec![(row("s"), Some("Discard".into()))];
+        m.setting_up = vec![(
+            row("s"),
+            Some(Discard {
+                agent: "agt_s".into(),
+                words: crate::home::DiscardWords {
+                    button: "Discard".into(),
+                    yes: "Discard".into(),
+                    ..Default::default()
+                },
+            }),
+        )];
         let l = m.lines(&w).unwrap();
         assert_eq!(l.your_tafs_label.as_deref(), Some("YOUR TAFS"));
         assert!(l.your_tafs.is_empty());

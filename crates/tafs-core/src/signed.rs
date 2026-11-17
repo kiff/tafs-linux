@@ -147,6 +147,38 @@ pub fn signed(method: &str, path: &str) -> bool {
         || answers_hold(method, path)
 }
 
+/// Whether tafs cloud takes `method` on `path` only after the device has checked the person or
+/// signed with its approval key (`useVersion`, `removeTaf`, a trial opened on a KIFF draft the
+/// phone signed, a trial installed): a version switched to or made live, a trial opened or
+/// installed, a taf removed for good. This computer never sends one, by path as well as by `Act`.
+pub fn signed_at_cloud(method: &str, path: &str) -> bool {
+    if path.contains("//") || path.contains("/./") || path.contains("/../") || path.ends_with("/..")
+    {
+        return true;
+    }
+    let path = path.split(['?', '#']).next().unwrap_or(path);
+    let path = path.trim_end_matches('/');
+    let p = parts(path);
+    // `discardSettingUp`: signed by the approval key, as a removal is.
+    if method == "POST"
+        && path.starts_with("/v1/home/setting-up/")
+        && p.len() == 6
+        && p[5] == "discard"
+    {
+        return true;
+    }
+    if !path.starts_with("/v1/tafs/") || p.len() < 4 || p[3].is_empty() {
+        return false;
+    }
+    matches!(
+        (method, &p[4..]),
+        ("DELETE", [])
+            | ("POST", ["versions", _, "switch" | "live"])
+            | ("PUT", ["trial"])
+            | ("POST", ["trial", "install"])
+    )
+}
+
 /// A path part, escaped (`KIFFClient.escaped`).
 fn escaped(v: &str) -> String {
     crate::access::escaped(v)
@@ -207,10 +239,24 @@ pub enum Act {
     MakeLive { taf: String, version: i64 },
     /// `removeTaf`: Remove for good, the `DELETE` to tafs cloud signed by the approval key.
     RemoveTaf { taf: String },
+    /// `resumeHalt`: a halted taf resumed, or every taf with no agent, confirmed by the device
+    /// (`tafs.resume.v1`) and signed.
+    Resume { agent: Option<String> },
+    /// `startTrying`: a version's trial opened on the KIFF draft the phone confirmed.
+    StartTrial { taf: String },
+    /// `installTrial`: the version tried made live, once the phone confirmed its draft.
+    InstallTrial { taf: String },
+    /// `goBackFromTrial`: the trial's KIFF draft ended with the setup signer, then the trial.
+    EndTrial { draft: String },
+    /// `discardSettingUp`: a taf being set up discarded, its Cards revoked and tafs cloud's
+    /// `POST` signed by the approval key, as a removal is.
+    DiscardSettingUp { agent: String },
     /// `answerYourStep`: Done or Skip it on a step a taf handed its owner.
     AnswerStep { handoff: String },
     /// `approveOnce`: a held call approved once, from the dial's face.
     ApproveOnce { call: String },
+    /// `dismissCardUnit`: a Card unit request dismissed, signed like a refusal (`reject`).
+    DismissCardUnit { exception: String },
     /// `approveKnobEvent`: an app event's subscription at planque, signed by the device.
     ApproveEvent { grant: String, event: String },
     /// `share(agent:with:)`: a taf shared with a group or a person, from Share's second step.
@@ -282,9 +328,32 @@ impl Act {
             ),
             Act::ConnectAgain { grant } => ("POST", format!("grants/{}/approve", escaped(grant))),
             Act::RemoveTaf { taf } => ("DELETE", format!("/v1/tafs/{}", escaped(taf))),
+            Act::Resume { agent } => (
+                "POST",
+                match agent {
+                    Some(a) => format!("/v1/agents/{}/resume", escaped(a)),
+                    None => "/v1/resume".into(),
+                },
+            ),
+            Act::StartTrial { taf } => ("PUT", format!("/v1/tafs/{}/trial", escaped(taf))),
+            Act::InstallTrial { taf } => {
+                ("POST", format!("/v1/tafs/{}/trial/install", escaped(taf)))
+            }
+            Act::EndTrial { draft } => (
+                "DELETE",
+                format!("/v1/me/agent-drafts/{}/trial", escaped(draft)),
+            ),
+            Act::DiscardSettingUp { agent } => (
+                "POST",
+                format!("/v1/home/setting-up/{}/discard", escaped(agent)),
+            ),
             Act::ApproveOnce { call } => (
                 "POST",
                 format!("/v1/me/card-exceptions/{}/approve-once", escaped(call)),
+            ),
+            Act::DismissCardUnit { exception } => (
+                "POST",
+                format!("/v1/me/card-exceptions/{}/reject", escaped(exception)),
             ),
             Act::ApproveEvent { grant, .. } => {
                 ("POST", format!("grants/{}/triggers", escaped(grant)))
@@ -325,7 +394,14 @@ impl Act {
     /// Whether the device checks the person, or signs with its approval key, before a tafs
     /// cloud call (`useVersion`, `removeTaf`): this computer never sends it.
     pub fn at_device(&self) -> bool {
-        matches!(self, Act::MakeLive { .. } | Act::RemoveTaf { .. })
+        matches!(
+            self,
+            Act::MakeLive { .. }
+                | Act::RemoveTaf { .. }
+                | Act::DiscardSettingUp { .. }
+                | Act::StartTrial { .. }
+                | Act::InstallTrial { .. }
+        )
     }
 
     /// The call goes to planque, which this computer never reaches (`session::may_send_to`).
@@ -437,10 +513,25 @@ mod tests {
                 version: 8,
             },
             Act::RemoveTaf { taf: "t1".into() },
+            Act::DiscardSettingUp {
+                agent: "agt_1".into(),
+            },
+            Act::Resume {
+                agent: Some("agt_1".into()),
+            },
+            Act::Resume { agent: None },
+            Act::StartTrial { taf: "t1".into() },
+            Act::InstallTrial { taf: "t1".into() },
+            Act::EndTrial {
+                draft: "drf_t".into(),
+            },
             Act::AnswerStep {
                 handoff: "h1".into(),
             },
             Act::ApproveOnce { call: "ce1".into() },
+            Act::DismissCardUnit {
+                exception: "ce2".into(),
+            },
             Act::ApproveEvent {
                 grant: "g1".into(),
                 event: "NEW_TICKET".into(),
@@ -459,6 +550,38 @@ mod tests {
     }
 
     #[test]
+    fn what_the_device_signs_at_tafs_cloud_is_never_sent() {
+        for (m, p) in [
+            ("DELETE", "/v1/tafs/t1"),
+            ("DELETE", "/v1/tafs/t1/"),
+            ("POST", "/v1/tafs/t1/versions/3/switch"),
+            ("POST", "/v1/tafs/t1/versions/3/live?x=1"),
+            ("PUT", "/v1/tafs/t1/trial"),
+            ("POST", "/v1/tafs/t1/trial/install"),
+            ("POST", "/v1/tafs/t1//versions/3/live"),
+            ("POST", "/v1/home/setting-up/agt_1/discard"),
+        ] {
+            assert!(signed_at_cloud(m, p), "{m} {p}");
+        }
+        // What the iPad sends unsigned: a door, a memory note, the trial's chat, going back.
+        for (m, p) in [
+            ("DELETE", "/v1/tafs/t1/doors/d1"),
+            ("DELETE", "/v1/tafs/t1/memory/n1"),
+            ("POST", "/v1/tafs/t1/trial/messages"),
+            ("DELETE", "/v1/tafs/t1/trial"),
+            ("DELETE", "/v1/tafs/t1/switching"),
+            ("POST", "/v1/home/coach-waiting/set-aside"),
+        ] {
+            assert!(!signed_at_cloud(m, p), "{m} {p}");
+        }
+        // Every act the device signs at tafs cloud is one of them.
+        for act in acts().iter().filter(|a| a.at_device()) {
+            let (m, p) = act.route();
+            assert!(signed_at_cloud(m, &p), "{act:?}");
+        }
+    }
+
+    #[test]
     fn no_signed_act_makes_a_request() {
         for act in acts() {
             let (method, path) = act.route();
@@ -469,10 +592,10 @@ mod tests {
                 continue;
             }
             if act.at_device() {
-                // The device signs or checks first; the app never sends it.
-                assert!(path.starts_with("/v1/tafs/t1"), "{act:?}");
+                // The device signs or checks first; the app never sends it, by path too.
+                assert!(signed_at_cloud(method, &path), "{act:?}");
                 assert!(
-                    matches!(method, "POST" | "DELETE"),
+                    matches!(method, "POST" | "PUT" | "DELETE"),
                     "{act:?} changes something"
                 );
                 continue;

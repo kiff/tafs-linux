@@ -11,8 +11,8 @@ use chrono::{DateTime, Duration, Utc};
 use serde_json::{json, Map, Value};
 
 use crate::coach::{
-    array_if, bool_if, field, object, text, text_if, Answer, Chat, ChatMessage, From, Kind,
-    MessageKind, Question, Read, SetupThread, Steering, SteeringMessage, PENDING,
+    array_if, bool_if, field, object, text, text_if, Answer, Attachment, Chat, ChatMessage, From,
+    Kind, MessageKind, Question, Read, SetupThread, Steering, SteeringMessage, PENDING,
 };
 use crate::words::{WordBook, WordsError};
 use crate::work::segment;
@@ -103,12 +103,16 @@ impl ChatTarget {
 }
 
 /// `MessageBody` as `JSONEncoder` writes it: an absent option is left out, `new_chat` and
-/// `new_chat_after_handover` only when true. No files: attachments aren't on this computer.
-pub fn message_body(text: &str, target: &ChatTarget) -> Vec<u8> {
+/// `new_chat_after_handover` only when true, and the files' ids only when there are some.
+pub fn message_body(text: &str, target: &ChatTarget, files: &[Attachment]) -> Vec<u8> {
     let mut body = Map::new();
     body.insert("text".into(), json!(text));
     if let Some(s) = &target.session {
         body.insert("session".into(), json!(s));
+    }
+    if !files.is_empty() {
+        let ids: Vec<&str> = files.iter().map(|f| f.id.as_str()).collect();
+        body.insert("attachments".into(), json!(ids));
     }
     if target.new_chat {
         body.insert("new_chat".into(), json!(true));
@@ -627,6 +631,8 @@ pub struct Delivery {
     pub text: String,
     pub target: ChatTarget,
     pub generation: u64,
+    /// The files it carries.
+    pub files: Vec<Attachment>,
 }
 
 /// What Submit does with the composer's words (`submitSetup`).
@@ -819,8 +825,22 @@ impl Conversation {
     /// `deliverSetupOnce`'s start: the message shown at once, the way it was sent, until tafs
     /// cloud's copy takes its place. None when it isn't tried.
     pub fn deliver(&mut self, text: &str, now: DateTime<Utc>) -> Option<Delivery> {
+        self.deliver_with(text, vec![], now)
+    }
+
+    /// `submitSetup` with files: a message of their own, the words with them or none
+    /// (`deliverSetup(text, files:)`). None when it isn't tried.
+    pub fn deliver_with(
+        &mut self,
+        text: &str,
+        files: Vec<Attachment>,
+        now: DateTime<Utc>,
+    ) -> Option<Delivery> {
         let text = text.trim();
-        if text.is_empty() || text.chars().count() > CHAT_LIMIT || self.setup.is_none() {
+        if (text.is_empty() && files.is_empty())
+            || text.chars().count() > CHAT_LIMIT
+            || self.setup.is_none()
+        {
             return None;
         }
         if self.sending {
@@ -837,7 +857,7 @@ impl Conversation {
             session: PENDING.into(),
             door: None,
             work: None,
-            attachments: vec![],
+            attachments: files.clone(),
             server_id: None,
             answers: None,
             delivered: None,
@@ -852,6 +872,7 @@ impl Conversation {
             text: text.into(),
             target: self.target(),
             generation: self.generation,
+            files,
         })
     }
 
@@ -1191,17 +1212,17 @@ mod tests {
     fn a_message_goes_where_coach_is_shown_and_follows_a_new_chat() {
         let fresh = ChatTarget::coach(true, Some("sess1"));
         assert_eq!(
-            v(&message_body("Hi", &fresh)),
+            v(&message_body("Hi", &fresh, &[])),
             json!({"text": "Hi", "new_chat": true, "new_chat_after_handover": true})
         );
         let shown = ChatTarget::coach(false, Some("sess1"));
         assert_eq!(
-            v(&message_body("Hi", &shown)),
+            v(&message_body("Hi", &shown, &[])),
             json!({"text": "Hi", "session": "sess1", "new_chat_after_handover": true})
         );
         let live = ChatTarget::coach(false, None);
         assert_eq!(
-            v(&message_body("Hi", &live)),
+            v(&message_body("Hi", &live, &[])),
             json!({"text": "Hi", "new_chat_after_handover": true})
         );
         assert_eq!(

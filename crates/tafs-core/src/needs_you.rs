@@ -83,6 +83,8 @@ pub struct CardUnitLines {
     pub history: String,
     /// The Coach button's words, when it's offered (`canDiscuss`).
     pub discuss: Option<String>,
+    /// What goes in Coach's box when it's tapped (`coach_text`), for the person to send.
+    pub coach_text: String,
     pub dismiss: String,
 }
 
@@ -94,6 +96,7 @@ pub fn card_unit_lines(ask: &crate::waits::CardUnitException, discuss: bool) -> 
         words: ask.words.clone(),
         history: ask.history.clone(),
         discuss: discuss.then(|| ask.action_title.clone()),
+        coach_text: ask.coach_text.clone(),
         dismiss: ask.dismiss_title.clone(),
     }
 }

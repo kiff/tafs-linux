@@ -5,6 +5,7 @@ mod ai_consent;
 mod alerts;
 mod app_event_sheet;
 mod approval;
+mod attach;
 mod brief;
 mod calendar;
 mod chat;
@@ -47,6 +48,7 @@ mod style;
 mod taf;
 mod taf_chat;
 mod usage;
+mod versions;
 mod welcome;
 mod widgets;
 mod work_panel;
@@ -162,6 +164,13 @@ struct Options {
     /// With `--home`: the KIFF account as `GET /v1/me` answers it, for screens drawn by who may
     /// do what.
     me: Option<String>,
+    /// A chat's tray of attached files, for the screenshots.
+    attach: Option<String>,
+    /// KIFF's held calls (`GET /v1/me/card-exceptions?status=held`), beside `--home`.
+    held: Option<String>,
+    /// A taf's versions and its open trial, as tafs cloud answers them, for the screenshots.
+    versions: Option<String>,
+    trial: Option<String>,
     /// With `--home`: a taf's notes as tafs cloud answers `GET /v1/tafs/{id}/memory`, for See all.
     memory: Option<String>,
     /// With `--home`: a page of a taf's runs as tafs cloud answers `GET /v1/tafs/{id}/work/runs`.
@@ -204,7 +213,7 @@ struct Options {
 }
 
 const USAGE: &str = "tafs [--lang en|de|fr|es|it|pt|nl|pl] [--theme light|dark] [--sample] [--signed-in] [--view-only [--paired]]
-     [--home contract.json] [--usage answers.json] [--people answers.json] [--connect answers.json] [--knob answer.json] [--setup answer.json] [--taf-activity answer.json] [--unproven answers.json] [--recipes answers.json] [--gallery answers.json] [--halt answer.json] [--record-search answers.json] [--access answer.json] [--receipts answer.json] [--activity answer.json] [--calls answer.json] [--receipt answer.json] [--work answer.json] [--doors answer.json] [--account-reads answers.json] [--me answer.json] [--memory answer.json] [--runs answer.json] [--request answer.json] [--balance answer.json] [--coach answer.json] [--coach-chats answer.json] [--coach-drafts answers.json] [--chat answer.json [--report]] [--brief answer.json] [--mission-log answer.json] [--coach-setup answer.json] [--unreachable network|error] [--app-event item.json] [--size WxH] [--page welcome|sign-in|pair|recipe:<id>|gallery|new-taf|halt-all|halt:<id>|record-search:<q>|record-export|receipt:<proposal id>|run:<taf id>|pin-sheet|share:<key>|share-step2:<key>|coach|coach-tools|coach-full|coach-hand:<id>|overview|overview-label:<id>|needs-you|brief-answer:<decision id>|mission-log:<mission id>|record|calendar|calendar-week|usage|usage-ask|usage-decline|connect-apps|connect-app|connect-connection|connect-remove|connect-which-taf|connect-approve|account|kiff-account|time-zone|time-zone-use|alerts|devices|devices-sign-out|people|people-rename|people-add|taf|taf-card|taf-setup|taf-setup:<id>|starts:<id>|results:<id>|doors:<id>[:<door>]|consent|connected|sign-in-code] [--screenshot out.png]";
+     [--home contract.json] [--usage answers.json] [--people answers.json] [--connect answers.json] [--knob answer.json] [--setup answer.json] [--taf-activity answer.json] [--unproven answers.json] [--recipes answers.json] [--gallery answers.json] [--halt answer.json] [--record-search answers.json] [--access answer.json] [--receipts answer.json] [--activity answer.json] [--calls answer.json] [--receipt answer.json] [--work answer.json] [--doors answer.json] [--account-reads answers.json] [--me answer.json] [--attach files.json] [--held answers.json] [--versions answer.json [--trial answer.json]] [--memory answer.json] [--runs answer.json] [--request answer.json] [--balance answer.json] [--coach answer.json] [--coach-chats answer.json] [--coach-drafts answers.json] [--chat answer.json [--report]] [--brief answer.json] [--mission-log answer.json] [--coach-setup answer.json] [--unreachable network|error] [--app-event item.json] [--size WxH] [--page welcome|sign-in|pair|recipe:<id>|gallery|new-taf|halt-all|halt:<id>|halt-resume:<id>|record-search:<q>|record-export|receipt:<proposal id>|run:<taf id>|pin-sheet|share:<key>|share-step2:<key>|coach|coach-tools|coach-full|coach-hand:<id>|overview|overview-label:<id>|needs-you|discard-setup|needs-you-set-all-aside|needs-you-dismiss|needs-you-hold:<id>|versions:<key>|trial:<key>|brief-answer:<decision id>|mission-log:<mission id>|record|calendar|calendar-week|usage|usage-ask|usage-decline|connect-apps|connect-app|connect-connection|connect-remove|connect-which-taf|connect-approve|account|kiff-account|time-zone|time-zone-use|alerts|devices|devices-sign-out|people|people-rename|people-add|taf|taf-card|taf-setup|taf-setup:<id>|starts:<id>|results:<id>|doors:<id>[:<door>]|consent|connected|sign-in-code] [--screenshot out.png]";
 
 fn options() -> Result<Options, String> {
     let mut o = Options::default();
@@ -237,6 +246,10 @@ fn options() -> Result<Options, String> {
             "--taf-activity" => o.taf_activity = Some(value()?),
             "--account-reads" => o.account_reads = Some(value()?),
             "--me" => o.me = Some(value()?),
+            "--attach" => o.attach = Some(value()?),
+            "--held" => o.held = Some(value()?),
+            "--versions" => o.versions = Some(value()?),
+            "--trial" => o.trial = Some(value()?),
             "--memory" => o.memory = Some(value()?),
             "--runs" => o.runs = Some(value()?),
             "--balance" => o.balance = Some(value()?),
@@ -296,8 +309,15 @@ fn main() -> glib::ExitCode {
 /// The page a screenshot or `--page` opens beside the sidebar.
 fn selection_of(page: Option<&str>) -> Selection {
     match page {
-        Some("needs-you") => Selection::NeedsYou,
+        Some("needs-you" | "needs-you-set-all-aside" | "needs-you-dismiss") => Selection::NeedsYou,
         Some(other) if other.starts_with("brief-answer:") => Selection::NeedsYou,
+        Some(other) if other.starts_with("needs-you-hold:") => Selection::NeedsYou,
+        Some(other) if other.starts_with("versions:") => {
+            Selection::Taf(other["versions:".len()..].into())
+        }
+        Some(other) if other.starts_with("trial:") => {
+            Selection::Taf(other["trial:".len()..].into())
+        }
         Some(other) if other.starts_with("mission-log:") => Selection::NeedsYou,
         Some("record") => Selection::Record,
         Some("calendar") | Some("calendar-week") => Selection::Calendar,
@@ -333,6 +353,9 @@ fn selection_of(page: Option<&str>) -> Selection {
         Some("record-export") => Selection::Record,
         Some(other) if other.starts_with("receipt:") => Selection::Record,
         Some(other) if other.starts_with("halt:") => Selection::Halt(other["halt:".len()..].into()),
+        Some(other) if other.starts_with("halt-resume:") => {
+            Selection::Halt(other["halt-resume:".len()..].into())
+        }
         Some(other) if other.starts_with("taf-card:") => {
             Selection::Taf(other["taf-card:".len()..].into())
         }
@@ -555,6 +578,32 @@ fn activate(app: &adw::Application, o: &Options) {
             share::OPEN_STEP2.with(|s| s.set(page.starts_with("share-step2:")));
         }
     }
+    // `--versions` (and `--trial`): a taf's versions read from files; `--page versions:<key>` or
+    // `trial:<key>` opens its sheet over that taf's page.
+    if let Some(path) = &o.versions {
+        versions::FILES
+            .with(|f| *f.borrow_mut() = Some((path.into(), o.trial.as_ref().map(Into::into))));
+    }
+    match o.page.as_deref() {
+        Some(p) if p.starts_with("versions:") => {
+            versions::OPEN.with(|v| *v.borrow_mut() = Some("versions"))
+        }
+        Some(p) if p.starts_with("trial:") => {
+            versions::OPEN.with(|v| *v.borrow_mut() = Some("trial"))
+        }
+        _ => {}
+    }
+    // `--page needs-you-hold:<id>`: as a hold's notification opens it, that hold brought into view.
+    if let Some(id) = o
+        .page
+        .as_deref()
+        .and_then(|p| p.strip_prefix("needs-you-hold:"))
+    {
+        needs_you::request_hold(id);
+    }
+    if let Some(path) = &o.attach {
+        attach::SEED.with(|s| *s.borrow_mut() = Some(path.into()));
+    }
     if o.page.as_deref() == Some("delete-account") {
         kiff_account::OPEN_DELETE.with(|d| d.set(true));
     }
@@ -577,18 +626,26 @@ fn activate(app: &adw::Application, o: &Options) {
         Some("devices-sign-out") => devices::OPEN_SIGN_OUT.with(|d| d.set(true)),
         Some("time-zone-use") => zones::TAP_USE_HERE.with(|t| t.set(true)),
         Some("usage-ask") => usage::OPEN.with(|u| u.set(Some("ask"))),
+        Some(p) if p.starts_with("halt-resume:") => halt::RESUME.with(|r| r.set(true)),
+        Some("discard-setup") => shell::DISCARD.with(|d| d.set(true)),
+        Some("needs-you-set-all-aside") => needs_you::OPEN.with(|a| a.set(Some("set-all-aside"))),
+        Some("needs-you-dismiss") => needs_you::OPEN.with(|a| a.set(Some("dismiss"))),
         Some("coach-tools") => coach::OPEN_TOOLS.with(|t| t.set(true)),
         Some("coach-full") => coach_mode::START_FULL.with(|f| f.set(true)),
         Some("usage-decline") => usage::OPEN.with(|u| u.set(Some("decline-tapped"))),
         _ => {}
     }
-    // A hold's notification, clicked (`app.open-hold`): Needs you, read again. A screenshot
+    // A hold's notification, clicked (`app.open-hold`): Needs you, read again, and the hold
+    // brought into view once it's listed. A screenshot
     // sends none.
     if !screenshot {
         let action = gio::SimpleAction::new("open-hold", Some(glib::VariantTy::STRING));
         let me = Rc::downgrade(&app_state);
-        action.connect_activate(move |_, _| {
+        action.connect_activate(move |_, hold| {
             if let Some(me) = me.upgrade() {
+                if let Some(id) = hold.and_then(|h| h.get::<String>()) {
+                    needs_you::request_hold(&id);
+                }
                 me.open_hold();
             }
         });
@@ -606,7 +663,7 @@ fn activate(app: &adw::Application, o: &Options) {
     let from_file = o.home.as_deref().map(|path| match read_contract(path) {
         Some(home) => Rc::new(Cloud {
             home,
-            held: vec![],
+            held: held_file(o.held.as_deref()),
             account: o.me.as_deref().map(|path| {
                 std::fs::read(path)
                     .ok()
@@ -2065,6 +2122,23 @@ impl App {
                 }
             })
         };
+        // Coach's waiting chats set aside at tafs cloud, from a kept session; then Home again.
+        let set_aside = match (mode, self.kept.borrow().as_ref()) {
+            (Mode::Kiff, Some(kept)) => Some(Rc::new(needs_you::SetAsideSource {
+                kept: kept.clone(),
+                languages: self.languages.clone(),
+                refresh: {
+                    let (me, kept) = (Rc::downgrade(self), kept.clone());
+                    Rc::new(move || {
+                        if let Some(me) = me.upgrade() {
+                            me.read_account(kept.clone(), view_only);
+                        }
+                    })
+                },
+                signed_out: signed_out.clone(),
+            })),
+            _ => None,
+        };
         let tafs =
             Rc::new(self.taf_pages(mode, &model, cloud.as_deref(), may_answer, at, signed_out));
         // Your brief, signed in with KIFF once tafs cloud sends one: read again for a label at
@@ -2148,6 +2222,7 @@ impl App {
                 .unwrap_or_default(),
         );
         let screens = shell::Screens {
+            set_aside,
             share,
             share_agents,
             account_email: account.as_ref().and_then(|a| a.email.clone()),
@@ -2601,7 +2676,13 @@ fn home_model(
         setting_up: h
             .setting_up()
             .iter()
-            .map(|s| (s.row(), s.discard.as_ref().map(|d| d.button.clone())))
+            .map(|s| {
+                let discard = s.discard.as_ref().map(|d| tafs_core::sidebar::Discard {
+                    agent: s.kiff_agent.clone(),
+                    words: d.clone(),
+                });
+                (s.row(), discard)
+            })
             .collect(),
         ..kiff_model()
     };
@@ -2907,6 +2988,23 @@ fn access_file(
 
 /// `--unproven`'s file, as KIFF answers `GET /v1/me/did-this-happen`. None given, none waiting;
 /// a file that can't be read stops the app, as a broken `--home` does.
+/// KIFF's held calls from a file, as `GET /v1/me/card-exceptions?status=held` answers.
+fn held_file(path: Option<&str>) -> Vec<CardException> {
+    let Some(path) = path else {
+        return vec![];
+    };
+    match std::fs::read(path)
+        .ok()
+        .and_then(|b| tafs_core::held::read_held(&b))
+    {
+        Some(calls) => calls,
+        None => {
+            eprintln!("{path} isn't KIFF's held calls as it answers them");
+            std::process::exit(2);
+        }
+    }
+}
+
 fn unproven_file(path: Option<&str>) -> Vec<tafs_core::unproven::Unproven> {
     let Some(path) = path else {
         return vec![];

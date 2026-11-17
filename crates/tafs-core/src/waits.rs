@@ -115,12 +115,14 @@ impl CoachWaiting {
     }
 }
 
-/// "Set all aside": its button, the ask's title and its yes.
+/// "Set all aside": its button, the ask's title, its words, and its yes and no.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct CoachWaitingClear {
     pub button: String,
     pub title: String,
+    pub text: String,
     pub yes: String,
+    pub no: String,
 }
 
 impl<'de> Deserialize<'de> for CoachWaitingClear {
@@ -130,7 +132,9 @@ impl<'de> Deserialize<'de> for CoachWaitingClear {
         Ok(CoachWaitingClear {
             button: trimmed(&words, "button"),
             title: trimmed(&words, "title"),
+            text: trimmed(&words, "text"),
             yes: trimmed(&words, "yes"),
+            no: trimmed(&words, "no"),
         })
     }
 }
@@ -141,9 +145,68 @@ impl CoachWaitingClear {
     }
 }
 
+/// Where one waiting chat is set aside, or every one with none (`setAsidePath`): tafs cloud's
+/// "not now", never an approval. Nothing is signed.
+pub fn set_aside_path(session: Option<&str>) -> String {
+    match session {
+        Some(s) => format!(
+            "/v1/home/coach-waiting/{}/set-aside",
+            crate::access::escaped(s)
+        ),
+        None => "/v1/home/coach-waiting/set-aside".into(),
+    }
+}
+
+/// What setting chats aside did (`SetAside`): the chats it ended. None when the answer can't be
+/// read as an object; a field it can't read is empty, as the iPad's.
+pub fn read_set_aside(body: &[u8]) -> Option<Vec<String>> {
+    let v: Value = serde_json::from_slice(body).ok()?;
+    v.as_object()?;
+    Some(
+        v.get("set_aside")
+            .and_then(Value::as_array)
+            .map(|a| {
+                a.iter()
+                    .filter_map(Value::as_str)
+                    .map(str::to_string)
+                    .collect()
+            })
+            .unwrap_or_default(),
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn setting_aside_is_tafs_cloud_s_and_signs_nothing() {
+        assert_eq!(
+            set_aside_path(Some("s 1/x")),
+            "/v1/home/coach-waiting/s%201%2Fx/set-aside"
+        );
+        assert_eq!(set_aside_path(None), "/v1/home/coach-waiting/set-aside");
+        for p in [set_aside_path(Some("s1")), set_aside_path(None)] {
+            assert!(!crate::signed::signed("POST", &p), "{p}");
+        }
+        assert_eq!(
+            read_set_aside(br#"{"set_aside":["s1","s2"],"withdrawn":1}"#).unwrap(),
+            ["s1", "s2"]
+        );
+        assert_eq!(
+            read_set_aside(br#"{"already":true}"#).unwrap(),
+            Vec::<String>::new()
+        );
+        assert_eq!(read_set_aside(b"[]"), None);
+        let clear: CoachWaitingClear = serde_json::from_str(
+            r#"{"words":{"button":"Set all aside","title":"End 2?","text":" Their asks go. ","yes":"End them","no":"Keep"}}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            (clear.text.as_str(), clear.no.as_str()),
+            ("Their asks go.", "Keep")
+        );
+    }
 
     #[test]
     fn steps_need_their_handoff_and_coach_waits_never_fail() {

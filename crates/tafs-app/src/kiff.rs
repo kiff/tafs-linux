@@ -157,7 +157,7 @@ pub fn run_now(token: &str, languages: &[&str], taf: &str) -> Result<Answer, Kif
 /// the session. It does no work and signs nothing.
 pub fn send_again(token: &str, languages: &[&str], path: &str) -> Result<Answer, KiffError> {
     let url = format!("{}{path}", tafs_core::home::TAFS_CLOUD);
-    if !may_send_to(&url) {
+    if !may_send_to(&url) || tafs_core::signed::signed_at_cloud("POST", path) {
         return Err(KiffError::Unreadable);
     }
     Kiff::read(
@@ -181,7 +181,11 @@ pub fn cloud_send(
     body: Option<&[u8]>,
 ) -> Result<Answer, KiffError> {
     let url = format!("{}{path}", tafs_core::home::TAFS_CLOUD);
-    if !may_send_to(&url) || !matches!(method, "POST" | "PUT" | "PATCH" | "DELETE") {
+    // What the device signs at tafs cloud is never sent from here, whatever builds its path.
+    if !may_send_to(&url)
+        || !matches!(method, "POST" | "PUT" | "PATCH" | "DELETE")
+        || tafs_core::signed::signed_at_cloud(method, path)
+    {
         return Err(KiffError::Unreadable);
     }
     let request = agent()
@@ -197,6 +201,35 @@ pub fn cloud_send(
     })
 }
 
+/// Coach's waiting chats set aside (`TafsCloud.setAsideCoach`): one, or every one, at tafs cloud
+/// as the session. It signs nothing; this device's signed read of its connections (`proof`), when
+/// it has one, goes as `Planque-Device-Signature` so tafs cloud can withdraw a connection the chat
+/// asked for. Neither the token nor the proof is ever logged.
+pub fn set_aside(
+    token: &str,
+    languages: &[&str],
+    path: &str,
+    proof: Option<&str>,
+) -> Result<Answer, KiffError> {
+    let url = format!("{}{path}", tafs_core::home::TAFS_CLOUD);
+    if !may_send_to(&url)
+        || tafs_core::signed::signed("POST", path)
+        || tafs_core::signed::signed_at_cloud("POST", path)
+    {
+        return Err(KiffError::Unreadable);
+    }
+    let mut request = agent()
+        .post(&url)
+        .set("Accept", "application/json")
+        .set("Accept-Language", &accept_language(languages))
+        .set("Authorization", &format!("Bearer {token}"))
+        .set("Content-Type", "application/json");
+    if let Some(proof) = proof {
+        request = request.set(tafs_core::planque::HEADER, proof);
+    }
+    Kiff::read(request.send_bytes(b"{}"))
+}
+
 /// A knock answered (`TafsCloud.answerKnock`): "do", "pair" or "ignore", at tafs cloud as the
 /// session. It signs nothing.
 pub fn answer_knock(
@@ -206,7 +239,7 @@ pub fn answer_knock(
     body: &[u8],
 ) -> Result<Answer, KiffError> {
     let url = format!("{}{path}", tafs_core::home::TAFS_CLOUD);
-    if !may_send_to(&url) {
+    if !may_send_to(&url) || tafs_core::signed::signed_at_cloud("POST", path) {
         return Err(KiffError::Unreadable);
     }
     Kiff::read(
@@ -301,6 +334,69 @@ pub fn kiff_send(
             .set("Content-Type", "application/json")
             .send_bytes(call.body()),
     )
+}
+
+/// A file's bytes, straight to storage where tafs cloud said (`TafsCloud.upload`): no session
+/// goes with them, only the headers tafs cloud gave, and only to an HTTPS address. Two minutes.
+pub fn upload(to: &tafs_core::attach::Upload, data: &[u8]) -> Result<u16, KiffError> {
+    if !to.sendable() {
+        return Err(KiffError::Unreadable);
+    }
+    let agent = ureq::AgentBuilder::new()
+        .timeout_connect(Duration::from_secs(15))
+        .timeout(Duration::from_secs(120))
+        .redirects(0)
+        .user_agent("tafs-linux")
+        .try_proxy_from_env(true)
+        .build();
+    let mut request = agent.request(&to.method, &to.url);
+    for (name, value) in &to.headers {
+        request = request.set(name, value);
+    }
+    match request.send_bytes(data) {
+        Ok(r) => Ok(r.status()),
+        Err(ureq::Error::Status(status, _)) => Ok(status),
+        Err(ureq::Error::Transport(_)) => Err(KiffError::Offline),
+    }
+}
+
+/// A sent file's bytes from the storage address tafs cloud gave (`TafsCloud.attachment`): no
+/// session goes with it, only to HTTPS, no redirect followed, and at most what a file may weigh.
+pub fn download(url: &str) -> Result<Answer, KiffError> {
+    if !tafs_core::attach::storage_address(url) {
+        return Err(KiffError::Unreadable);
+    }
+    let response = match ureq::AgentBuilder::new()
+        .timeout_connect(Duration::from_secs(15))
+        .timeout(Duration::from_secs(120))
+        .redirects(0)
+        .user_agent("tafs-linux")
+        .try_proxy_from_env(true)
+        .build()
+        .get(url)
+        .call()
+    {
+        Ok(r) => r,
+        Err(ureq::Error::Status(status, _)) => {
+            return Ok(Answer {
+                status,
+                body: vec![],
+            })
+        }
+        Err(ureq::Error::Transport(_)) => return Err(KiffError::Offline),
+    };
+    let status = response.status();
+    let mut body = Vec::new();
+    let most = tafs_core::attach::READ_AT_MOST;
+    response
+        .into_reader()
+        .take(most + 1)
+        .read_to_end(&mut body)
+        .map_err(|_| KiffError::Offline)?;
+    if body.len() as u64 > most {
+        return Err(KiffError::Unreadable);
+    }
+    Ok(Answer { status, body })
 }
 
 /// `GET /v1/me/devices` at KIFF as the session (`devices()`).

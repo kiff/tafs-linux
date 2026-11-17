@@ -13,7 +13,11 @@ export XDG_CONFIG_HOME=$(mktemp -d)
 mkdir -p "$XDG_CONFIG_HOME/gtk-4.0"
 printf '[Settings]\ngtk-font-name=Inter 11\ngtk-hint-font-metrics=1\n' > "$XDG_CONFIG_HOME/gtk-4.0/settings.ini"
 missing=0
-for screen in welcome sign-in sign-in-code sign-in-narrow pair connected overview overview-home overview-empty overview-unread needs-you needs-you-empty needs-you-waits needs-you-happened record taf taf-card taf-home taf-home-card taf-card-lines taf-work taf-work-manage taf-next taf-card-manage taf-run taf-knocks doors doors-door taf-dial taf-setup-apps taf-starts taf-results taf-setup taf-units usage usage-kiff usage-kiff-member usage-ask usage-decline connect-apps connect-apps-narrow connect-app connect-connection connect-remove connect-kiff connect-which-taf connect-approve devices devices-sign-out people people-rename people-add share share-step2 kiff-account account-kiff consent time-zone time-zone-use language alerts calendar calendar-week calendar-compact account sidebar-sample sidebar-others sidebar-setting-up sidebar-unreachable sidebar-plan view-only view-only-paired recipes recipe-sheet gallery-strip gallery new-taf coach-hand halt-all halt-all-halted halt-one record-search record-export record-receipt record-on delete-account pin-sheet app-event coach coach-wider coach-asks coach-chats coach-empty coach-start coach-draft coach-draft-refused coach-tools coach-full coach-drive taf-chat taf-chat-working taf-report brief brief-answer brief-clear overview-labels overview-label mission-log; do
+# A held call from KIFF, held a moment ago and lapsing in ten minutes, as the iPad's card counts it.
+held=$(mktemp)
+sed -e "s/__HELD_AT__/$(date -u -d '-30 sec' +%FT%TZ)/" -e "s/__EXPIRES__/$(date -u -d '+10 min' +%FT%TZ)/" \
+  crates/tafs-app/fixtures/held-kiff.json > "$held"
+for screen in welcome sign-in sign-in-code sign-in-narrow pair connected overview overview-home overview-empty overview-unread needs-you needs-you-kiff needs-you-empty needs-you-waits needs-you-set-all-aside needs-you-dismiss needs-you-hold needs-you-happened record taf taf-card taf-home taf-home-card taf-card-lines taf-work taf-work-manage taf-next taf-card-manage taf-run taf-knocks doors doors-door taf-dial taf-setup-apps taf-starts taf-results taf-setup taf-units usage usage-kiff usage-kiff-member usage-ask usage-decline connect-apps connect-apps-narrow connect-app connect-connection connect-remove connect-kiff connect-which-taf connect-approve devices devices-sign-out people people-rename people-add share share-step2 kiff-account account-kiff consent time-zone time-zone-use language alerts calendar calendar-week calendar-compact account sidebar-sample sidebar-others sidebar-setting-up discard-setup sidebar-unreachable sidebar-plan view-only view-only-paired recipes recipe-sheet gallery-strip gallery new-taf coach-hand halt-all halt-all-halted halt-one halt-resume record-search record-export record-receipt record-on delete-account pin-sheet app-event coach coach-attach coach-wider coach-asks coach-chats coach-empty coach-start coach-draft coach-draft-refused coach-tools coach-full coach-drive taf-chat taf-chat-attach taf-versions taf-versions-trial taf-trial taf-chat-working taf-report brief brief-answer brief-clear overview-labels overview-label mission-log; do
   case $screen in
     welcome) opts=(--page welcome) ;;
     sign-in) opts=(--page sign-in) ;;
@@ -28,9 +32,17 @@ for screen in welcome sign-in sign-in-code sign-in-narrow pair connected overvie
     # Home couldn't be read yet: the mascot and "Couldn't load your tafs.", the Unreachable line.
     overview-unread) opts=(--view-only --unreachable network) ;;
     needs-you) opts=(--sample --signed-in --page needs-you) ;;
+    # A held call from KIFF, as this computer answers it: Answer in KIFF.
+    needs-you-kiff) opts=(--home shared/contracts/home.json --me crates/tafs-app/fixtures/me-manager.json --held "$held" --page needs-you) ;;
     # Nothing waiting: board 6 over its words.
     needs-you-empty) opts=(--home shared/contracts/home.json --page needs-you) ;;
     needs-you-waits) opts=(--home crates/tafs-app/fixtures/home-waits.json --page needs-you) ;;
+    # "Set all aside" tapped: tafs cloud's one ask, its yes and no. A Card unit request's Dismiss
+    # tapped: it's signed like a refusal, so the can't-approve line under it, nothing sent.
+    needs-you-set-all-aside) opts=(--home crates/tafs-app/fixtures/home-waits.json --page needs-you-set-all-aside) ;;
+    # A hold's notification clicked: Needs you with that request brought to the top.
+    needs-you-hold) opts=(--home crates/tafs-app/fixtures/home-waits.json --page needs-you-hold:exc-example) ;;
+    needs-you-dismiss) opts=(--home crates/tafs-app/fixtures/home-waits.json --page needs-you-dismiss) ;;
     needs-you-happened) opts=(--home shared/contracts/home.json --unproven crates/tafs-app/fixtures/unproven.json --page needs-you) ;;
     account) opts=(--sample --signed-in --page account) ;;
     calendar) opts=(--sample --signed-in --page calendar) ;;
@@ -89,6 +101,15 @@ for screen in welcome sign-in sign-in-code sign-in-narrow pair connected overvie
     taf-starts) opts=(--home shared/contracts/home.json --access crates/tafs-app/fixtures/access-manage.json --me crates/tafs-app/fixtures/me-manager.json --knob crates/tafs-app/fixtures/taf-knob-setup.json --doors crates/tafs-app/fixtures/taf-doors-dial.json --page starts:taf-aaaa0000000000000000) ;;
     taf-results) opts=(--home shared/contracts/home.json --access crates/tafs-app/fixtures/access-manage.json --me crates/tafs-app/fixtures/me-manager.json --knob crates/tafs-app/fixtures/taf-knob-setup.json --work crates/tafs-app/fixtures/taf-work.json --page results:taf-aaaa0000000000000000) ;;
     # A taf's chat from a file (synthetic: no contract for a taf's own thread at the pin): at rest, and at work.
+    # Files attached in a chat's box (synthetic): one ready, one going up, one that didn't go, each
+    # with its remove control; they go with the next message.
+    taf-chat-attach) opts=(--home shared/contracts/home.json --access crates/tafs-app/fixtures/access-manage.json --chat crates/tafs-app/fixtures/taf-chat.json --attach crates/tafs-app/fixtures/attach-tray.json --page taf:taf-aaaa0000000000000000) ;;
+    # A taf's versions (synthetic): newest first, the live one marked, an ended trial's line; and
+    # with a trial open, Resume; then the trial itself, its bar, guide and chat. What the phone
+    # signs is drawn up to the signature.
+    taf-versions) opts=(--home shared/contracts/home.json --access crates/tafs-app/fixtures/access-manage.json --chat crates/tafs-app/fixtures/taf-chat.json --versions crates/tafs-app/fixtures/versions.json --page versions:taf-aaaa0000000000000000) ;;
+    taf-versions-trial) opts=(--home shared/contracts/home.json --access crates/tafs-app/fixtures/access-manage.json --chat crates/tafs-app/fixtures/taf-chat.json --versions crates/tafs-app/fixtures/versions.json --trial crates/tafs-app/fixtures/trial.json --page versions:taf-aaaa0000000000000000) ;;
+    taf-trial) opts=(--home shared/contracts/home.json --access crates/tafs-app/fixtures/access-manage.json --chat crates/tafs-app/fixtures/taf-chat-working.json --versions crates/tafs-app/fixtures/versions.json --trial crates/tafs-app/fixtures/trial.json --page trial:taf-aaaa0000000000000000) ;;
     taf-chat) opts=(--home shared/contracts/home.json --access crates/tafs-app/fixtures/access-manage.json --chat crates/tafs-app/fixtures/taf-chat.json --page taf:taf-aaaa0000000000000000) ;;
     taf-chat-working) opts=(--home shared/contracts/home.json --chat crates/tafs-app/fixtures/taf-chat-working.json --page taf:taf-aaaa0000000000000000) ;;
     # Report this answer, open over the chat's last answer: its Send sends nothing.
@@ -99,6 +120,9 @@ for screen in welcome sign-in sign-in-code sign-in-narrow pair connected overvie
     taf-card) opts=(--sample --signed-in --page taf-card) ;;
     taf-home-card) opts=(--home shared/contracts/home.json --page taf-card:taf-aaaa0000000000000000) ;;
     sidebar-plan) opts=(--home shared/contracts/home.json --balance crates/tafs-app/fixtures/balance-home-line.json --page overview) ;;
+    # Discard tapped on a taf being set up, then its yes: tafs cloud's ask, then the can't-approve
+    # line under it (its yes is signed, as a removal is), nothing revoked or sent.
+    discard-setup) opts=(--home crates/tafs-app/fixtures/home-setting-up.json --me crates/tafs-app/fixtures/me-manager.json --coach-setup crates/tafs-app/fixtures/setup-coach.json --page discard-setup) ;;
     sidebar-setting-up) opts=(--home crates/tafs-app/fixtures/home-setting-up.json --me crates/tafs-app/fixtures/me-manager.json --coach-setup crates/tafs-app/fixtures/setup-coach.json --page overview) ;;
     # Home couldn't be read: the Unreachable line at the foot, as the app tries again (nothing is read).
     sidebar-unreachable) opts=(--home shared/contracts/home.json --me crates/tafs-app/fixtures/me-manager.json --unreachable network) ;;
@@ -120,10 +144,14 @@ for screen in welcome sign-in sign-in-code sign-in-narrow pair connected overvie
     halt-all) opts=(--home shared/contracts/home.json --halt crates/tafs-app/fixtures/halt-halting.json --page halt-all) ;;
     # Halt all once every part holds it: board 4 over the screen.
     halt-all-halted) opts=(--home shared/contracts/home.json --halt crates/tafs-app/fixtures/halt-halted.json --page halt-all) ;;
+    # Resume tapped on a halted taf: resuming is confirmed and signed by the device, so the
+    # can't-approve line under it, nothing sent.
+    halt-resume) opts=(--home shared/contracts/home.json --halt crates/tafs-app/fixtures/halt-halted.json --page halt-resume:taf-aaaa0000000000000000) ;;
     halt-one) opts=(--home shared/contracts/home.json --halt crates/tafs-app/fixtures/halt-halted.json --page halt:taf-aaaa0000000000000000) ;;
     gallery-strip) opts=(--home shared/contracts/home.json --gallery crates/tafs-app/fixtures/gallery.json) ;;
     gallery) opts=(--home shared/contracts/home.json --gallery crates/tafs-app/fixtures/gallery.json --recipes crates/tafs-app/fixtures/recipes.json --page gallery) ;;
     # Coach's conversation from tafs cloud's contract, and one with an approval waiting under its wider line.
+    coach-attach) opts=(--home shared/contracts/home.json --me crates/tafs-app/fixtures/me-manager.json --coach shared/contracts/coach-conversation.json --attach crates/tafs-app/fixtures/attach-tray.json --page coach) ;;
     coach) opts=(--home shared/contracts/home.json --me crates/tafs-app/fixtures/me-manager.json --coach shared/contracts/coach-conversation.json --page coach) ;;
     coach-wider) opts=(--home shared/contracts/home.json --me crates/tafs-app/fixtures/me-manager.json --coach shared/contracts/coach-wider.json --page coach) ;;
     coach-asks) opts=(--home shared/contracts/home.json --me crates/tafs-app/fixtures/me-manager.json --coach crates/tafs-app/fixtures/coach-asks.json --page coach) ;;

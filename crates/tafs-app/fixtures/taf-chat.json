@@ -77,7 +77,10 @@
         "from": "owner",
         "kind": "message",
         "text": "Check the shipping label for 4410 in Shippo",
-        "session": "sesn_9"
+        "session": "sesn_9",
+        "attachments": [
+          {"id": "att_label", "kind": "image", "media_type": "image/jpeg", "name": "label-4410.jpg", "size": 182044}
+        ]
       },
       {
         "id": "run7.4",

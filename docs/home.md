@@ -173,7 +173,12 @@ As the iPad's sidebar (`HomeSplitView`, `tafSections`, `otherAgents`):
     read from `GET /v1/setup` with Home when a row needs it), the row opens Coach on that chat
     (`finishSetup`); otherwise it opens nothing.
   - Discard, for the person whose setup it was, is tafs cloud's button word, under the row on the
-    right. It's signed, so it's there, dimmed.
+    right (soft). Tapped, tafs cloud's ask: its title (else the button's words), its words, its
+    yes (red) and its no (else Cancel). Its yes revokes the taf's Cards and drops it, signed
+    behind the approval key as a removal is (`discardSettingUp`, `POST
+    /v1/home/setting-up/{agent}/discard`), so this computer shows the can't-approve line under it
+    and nothing is revoked or sent. One whose agent is a placeholder (`setting-up:`) or none does
+    nothing on its yes, as on the iPad. CI's `discard-setup` taps it.
   - Read as the iPad's own decoder reads it: whatever is missing or the wrong kind reads as
     empty, an item without a name is skipped, and none of it fails Home.
 - **Other agents with Cards** comes last, after the recipes strip: every agent made through KIFF's
@@ -209,6 +214,5 @@ crates/tafs-app/fixtures/balance-home-line.json`, synthetic) is CI's `sidebar-pl
 - **The account's name** under Account, and its zone for times: from KIFF's account read.
 - **A room's end on a later day** shows its date as 2026-11-16 00:00, not in the language's words
   yet.
-- **Discard** itself, which is signed.
 - **The sample's Coach** (the reference set's signed-in sidebar over the sample): its title alone,
   as the sample has no Coach on this computer.

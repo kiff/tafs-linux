@@ -56,6 +56,20 @@ pub struct ChatTaf {
     pub ask_coach: bool,
     /// Its held calls' cards, as Needs you draws them, placed where they were held.
     pub held: Vec<CardLines>,
+    /// Its open trial's own chat (`TrialScreen`), not the taf's: read and sent at the trial's
+    /// paths, kept apart, and with no files.
+    pub trial: bool,
+}
+
+impl ChatTaf {
+    /// What the app keeps its chat and draft under: the trial's apart from the taf's.
+    fn key(&self) -> String {
+        if self.trial {
+            format!("trial:{}", self.id)
+        } else {
+            self.id.clone()
+        }
+    }
 }
 
 thread_local! {
@@ -88,6 +102,8 @@ struct Page {
     scroller: gtk::ScrolledWindow,
     error: gtk::Label,
     composer: Composer,
+    /// The files picked for the next message (`chatFiles[taf]`).
+    attach: Rc<crate::attach::Attach>,
 }
 
 /// The Chat tab's pane: the thread, the line above the box, and the box.
@@ -124,10 +140,26 @@ pub fn pane(w: Rc<WordBook>, taf: ChatTaf, source: ChatSource) -> gtk::Widget {
     bar_clamp.set_child(Some(&field));
     composer.bar.append(&bar_clamp);
     root.append(&composer.bar);
+    // The taf's files go to it at tafs cloud (`filesTarget`); a screenshot's go nowhere.
+    let attach = crate::attach::Attach::new(
+        w.clone(),
+        match &source {
+            ChatSource::Cloud {
+                token, languages, ..
+            } => Some(crate::attach::Target {
+                token: token.clone(),
+                languages: languages.clone(),
+                taf: taf.id.clone(),
+            }),
+            _ => None,
+        },
+    );
+    attach.place(&composer);
+    attach.button.set_visible(!source.is_none() && !taf.trial);
 
     let chat = CHATS.with(|c| {
         c.borrow_mut()
-            .entry(taf.id.clone())
+            .entry(taf.key())
             .or_insert_with(|| Rc::new(RefCell::new(TafChat::new(&taf.id))))
             .clone()
     });
@@ -145,8 +177,17 @@ pub fn pane(w: Rc<WordBook>, taf: ChatTaf, source: ChatSource) -> gtk::Widget {
         scroller,
         error,
         composer,
+        attach,
     });
     wire_composer(&page);
+    {
+        let p = Rc::downgrade(&page);
+        page.attach.on_change(Rc::new(move || {
+            if let Some(p) = p.upgrade() {
+                p.composer_state();
+            }
+        }));
+    }
     match page.source.clone() {
         ChatSource::File {
             thread: path,
@@ -212,7 +253,7 @@ pub fn pane(w: Rc<WordBook>, taf: ChatTaf, source: ChatSource) -> gtk::Widget {
 fn wire_composer(page: &Rc<Page>) {
     let c = &page.composer;
     let buffer = c.view.buffer();
-    let id = page.taf.id.clone();
+    let id = page.taf.key();
     DRAFTS.with(|d| buffer.set_text(d.borrow().get(&id).map_or("", String::as_str)));
     {
         let p = Rc::downgrade(page);
@@ -282,7 +323,12 @@ impl Page {
         if self.reading.replace(true) {
             return;
         }
-        let (words, path) = ((*self.w).clone(), taf_chat::conversation_path(&self.taf.id));
+        let path = if self.taf.trial {
+            tafs_core::versions::trial_conversation_path(&self.taf.id)
+        } else {
+            taf_chat::conversation_path(&self.taf.id)
+        };
+        let words = (*self.w).clone();
         let read = gtk::gio::spawn_blocking(move || {
             let a = crate::kiff::cloud(&token, &languages, &path)
                 .map_err(|e| Some(e.words(&words).unwrap_or_default()))?;
@@ -373,6 +419,39 @@ impl Page {
     /// Send: what's in the box.
     fn send(self: &Rc<Self>) {
         let words = self.composer.draft();
+        // A message with files goes as a message of its own.
+        let taken = self.attach.take();
+        if !taken.is_empty() {
+            if !self.sends() {
+                self.attach.put_back(taken);
+                return;
+            }
+            let refs: Vec<_> = taken
+                .iter()
+                .filter_map(|f| f.attachment().cloned())
+                .collect();
+            let delivery = self
+                .chat
+                .borrow_mut()
+                .deliver_with(&words, refs, chrono::Utc::now());
+            let Some(d) = delivery else {
+                self.attach.put_back(taken);
+                return;
+            };
+            self.composer.set_draft("");
+            self.follow.set(true);
+            self.draw();
+            let p = self.clone();
+            glib::spawn_future_local(async move {
+                if !p.deliver(d).await {
+                    if p.composer.draft().is_empty() {
+                        p.composer.set_draft(&words);
+                    }
+                    p.attach.put_back(taken);
+                }
+            });
+            return;
+        }
         self.send_words(&words, true);
     }
 
@@ -425,11 +504,21 @@ impl Page {
 
     /// `deliverChatOnce`'s send: true once the message is taken (sent, or kept as not sent).
     async fn deliver(self: &Rc<Self>, d: Delivery) -> bool {
-        let body = coach_send::message_body(&d.text, &d.target);
-        let Some(answer) = self
-            .post(coach_send::messages_path(&self.taf.id), body)
-            .await
-        else {
+        // The trial's chat takes its words alone (`trialMessage`).
+        let (path, body) = if self.taf.trial {
+            (
+                tafs_core::versions::trial_messages_path(&self.taf.id),
+                serde_json::json!({ "text": d.text })
+                    .to_string()
+                    .into_bytes(),
+            )
+        } else {
+            (
+                coach_send::messages_path(&self.taf.id),
+                coach_send::message_body(&d.text, &d.target, &d.files),
+            )
+        };
+        let Some(answer) = self.post(path, body).await else {
             return false;
         };
         let now = chrono::Utc::now();
@@ -438,7 +527,11 @@ impl Page {
                 self.signed_out();
                 return false;
             }
-            Ok(a) if (200..300).contains(&a.status) => match coach_send::sent(&a.body) {
+            Ok(a) if (200..300).contains(&a.status) => match if self.taf.trial {
+                tafs_core::versions::trial_sent(&a.body)
+            } else {
+                coach_send::sent(&a.body)
+            } {
                 Some(sent) => {
                     self.chat.borrow_mut().delivered(&d, &sent, now);
                     self.draw();
@@ -645,8 +738,14 @@ impl Page {
     fn composer_state(&self) {
         let thinking = self.chat.borrow().thinking();
         if let Ok(k) = taf_chat::composer(&self.w, Some(&self.taf.name), thinking) {
-            self.composer
-                .show(&k.placeholder, &k.send, &k.stop, thinking);
+            let (ready, held) = self.attach.send_state(&k.send, thinking);
+            self.composer.show_with(
+                &k.placeholder,
+                &k.send,
+                &k.stop,
+                thinking,
+                Some((ready, held.as_deref())),
+            );
         }
     }
 
@@ -737,13 +836,14 @@ impl Page {
                     stamp,
                     menu,
                     pending,
+                    files,
                 } => self.owner_line(
                     lines,
                     words,
                     answered.as_deref(),
                     stamp.as_deref(),
-                    *menu,
-                    *pending,
+                    (*menu, *pending),
+                    files,
                 ),
                 Line::Taf {
                     work,
@@ -846,8 +946,8 @@ impl Page {
         words: &str,
         answered: Option<&str>,
         stamp: Option<&str>,
-        menu: bool,
-        pending: bool,
+        (menu, pending): (bool, bool),
+        files: &[tafs_core::coach::Attachment],
     ) -> gtk::Widget {
         let v = gtk::Box::new(gtk::Orientation::Vertical, 4);
         if let Some(s) = stamp {
@@ -891,7 +991,18 @@ impl Page {
                 ],
             );
         }
-        v.append(&b);
+        // Files sent alone have no words: their chips stand for the message.
+        if !words.is_empty() || files.is_empty() {
+            v.append(&b);
+        }
+        if !files.is_empty() {
+            let attach = self.attach.clone();
+            v.append(&crate::chat::message_files(
+                &self.w,
+                files,
+                Rc::new(move |f, chip| attach.open_sent(f, chip)),
+            ));
+        }
         v.upcast()
     }
 

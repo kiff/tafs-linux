@@ -205,7 +205,7 @@ fn draw(
         .flatten()
     {
         let lines = tafs_core::needs_you::card_unit_lines(ask, taf.discuss);
-        root.append(&crate::needs_you::card_unit_panel(&lines));
+        root.append(&crate::needs_you::card_unit_panel(w, &lines));
     }
     // Its own Connect again, first: that same connection signed in again, behind the device's
     // approval, which this computer can't give.

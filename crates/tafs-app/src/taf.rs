@@ -139,6 +139,17 @@ pub fn page(
         head.append(&chip);
     }
     outer.append(&head);
+    // Its versions, and its trial while one is open, for the person who manages a tafs cloud taf.
+    if let (false, true, Some(id)) = (t.sample, t.manages, &t.cloud_id) {
+        outer.append(&crate::versions::link(
+            w.clone(),
+            crate::versions::VersionsTaf {
+                id: id.clone(),
+                name: t.name.clone(),
+                chat: t.chat.clone(),
+            },
+        ));
+    }
 
     // Chat, Activity, Card, Setup, as the system's segmented control. Chat is a tafs cloud taf's,
     // signed in with KIFF, and the page opens on it (the sample's chat is there, dimmed); Setup too
@@ -178,6 +189,7 @@ pub fn page(
     outer.append(&tabs);
 
     // The Card in front, one line above the activity.
+    let mut card_bar_box: Option<gtk::Box> = None;
     if let Some(card) = &t.card {
         let meta = CardMeta {
             title: &t.card_title,
@@ -194,8 +206,7 @@ pub fn page(
             bar.add_controller(click);
             bar.set_cursor_from_name(Some("pointer"));
             outer.append(&bar);
-            let bar2 = bar.clone();
-            card_tab.connect_toggled(move |b| bar2.set_visible(!b.is_active()));
+            card_bar_box = Some(bar);
         }
     }
 
@@ -211,21 +222,16 @@ pub fn page(
             t.doors.clone(),
         ));
     }
-    if !t.held.is_empty() {
-        body.append(&eyebrow(
-            &w.line("needs_you.title").unwrap_or_default(),
-            true,
-        ));
-        for card in &t.held {
-            body.append(&crate::needs_you::held_card(&w, card));
-        }
-    }
+    // Its held calls: here, or in the side column beside it on a wide window.
+    let held_here = held_box(&w, &t.held);
+    body.append(&held_here);
     if !t.sample {
         if let Some(id) = &t.cloud_id {
             // `TafActivityList.parts`: its held calls, its Card unit requests, its work, then the
             // list. The requests are its Activity's last page's, once read.
             let units = gtk::Box::new(gtk::Orientation::Vertical, 14);
             let units_of = Units {
+                w: w.clone(),
                 home: t.card_units.clone(),
                 discuss: t.may_use_coach && t.manages,
                 into: units.clone(),
@@ -371,7 +377,7 @@ pub fn page(
     scroller.set_vexpand(true);
     let card_scroller = gtk::ScrolledWindow::new();
     card_scroller.set_hscrollbar_policy(gtk::PolicyType::Never);
-    let card = card_pane(&w, t, &open_coach);
+    let card = card_pane(&w, t, &open_coach, &open_usage);
     // `HaltRow(tafID:framed:)`, at the Card's foot as on the iPad.
     if let Some(row) = halt_row {
         row.set_margin_start(16);
@@ -485,6 +491,7 @@ pub fn page(
             name: t.name.clone(),
             ask_coach: t.may_use_coach && t.manages,
             held: t.held.clone(),
+            trial: false,
         }));
         let panes = panes.clone();
         chat_tab.connect_toggled(move |b| {
@@ -498,7 +505,51 @@ pub fn page(
             }
         });
     }
-    outer.append(&panes);
+    // `sideColumn`: beside the chat or the activity, on a wide window, the calls waiting and the
+    // Cards, 360 wide; the page keeps an iPhone's width (430) for the chat beside it, and is wider
+    // than tall. Without it, the Card bar above, and the held calls in the activity.
+    let row = gtk::Box::new(gtk::Orientation::Horizontal, 16);
+    panes.set_hexpand(true);
+    row.append(&panes);
+    let side_scroller = gtk::ScrolledWindow::new();
+    side_scroller.set_hscrollbar_policy(gtk::PolicyType::Never);
+    side_scroller.set_size_request(SIDE_WIDTH, -1);
+    side_scroller.set_child(Some(&side(&w, t, &card_tab)));
+    side_scroller.set_visible(false);
+    side_scroller.set_widget_name("taf.side");
+    row.append(&side_scroller);
+    outer.append(&row);
+    {
+        let (side, bar, held, card_tab, setup_tab) = (
+            side_scroller.clone(),
+            card_bar_box.clone(),
+            held_here.clone(),
+            card_tab.clone(),
+            setup_tab.clone(),
+        );
+        let has_cards = !t.cards.is_empty();
+        outer.add_tick_callback(move |o, _| {
+            let (width, height) = (o.width(), o.height());
+            let section_lt_card = !card_tab.is_active() && !setup_tab.is_active();
+            let wide = has_cards
+                && section_lt_card
+                && width > height
+                && width - SIDE_WIDTH - 32 >= CHAT_AT_LEAST;
+            if side.is_visible() != wide {
+                side.set_visible(wide);
+            }
+            if let Some(bar) = &bar {
+                let shown = !wide && !card_tab.is_active();
+                if bar.is_visible() != shown {
+                    bar.set_visible(shown);
+                }
+            }
+            if held.is_visible() == wide {
+                held.set_visible(!wide);
+            }
+            gtk::glib::ControlFlow::Continue
+        });
+    }
     {
         let panes = panes.clone();
         activity_tab.connect_toggled(move |b| {
@@ -557,7 +608,12 @@ pub fn page(
 }
 
 /// The Card tab (`card(_:)`): the Cards as a wallet stack, the front Card's lines, and Revoke.
-fn card_pane(w: &Rc<WordBook>, t: &TafPage, open_coach: &Rc<dyn Fn()>) -> gtk::Box {
+fn card_pane(
+    w: &Rc<WordBook>,
+    t: &TafPage,
+    open_coach: &Rc<dyn Fn()>,
+    open_usage: &Rc<dyn Fn()>,
+) -> gtk::Box {
     // `offersReconnect`: signed in, for whoever manages the taf and may use Coach.
     let reconnect: Option<Rc<dyn Fn()>> =
         (!t.sample && t.manages && t.may_use_coach).then(|| open_coach.clone());
@@ -659,6 +715,35 @@ fn card_pane(w: &Rc<WordBook>, t: &TafPage, open_coach: &Rc<dyn Fn()>) -> gtk::B
     let f = draw.borrow().clone();
     if let Some(f) = f {
         f();
+    }
+    // Its Usage row: its credits this period and its runs, in Plan & usage (`TafCreditsView`), for
+    // whoever manages a tafs cloud taf, signed in.
+    if let (false, true, Some(id)) = (t.sample, t.manages, &t.cloud_id) {
+        let row = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+        let icon = crate::widgets::symbol(crate::widgets::icon_for("chart.bar"), 15);
+        icon.add_css_class("tafs-amber-text");
+        row.append(&icon);
+        let label = text(
+            &w.line("usage.label").unwrap_or_default(),
+            15,
+            600,
+            &["tafs-amber-text"],
+        );
+        label.set_hexpand(true);
+        row.append(&label);
+        let chevron = crate::widgets::symbol("go-next-symbolic", 13);
+        chevron.add_css_class("tafs-dim");
+        row.append(&chevron);
+        let b = gtk::Button::new();
+        b.set_child(Some(&row));
+        b.add_css_class("tafs-panel-link");
+        b.set_widget_name("taf.usage");
+        let (open, id) = (open_usage.clone(), id.clone());
+        b.connect_clicked(move |_| {
+            crate::usage::open_runs_of(&id);
+            open();
+        });
+        pane.append(&b);
     }
     // Revoke, for the sample or whoever manages the taf (`manages`, from KIFF's access read). A
     // view-only session (KIFF's `view`) isn't offered it, on every device alike: the shared line
@@ -891,6 +976,67 @@ const EDGE: i32 = 26;
 
 /// `TafCardFace`: its title and environment, its figure and words, its facts, who issued it and
 /// until when, white on the taf's colour (the dim colour when it isn't live).
+/// The side column's width, and the chat's least width beside it (`sideWidth`, `chatAtLeast`).
+const SIDE_WIDTH: i32 = 360;
+const CHAT_AT_LEAST: i32 = 430;
+
+/// A taf's held calls under NEEDS YOU in amber; nothing when none waits.
+fn held_box(w: &Rc<WordBook>, held: &[tafs_core::needs_you::CardLines]) -> gtk::Box {
+    let b = gtk::Box::new(gtk::Orientation::Vertical, 16);
+    if !held.is_empty() {
+        b.append(&eyebrow(
+            &w.line("needs_you.title").unwrap_or_default(),
+            true,
+        ));
+        for card in held {
+            b.append(&crate::needs_you::held_card(w, card));
+        }
+    }
+    b
+}
+
+/// `side`: the calls waiting, then CARDS with their stack, and All N Cards, which opens the Card
+/// tab.
+fn side(w: &Rc<WordBook>, t: &TafPage, card_tab: &gtk::ToggleButton) -> gtk::Box {
+    let v = gtk::Box::new(gtk::Orientation::Vertical, 16);
+    v.set_margin_top(4);
+    v.set_margin_bottom(12);
+    v.append(&held_box(w, &t.held));
+    let n = t.cards.len() as i64;
+    v.append(&eyebrow(
+        &w.count("card.heading", n, &[]).unwrap_or_default(),
+        false,
+    ));
+    let order = tafs_core::cards::stack(&t.cards, None);
+    let overlay = gtk::Overlay::new();
+    let base = gtk::Box::new(gtk::Orientation::Vertical, 0);
+    base.set_size_request(
+        FACE_WIDTH,
+        FACE_HEIGHT + (order.len() as i32 - 1).max(0) * EDGE,
+    );
+    overlay.set_child(Some(&base));
+    for (i, (index, depth)) in order.iter().enumerate() {
+        let f = face(
+            w,
+            &t.cards[*index],
+            t.color,
+            &t.issued_by,
+            t.revoked,
+            *depth,
+        );
+        f.set_margin_top(i as i32 * EDGE);
+        f.set_valign(gtk::Align::Start);
+        overlay.add_overlay(&f);
+    }
+    overlay.set_halign(gtk::Align::Center);
+    v.append(&overlay);
+    let all = crate::widgets::outline(&w.count("card.all_of", n, &[]).unwrap_or_default());
+    let tab = card_tab.clone();
+    all.connect_clicked(move |_| tab.set_active(true));
+    v.append(&all);
+    v
+}
+
 fn face(
     w: &WordBook,
     card: &tafs_core::cards::FullCard,
@@ -1095,6 +1241,7 @@ fn line(w: &WordBook, e: &Entry) -> gtk::Box {
 /// `TafActivityList`'s `.cardUnits`: the Activity's last page's requests (`card_unit_exceptions`),
 /// else Home's for the taf, each as Needs you draws it, then tafs cloud's notice.
 struct Units {
+    w: Rc<WordBook>,
     home: Vec<tafs_core::waits::CardUnitException>,
     discuss: bool,
     into: gtk::Box,
@@ -1107,7 +1254,8 @@ impl Units {
         }
         for ask in page.unwrap_or(&self.home) {
             let lines = tafs_core::needs_you::card_unit_lines(ask, self.discuss);
-            self.into.append(&crate::needs_you::card_unit_panel(&lines));
+            self.into
+                .append(&crate::needs_you::card_unit_panel(&self.w, &lines));
         }
         if let Some(notice) = notice {
             self.into.append(&text(notice, 13, 400, &["tafs-dim"]));

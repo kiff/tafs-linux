@@ -1,0 +1,27 @@
+{
+  "exceptions": [
+    {
+      "id": "exc_allow",
+      "subject": "rae",
+      "action": "stripe_create_refund",
+      "entity_id": "tc_9",
+      "status": "held",
+      "breaches": [
+        {"outcome": "per_action_exceeded", "reason": "over", "limit": 10000, "quantity": "sum(amount)", "unit": "EUR", "scale": 2}
+      ],
+      "parameters": {"amount": 15000},
+      "parameter_units": {"amount": {"unit": "EUR", "scale": 2}},
+      "reason": null,
+      "units_unavailable": false,
+      "next_steps": [],
+      "created_at": "__HELD_AT__",
+      "expires_at": "__EXPIRES__",
+      "accounting_version": 3,
+      "title": "Refund a payment",
+      "arguments": {"amount": 15000, "payment_intent": "pi_123", "kiff_about": "Order 1042"},
+      "taf_about": "Order 1042",
+      "taf_reason": "Box arrived crushed",
+      "can_approve_once": true
+    }
+  ]
+}

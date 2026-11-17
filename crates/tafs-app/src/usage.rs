@@ -76,6 +76,13 @@ thread_local! {
     /// `--page usage-ask` or `usage-decline`: Ask an admin's sheet, or the first request's
     /// Decline, opens once the page is read, for its screenshot.
     pub static OPEN: std::cell::Cell<Option<&'static str>> = const { std::cell::Cell::new(None) };
+    /// A taf's runs to open once Plan & usage is drawn: its Usage row on its Card tab.
+    static RUNS_OF: RefCell<Option<String>> = const { RefCell::new(None) };
+}
+
+/// A taf's Usage row (`TafCreditsView` from its page): Plan & usage opens on its runs, this period.
+pub fn open_runs_of(taf: &str) {
+    RUNS_OF.with(|r| *r.borrow_mut() = Some(taf.to_string()));
 }
 
 /// What the screen's buttons act on: the words, what was read, and reading again.
@@ -251,6 +258,11 @@ pub fn page(w: Rc<WordBook>, source: UsageSource, names: Names) -> gtk::Widget {
             screens.set_visible_child_name("runs");
         })
     };
+    // Opened from a taf's Usage row: on its runs at once.
+    if let Some(taf) = RUNS_OF.with(|r| r.borrow_mut().take()) {
+        let open = open_runs.clone();
+        gtk::glib::idle_add_local_once(move || open(taf, false));
+    }
     // `refreshUsage`: the balance, the credits and KIFF's usage, read as the session.
     let reload: Rc<dyn Fn()> = {
         let (w, source, state, redraw) = (w.clone(), source.clone(), state.clone(), redraw.clone());

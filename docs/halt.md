@@ -19,10 +19,12 @@ Until then it reads **Halting…**. While it's halting, the screen reads it agai
 at most 60 times (`GET` the same path). A read that can't be read keeps what was there.
 
 **Resuming gives authority back**, so it's signed by the device (`tafs.resume.v1`). This
-computer's key is in software and signs nothing, so its button is there, dimmed: "Resume Rae", or
-"Resume all your tafs" (the iPad's prompt words, as Linux has no biometry to name), with "This
-device can't approve. Approve on another device signed in to your account." under it. A taf
-halted with the whole account has no button: it resumes with the account.
+computer's key is in software and signs nothing, so its button is there: "Resume Rae", or
+"Resume all your tafs" (the iPad's prompt words, as Linux has no biometry to name). Its tap says
+"This device can't approve. Approve on another device signed in to your account." under it, and
+nothing is sent (`signed::Act::Resume`, KIFF's `POST /v1/agents/{agent}/resume` or `/v1/resume`).
+A taf halted with the whole account has no button: it resumes with the account. CI's
+`halt-resume` taps it.
 
 ## The screen
 

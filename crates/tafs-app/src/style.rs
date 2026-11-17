@@ -44,6 +44,19 @@ window, .tafs-ground { background-color: @tafs_background; color: @tafs_ink; }
 .tafs-panel { background-color: @tafs_panel; border: 1px solid @tafs_line; border-radius: 18px; padding: 16px; }
 .tafs-panel.amber-edge { border-color: alpha(@tafs_amber, 0.4); }
 
+/* VersionsPanel's tags: "Live now" on the green, "Trying" and "not live" on the amber, white 11
+   bold in a capsule. TrialScreen's bar on the amber at 8%. */
+.tafs-version-tag { color: white; font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 999px; }
+.tafs-version-tag.ok { background-color: @tafs_ok; }
+.tafs-version-tag.amber { background-color: @tafs_amber; }
+.tafs-trial-bar { background-color: alpha(@tafs_amber, 0.08); border-radius: 12px; padding: 10px 16px; }
+
+/* AttachViews: FileIcon, 36 on a soft square with corners of 8; FileChip in the tray and
+   MessageFiles in the thread, on the panel colour, edged in the line colour, corners of 12. */
+.tafs-file-icon { min-width: 36px; min-height: 36px; border-radius: 8px; background-color: alpha(@tafs_line, 0.4); }
+.tafs-file-chip { background-color: @tafs_panel; border: 1px solid @tafs_line; border-radius: 12px; padding: 6px 2px 6px 6px; }
+button.tafs-message-file { background-color: @tafs_panel; border: 1px solid @tafs_line; border-radius: 12px; padding: 6px 12px 6px 6px; box-shadow: none; }
+
 /* PrimaryLook: the brand sweep, white 16 semibold, 54 high, corners of 16. */
 button.tafs-primary {
   background-image: linear-gradient(135deg, BRAND0, BRAND1, BRAND2);
@@ -63,6 +76,9 @@ button.tafs-outline:hover { background-color: alpha(@tafs_ink, 0.04); }
 button.tafs-outline:active { background-color: alpha(@tafs_ink, 0.08); }
 /* OutlineButtonStyle(color: Theme.no): a halt's button, its words and edge in red. */
 button.tafs-outline.tafs-no { color: @tafs_no; border-color: alpha(@tafs_no, 0.5); }
+/* OutlineButtonStyle(color: Theme.soft) and (color: Theme.amberText): Set aside, Set all aside. */
+button.tafs-outline.tafs-soft { color: @tafs_soft; border-color: alpha(@tafs_soft, 0.4); }
+button.tafs-outline.tafs-amber-text { color: @tafs_amber_text; border-color: alpha(@tafs_amber_text, 0.4); }
 button.tafs-outline:disabled { opacity: 0.4; }
 
 button.tafs-link { background: none; box-shadow: none; border: none; color: @tafs_amber_text; font-size: 13px; font-weight: 600; padding: 2px 4px; min-height: 0; }

@@ -262,6 +262,8 @@ pub enum Line {
     Owner {
         text: String,
         answered: Option<String>,
+        /// The files sent with it (`MessageFiles`), each opened full size.
+        files: Vec<crate::coach::Attachment>,
     },
     /// Coach's words (Markdown), under its work; tafs cloud's id for them and their chat when
     /// they can be reported.
@@ -1523,6 +1525,7 @@ fn message(w: &WordBook, thread: &SetupThread, m: &ChatMessage) -> Result<Line, 
             } else {
                 None
             },
+            files: m.attachments.clone(),
         },
         From::Taf if m.kind == MessageKind::Kickoff => Line::Gap(w.get(
             "chat.run_started_with",
@@ -1857,7 +1860,8 @@ mod tests {
             l.lines[1],
             Line::Owner {
                 text: "Set up refunds for my shop".into(),
-                answered: None
+                answered: None,
+                files: vec![]
             }
         );
         let Line::Coach { work, report, .. } = &l.lines[2] else {
@@ -1894,7 +1898,8 @@ mod tests {
             l.lines[4],
             Line::Owner {
                 text: "Up to €5 each, €50 a day".into(),
-                answered: Some("Answered the card above".into())
+                answered: Some("Answered the card above".into()),
+                files: vec![]
             }
         );
         let Line::Card {

@@ -101,6 +101,47 @@ In the iPad's order, in a column at most 720 wide:
 - **The box:** "Message Rae", or "Write the next message" while it works; Send on the brand sweep, its
   label "Send to Rae while it works" then; Stop in the ink. Ctrl+Enter sends.
 
+## No mic
+
+The iPad's mic dictates on the device only (`requiresOnDeviceRecognition`), and a Linux desktop
+has no on-device speech recognition, so there's no mic here; nothing of tafs sends a voice off the
+device.
+
+## Files
+
+Attaching photos and files (`AttachViews.swift`, `tafs-core/attach.rs`, app `attach.rs`), in a
+taf's chat and in Coach's alike:
+
+- **The paperclip** at the start of the box: Choose photos, or Choose file, with this computer's
+  file chooser. There's no camera to take a photo with. It holds five files a message
+  (`FilePrep.perMessage`), and says so when it's full.
+- **Each file is made ready as the iPad makes it** (`FilePrep`). A photo is redrawn as a JPEG on
+  white, its long edge at most 2,576 px, so nothing but its pixels goes. Any other kind tafs takes
+  (PDF, text, CSV, Markdown, Word, Excel) is checked against its limit before it's read (10 MB a
+  photo, 25 MB a PDF, 2 MB the rest); one over it, or of a kind tafs doesn't take, says why in the
+  tray and isn't added.
+- **Up as soon as it's picked**: declared to tafs cloud as the session (`POST
+  /v1/tafs/{id}/attachments`, its kind, name, size and SHA-256), whose answer says where its bytes
+  go. They go straight to that storage address, with only the headers tafs cloud gave: no
+  session, HTTPS only, no credentials in the address, no redirect followed. Nothing is signed.
+- **The tray** above the box (`FileTray`, `FileChip`): each file's icon or thumbnail, its name,
+  and Uploading, Ready, or why it didn't go (in red), with its remove control. Send waits while a
+  file is still going up ("Send once the files are up"); files ready to go make Send sendable with no
+  words.
+- **With the next message**, by their ids (`attachments`); a message the send didn't take puts its
+  files back in the tray.
+- **In the thread** (`MessageFiles`): a message's files under it at the end, each its icon and
+  name. A message of files alone has no bubble. A tap asks tafs cloud for that file (`GET
+  /v1/tafs/{id}/attachments/{file}`, only the person's own), reads its bytes from the storage
+  address it answers (HTTPS only, at most 25 MB), saves them in this app's cache
+  (`~/.cache/tafs/opened/{id}/`) under the file's name with the extension of its kind, so the
+  desktop never takes it for a program, and opens it with the desktop's app for it, as the iPad's
+  Quick Look. One that can't be opened says why in the tray.
+
+`--attach crates/tafs-app/fixtures/attach-tray.json` (synthetic) fills the tray as a screenshot
+draws it: CI's `taf-chat-attach` and `coach-attach`. `taf-chat.json` sends one message with a
+photo.
+
 ## Reporting an answer
 
 Each of the taf's answers that tafs cloud has an id for (`canReport`: never the owner's words, a
@@ -129,7 +170,7 @@ answer that can be reported; its Send sends nothing.
   held call (the chat opens at its newest).
 - What became of a held call the owner answered (`OutcomeLine` from the Record: KIFF's answer time
   isn't read here), and a held call's place from the stream (`anchors`).
-- A door's knocks among the messages (they're on the Activity tab), attachments and the mic, Copy
+- A door's knocks among the messages (they're on the Activity tab), Copy
   and Delete on a message not sent, and keeping across launches which unread rows were dealt with.
 - The sample's chat (`sampleReply`).
 

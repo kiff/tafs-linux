@@ -41,13 +41,36 @@ fn chat_of(json: &str) -> TafChat {
 fn the_conversation_is_the_live_chat_s() {
     assert_eq!(conversation_path("taf 1"), "/v1/tafs/taf%201/conversation");
     // A taf's message goes into its live chat: no session, no new chat.
-    let body: Value = serde_json::from_slice(&message_body("Hi", &ChatTarget::default())).unwrap();
+    let body: Value =
+        serde_json::from_slice(&message_body("Hi", &ChatTarget::default(), &[])).unwrap();
     assert_eq!(body, serde_json::json!({"text": "Hi"}));
+    // Files go with it by their ids (`MessageBody.attachments`), none when there are none.
+    let file = crate::coach::Attachment {
+        id: "att_1".into(),
+        kind: "image".into(),
+        media_type: "image/jpeg".into(),
+        name: "receipt.jpg".into(),
+        size: 10,
+    };
+    let body: Value =
+        serde_json::from_slice(&message_body("", &ChatTarget::default(), &[file])).unwrap();
+    assert_eq!(
+        body,
+        serde_json::json!({"text": "", "attachments": ["att_1"]})
+    );
 }
 
 #[test]
 fn the_fixture_reads_as_the_ipad_reads_it() {
     let t = TafThread::read(&fixture("taf-chat.json")).unwrap();
+    // A message sent with a file: the file goes with it, by its id, name and kind.
+    let sent = t
+        .messages
+        .iter()
+        .find(|m| !m.attachments.is_empty())
+        .unwrap();
+    assert_eq!(sent.attachments[0].id, "att_label");
+    assert_eq!(sent.attachments[0].media_type, "image/jpeg");
     assert_eq!(t.messages.len(), 8);
     assert_eq!(t.working, None);
     assert_eq!(
@@ -760,7 +783,8 @@ fn the_chat_draws_the_ipad_s_lines() {
             answered: None,
             stamp: Some("BY EMAIL · ana@example.com".into()),
             menu: false,
-            pending: false
+            pending: false,
+            files: vec![]
         })
     );
     assert!(

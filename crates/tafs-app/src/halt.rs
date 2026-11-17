@@ -28,6 +28,8 @@ pub struct HaltSource {
 pub struct Whose {
     pub id: Option<String>,
     pub name: Option<String>,
+    /// Its KIFF agent, which resuming names.
+    pub agent: Option<String>,
 }
 
 /// One read (`refreshHalt`): none when it didn't come back readable, and the screen keeps what
@@ -67,6 +69,11 @@ fn send(w: &WordBook, source: &HaltSource, id: Option<&str>) -> Result<Halt, Str
 
 /// The screen's redraw, set once it's made: the reads and the halt call it.
 type Redraw = Rc<RefCell<Option<Rc<dyn Fn()>>>>;
+
+thread_local! {
+    /// `--page halt-resume:<id>`: Resume, tapped.
+    pub static RESUME: Cell<bool> = const { Cell::new(false) };
+}
 
 /// The screen (`HaltScreen`).
 pub fn page(w: Rc<WordBook>, source: Rc<HaltSource>, whose: Whose) -> gtk::Widget {
@@ -267,11 +274,27 @@ pub fn page(w: Rc<WordBook>, source: Rc<HaltSource>, whose: Whose) -> gtk::Widge
                     // Halt again: a part that didn't take it the first time is asked again.
                     body.append(&halt_button(again));
                 }
-                Action::Resume { button, why } => {
+                // Resuming is confirmed and signed by the device: its tap says this computer
+                // can't approve, under it, and nothing is sent.
+                Action::Resume { button, .. } => {
                     let b = outline(button);
-                    b.set_sensitive(false);
+                    b.set_widget_name("halt.resume");
+                    let slot = crate::approval::refusal_slot();
+                    let act = tafs_core::signed::Act::Resume {
+                        agent: whose.agent.clone(),
+                    };
+                    let (w, slot2) = (w.clone(), slot.clone());
+                    b.connect_clicked(move |_| {
+                        crate::approval::refuse(&w, tafs_core::sidebar::Mode::Kiff, &act, &slot2)
+                    });
                     body.append(&b);
-                    body.append(&text(why, 13, 400, &["tafs-soft"]));
+                    body.append(&slot);
+                    if RESUME.with(|r| r.replace(false)) {
+                        gtk::glib::timeout_add_local_once(
+                            std::time::Duration::from_millis(400),
+                            move || b.emit_clicked(),
+                        );
+                    }
                 }
                 Action::None => {}
             }
