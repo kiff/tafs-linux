@@ -500,6 +500,13 @@ pub enum Screen {
 /// The name of a taf's page's navigation, where Setup's screens push.
 pub const TAF_NAV: &str = "taf-nav";
 
+/// The navigation of the taf's page `w` is on, if it's on one: where its screens push.
+pub fn taf_nav(w: &impl IsA<gtk::Widget>) -> Option<adw::NavigationView> {
+    w.ancestor(adw::NavigationView::static_type())
+        .and_downcast::<adw::NavigationView>()
+        .filter(|n| n.widget_name() == TAF_NAV)
+}
+
 /// Opens one of Setup's screens: pushed on the taf's page it's opened from, with Back and its title
 /// in the bar, as the iPad's `NavigationLink`; elsewhere, in a sheet with its own navigation.
 pub fn open(knobs: Knobs, screen: Screen, parent: &impl IsA<gtk::Widget>) {
@@ -512,10 +519,7 @@ pub fn open(knobs: Knobs, screen: Screen, parent: &impl IsA<gtk::Widget>) {
     column.set_margin_end(16);
     column.set_margin_top(12);
     column.set_margin_bottom(12);
-    let host = parent
-        .ancestor(adw::NavigationView::static_type())
-        .and_downcast::<adw::NavigationView>()
-        .filter(|n| n.widget_name() == TAF_NAV);
+    let host = taf_nav(parent);
     let (nav, dialog) = match &host {
         Some(nav) => (nav.clone(), None),
         None => {
@@ -585,7 +589,8 @@ pub fn open(knobs: Knobs, screen: Screen, parent: &impl IsA<gtk::Widget>) {
     }
 }
 
-fn page(title: &str, content: &gtk::Box) -> adw::NavigationPage {
+/// A screen pushed on a navigation: Back and its title in its bar, its column scrolled.
+pub(crate) fn page(title: &str, content: &gtk::Box) -> adw::NavigationPage {
     let scroller = gtk::ScrolledWindow::new();
     scroller.set_hscrollbar_policy(gtk::PolicyType::Never);
     scroller.set_child(Some(content));
