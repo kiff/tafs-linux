@@ -220,7 +220,10 @@ iPad's. Under "Its work":
   again; "It couldn't be set. …" when it wasn't. "You're told when a case waits longer." under it;
 - **its requests and skipped firings,** newest first. A request's line is amber when it needs
   you, red when it failed, else soft, with what it used ("34 credits") and where its result went
-  under it. A door reply given up on offers **Send again** to whoever manages the taf
+  under it. A step the run handed its owner (`your_step`) stands in its line's place as its card
+  (`YourStepCard`, [Needs you](needs-you.md)), without the taf's name: Home's copy of it where
+  Home lists it, which carries the vendor's link when tafs cloud vouched for it, else the
+  request's own. Done and Skip it are signed: their tap says this computer can't approve. A door reply given up on offers **Send again** to whoever manages the taf
   (`POST …/requests/{run}/deliveries/{place}/send`, unsigned; "Sending again…" while it goes,
   "It wasn't sent again. …" when it didn't). A skipped firing is dim: nothing ran, which isn't a
   failure.
@@ -445,5 +448,4 @@ nothing shows until they're read, or when they can't be. A 401 signs this comput
 - **In the trial's sheet:** its guide stays above the chat once messages are in (the iPad shows it
   before the first only), and the chat's box is under it, a scroll down.
 - **The line under the head:** who it's shared with (`ShareLine`) sits under the tabs.
-- **In its work:** a step it handed you as its card (`YourStepCard`): its line for now.
 - Remove, and folding the head while scrolling.

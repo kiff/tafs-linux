@@ -1488,6 +1488,7 @@ impl App {
                         setup: setup_pane::SetupSource::None,
                         doors: knocks::DoorsSource::None,
                         card_units: vec![],
+                        steps: vec![],
                         may_use_coach: false,
                         health: None,
                         runs: runs_panel::RunsSource::None,
@@ -1573,6 +1574,16 @@ impl App {
                             .iter()
                             .flatten()
                             .filter(|a| t.cloud && a.taf == t.key)
+                            .cloned()
+                            .collect(),
+                        steps: c
+                            .home
+                            .your_steps
+                            .iter()
+                            .flatten()
+                            .filter(|s| {
+                                t.cloud && s.taf.as_ref().is_some_and(|(id, _)| *id == t.key)
+                            })
                             .cloned()
                             .collect(),
                         may_use_coach: model.may_use_coach,

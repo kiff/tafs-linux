@@ -77,6 +77,9 @@ pub struct TafPage {
     /// Its Card unit requests as Home sent them, drawn until its Activity's own are read, and
     /// whether this person may use Coach (their Coach button, dimmed).
     pub card_units: Vec<tafs_core::waits::CardUnitException>,
+    /// The steps it handed its owner, as Home sent them (with the vendor's link when tafs cloud
+    /// vouched for it): a request's step is drawn from here where it's listed.
+    pub steps: Vec<tafs_core::waits::YourStep>,
     pub may_use_coach: bool,
     /// Where its work is read (`WorkPanel`), and its health as Home read it.
     pub work: crate::work_panel::WorkSource,
@@ -265,6 +268,7 @@ pub fn page(
                     },
                     manages: t.manages,
                     may_use_coach: t.may_use_coach,
+                    steps: t.steps.clone(),
                 }),
             ));
             // Its runs: when it runs next and Run now, then the runs tafs cloud kept, read again
