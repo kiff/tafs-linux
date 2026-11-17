@@ -56,6 +56,20 @@ pub struct ChatTaf {
     pub ask_coach: bool,
     /// Its held calls' cards, as Needs you draws them, placed where they were held.
     pub held: Vec<CardLines>,
+    /// Its open trial's own chat (`TrialScreen`), not the taf's: read and sent at the trial's
+    /// paths, kept apart, and with no files.
+    pub trial: bool,
+}
+
+impl ChatTaf {
+    /// What the app keeps its chat and draft under: the trial's apart from the taf's.
+    fn key(&self) -> String {
+        if self.trial {
+            format!("trial:{}", self.id)
+        } else {
+            self.id.clone()
+        }
+    }
 }
 
 thread_local! {
@@ -141,11 +155,11 @@ pub fn pane(w: Rc<WordBook>, taf: ChatTaf, source: ChatSource) -> gtk::Widget {
         },
     );
     attach.place(&composer);
-    attach.button.set_visible(!source.is_none());
+    attach.button.set_visible(!source.is_none() && !taf.trial);
 
     let chat = CHATS.with(|c| {
         c.borrow_mut()
-            .entry(taf.id.clone())
+            .entry(taf.key())
             .or_insert_with(|| Rc::new(RefCell::new(TafChat::new(&taf.id))))
             .clone()
     });
@@ -239,7 +253,7 @@ pub fn pane(w: Rc<WordBook>, taf: ChatTaf, source: ChatSource) -> gtk::Widget {
 fn wire_composer(page: &Rc<Page>) {
     let c = &page.composer;
     let buffer = c.view.buffer();
-    let id = page.taf.id.clone();
+    let id = page.taf.key();
     DRAFTS.with(|d| buffer.set_text(d.borrow().get(&id).map_or("", String::as_str)));
     {
         let p = Rc::downgrade(page);
@@ -309,7 +323,12 @@ impl Page {
         if self.reading.replace(true) {
             return;
         }
-        let (words, path) = ((*self.w).clone(), taf_chat::conversation_path(&self.taf.id));
+        let path = if self.taf.trial {
+            tafs_core::versions::trial_conversation_path(&self.taf.id)
+        } else {
+            taf_chat::conversation_path(&self.taf.id)
+        };
+        let words = (*self.w).clone();
         let read = gtk::gio::spawn_blocking(move || {
             let a = crate::kiff::cloud(&token, &languages, &path)
                 .map_err(|e| Some(e.words(&words).unwrap_or_default()))?;
@@ -485,11 +504,21 @@ impl Page {
 
     /// `deliverChatOnce`'s send: true once the message is taken (sent, or kept as not sent).
     async fn deliver(self: &Rc<Self>, d: Delivery) -> bool {
-        let body = coach_send::message_body(&d.text, &d.target, &d.files);
-        let Some(answer) = self
-            .post(coach_send::messages_path(&self.taf.id), body)
-            .await
-        else {
+        // The trial's chat takes its words alone (`trialMessage`).
+        let (path, body) = if self.taf.trial {
+            (
+                tafs_core::versions::trial_messages_path(&self.taf.id),
+                serde_json::json!({ "text": d.text })
+                    .to_string()
+                    .into_bytes(),
+            )
+        } else {
+            (
+                coach_send::messages_path(&self.taf.id),
+                coach_send::message_body(&d.text, &d.target, &d.files),
+            )
+        };
+        let Some(answer) = self.post(path, body).await else {
             return false;
         };
         let now = chrono::Utc::now();
@@ -498,7 +527,11 @@ impl Page {
                 self.signed_out();
                 return false;
             }
-            Ok(a) if (200..300).contains(&a.status) => match coach_send::sent(&a.body) {
+            Ok(a) if (200..300).contains(&a.status) => match if self.taf.trial {
+                tafs_core::versions::trial_sent(&a.body)
+            } else {
+                coach_send::sent(&a.body)
+            } {
                 Some(sent) => {
                     self.chat.borrow_mut().delivered(&d, &sent, now);
                     self.draw();

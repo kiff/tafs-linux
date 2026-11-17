@@ -138,6 +138,23 @@ pub fn read_trial(body: &[u8]) -> Option<Option<OpenTrial>> {
     serde_json::from_slice::<Answer>(body).ok().map(|a| a.trial)
 }
 
+/// `trialMessage`'s answer, `{session, run}`, as a message taken: its chat, and no id of its own
+/// (the thread read next names it).
+pub fn trial_sent(body: &[u8]) -> Option<crate::coach_send::Sent> {
+    #[derive(Deserialize)]
+    struct Answer {
+        session: String,
+        #[allow(dead_code)]
+        run: String,
+    }
+    let a: Answer = serde_json::from_slice(body).ok()?;
+    Some(crate::coach_send::Sent {
+        session: a.session,
+        new_session: false,
+        message: None,
+    })
+}
+
 /// A day as the iPad's abbreviated date writes it, in the account's zone.
 fn date(w: &WordBook, at: &DateTime<Utc>) -> String {
     crate::record::short_date(w.language(), crate::account_time::day(at))

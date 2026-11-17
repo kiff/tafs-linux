@@ -44,6 +44,13 @@ window, .tafs-ground { background-color: @tafs_background; color: @tafs_ink; }
 .tafs-panel { background-color: @tafs_panel; border: 1px solid @tafs_line; border-radius: 18px; padding: 16px; }
 .tafs-panel.amber-edge { border-color: alpha(@tafs_amber, 0.4); }
 
+/* VersionsPanel's tags: "Live now" on the green, "Trying" and "not live" on the amber, white 11
+   bold in a capsule. TrialScreen's bar on the amber at 8%. */
+.tafs-version-tag { color: white; font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 999px; }
+.tafs-version-tag.ok { background-color: @tafs_ok; }
+.tafs-version-tag.amber { background-color: @tafs_amber; }
+.tafs-trial-bar { background-color: alpha(@tafs_amber, 0.08); border-radius: 12px; padding: 10px 16px; }
+
 /* AttachViews: FileIcon, 36 on a soft square with corners of 8; FileChip in the tray and
    MessageFiles in the thread, on the panel colour, edged in the line colour, corners of 12. */
 .tafs-file-icon { min-width: 36px; min-height: 36px; border-radius: 8px; background-color: alpha(@tafs_line, 0.4); }

@@ -139,6 +139,17 @@ pub fn page(
         head.append(&chip);
     }
     outer.append(&head);
+    // Its versions, and its trial while one is open, for the person who manages a tafs cloud taf.
+    if let (false, true, Some(id)) = (t.sample, t.manages, &t.cloud_id) {
+        outer.append(&crate::versions::link(
+            w.clone(),
+            crate::versions::VersionsTaf {
+                id: id.clone(),
+                name: t.name.clone(),
+                chat: t.chat.clone(),
+            },
+        ));
+    }
 
     // Chat, Activity, Card, Setup, as the system's segmented control. Chat is a tafs cloud taf's,
     // signed in with KIFF, and the page opens on it (the sample's chat is there, dimmed); Setup too
@@ -486,6 +497,7 @@ pub fn page(
             name: t.name.clone(),
             ask_coach: t.may_use_coach && t.manages,
             held: t.held.clone(),
+            trial: false,
         }));
         let panes = panes.clone();
         chat_tab.connect_toggled(move |b| {

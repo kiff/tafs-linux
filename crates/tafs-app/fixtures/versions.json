@@ -1,0 +1,9 @@
+{
+  "versions": [
+    {"n": 1, "note": null, "by": "setup", "created": "2026-11-01T09:00:00Z", "live": false, "draft": null,
+     "trials": [{"started": "2026-11-02T09:00:00Z", "ended": "2026-11-03T09:00:00Z", "why": "back", "calls": 3, "held": 1, "refused": 0}]},
+    {"n": 2, "note": "Refunds up to €200 without asking", "by": "auth0|rae", "by_words": "By you", "created": "2026-11-10T14:05:00Z", "live": true, "draft": null},
+    {"n": 3, "note": "Asks before shipping a replacement", "by": "auth0|rae", "by_words": "By Coach mode", "created": "2026-11-16T08:30:00.000Z", "live": false, "draft": "drf_3"}
+  ],
+  "switching": null
+}

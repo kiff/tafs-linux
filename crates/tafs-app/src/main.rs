@@ -48,6 +48,7 @@ mod style;
 mod taf;
 mod taf_chat;
 mod usage;
+mod versions;
 mod welcome;
 mod widgets;
 mod work_panel;
@@ -167,6 +168,9 @@ struct Options {
     attach: Option<String>,
     /// KIFF's held calls (`GET /v1/me/card-exceptions?status=held`), beside `--home`.
     held: Option<String>,
+    /// A taf's versions and its open trial, as tafs cloud answers them, for the screenshots.
+    versions: Option<String>,
+    trial: Option<String>,
     /// With `--home`: a taf's notes as tafs cloud answers `GET /v1/tafs/{id}/memory`, for See all.
     memory: Option<String>,
     /// With `--home`: a page of a taf's runs as tafs cloud answers `GET /v1/tafs/{id}/work/runs`.
@@ -209,7 +213,7 @@ struct Options {
 }
 
 const USAGE: &str = "tafs [--lang en|de|fr|es|it|pt|nl|pl] [--theme light|dark] [--sample] [--signed-in] [--view-only [--paired]]
-     [--home contract.json] [--usage answers.json] [--people answers.json] [--connect answers.json] [--knob answer.json] [--setup answer.json] [--taf-activity answer.json] [--unproven answers.json] [--recipes answers.json] [--gallery answers.json] [--halt answer.json] [--record-search answers.json] [--access answer.json] [--receipts answer.json] [--activity answer.json] [--calls answer.json] [--receipt answer.json] [--work answer.json] [--doors answer.json] [--account-reads answers.json] [--me answer.json] [--attach files.json] [--held answers.json] [--memory answer.json] [--runs answer.json] [--request answer.json] [--balance answer.json] [--coach answer.json] [--coach-chats answer.json] [--coach-drafts answers.json] [--chat answer.json [--report]] [--brief answer.json] [--mission-log answer.json] [--coach-setup answer.json] [--unreachable network|error] [--app-event item.json] [--size WxH] [--page welcome|sign-in|pair|recipe:<id>|gallery|new-taf|halt-all|halt:<id>|halt-resume:<id>|record-search:<q>|record-export|receipt:<proposal id>|run:<taf id>|pin-sheet|share:<key>|share-step2:<key>|coach|coach-tools|coach-full|coach-hand:<id>|overview|overview-label:<id>|needs-you|discard-setup|needs-you-set-all-aside|needs-you-dismiss|needs-you-hold:<id>|brief-answer:<decision id>|mission-log:<mission id>|record|calendar|calendar-week|usage|usage-ask|usage-decline|connect-apps|connect-app|connect-connection|connect-remove|connect-which-taf|connect-approve|account|kiff-account|time-zone|time-zone-use|alerts|devices|devices-sign-out|people|people-rename|people-add|taf|taf-card|taf-setup|taf-setup:<id>|starts:<id>|results:<id>|doors:<id>[:<door>]|consent|connected|sign-in-code] [--screenshot out.png]";
+     [--home contract.json] [--usage answers.json] [--people answers.json] [--connect answers.json] [--knob answer.json] [--setup answer.json] [--taf-activity answer.json] [--unproven answers.json] [--recipes answers.json] [--gallery answers.json] [--halt answer.json] [--record-search answers.json] [--access answer.json] [--receipts answer.json] [--activity answer.json] [--calls answer.json] [--receipt answer.json] [--work answer.json] [--doors answer.json] [--account-reads answers.json] [--me answer.json] [--attach files.json] [--held answers.json] [--versions answer.json [--trial answer.json]] [--memory answer.json] [--runs answer.json] [--request answer.json] [--balance answer.json] [--coach answer.json] [--coach-chats answer.json] [--coach-drafts answers.json] [--chat answer.json [--report]] [--brief answer.json] [--mission-log answer.json] [--coach-setup answer.json] [--unreachable network|error] [--app-event item.json] [--size WxH] [--page welcome|sign-in|pair|recipe:<id>|gallery|new-taf|halt-all|halt:<id>|halt-resume:<id>|record-search:<q>|record-export|receipt:<proposal id>|run:<taf id>|pin-sheet|share:<key>|share-step2:<key>|coach|coach-tools|coach-full|coach-hand:<id>|overview|overview-label:<id>|needs-you|discard-setup|needs-you-set-all-aside|needs-you-dismiss|needs-you-hold:<id>|versions:<key>|trial:<key>|brief-answer:<decision id>|mission-log:<mission id>|record|calendar|calendar-week|usage|usage-ask|usage-decline|connect-apps|connect-app|connect-connection|connect-remove|connect-which-taf|connect-approve|account|kiff-account|time-zone|time-zone-use|alerts|devices|devices-sign-out|people|people-rename|people-add|taf|taf-card|taf-setup|taf-setup:<id>|starts:<id>|results:<id>|doors:<id>[:<door>]|consent|connected|sign-in-code] [--screenshot out.png]";
 
 fn options() -> Result<Options, String> {
     let mut o = Options::default();
@@ -244,6 +248,8 @@ fn options() -> Result<Options, String> {
             "--me" => o.me = Some(value()?),
             "--attach" => o.attach = Some(value()?),
             "--held" => o.held = Some(value()?),
+            "--versions" => o.versions = Some(value()?),
+            "--trial" => o.trial = Some(value()?),
             "--memory" => o.memory = Some(value()?),
             "--runs" => o.runs = Some(value()?),
             "--balance" => o.balance = Some(value()?),
@@ -306,6 +312,12 @@ fn selection_of(page: Option<&str>) -> Selection {
         Some("needs-you" | "needs-you-set-all-aside" | "needs-you-dismiss") => Selection::NeedsYou,
         Some(other) if other.starts_with("brief-answer:") => Selection::NeedsYou,
         Some(other) if other.starts_with("needs-you-hold:") => Selection::NeedsYou,
+        Some(other) if other.starts_with("versions:") => {
+            Selection::Taf(other["versions:".len()..].into())
+        }
+        Some(other) if other.starts_with("trial:") => {
+            Selection::Taf(other["trial:".len()..].into())
+        }
         Some(other) if other.starts_with("mission-log:") => Selection::NeedsYou,
         Some("record") => Selection::Record,
         Some("calendar") | Some("calendar-week") => Selection::Calendar,
@@ -565,6 +577,21 @@ fn activate(app: &adw::Application, o: &Options) {
             share::OPEN.with(|s| *s.borrow_mut() = Some(key.to_string()));
             share::OPEN_STEP2.with(|s| s.set(page.starts_with("share-step2:")));
         }
+    }
+    // `--versions` (and `--trial`): a taf's versions read from files; `--page versions:<key>` or
+    // `trial:<key>` opens its sheet over that taf's page.
+    if let Some(path) = &o.versions {
+        versions::FILES
+            .with(|f| *f.borrow_mut() = Some((path.into(), o.trial.as_ref().map(Into::into))));
+    }
+    match o.page.as_deref() {
+        Some(p) if p.starts_with("versions:") => {
+            versions::OPEN.with(|v| *v.borrow_mut() = Some("versions"))
+        }
+        Some(p) if p.starts_with("trial:") => {
+            versions::OPEN.with(|v| *v.borrow_mut() = Some("trial"))
+        }
+        _ => {}
     }
     // `--page needs-you-hold:<id>`: as a hold's notification opens it, that hold brought into view.
     if let Some(id) = o

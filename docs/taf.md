@@ -390,15 +390,48 @@ crates/tafs-app/fixtures/access-manage.json --people crates/tafs-app/fixtures/pe
 with `--page share:taf-aaaa0000000000000000` (step one, CI's `share`) or `share-step2:…` (step two
 with a change picked and Share tapped, CI's `share-step2`).
 
+## Its versions and its trial
+
+For the person who manages a tafs cloud taf, under its name (`VersionsPanel`, `TrialViews.swift`;
+app `versions.rs`, `tafs-core/versions.rs`): "Version 2 · live" (else "Versions") with a clock and a
+chevron, and, while a trial is open, "Trying v3 · Resume" in amber. Both are read from tafs cloud
+as the session when the page opens (`GET /v1/tafs/{id}/versions`, `GET /v1/tafs/{id}/trial`);
+nothing shows until they're read, or when they can't be. A 401 signs this computer out.
+
+- **Versions**, in a sheet: the eyebrow and what versions are; a switch under way, with Finish
+  and Cancel; then each version, newest first: its number, "Live now" (green) or "Trying"
+  (amber), its note, who made it and when, "brings a new Card" when it does, and what each ended
+  trial came to ("Tried Nov 2 · 3 calls, 1 held · went back"). The live one offers nothing; the
+  one being tried offers Resume the trial; the rest offer Try it and Install this version, both
+  closed while a trial is open, and Install closed while another version's switch is under way.
+- **What's sent:** Cancel on a switch (`DELETE /v1/tafs/{id}/switching`), and the trial's chat.
+- **What's drawn up to the signature:**
+  - Install this version, Finish: the switch the device begins and signs (`Act::MakeLive`); the tap
+    shows the can't-approve line, and nothing is sent.
+  - Try it opens what trying it means ("While you try it" and its four lines), with Start trying
+    disabled and why (`ApprovalNotice`). Its Card isn't shown: tafs cloud makes it as a KIFF draft
+    (`POST /v1/tafs/{id}/versions/{n}/try`) only the phone confirms, so it isn't asked for.
+- **The trial** (`TrialScreen`), in a sheet named "Rae · v3": its bar on the amber (Trying version
+  3, "not live"), Go back with its ask, whose yes shows the can't-approve line (the trial's KIFF
+  draft is ended with the device's key first, `Act::EndTrial`), Install disabled with why
+  (`Act::InstallTrial`); what the trial is, in tafs cloud's words (what's new, what to try it
+  with, that the live taf keeps working, when it ends unused); and the trial's own chat
+  (`/v1/tafs/{id}/trial/conversation`, `/v1/tafs/{id}/trial/messages`, the words alone, no
+  files), kept apart from the taf's.
+- `--versions` (with `--trial`) reads them from files (synthetic: no contract at the pin);
+  `--page versions:<key>` or `trial:<key>` opens the sheet. CI's `taf-versions`,
+  `taf-versions-trial` and `taf-trial`.
+
 ## Not yet
 
 - **The sample's Chat**, there, dimmed. A tafs cloud taf's page opens on its chat ([chat.md](chat.md)).
 - **On the Setup tab:** the sample's Setup (there, dimmed); pulling Starts when or Results go to
   to read them again.
-- **On the Card tab:** Usage (`TafCreditsView` is Plan & usage's own, not reachable from here yet);
-  Versions (with trials).
+- **On the Card tab:** Usage (`TafCreditsView` is Plan & usage's own, not reachable from here yet).
+- **In the trial's sheet:** its guide stays above the chat once messages are in (the iPad shows it
+  before the first only), and the chat's box is under it, a scroll down.
 - **On a tafs cloud taf's Activity:** "All apps" for a selection (an app's calls open the
   Activity unfiltered).
-- **The line under the head:** its version and who it's shared with (`headerLine`, `ShareLine`).
+- **The line under the head:** who it's shared with (`ShareLine`) sits under the tabs.
 - **In its work:** a step it handed you as its card (`YourStepCard`): its line for now.
 - **The side column** on a wide window, Remove, and folding the head while scrolling.
