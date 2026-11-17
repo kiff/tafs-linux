@@ -40,7 +40,9 @@ signs for, does nothing on that tap.
 - what the iPad signs beforehand: a device signed out, a computer's pairing, a passkey.
 
 A call this computer makes as the session is a `signed::Unsigned`, which can't be made for any of
-them. Each signed act (`signed::Act`) names the call the iPad would make, and the tests check
+them. The route is matched as KIFF matches it, without its query, fragment or a trailing `/`, and
+a path that isn't plain (`//`, `/./`, `/../`) counts as signed, so no spelling of a signed route
+can be made unsigned. Each signed act (`signed::Act`) names the call the iPad would make, and the tests check
 that none of them can be made.
 
 The acts drawn this way: People & groups' changes, signing another device out, and the

@@ -104,7 +104,15 @@ pub fn grants_authority(method: &str, path: &str) -> bool {
 /// authority, the session's approval key and its relink, or one the iPad builds and signs
 /// beforehand (a device signed out, a computer's pairing, a passkey added or removed).
 pub fn signed(method: &str, path: &str) -> bool {
-    let path = path.split('#').next().unwrap_or(path);
+    // A path that isn't plain (`//`, `/./`, `/../`) is taken as signed: nothing here builds one,
+    // and none may slip past the lists below by its spelling.
+    if path.contains("//") || path.contains("/./") || path.contains("/../") || path.ends_with("/..")
+    {
+        return true;
+    }
+    // The route itself, as KIFF matches it: no query, no fragment, no trailing `/`.
+    let path = path.split(['?', '#']).next().unwrap_or(path);
+    let path = path.trim_end_matches('/');
     signs_setup(path)
         || grants_authority(method, path)
         || path == "/v1/me/device/approval-key"
@@ -345,6 +353,36 @@ mod tests {
         );
         assert!(Unsigned::new("POST", "/v1/me/pack-requests/r1/withdraw".into(), vec![]).is_some());
         assert!(Unsigned::new("PUT", "/v1/me/time-zone".into(), vec![]).is_none());
+    }
+
+    #[test]
+    fn a_signed_route_is_signed_however_it_is_spelled() {
+        for (method, path) in [
+            ("PUT", "/v1/me/time-zone?x=1"),
+            ("PUT", "/v1/me/usage/limit/"),
+            ("POST", "/v1/me/pack-requests/r1/decline?a"),
+            ("POST", "/v1/me/agent-drafts/d1/confirm?x"),
+            ("POST", "/v1/resume?"),
+            ("PUT", "/v1/me/time-zone#x"),
+            ("PUT", "/v1/me/time-zone//"),
+            ("POST", "/v1/me/pack-requests/./r1/decline"),
+            ("POST", "/v1/me/pack-requests/x/../r1/decline"),
+            ("GET", "/v1/me//devices"),
+        ] {
+            assert!(signed(method, path), "{method} {path}");
+            assert!(
+                Unsigned::new(method, path.to_string(), vec![]).is_none(),
+                "{method} {path}"
+            );
+        }
+        // An unsigned route stays unsigned with a query or a trailing `/`.
+        for path in ["/v1/me/pack-requests?x=1", "/v1/me/pack-requests/"] {
+            assert!(!signed("POST", path), "{path}");
+            assert!(
+                Unsigned::new("POST", path.to_string(), vec![]).is_some(),
+                "{path}"
+            );
+        }
     }
 
     #[test]
