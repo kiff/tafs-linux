@@ -206,7 +206,7 @@ struct Options {
 }
 
 const USAGE: &str = "tafs [--lang en|de|fr|es|it|pt|nl|pl] [--theme light|dark] [--sample] [--signed-in] [--view-only [--paired]]
-     [--home contract.json] [--usage answers.json] [--people answers.json] [--connect answers.json] [--knob answer.json] [--setup answer.json] [--taf-activity answer.json] [--unproven answers.json] [--recipes answers.json] [--gallery answers.json] [--halt answer.json] [--record-search answers.json] [--access answer.json] [--receipts answer.json] [--activity answer.json] [--calls answer.json] [--receipt answer.json] [--work answer.json] [--doors answer.json] [--account-reads answers.json] [--me answer.json] [--held answers.json] [--memory answer.json] [--runs answer.json] [--request answer.json] [--balance answer.json] [--coach answer.json] [--coach-chats answer.json] [--coach-drafts answers.json] [--chat answer.json [--report]] [--brief answer.json] [--mission-log answer.json] [--coach-setup answer.json] [--unreachable network|error] [--app-event item.json] [--size WxH] [--page welcome|sign-in|pair|recipe:<id>|gallery|new-taf|halt-all|halt:<id>|record-search:<q>|record-export|receipt:<proposal id>|run:<taf id>|pin-sheet|share:<key>|share-step2:<key>|coach|coach-tools|coach-full|coach-hand:<id>|overview|overview-label:<id>|needs-you|needs-you-allow|needs-you-set-all-aside|needs-you-dismiss|brief-answer:<decision id>|mission-log:<mission id>|record|calendar|calendar-week|usage|usage-ask|usage-decline|connect-apps|connect-app|connect-connection|connect-remove|connect-which-taf|connect-approve|account|kiff-account|time-zone|time-zone-use|alerts|devices|devices-sign-out|people|people-rename|people-add|taf|taf-card|taf-setup|taf-setup:<id>|starts:<id>|results:<id>|doors:<id>[:<door>]|consent|connected|sign-in-code] [--screenshot out.png]";
+     [--home contract.json] [--usage answers.json] [--people answers.json] [--connect answers.json] [--knob answer.json] [--setup answer.json] [--taf-activity answer.json] [--unproven answers.json] [--recipes answers.json] [--gallery answers.json] [--halt answer.json] [--record-search answers.json] [--access answer.json] [--receipts answer.json] [--activity answer.json] [--calls answer.json] [--receipt answer.json] [--work answer.json] [--doors answer.json] [--account-reads answers.json] [--me answer.json] [--held answers.json] [--memory answer.json] [--runs answer.json] [--request answer.json] [--balance answer.json] [--coach answer.json] [--coach-chats answer.json] [--coach-drafts answers.json] [--chat answer.json [--report]] [--brief answer.json] [--mission-log answer.json] [--coach-setup answer.json] [--unreachable network|error] [--app-event item.json] [--size WxH] [--page welcome|sign-in|pair|recipe:<id>|gallery|new-taf|halt-all|halt:<id>|record-search:<q>|record-export|receipt:<proposal id>|run:<taf id>|pin-sheet|share:<key>|share-step2:<key>|coach|coach-tools|coach-full|coach-hand:<id>|overview|overview-label:<id>|needs-you|needs-you-allow|needs-you-set-all-aside|needs-you-dismiss|needs-you-hold:<id>|brief-answer:<decision id>|mission-log:<mission id>|record|calendar|calendar-week|usage|usage-ask|usage-decline|connect-apps|connect-app|connect-connection|connect-remove|connect-which-taf|connect-approve|account|kiff-account|time-zone|time-zone-use|alerts|devices|devices-sign-out|people|people-rename|people-add|taf|taf-card|taf-setup|taf-setup:<id>|starts:<id>|results:<id>|doors:<id>[:<door>]|consent|connected|sign-in-code] [--screenshot out.png]";
 
 fn options() -> Result<Options, String> {
     let mut o = Options::default();
@@ -303,6 +303,7 @@ fn selection_of(page: Option<&str>) -> Selection {
             Selection::NeedsYou
         }
         Some(other) if other.starts_with("brief-answer:") => Selection::NeedsYou,
+        Some(other) if other.starts_with("needs-you-hold:") => Selection::NeedsYou,
         Some(other) if other.starts_with("mission-log:") => Selection::NeedsYou,
         Some("record") => Selection::Record,
         Some("calendar") | Some("calendar-week") => Selection::Calendar,
@@ -560,6 +561,14 @@ fn activate(app: &adw::Application, o: &Options) {
             share::OPEN_STEP2.with(|s| s.set(page.starts_with("share-step2:")));
         }
     }
+    // `--page needs-you-hold:<id>`: as a hold's notification opens it, that hold brought into view.
+    if let Some(id) = o
+        .page
+        .as_deref()
+        .and_then(|p| p.strip_prefix("needs-you-hold:"))
+    {
+        needs_you::request_hold(id);
+    }
     if o.page.as_deref() == Some("delete-account") {
         kiff_account::OPEN_DELETE.with(|d| d.set(true));
     }
@@ -590,13 +599,17 @@ fn activate(app: &adw::Application, o: &Options) {
         Some("usage-decline") => usage::OPEN.with(|u| u.set(Some("decline-tapped"))),
         _ => {}
     }
-    // A hold's notification, clicked (`app.open-hold`): Needs you, read again. A screenshot
+    // A hold's notification, clicked (`app.open-hold`): Needs you, read again, and the hold
+    // brought into view once it's listed. A screenshot
     // sends none.
     if !screenshot {
         let action = gio::SimpleAction::new("open-hold", Some(glib::VariantTy::STRING));
         let me = Rc::downgrade(&app_state);
-        action.connect_activate(move |_, _| {
+        action.connect_activate(move |_, hold| {
             if let Some(me) = me.upgrade() {
+                if let Some(id) = hold.and_then(|h| h.get::<String>()) {
+                    needs_you::request_hold(&id);
+                }
                 me.open_hold();
             }
         });

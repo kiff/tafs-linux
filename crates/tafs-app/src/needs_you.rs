@@ -57,8 +57,13 @@ pub fn page(
     for happened in &n.happened {
         column.append(&happened_card(happened));
     }
+    // A hold opened from its notification is brought into view (`requestedHold`): its card, or
+    // its Card unit request.
+    let mut by_id: Vec<(String, gtk::Widget)> = Vec::new();
     for ask in &n.card_units {
-        column.append(&card_unit_panel(&w, ask));
+        let panel = card_unit_panel(&w, ask);
+        by_id.push((ask.id.clone(), panel.clone().upcast()));
+        column.append(&panel);
     }
     if let Some((nothing, hint)) = &n.empty {
         // Board 6, nothing waiting (`Illustration.nothingWaiting`), above its words.
@@ -69,7 +74,9 @@ pub fn page(
         column.append(&p);
     }
     for card in &n.cards {
-        column.append(&held_card(&w, card));
+        let c = held_card(&w, card);
+        by_id.push((card.id.clone(), c.clone().upcast()));
+        column.append(&c);
     }
     // A knock at a taf's door waits for the owner too: its row opens the taf, on its Activity,
     // where the knocks are answered.
@@ -83,7 +90,46 @@ pub fn page(
     scroller.set_child(Some(&column));
     scroller.set_vexpand(true);
     crate::widgets::ground(&scroller);
+    if let Some(card) = REQUESTED
+        .with(|r| r.borrow().clone())
+        .and_then(|id| by_id.into_iter().find(|(i, _)| *i == id))
+        .map(|(_, c)| c)
+    {
+        scroll_to(&scroller, &column, card);
+    }
     scroller.upcast()
+}
+
+thread_local! {
+    /// The hold whose notification was clicked (`requestedHold`), until a Needs you that lists it
+    /// is on screen: its id as KIFF keeps it.
+    static REQUESTED: RefCell<Option<String>> = const { RefCell::new(None) };
+}
+
+/// A hold's notification clicked: Needs you brings it into view once it lists it.
+pub fn request_hold(id: &str) {
+    REQUESTED.with(|r| *r.borrow_mut() = Some(id.to_string()));
+}
+
+/// `card` at the top of `scroller`, once it's on screen; the request is then done. A page
+/// replaced before then leaves it for the next.
+fn scroll_to(scroller: &gtk::ScrolledWindow, column: &gtk::Box, card: gtk::Widget) {
+    let (scroller, column) = (scroller.clone(), column.clone());
+    glib::timeout_add_local(std::time::Duration::from_millis(100), move || {
+        if !card.is_mapped() || scroller.vadjustment().upper() <= 0.0 {
+            // Not drawn yet, or no longer: a replaced page is never mapped again.
+            return if scroller.parent().is_some() {
+                glib::ControlFlow::Continue
+            } else {
+                glib::ControlFlow::Break
+            };
+        }
+        if let Some(bounds) = card.compute_bounds(&column) {
+            scroller.vadjustment().set_value(f64::from(bounds.y()));
+        }
+        REQUESTED.with(|r| *r.borrow_mut() = None);
+        glib::ControlFlow::Break
+    });
 }
 
 /// `YourStepCard`: tafs cloud's title, the taf, what and why, the vendor's page when tafs cloud

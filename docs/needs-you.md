@@ -169,7 +169,8 @@ KIFF's held calls (`GET /v1/me/card-exceptions?status=held`) once a minute, as W
 - **Gone:** a hold no longer held (answered elsewhere, or lapsed) loses its notification at the
   next read. Signing out withdraws every one, and ends the reads.
 - **Clicking one:** tafs comes to the front and reads the account again, opening on Needs you
-  (`PushDelegate.open`). Bringing that one call into view isn't ported.
+  (`PushDelegate.open`), and once Needs you lists that hold, its card (or its Card unit
+  request) is brought to the top (`requestedHold`). CI's `needs-you-hold` opens as one would.
 - **A read that fails** changes nothing, and the next minute reads again. A 401 signs this
   computer out, as any read does.
 - **Each notification's id** is its hold's id hashed (SHA-256), so any id KIFF sends is a safe
