@@ -42,7 +42,7 @@ fn the_conversation_is_the_live_chat_s() {
     assert_eq!(conversation_path("taf 1"), "/v1/tafs/taf%201/conversation");
     // A taf's message goes into its live chat: no session, no new chat.
     let body: Value =
-        serde_json::from_slice(&message_body("Hi", &ChatTarget::default(), &[])).unwrap();
+        serde_json::from_slice(&message_body("Hi", &ChatTarget::default(), &[], None)).unwrap();
     assert_eq!(body, serde_json::json!({"text": "Hi"}));
     // Files go with it by their ids (`MessageBody.attachments`), none when there are none.
     let file = crate::coach::Attachment {
@@ -53,7 +53,7 @@ fn the_conversation_is_the_live_chat_s() {
         size: 10,
     };
     let body: Value =
-        serde_json::from_slice(&message_body("", &ChatTarget::default(), &[file])).unwrap();
+        serde_json::from_slice(&message_body("", &ChatTarget::default(), &[file], None)).unwrap();
     assert_eq!(
         body,
         serde_json::json!({"text": "", "attachments": ["att_1"]})
@@ -321,13 +321,11 @@ fn send_goes_now_or_to_the_run_at_work() {
         1
     );
     // At work: Send writes to its run.
-    assert_eq!(
+    assert!(matches!(
         c.submit(&w, "and 4411", now).unwrap(),
-        Submit::Steer {
-            run: "run9".into(),
-            text: "and 4411".into()
-        }
-    );
+        Submit::Steer { run, text, client_id }
+            if run == "run9" && text == "and 4411" && client_id.len() == 36
+    ));
 }
 
 fn mine_like(text: &str) -> ChatMessage {
@@ -353,7 +351,7 @@ fn words_written_to_the_run_show_at_once() {
     let w = en();
     let now = at("2026-11-16T10:05:00Z");
     let mut c = chat_of(std::str::from_utf8(&fixture("taf-chat-working.json")).unwrap());
-    let body: Value = serde_json::from_slice(&steer_body("run8", "and 4411")).unwrap();
+    let body: Value = serde_json::from_slice(&steer_body("run8", "and 4411", None)).unwrap();
     assert_eq!(
         body,
         serde_json::json!({"run": "run8", "text": "and 4411", "hold": true})
@@ -619,7 +617,7 @@ fn a_message_that_goes_takes_a_too_fast_one_away() {
     let mut c = chat_of(std::str::from_utf8(&fixture("taf-chat.json")).unwrap());
     let (_, u) = c.retry(c.unsent[0].id).unwrap();
     let left = c.unsent.len();
-    c.steer_not_sent(&u.text, "again", None, false, now);
+    c.steer_not_sent(&u.text, "id", "again", None, false, now);
     c.retry_kept(left, &u);
     assert_eq!(c.unsent[0].settle, u.settle);
 }
@@ -1307,4 +1305,99 @@ fn once_recorded_each_held_call_stays_after_what_came_before_it() {
     c.anchors.clear();
     let it = items_of(&c, &held, at("2026-11-16T09:06:00Z"));
     assert!(matches!(it[1], Item::Held { key: "card-a", .. }));
+}
+
+#[test]
+fn each_message_goes_under_its_own_id_and_retry_under_the_same() {
+    let w = en();
+    let now = at("2026-11-16T10:00:00Z");
+    let mut c = chat_of(r#"{"messages":[]}"#);
+    let Submit::Send(d) = c.submit(&w, "Refund 4410", now).unwrap() else {
+        panic!("a message");
+    };
+    // A v4 UUID, on the stream's body and on the plain send's: one body, the same id.
+    let id = d.client_id.clone();
+    assert_eq!((id.len(), &id[14..15]), (36, "4"));
+    let body: Value =
+        serde_json::from_slice(&message_body(&d.text, &d.target, &d.files, Some(&id))).unwrap();
+    assert_eq!(body["client_message_id"], serde_json::json!(id));
+    // Not sent: its row keeps the id, and Retry sends under it again.
+    c.not_sent(&d, "It didn't go.", None, false, now);
+    assert_eq!(c.unsent[0].client_id.as_deref(), Some(id.as_str()));
+    let (_, again) = c.retry(c.unsent[0].id).unwrap();
+    let d2 = c.deliver(&again.text, now).unwrap();
+    assert_eq!(d2.client_id, id);
+    // Sent: the next message is another, with its own.
+    c.delivered(
+        &d2,
+        &Sent {
+            session: "s".into(),
+            new_session: false,
+            message: None,
+        },
+        now,
+    );
+    let d3 = c.deliver("And 4411", now).unwrap();
+    assert_ne!(d3.client_id, id);
+    // Edit takes the words back to the box: what's sent from there is a new message.
+    c.not_sent(&d3, "It didn't go.", None, false, now);
+    let row = c.unsent.last().unwrap().id;
+    let words = c.edit(row).unwrap();
+    let d4 = c.deliver(&words, now).unwrap();
+    assert_ne!(d4.client_id, d3.client_id);
+    // A Retry that wasn't taken leaves no id for the next message.
+    c.not_sent(&d4, "It didn't go.", None, false, now);
+    let row = c.unsent.last().unwrap().id;
+    let (at_, m) = c.retry(row).unwrap();
+    c.retry_back(at_, m);
+    assert_ne!(
+        c.deliver("Something else", now).unwrap().client_id,
+        d4.client_id
+    );
+    // A trial's chat, and an improvement, send none.
+    let body: Value =
+        serde_json::from_slice(&message_body("Hi", &ChatTarget::default(), &[], None)).unwrap();
+    assert!(body.get("client_message_id").is_none());
+}
+
+#[test]
+fn a_steer_goes_under_its_id_and_its_retry_too() {
+    let w = en();
+    let now = at("2026-11-16T10:05:00Z");
+    let mut c = chat_of(std::str::from_utf8(&fixture("taf-chat-working.json")).unwrap());
+    let Submit::Steer {
+        run,
+        text,
+        client_id,
+    } = c.submit(&w, "and 4411", now).unwrap()
+    else {
+        panic!("a steer");
+    };
+    let body: Value = serde_json::from_slice(&steer_body(&run, &text, Some(&client_id))).unwrap();
+    assert_eq!(body["client_message_id"], serde_json::json!(client_id));
+    c.steer_not_sent(&text, &client_id, "It didn't go.", None, false, now);
+    let row = c.unsent.last().unwrap().id;
+    c.retry(row).unwrap();
+    let Submit::Steer {
+        client_id: again, ..
+    } = c.submit(&w, "and 4411", now).unwrap()
+    else {
+        panic!("a steer");
+    };
+    assert_eq!(again, client_id);
+}
+
+#[test]
+fn an_id_already_used_for_other_words_says_so() {
+    let w = en();
+    let r = Refusal::read(
+        409,
+        br#"{"code":"dedup_key_conflict","error":"dedup key names another message"}"#,
+    );
+    let why = w.line("error.sent_with_other_text").unwrap();
+    assert_eq!(r.words(&w).unwrap(), why);
+    match refused(&w, &r, "Rae", false).unwrap() {
+        SendRefused::NotSent { why: said, .. } => assert_eq!(said, why),
+        other => panic!("{other:?}"),
+    }
 }

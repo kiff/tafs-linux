@@ -959,12 +959,16 @@ impl Page {
                     }
                 });
             }
-            Submit::Steer { run, text } => {
+            Submit::Steer {
+                run,
+                text,
+                client_id,
+            } => {
                 self.jump.sent(&text);
                 self.set_draft("");
                 let p = self.clone();
                 glib::spawn_future_local(async move {
-                    if !p.steer(&run, &text).await && p.draft().is_empty() {
+                    if !p.steer(&run, &text, &client_id).await && p.draft().is_empty() {
                         p.set_draft(&words);
                     }
                 });
@@ -996,7 +1000,7 @@ impl Page {
             }
             None => (
                 coach_send::messages_path(&setup),
-                coach_send::message_body(&d.text, &d.target, &d.files),
+                coach_send::message_body(&d.text, &d.target, &d.files, Some(&d.client_id)),
             ),
         };
         // Streamed, so Coach's words show as it writes them; sent plainly when the stream can't
@@ -1178,7 +1182,8 @@ impl Page {
     }
 
     /// Written to Coach's run while it works (`steer`): true once taken, held or kept as not sent.
-    async fn steer(self: &Rc<Self>, run: &str, words: &str) -> bool {
+    /// `id`: the message's `client_message_id`.
+    async fn steer(self: &Rc<Self>, run: &str, words: &str, id: &str) -> bool {
         let (Some(setup), generation) = ({
             let c = self.conv.borrow();
             (c.setup.clone(), c.generation)
@@ -1188,7 +1193,7 @@ impl Page {
         let Some(answer) = self
             .post(
                 coach_send::steer_path(&setup),
-                coach_send::steer_body(run, words),
+                coach_send::steer_body(run, words, Some(id)),
             )
             .await
         else {
@@ -1216,7 +1221,7 @@ impl Page {
                     let why = tafs_core::signin::plain_words(&self.w, 200).unwrap_or_default();
                     self.conv
                         .borrow_mut()
-                        .steer_not_sent(words, &why, None, now);
+                        .steer_not_sent(words, id, &why, None, now);
                     true
                 }
             },
@@ -1240,14 +1245,14 @@ impl Page {
                     let why = r.words(&self.w).unwrap_or_default();
                     self.conv
                         .borrow_mut()
-                        .steer_not_sent(words, &why, r.halted.clone(), now);
+                        .steer_not_sent(words, id, &why, r.halted.clone(), now);
                     true
                 }
             }
             Err(why) => {
                 self.conv
                     .borrow_mut()
-                    .steer_not_sent(words, &why, None, now);
+                    .steer_not_sent(words, id, &why, None, now);
                 true
             }
         };
@@ -1384,7 +1389,11 @@ impl Page {
             let taken = match submit {
                 Submit::Stay => false,
                 Submit::Send(d) => p.deliver(d).await,
-                Submit::Steer { run, text } => p.steer(&run, &text).await,
+                Submit::Steer {
+                    run,
+                    text,
+                    client_id,
+                } => p.steer(&run, &text, &client_id).await,
             };
             if !taken {
                 p.conv.borrow_mut().retry_back(at, message);
