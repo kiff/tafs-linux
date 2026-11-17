@@ -748,6 +748,8 @@ fn runs_page(
                 languages: languages.clone(),
             },
             manages: names.iter().any(|(id, _, m)| *id == taf && *m),
+            // From Plan & usage, a run's page has no Coach here yet.
+            coach: None,
         }),
         _ => None,
     };

@@ -256,7 +256,8 @@ After its work, a tafs cloud taf's runs (`crates/tafs-app/src/runs_panel.rs`,
   - for whoever manages the taf, Try the reply now on each delivery that can be sent again
     (`POST …/requests/{run}/deliveries/{place}/send`, unsigned). It turns to "Sending again…",
     and the page is read again. If it fails, "It wasn't sent again." and why.
-  - Ask Coach isn't here: Coach isn't on this computer.
+  - Ask Coach, for someone who may use Coach (`openCoach`): the sheets close, and Coach opens on
+    this taf where they manage it ([Coach on a taf](coach.md)), else as it was.
   - What went wrong reading it shows with Try again.
 - **Read as strictly as the iPad's `RunsPage`:** a page without its title, or with a run it
   can't read, isn't one.

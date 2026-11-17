@@ -82,7 +82,8 @@ request's Decline with Decline tapped (`usage-decline`).
   read again, and where that read fails, what the last one gave stays, with why under its runs.
 - **A run's own page** (`CreditsRunRow`): signed in with KIFF, a run tafs cloud says `opens`
   is a link, with a chevron, to the run's own page (`KnobRequestDetail`, [the taf's
-  page](taf.md)), read as the session. Try the reply now is there for whoever manages the taf. A
+  page](taf.md)), read as the session. Try the reply now is there for whoever manages the taf; Ask Coach isn't
+  yet, from here. A
   run that doesn't open, and the screenshots' file, stay plain lines.
 
 A read that fails keeps what was read before and says why: tafs cloud's own `words` when it

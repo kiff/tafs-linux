@@ -269,8 +269,13 @@ pub fn page(
             ));
             // Its runs: when it runs next and Run now, then the runs tafs cloud kept, read again
             // once Run now started one.
-            let (kept, reload) =
-                crate::runs_panel::retained_runs(w.clone(), id.clone(), t.runs.clone(), t.manages);
+            let (kept, reload) = crate::runs_panel::retained_runs(
+                w.clone(),
+                id.clone(),
+                t.runs.clone(),
+                t.manages,
+                (t.may_use_coach && !t.sample).then(|| open_coach.clone()),
+            );
             if let Some(line) = &t.runs_line {
                 if !matches!(t.runs, crate::runs_panel::RunsSource::None) {
                     body.append(&crate::runs_panel::runs_panel(

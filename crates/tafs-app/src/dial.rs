@@ -909,6 +909,11 @@ impl Dial {
             id: self.knobs.taf().id.clone(),
             source: self.knobs.taf().runs.clone(),
             manages: self.manages,
+            coach: self
+                .knobs
+                .taf()
+                .may_use_coach
+                .then(|| self.knobs.taf().open_coach.clone()),
         };
         let list = s.column.clone();
         let knobs = self.knobs.clone();

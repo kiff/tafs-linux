@@ -82,6 +82,8 @@ pub struct Opening {
     pub id: String,
     pub source: RunsSource,
     pub manages: bool,
+    /// Coach from a run's page (`openCoach`, on the taf on screen), for someone who may use it.
+    pub coach: Option<Rc<dyn Fn()>>,
 }
 
 /// A row: a run's line, what it used, where its result went, opening its own page; or a
@@ -112,8 +114,8 @@ fn row(r: &Row, open: &Opening) -> gtk::Widget {
 }
 
 /// A run's own page (`KnobRequestDetail`), over the window: where it came from and its line,
-/// each step with its mark, and Try the reply now for whoever manages the taf. Coach's Ask isn't
-/// on this computer.
+/// each step with its mark, Try the reply now for whoever manages the taf, and Ask Coach for
+/// someone who may use Coach.
 pub fn request_sheet(open: Opening, run: String, parent: &impl IsA<gtk::Widget>) {
     let w = open.w.clone();
     let column = gtk::Box::new(gtk::Orientation::Vertical, 16);
@@ -328,6 +330,33 @@ fn draw_request(
         column.append(&b);
         column.append(&said);
     }
+    // Ask Coach (`openCoach`): Coach, on the taf on screen.
+    if let Some(coach) = &open.coach {
+        let b = outline(&l("coach.ask"));
+        b.set_hexpand(false);
+        b.set_halign(gtk::Align::Start);
+        b.set_widget_name("run.ask-coach");
+        let coach = coach.clone();
+        b.connect_clicked(move |b| {
+            // Out of the sheets first (this page, and the runs under it): Coach opens over the
+            // window.
+            if let Some(win) = b
+                .root()
+                .and_then(|r| r.downcast::<adw::ApplicationWindow>().ok())
+            {
+                for _ in 0..4 {
+                    match win.visible_dialog() {
+                        Some(d) => {
+                            d.force_close();
+                        }
+                        None => break,
+                    }
+                }
+            }
+            coach();
+        });
+        column.append(&b);
+    }
 }
 
 /// `RunsPanel`: the line, and Run now with tafs cloud's words when it started no run. `line` is
@@ -424,12 +453,14 @@ pub fn retained_runs(
     id: String,
     source: RunsSource,
     manages: bool,
+    coach: Option<Rc<dyn Fn()>>,
 ) -> (gtk::Box, Rc<dyn Fn()>) {
     let opening = Opening {
         w: w.clone(),
         id: id.clone(),
         source: source.clone(),
         manages,
+        coach,
     };
     let root = gtk::Box::new(gtk::Orientation::Vertical, 0);
     let load: Later = Rc::new(RefCell::new(None));
