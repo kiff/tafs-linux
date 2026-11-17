@@ -131,6 +131,7 @@ pub fn icon_for(sf: &str) -> &'static str {
         "sparkle" => "tafs-sparkle-symbolic",
         "sparkles" => "tafs-sparkles-symbolic",
         "clock" => "tafs-clock-symbolic",
+        "paperplane" => "tafs-paperplane-symbolic",
         "bolt.fill" => "tafs-bolt-symbolic",
         "doc.on.doc" => "tafs-copy-symbolic",
         "checkmark" => "tafs-checkmark-symbolic",

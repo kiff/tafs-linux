@@ -271,7 +271,7 @@ fn draw(
     if let Some(knobs) = &taf.knobs {
         root.append(&screen_link(
             &l("setup.results_go_to"),
-            "mail-send-symbolic",
+            crate::widgets::icon_for("paperplane"),
             knobs,
             crate::starts_when::Screen::ResultsGoTo,
         ));
@@ -289,6 +289,8 @@ fn draw(
         }
         let all = gtk::Button::with_label(&l("taf.memory.see_all"));
         all.add_css_class("tafs-link");
+        // A plain button in the panel: the list's tint, at the body's size.
+        all.add_css_class("tafs-tint-link");
         all.set_halign(gtk::Align::Start);
         {
             let (w, taf, source, load) = (w.clone(), taf.clone(), source.clone(), load.clone());

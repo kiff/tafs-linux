@@ -402,7 +402,8 @@ menubutton.tafs-plain > button { background: none; background-image: none; borde
 button.tafs-outline.tafs-ok { color: @tafs_ok; border-color: alpha(@tafs_ok, 0.5); }
 button.tafs-link.tafs-big-link { font-size: 15px; }
 button.tafs-ring-node { padding: 5px; border-radius: 14px; background-color: @tafs_panel; background-image: none; border: 1px solid @tafs_line; box-shadow: none; }
-button.tafs-ring-plus { border-radius: 999px; background-color: @tafs_raised; border: 1px dashed @tafs_line; box-shadow: none; min-width: 46px; min-height: 46px; padding: 0; }
+button.tafs-ring-plus { border-radius: 999px; background-color: @tafs_raised; border: 1px dashed @tafs_line; box-shadow: none; min-width: 46px; min-height: 46px; padding: 0; color: @tafs_amber; }
+button.tafs-link.tafs-tint-link { font-size: 17px; font-weight: 400; color: @tafs_amber; padding: 2px 0; }
 .tafs-knock { padding: 12px; border-radius: 16px; background-color: alpha(@tafs_amber, 0.07); border: 1px solid alpha(@tafs_amber, 0.45); }
 .tafs-knock.paired { background-color: @tafs_panel; border-color: alpha(@tafs_ink, 0.2); }
 button.tafs-knock-do { background: @tafs_amber; color: white; font-size: 14px; font-weight: 600; border-radius: 999px; padding: 8px 14px; border: none; box-shadow: none; min-height: 0; }
