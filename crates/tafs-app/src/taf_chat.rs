@@ -88,6 +88,8 @@ struct Page {
     scroller: gtk::ScrolledWindow,
     error: gtk::Label,
     composer: Composer,
+    /// The files picked for the next message (`chatFiles[taf]`).
+    attach: Rc<crate::attach::Attach>,
 }
 
 /// The Chat tab's pane: the thread, the line above the box, and the box.
@@ -124,6 +126,22 @@ pub fn pane(w: Rc<WordBook>, taf: ChatTaf, source: ChatSource) -> gtk::Widget {
     bar_clamp.set_child(Some(&field));
     composer.bar.append(&bar_clamp);
     root.append(&composer.bar);
+    // The taf's files go to it at tafs cloud (`filesTarget`); a screenshot's go nowhere.
+    let attach = crate::attach::Attach::new(
+        w.clone(),
+        match &source {
+            ChatSource::Cloud {
+                token, languages, ..
+            } => Some(crate::attach::Target {
+                token: token.clone(),
+                languages: languages.clone(),
+                taf: taf.id.clone(),
+            }),
+            _ => None,
+        },
+    );
+    attach.place(&composer);
+    attach.button.set_visible(!source.is_none());
 
     let chat = CHATS.with(|c| {
         c.borrow_mut()
@@ -145,8 +163,17 @@ pub fn pane(w: Rc<WordBook>, taf: ChatTaf, source: ChatSource) -> gtk::Widget {
         scroller,
         error,
         composer,
+        attach,
     });
     wire_composer(&page);
+    {
+        let p = Rc::downgrade(&page);
+        page.attach.on_change(Rc::new(move || {
+            if let Some(p) = p.upgrade() {
+                p.composer_state();
+            }
+        }));
+    }
     match page.source.clone() {
         ChatSource::File {
             thread: path,
@@ -373,6 +400,39 @@ impl Page {
     /// Send: what's in the box.
     fn send(self: &Rc<Self>) {
         let words = self.composer.draft();
+        // A message with files goes as a message of its own.
+        let taken = self.attach.take();
+        if !taken.is_empty() {
+            if !self.sends() {
+                self.attach.put_back(taken);
+                return;
+            }
+            let refs: Vec<_> = taken
+                .iter()
+                .filter_map(|f| f.attachment().cloned())
+                .collect();
+            let delivery = self
+                .chat
+                .borrow_mut()
+                .deliver_with(&words, refs, chrono::Utc::now());
+            let Some(d) = delivery else {
+                self.attach.put_back(taken);
+                return;
+            };
+            self.composer.set_draft("");
+            self.follow.set(true);
+            self.draw();
+            let p = self.clone();
+            glib::spawn_future_local(async move {
+                if !p.deliver(d).await {
+                    if p.composer.draft().is_empty() {
+                        p.composer.set_draft(&words);
+                    }
+                    p.attach.put_back(taken);
+                }
+            });
+            return;
+        }
         self.send_words(&words, true);
     }
 
@@ -425,7 +485,7 @@ impl Page {
 
     /// `deliverChatOnce`'s send: true once the message is taken (sent, or kept as not sent).
     async fn deliver(self: &Rc<Self>, d: Delivery) -> bool {
-        let body = coach_send::message_body(&d.text, &d.target);
+        let body = coach_send::message_body(&d.text, &d.target, &d.files);
         let Some(answer) = self
             .post(coach_send::messages_path(&self.taf.id), body)
             .await
@@ -645,8 +705,14 @@ impl Page {
     fn composer_state(&self) {
         let thinking = self.chat.borrow().thinking();
         if let Ok(k) = taf_chat::composer(&self.w, Some(&self.taf.name), thinking) {
-            self.composer
-                .show(&k.placeholder, &k.send, &k.stop, thinking);
+            let (ready, held) = self.attach.send_state(&k.send, thinking);
+            self.composer.show_with(
+                &k.placeholder,
+                &k.send,
+                &k.stop,
+                thinking,
+                Some((ready, held.as_deref())),
+            );
         }
     }
 

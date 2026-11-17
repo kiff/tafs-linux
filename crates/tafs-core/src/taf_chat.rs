@@ -330,8 +330,21 @@ impl TafChat {
     /// `deliverChatOnce`'s start: the message shown at once, faded, until tafs cloud's copy takes
     /// its place; it goes into the taf's live chat. None when it isn't tried.
     pub fn deliver(&mut self, text: &str, now: DateTime<Utc>) -> Option<Delivery> {
+        self.deliver_with(text, vec![], now)
+    }
+
+    /// `submitChat` with files: a message of their own, the words with them or none.
+    pub fn deliver_with(
+        &mut self,
+        text: &str,
+        files: Vec<crate::coach::Attachment>,
+        now: DateTime<Utc>,
+    ) -> Option<Delivery> {
         let text = text.trim();
-        if text.is_empty() || text.chars().count() > CHAT_LIMIT || self.taf.is_none() {
+        if (text.is_empty() && files.is_empty())
+            || text.chars().count() > CHAT_LIMIT
+            || self.taf.is_none()
+        {
             return None;
         }
         if self.sending {
@@ -350,7 +363,7 @@ impl TafChat {
             session: PENDING.into(),
             door: None,
             work: None,
-            attachments: vec![],
+            attachments: files.clone(),
             server_id: None,
             answers: None,
             delivered: None,
@@ -365,6 +378,7 @@ impl TafChat {
             text: text.into(),
             target: ChatTarget::default(),
             generation: 0,
+            files,
         })
     }
 

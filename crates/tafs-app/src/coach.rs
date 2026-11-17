@@ -116,6 +116,8 @@ struct Page {
     /// conversation (`CoachToolsRow`).
     coach_tools: RefCell<Option<CoachTools>>,
     tools_row: gtk::Button,
+    /// The files picked for the next message (`setupFiles`).
+    attach: Rc<crate::attach::Attach>,
     /// "Taking shape" beside the conversation, and what it holds.
     side: gtk::Box,
     shape: gtk::Box,
@@ -222,6 +224,9 @@ pub fn page(
     let composer = crate::chat::composer(crate::chat::Whose::Coach);
     composer.bar.set_visible(false);
     chat.append(&composer.bar);
+    // Coach's files go to Coach's taf at tafs cloud, once it's read (`filesTarget`).
+    let attach = crate::attach::Attach::new(w.clone(), None);
+    attach.place(&composer);
     let side = gtk::Box::new(gtk::Orientation::Horizontal, 0);
     side.append(&gtk::Separator::new(gtk::Orientation::Vertical));
     let shape = gtk::Box::new(gtk::Orientation::Vertical, 22);
@@ -271,6 +276,7 @@ pub fn page(
         wide: Cell::new(false),
         coach_tools: RefCell::new(None),
         tools_row,
+        attach,
         side,
         shape,
         shape_drawn: RefCell::new(None),
@@ -278,6 +284,14 @@ pub fn page(
     // Opened for a new taf, a job handed over or a setup to finish: that conversation.
     crate::coach_start::apply(&mut page.conv.borrow_mut());
     wire_composer(&page);
+    {
+        let p = Rc::downgrade(&page);
+        page.attach.on_change(Rc::new(move || {
+            if let Some(p) = p.upgrade() {
+                p.composer_state();
+            }
+        }));
+    }
     {
         let p = Rc::downgrade(&page);
         page.tools_row.connect_clicked(move |_| {
@@ -482,6 +496,16 @@ impl Page {
             .unwrap_or_else(|_| Err(Fail::Why(String::new())));
         match read {
             Ok((Some(id), tools)) => {
+                if let CoachSource::Cloud {
+                    kept, languages, ..
+                } = &self.source
+                {
+                    self.attach.set_target(Some(crate::attach::Target {
+                        token: kept.token.clone(),
+                        languages: languages.clone(),
+                        taf: id.clone(),
+                    }));
+                }
                 self.conv.borrow_mut().setup = Some(id);
                 *self.coach_tools.borrow_mut() = tools;
                 self.load_thread().await;
@@ -720,6 +744,35 @@ impl Page {
             return;
         }
         let words = self.draft();
+        // A message with files goes as a message of its own (`deliverSetup(text, files:)`).
+        let taken = self.attach.take();
+        if !taken.is_empty() {
+            let refs: Vec<_> = taken
+                .iter()
+                .filter_map(|f| f.attachment().cloned())
+                .collect();
+            let delivery = self
+                .conv
+                .borrow_mut()
+                .deliver_with(&words, refs, chrono::Utc::now());
+            let Some(d) = delivery else {
+                self.attach.put_back(taken);
+                return;
+            };
+            self.set_draft("");
+            self.follow.set(true);
+            self.draw();
+            let p = self.clone();
+            glib::spawn_future_local(async move {
+                if !p.deliver(d).await {
+                    if p.draft().is_empty() {
+                        p.set_draft(&words);
+                    }
+                    p.attach.put_back(taken);
+                }
+            });
+            return;
+        }
         let submit = self.conv.borrow_mut().submit(&words, chrono::Utc::now());
         match submit {
             Submit::Stay => {}
@@ -751,7 +804,7 @@ impl Page {
         let Some(setup) = self.conv.borrow().setup.clone() else {
             return false;
         };
-        let body = coach_send::message_body(&d.text, &d.target);
+        let body = coach_send::message_body(&d.text, &d.target, &d.files);
         let Some(answer) = self.post(coach_send::messages_path(&setup), body).await else {
             return false;
         };
@@ -1041,7 +1094,14 @@ impl Page {
         };
         self.composer.bar.set_visible(c.setup.is_some());
         self.tools.set_visible(c.setup.is_some());
-        self.composer.show(&placeholder, &send, &stop, thinking);
+        let (ready, held) = self.attach.send_state(&send, thinking);
+        self.composer.show_with(
+            &placeholder,
+            &send,
+            &stop,
+            thinking,
+            Some((ready, held.as_deref())),
+        );
     }
 
     /// `CoachToolsRow`: tafs cloud's line, and a chevron, above the conversation while Coach's

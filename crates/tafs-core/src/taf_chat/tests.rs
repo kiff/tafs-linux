@@ -41,8 +41,23 @@ fn chat_of(json: &str) -> TafChat {
 fn the_conversation_is_the_live_chat_s() {
     assert_eq!(conversation_path("taf 1"), "/v1/tafs/taf%201/conversation");
     // A taf's message goes into its live chat: no session, no new chat.
-    let body: Value = serde_json::from_slice(&message_body("Hi", &ChatTarget::default())).unwrap();
+    let body: Value =
+        serde_json::from_slice(&message_body("Hi", &ChatTarget::default(), &[])).unwrap();
     assert_eq!(body, serde_json::json!({"text": "Hi"}));
+    // Files go with it by their ids (`MessageBody.attachments`), none when there are none.
+    let file = crate::coach::Attachment {
+        id: "att_1".into(),
+        kind: "image".into(),
+        media_type: "image/jpeg".into(),
+        name: "receipt.jpg".into(),
+        size: 10,
+    };
+    let body: Value =
+        serde_json::from_slice(&message_body("", &ChatTarget::default(), &[file])).unwrap();
+    assert_eq!(
+        body,
+        serde_json::json!({"text": "", "attachments": ["att_1"]})
+    );
 }
 
 #[test]

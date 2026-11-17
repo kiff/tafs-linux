@@ -336,6 +336,30 @@ pub fn kiff_send(
     )
 }
 
+/// A file's bytes, straight to storage where tafs cloud said (`TafsCloud.upload`): no session
+/// goes with them, only the headers tafs cloud gave, and only to an HTTPS address. Two minutes.
+pub fn upload(to: &tafs_core::attach::Upload, data: &[u8]) -> Result<u16, KiffError> {
+    if !to.sendable() {
+        return Err(KiffError::Unreadable);
+    }
+    let agent = ureq::AgentBuilder::new()
+        .timeout_connect(Duration::from_secs(15))
+        .timeout(Duration::from_secs(120))
+        .redirects(0)
+        .user_agent("tafs-linux")
+        .try_proxy_from_env(true)
+        .build();
+    let mut request = agent.request(&to.method, &to.url);
+    for (name, value) in &to.headers {
+        request = request.set(name, value);
+    }
+    match request.send_bytes(data) {
+        Ok(r) => Ok(r.status()),
+        Err(ureq::Error::Status(status, _)) => Ok(status),
+        Err(ureq::Error::Transport(_)) => Err(KiffError::Offline),
+    }
+}
+
 /// `GET /v1/me/devices` at KIFF as the session (`devices()`).
 pub fn devices(token: &str, languages: &[&str]) -> Result<Answer, KiffError> {
     get(

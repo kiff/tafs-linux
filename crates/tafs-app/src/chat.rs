@@ -33,6 +33,8 @@ pub async fn post(
 /// The message box (`composer`) and its button, Send or Stop.
 pub struct Composer {
     pub bar: gtk::Box,
+    /// The row under the words: the paperclip at its start, Send or Stop at its end.
+    pub row: gtk::Box,
     pub view: gtk::TextView,
     pub placeholder: gtk::Label,
     pub send: gtk::Button,
@@ -113,6 +115,7 @@ pub fn composer(whose: Whose) -> Composer {
     bar.append(&field);
     Composer {
         bar,
+        row,
         view,
         placeholder,
         send,
@@ -131,10 +134,20 @@ impl Composer {
     }
 
     /// Its words and its button: Stop while the agent works and nothing is written, else Send,
-    /// dimmed while there's nothing to send.
-    pub fn show(&self, placeholder: &str, send: &str, stop: &str, thinking: bool) {
+    /// dimmed while there's nothing to send. With the chat's files (`FileTray`): files ready to go
+    /// make Send sendable without words; while one is still going up, or files wait for the agent
+    /// to finish, Send waits, its words `held`.
+    pub fn show_with(
+        &self,
+        placeholder: &str,
+        send: &str,
+        stop: &str,
+        thinking: bool,
+        files: Option<(bool, Option<&str>)>,
+    ) {
         let draft = self.draft();
-        let empty = draft.trim().is_empty();
+        let (ready, held) = files.unwrap_or((false, None));
+        let empty = draft.trim().is_empty() && !ready;
         self.placeholder.set_label(placeholder);
         self.placeholder.set_visible(draft.is_empty());
         self.view
@@ -143,9 +156,9 @@ impl Composer {
         self.stop
             .update_property(&[gtk::accessible::Property::Label(stop)]);
         self.send.set_visible(!(thinking && empty));
-        self.send.set_sensitive(!empty);
+        self.send.set_sensitive(!empty && held.is_none());
         self.send
-            .update_property(&[gtk::accessible::Property::Label(send)]);
+            .update_property(&[gtk::accessible::Property::Label(held.unwrap_or(send))]);
     }
 
     /// ⌘↩ sends and ⌘. stops, as on the iPad's keyboard: Ctrl here.

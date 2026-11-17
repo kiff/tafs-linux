@@ -1,0 +1,5 @@
+[
+  {"name": "receipt-1042.jpg", "media_type": "image/jpeg", "state": "ready"},
+  {"name": "Return form.pdf", "media_type": "application/pdf", "state": "uploading"},
+  {"name": "notes.txt", "media_type": "text/plain", "state": "failed"}
+]
