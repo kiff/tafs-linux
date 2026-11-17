@@ -145,7 +145,14 @@ pub enum Layout {
 }
 
 pub fn layout(width: f64, height: f64) -> Layout {
-    if width >= 700.0 && width > height && height >= 600.0 {
+    layout_in(width, height, width > height)
+}
+
+/// `layout` where "the screen lies on its side" is the window's shape, not the page's: a 4:3
+/// window less the sidebar leaves a page about as tall as it's wide, where the iPad in landscape
+/// is always wider.
+pub fn layout_in(width: f64, height: f64, landscape: bool) -> Layout {
+    if width >= 700.0 && landscape && height >= 600.0 {
         Layout::Wide
     } else {
         Layout::Compact
@@ -575,5 +582,9 @@ mod tests {
         assert_eq!(layout(1000.0, 790.0), Layout::Wide);
         assert_eq!(layout(1000.0, 1300.0), Layout::Compact);
         assert_eq!(layout(600.0, 500.0), Layout::Compact);
+        // A 4:3 window less the sidebar: the page about square, the window on its side.
+        assert_eq!(layout_in(904.0, 900.0, true), Layout::Wide);
+        assert_eq!(layout_in(904.0, 900.0, false), Layout::Compact);
+        assert_eq!(layout_in(904.0, 560.0, true), Layout::Compact);
     }
 }

@@ -396,11 +396,23 @@ pub fn page(
     let card_scroller = gtk::ScrolledWindow::new();
     card_scroller.set_hscrollbar_policy(gtk::PolicyType::Never);
     let card = card_pane(&w, t, &open_coach, &open_usage);
-    // `HaltRow(tafID:framed:)`, at the Card's foot as on the iPad.
+    // `HaltRow(tafID:framed:)`, as on the iPad: after the Card's own lines and How this is
+    // counted, before Changes to how it runs, Usage and Revoke.
     if let Some(row) = halt_row {
-        row.set_margin_start(16);
-        row.set_margin_end(16);
-        card.append(&row);
+        let next = ["taf.changes", "taf.usage"].iter().find_map(|n| {
+            let mut c = card.first_child();
+            while let Some(w) = c {
+                if w.widget_name() == *n && w.is_visible() {
+                    return Some(w);
+                }
+                c = w.next_sibling();
+            }
+            None
+        });
+        match next.and_then(|n| n.prev_sibling()) {
+            Some(before) => card.insert_child_after(&row, Some(&before)),
+            None => card.append(&row),
+        }
     }
     card_scroller.set_child(Some(&card));
     card_scroller.set_vexpand(true);
@@ -442,9 +454,8 @@ pub fn page(
         let setup_scroller = gtk::ScrolledWindow::new();
         setup_scroller.set_hscrollbar_policy(gtk::PolicyType::Never);
         setup_scroller.set_vexpand(true);
+        // At the page's own edges, with the tabs, as the Card tab and the iPad's Setup.
         let column = gtk::Box::new(gtk::Orientation::Vertical, 0);
-        column.set_margin_start(16);
-        column.set_margin_end(16);
         setup_scroller.set_child(Some(&column));
         panes.add_named(&setup_scroller, Some("setup"));
         let made = std::cell::Cell::new(false);
@@ -528,14 +539,17 @@ pub fn page(
         });
     }
     // `sideColumn`: beside the chat or the activity, on a wide window, the calls waiting and the
-    // Cards, 360 wide; the page keeps an iPhone's width (430) for the chat beside it, and is wider
-    // than tall. Without it, the Card bar above, and the held calls in the activity.
+    // Cards, 360 wide; the page keeps an iPhone's width (430) for the chat beside it, in a window
+    // wider than tall (the iPad in landscape). Without it, the Card bar above, and the held calls in the activity.
     let row = gtk::Box::new(gtk::Orientation::Horizontal, 16);
     panes.set_hexpand(true);
     row.append(&panes);
     let side_scroller = gtk::ScrolledWindow::new();
     side_scroller.set_hscrollbar_policy(gtk::PolicyType::Never);
     side_scroller.set_size_request(SIDE_WIDTH, -1);
+    // 360 wide, never more: what's in it wanting room mustn't take it from the chat or the
+    // activity.
+    side_scroller.set_hexpand(false);
     side_scroller.set_child(Some(&side(&w, t, &card_tab)));
     side_scroller.set_visible(false);
     side_scroller.set_widget_name("taf.side");
@@ -551,17 +565,25 @@ pub fn page(
         );
         let has_cards = !t.cards.is_empty();
         outer.add_tick_callback(move |o, _| {
-            let (width, height) = (o.width(), o.height());
+            let width = o.width();
+            // "Only in landscape": the iPad's page is wider than tall exactly when the iPad is
+            // in landscape. Here that's the window's shape, as a 4:3 window less the sidebar
+            // leaves a page about as tall as it's wide.
+            let landscape = o
+                .root()
+                .map(|r| r.width() > r.height())
+                .unwrap_or(width > o.height());
             let section_lt_card = !card_tab.is_active() && !setup_tab.is_active();
             let wide = has_cards
                 && section_lt_card
-                && width > height
+                && landscape
                 && width - SIDE_WIDTH - 32 >= CHAT_AT_LEAST;
             if side.is_visible() != wide {
                 side.set_visible(wide);
             }
             if let Some(bar) = &bar {
-                let shown = !wide && !card_tab.is_active();
+                // Above the chat or the activity only (`section < 2`), never the Card or Setup.
+                let shown = !wide && section_lt_card;
                 if bar.is_visible() != shown {
                     bar.set_visible(shown);
                 }
@@ -737,6 +759,18 @@ fn card_pane(
     let f = draw.borrow().clone();
     if let Some(f) = f {
         f();
+    }
+    // Changes to how it runs: its versions, for whoever manages a tafs cloud taf.
+    if let (false, true, Some(id)) = (t.sample, t.manages, &t.cloud_id) {
+        pane.append(&crate::versions::changes_row(
+            w.clone(),
+            crate::versions::VersionsTaf {
+                id: id.clone(),
+                name: t.name.clone(),
+                chat: t.chat.clone(),
+            },
+            t.setup.clone(),
+        ));
     }
     // Its Usage row: its credits this period and its runs, in Plan & usage (`TafCreditsView`), for
     // whoever manages a tafs cloud taf, signed in.

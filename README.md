@@ -13,6 +13,7 @@ It draws what KIFF and tafs cloud send. Nothing in this first version runs actio
 | `crates/tafs-app` | The GTK app (`tafs`). It places what the core says. |
 | `tools/sync.sh` | The words and contracts at the pin, into `shared/`. |
 | `tools/screenshots.sh` | Every screen built so far in en, fr and pt, light and dark. |
+| `tools/pin-check.sh` | The chat pin in the window, in a taf's chat and in Coach (the iPad's `ChatPinUITests`), under a display. |
 | `shared-pin.json` | The commit of the shared repository the words and contracts are read at. |
 | `docs/` | One page per area. The [port checklist](docs/port-checklist.md) says where each iPad screen stands. |
 

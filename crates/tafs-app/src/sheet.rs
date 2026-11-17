@@ -18,11 +18,13 @@ pub fn new(title: &str, cancel: &str, confirm: Option<&str>, width: i32) -> Shee
     header.set_show_start_title_buttons(false);
     let cancel = gtk::Button::with_label(cancel);
     cancel.add_css_class("tafs-unsent-act");
+    cancel.add_css_class("tafs-bar-text");
     cancel.set_margin_start(8);
     header.pack_start(&cancel);
     let confirm = confirm.map(|words| {
         let b = gtk::Button::with_label(words);
         b.add_css_class("tafs-unsent-act");
+        b.add_css_class("tafs-bar-text");
         b.add_css_class("strong");
         b.set_margin_end(8);
         header.pack_end(&b);

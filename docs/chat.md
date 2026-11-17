@@ -89,6 +89,21 @@ All at tafs cloud, as the session, unsigned; a 401 on any of them signs this com
 
 ## What's drawn
 
+- **The pin** (`pinNext`, `pinned`, `PinnedTurn`; `tafs-core/src/pin.rs`, shared with Coach): a
+  message sent goes to the top of the thread at once and stays there while the taf works and its
+  answer grows below it, the work block under it and the words under that. The room under it is
+  the view less its turn, so nothing moves as the answer grows; it stays once the run ends, until
+  the next message is pinned. What's pinned is the message just sent, matched by its words
+  (`matchesSent`) among what's new since Send: never a reply that came first, nor an older copy of
+  the same words. When tafs cloud's copy takes its place under another id, the pin moves to it
+  without the view moving (the 859 test); gone with no copy, the view goes to the latest. One
+  written to the run and one tafs cloud holds are pinned the same way. A message that couldn't go
+  lets the pin go, and the chat goes to its end, as Android's does (the iPad is to follow). The
+  owner scrolling (wheel, touchpad, the scrollbar) hands the view back; ↓ lets the pin go and
+  follows again. `tools/pin-check.sh` checks it in the window, as the iPad's `ChatPinUITests`:
+  at the top within a second of Send, still there while it works (the work block under it) and
+  writes, and unmoved when the stored copy replaces it.
+
 In the iPad's order, in a column at most 720 wide:
 
 - **The empty chat:** "Ask Rae what it did, or tell it what to do differently…".
@@ -193,7 +208,6 @@ answer that can be reported; its Send sends nothing.
 - **A held call made in a streamed answer** is placed where Needs you's list places it, not where
   it was made in the answer, and KIFF isn't read again at once when it's held or the run ends;
   what went through before a failure has no amount from the Record.
-- **Pinning a sent message** to the top (a sent message brings the chat to its newest).
 - What became of a held call the owner answered (`OutcomeLine` from the Record: KIFF's answer time
   isn't read here), and a held call's place from the stream (`anchors`).
 - A door's knocks among the messages (they're on the Activity tab), and keeping across launches

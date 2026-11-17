@@ -211,8 +211,12 @@ pub fn pane(w: Rc<WordBook>, taf: ChatTaf, source: ChatSource) -> gtk::Widget {
                     let fresh = TafChat::new(&page.taf.id);
                     *page.chat.borrow_mut() = fresh;
                     page.chat.borrow_mut().took(&page.w, t, chrono::Utc::now());
-                    if let Some(stream) = stream {
-                        page.stream_from(&stream);
+                    match stream {
+                        Some(stream) if crate::chat::PIN_CHECK.with(|c| c.get()) => {
+                            page.pin_check(&stream)
+                        }
+                        Some(stream) => page.stream_from(&stream),
+                        None => {}
                     }
                 }
                 None => {
@@ -454,6 +458,7 @@ impl Page {
                 self.attach.put_back(taken);
                 return;
             };
+            self.jump.sent(&d.text);
             self.composer.set_draft("");
             self.follow.set(true);
             self.draw();
@@ -496,6 +501,7 @@ impl Page {
                 self.draw();
             }
             Submit::Send(d) => {
+                self.jump.sent(&d.text);
                 self.composer.set_draft("");
                 self.follow.set(true);
                 self.draw();
@@ -507,6 +513,7 @@ impl Page {
                 });
             }
             Submit::Steer { run, text } => {
+                self.jump.sent(&text);
                 self.composer.set_draft("");
                 let p = self.clone();
                 glib::spawn_future_local(async move {
@@ -715,6 +722,95 @@ impl Page {
         });
     }
 
+    /// `--pin-check`: a message sent here, its stream's events played as they come, and the run's
+    /// end as tafs cloud's reload brings it, with the pin checked as the iPad's `ChatPinUITests`.
+    /// Nothing is sent.
+    fn pin_check(self: &Rc<Self>, path: &std::path::Path) {
+        const WORDS: &str = "Which refunds went out this morning?";
+        let events = crate::chat::events_from(path);
+        let sent: Rc<RefCell<Option<Delivery>>> = Rc::default();
+        let f: Rc<RefCell<taf_chat::Following>> = Rc::default();
+        let send = {
+            let (p, sent) = (self.clone(), sent.clone());
+            Box::new(move || {
+                let now = chrono::Utc::now();
+                let d = p.chat.borrow_mut().deliver(WORDS, now);
+                p.jump.sent(WORDS);
+                p.chat.borrow_mut().streaming(now);
+                *sent.borrow_mut() = d;
+                p.follow.set(true);
+                p.draw();
+            })
+        };
+        let event = {
+            let (p, sent, f) = (self.clone(), sent.clone(), f.clone());
+            Box::new(move |e: &tafs_core::stream::Event| {
+                let local = sent.borrow().as_ref().map(|d| d.local.clone());
+                let _ = p.chat.borrow_mut().stream_event(
+                    &p.w,
+                    e,
+                    local.as_deref(),
+                    &mut f.borrow_mut(),
+                );
+                p.draw();
+            })
+        };
+        let finish = {
+            let (p, sent, f) = (self.clone(), sent.clone(), f.clone());
+            Box::new(move || {
+                let now = chrono::Utc::now();
+                let mut c = p.chat.borrow_mut();
+                c.stream_over(&f.borrow(), WORDS);
+                let live = c.live.clone().unwrap_or_default();
+                let session = live.session.clone().unwrap_or_else(|| "live".into());
+                // tafs cloud's copy of the message, in its chat (another id than the one shown
+                // while it worked), and the answer recorded.
+                let _ = sent.borrow();
+                for m in c.thread.messages.iter_mut() {
+                    if m.session == tafs_core::coach::PENDING {
+                        m.session = session.clone();
+                    }
+                }
+                let mut words: Vec<String> = live
+                    .parts
+                    .iter()
+                    .filter_map(|p| match p {
+                        tafs_core::stream::ReplyPart::Text(t) => Some(t.clone()),
+                        _ => None,
+                    })
+                    .collect();
+                words.push(live.text.clone());
+                let mut answer = c
+                    .thread
+                    .messages
+                    .last()
+                    .cloned()
+                    .unwrap_or_else(|| unreachable!("the message just sent"));
+                answer.from = tafs_core::coach::From::Taf;
+                answer.text = words.concat();
+                answer.session = session;
+                answer.at = now;
+                answer.server_id = None;
+                answer.attachments = vec![];
+                c.thread.messages.push(answer);
+                c.awaiting = None;
+                c.live_gone();
+                drop(c);
+                p.draw();
+            })
+        };
+        crate::chat::pin_check(
+            self.jump.clone(),
+            events,
+            crate::chat::PinSteps {
+                send,
+                event,
+                finish,
+                root: self.column.clone().upcast(),
+            },
+        );
+    }
+
     /// The thread read now, after a read already going ends.
     async fn load_now(self: &Rc<Self>) {
         while self.reading.get() {
@@ -862,6 +958,9 @@ impl Page {
             .borrow_mut()
             .submit(&self.w, &message.text, chrono::Utc::now())
             .unwrap_or(Submit::Stay);
+        if !matches!(submit, Submit::Stay) {
+            self.jump.sent(&message.text);
+        }
         self.draw();
         let p = self.clone();
         glib::spawn_future_local(async move {
@@ -949,6 +1048,7 @@ impl Page {
         let keep = self.scroller.vadjustment().value();
         let before = self.drawn.borrow().as_ref().map(|d| d.lines.len());
         self.jump.hold();
+        self.jump.begin();
         while let Some(child) = self.column.first_child() {
             self.column.remove(&child);
         }
@@ -981,6 +1081,13 @@ impl Page {
             !lines.lines.is_empty(),
             before.is_some_and(|b| lines.lines.len() > b),
         );
+        // What the pin can hold, in the thread's order (`pinNext`, `pinned`).
+        let candidates = crate::chat::pin_candidates(
+            &lines.pins,
+            lines.unsent.iter().map(|u| (u.id, u.words.clone())),
+            &lines.steering,
+            lines.queued.as_ref(),
+        );
         *self.drawn.borrow_mut() = Some(lines);
         // Something new below while the owner reads back: ↓'s dot.
         if grew {
@@ -992,7 +1099,8 @@ impl Page {
             self.jump.following.set(true);
         }
         let jump = self.jump.clone();
-        glib::idle_add_local_once(move || jump.put(keep, ready, near_end));
+        let column = self.column.clone();
+        glib::idle_add_local_once(move || jump.drawn(&column, &candidates, keep, ready, near_end));
     }
 
     fn draw_lines(self: &Rc<Self>, lines: &ChatLines) {
@@ -1011,7 +1119,7 @@ impl Page {
             if let (Some((work, _)), true) = (&lines.live, live_at == Some(i)) {
                 column.append(&crate::chat::live_work(work));
             }
-            column.append(&match line {
+            let row: gtk::Widget = match line {
                 Line::Gap(at) => crate::chat::gap(at),
                 Line::Kickoff(note) => {
                     let l = text(note, 12, 400, &["tafs-dim"]);
@@ -1100,11 +1208,18 @@ impl Page {
                     }
                     p.upcast()
                 }
-            });
+            };
+            // What the pin can hold: the owner's message, by its id.
+            if let Some((_, c)) = lines.pins.iter().find(|(at, _)| *at == i) {
+                self.jump.row(&c.id, &row);
+            }
+            column.append(&row);
         }
         let busy = self.chat.borrow().sending;
         for u in &lines.unsent {
-            column.append(&self.unsent(u, busy));
+            let row = self.unsent(u, busy);
+            self.jump.row(&format!("u|{}", u.id), &row);
+            column.append(&row);
         }
         // What the taf is doing and the steps it took, under its words so far; the dots while
         // nothing streams.
@@ -1118,12 +1233,13 @@ impl Page {
             }
         }
         // Written to the run while it goes, not read yet.
-        for (words, note) in &lines.steering {
+        for (i, (words, note)) in lines.steering.iter().enumerate() {
             let v = gtk::Box::new(gtk::Orientation::Vertical, 4);
             v.append(&owner(words, None, true));
             let n = text(note, 12, 400, &["tafs-dim"]);
             n.set_xalign(1.0);
             v.append(&n);
+            self.jump.row(&format!("steer|{i}"), &v);
             column.append(&v);
         }
         // It failed part-way: what went through before, and Retry, which sends its message again.
@@ -1159,6 +1275,7 @@ impl Page {
             let n = text(waits, 13, 400, &["tafs-dim"]);
             n.set_xalign(1.0);
             v.append(&n);
+            self.jump.row("queued", &v);
             column.append(&v);
         }
     }
@@ -1282,7 +1399,7 @@ impl Page {
         h.set_halign(gtk::Align::End);
         let m = symbol(
             if u.halted {
-                "process-stop-symbolic"
+                crate::widgets::icon_for("hand.raised.fill")
             } else {
                 "dialog-error-symbolic"
             },

@@ -368,6 +368,8 @@ pub struct GalleryPane {
     /// The sheet's words from `/v1/recipes`, for a gallery that sends none.
     pub labels: Option<tafs_core::recipes::Labels>,
     pub may_use_coach: bool,
+    /// The sheet's Close, in the app's words.
+    pub close: String,
 }
 
 /// Why the gallery is open (`GalleryMode`): from + New, to start a taf; or to browse the jobs
@@ -434,8 +436,26 @@ pub fn gallery(pane: &GalleryPane, mode: GalleryMode, parent: &impl IsA<gtk::Wid
     let list = list_page(Rc::new(pane.list(mode)), GALLERY, &head);
     list.set_vexpand(true);
     let title = pane.gallery.title(mode == GalleryMode::Browse);
+    // Its bar as the app's sheets' (`cancellationAction`): Close at the start, in words, the title
+    // in the middle, and no ✕ of the window's.
     let header = adw::HeaderBar::new();
-    header.set_title_widget(Some(&gtk::Label::new(Some(title))));
+    header.set_show_end_title_buttons(false);
+    header.set_show_start_title_buttons(false);
+    let heading = gtk::Label::new(Some(title));
+    heading.add_css_class("heading");
+    header.set_title_widget(Some(&heading));
+    let close = gtk::Button::with_label(&pane.close);
+    close.add_css_class("tafs-unsent-act");
+    close.add_css_class("tafs-bar-text");
+    close.set_margin_start(8);
+    close.set_widget_name("gallery.close");
+    {
+        let d = dialog.clone();
+        close.connect_clicked(move |_| {
+            d.close();
+        });
+    }
+    header.pack_start(&close);
     let toolbar = adw::ToolbarView::new();
     toolbar.add_top_bar(&header);
     toolbar.set_content(Some(&list));

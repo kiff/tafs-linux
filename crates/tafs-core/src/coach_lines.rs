@@ -334,6 +334,8 @@ pub struct CoachLines {
     pub queued: Option<(String, String)>,
     /// The thread's items in the order drawn, to keep it (`rememberDrawn`).
     pub order: Vec<crate::coach::Entry>,
+    /// The owner's messages among `lines`, by their line: what the pin can hold.
+    pub pins: Vec<(usize, crate::pin::Candidate)>,
 }
 
 /// The message box (`composer`): what it says while empty, and its button's words.
@@ -1644,6 +1646,7 @@ fn lines_while(
     });
     let mut live_at = None;
     let mut out = Vec::new();
+    let mut pins = Vec::new();
     for (i, item) in items.iter().enumerate() {
         if Some(i) == first_of_run {
             live_at = Some(out.len());
@@ -1653,7 +1656,20 @@ fn lines_while(
             out.push(Line::Gap(gap(w.language(), at, now)));
         }
         match item {
-            Item::Message(m) => out.push(message(w, thread, m)?),
+            Item::Message(m) => {
+                if m.from == From::Owner {
+                    pins.push((
+                        out.len(),
+                        crate::pin::Candidate {
+                            id: item.id(),
+                            words: m.text.clone(),
+                            message: true,
+                            unsent: false,
+                        },
+                    ));
+                }
+                out.push(message(w, thread, m)?)
+            }
             Item::Component(c) => {
                 if let Some(card) = card(w, thread, c, listed, mode, drafts)? {
                     out.push(Line::Card {
@@ -1721,6 +1737,7 @@ fn lines_while(
             None => None,
         },
         live_text: None,
+        pins,
         steering,
         queued: match thread.steering.as_ref().and_then(|s| s.held.as_ref()) {
             Some(m) => Some((m.text.clone(), w.line("chat.held")?)),

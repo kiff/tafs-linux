@@ -202,6 +202,66 @@ pub fn link(w: Rc<WordBook>, taf: VersionsTaf) -> gtk::Box {
 }
 
 /// What opens the sheets, for one taf.
+/// The Card tab's "Changes to how it runs" (`PanelLink` to `VersionsScreen`), for whoever
+/// manages a tafs cloud taf: tafs cloud's title for the versions, else the app's, and its
+/// summary ("v1 live · 0 earlier") once Setup's read says it. It opens the versions, as the
+/// version line under the taf's name does.
+pub fn changes_row(
+    w: Rc<WordBook>,
+    taf: VersionsTaf,
+    setup: crate::setup_pane::SetupSource,
+) -> gtk::Button {
+    let b = gtk::Button::new();
+    b.add_css_class("tafs-panel-link");
+    b.set_widget_name("taf.changes");
+    let Some(source) = Source::of(&taf.chat) else {
+        b.set_visible(false);
+        return b;
+    };
+    let row = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+    let words = gtk::Box::new(gtk::Orientation::Vertical, 4);
+    words.set_hexpand(true);
+    let head = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+    let icon = symbol(crate::widgets::icon_for("square.stack.3d.up"), 15);
+    icon.add_css_class("tafs-amber-text");
+    head.append(&icon);
+    let title = text(
+        &w.line("version.changes_row").unwrap_or_default(),
+        15,
+        600,
+        &["tafs-amber-text"],
+    );
+    head.append(&title);
+    words.append(&head);
+    let summary = text("", 13, 400, &["tafs-soft"]);
+    summary.set_visible(false);
+    words.append(&summary);
+    row.append(&words);
+    let chevron = symbol("go-next-symbolic", 13);
+    chevron.add_css_class("tafs-dim");
+    row.append(&chevron);
+    b.set_child(Some(&row));
+    let open = Rc::new(Opener {
+        w: w.clone(),
+        source,
+        taf: taf.clone(),
+    });
+    b.connect_clicked(move |b| open.versions(b));
+    let id = taf.id.clone();
+    glib::spawn_future_local(async move {
+        if let Some(v) = crate::setup_pane::versions_of(&w, &setup, &id).await {
+            if !v.title.trim().is_empty() {
+                title.set_label(&v.title);
+            }
+            if !v.summary.trim().is_empty() {
+                summary.set_label(&v.summary);
+                summary.set_visible(true);
+            }
+        }
+    });
+    b
+}
+
 #[derive(Clone)]
 struct Opener {
     w: Rc<WordBook>,

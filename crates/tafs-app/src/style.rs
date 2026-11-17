@@ -68,10 +68,11 @@ button.tafs-primary:hover { background-image: linear-gradient(135deg, BRAND0, BR
 button.tafs-primary:active { opacity: 0.8; }
 button.tafs-primary:disabled { background-image: none; background-color: alpha(@tafs_dim, 0.22); color: @tafs_soft; }
 
-/* OutlineLook: ink 15 medium, 48 high, corners of 14, its edge the ink at 40%. */
+/* OutlineLook: ink 15 medium, 48 high with its edge (46 inside a 1 px edge, no padding above or
+   below), corners of 14, its edge the ink at 40%. */
 button.tafs-outline {
   background: none; color: @tafs_ink; font-size: 15px; font-weight: 500;
-  min-height: 48px; border-radius: 14px; border: 1px solid alpha(@tafs_ink, 0.4); box-shadow: none;
+  min-height: 46px; padding: 0 12px; border-radius: 14px; border: 1px solid alpha(@tafs_ink, 0.4); box-shadow: none;
 }
 button.tafs-outline:hover { background-color: alpha(@tafs_ink, 0.04); }
 button.tafs-outline:active { background-color: alpha(@tafs_ink, 0.08); }
@@ -120,7 +121,7 @@ button.tafs-unreachable-status { padding: 0 2px; min-height: 0; font-size: 12px;
 
 /* Coach: the ink button, the dark ground's colour on it, 44 high, corners of 14. */
 button.tafs-coach { background-color: @tafs_ink; background-image: none; color: @tafs_on_fill; font-size: 15px; font-weight: 600;
-  min-height: 44px; border-radius: 14px; border: none; box-shadow: none; }
+  min-height: 44px; padding: 0 12px; border-radius: 14px; border: none; box-shadow: none; }
 button.tafs-coach:hover { background-color: alpha(@tafs_ink, 0.92); }
 button.tafs-coach.driving { background-color: @tafs_amber; }
 button.tafs-account { background: none; box-shadow: none; border: none; padding: 0; min-height: 44px; }
@@ -190,6 +191,8 @@ entry.tafs-own-answer { background-color: @tafs_panel; border: 1px solid @tafs_c
 /* A message not sent, or held to go later: its bubble at 60%. */
 .tafs-unsent .tafs-owner-bubble { opacity: 0.6; }
 button.tafs-unsent-act { background: none; border: none; box-shadow: none; padding: 0; min-height: 0; font-size: 14px; color: @tafs_soft; }
+/* A sheet's bar buttons (Close, Done, Cancel): the app's accent, as the iPad's toolbar tint. */
+button.tafs-unsent-act.tafs-bar-text { color: @tafs_amber_text; }
 button.tafs-unsent-act.strong { color: @tafs_ink; font-weight: 600; }
 /* The composer: the bar on the background with a soft shadow above it (`barBackground`), the field on the panel with a 1-point edge, corners of 20;
    Send the coach colour, Stop the ink, each a 40-point circle. */
@@ -209,6 +212,8 @@ button.tafs-send.brand:disabled { opacity: 0.4; color: white; }
 .tafs-mono { font-family: monospace; }
 /* Coach's bar: New conversation and its menu, plain icons in the ink. */
 button.tafs-bar-icon, menubutton.tafs-bar-icon > button { background: none; border: none; box-shadow: none; color: @tafs_ink; min-width: 36px; min-height: 36px; padding: 0; }
+/* CoachMode's `.tint(Theme.coach)`: its bar's buttons in Coach's blue. */
+button.tafs-bar-icon.tafs-coach-tint, menubutton.tafs-bar-icon.tafs-coach-tint > button { color: @tafs_coach; }
 button.tafs-bar-icon:hover, menubutton.tafs-bar-icon > button:hover { background-color: alpha(@tafs_ink, 0.06); }
 /* Previous conversations: each chat on the panel, the one shown on the raised colour. */
 .tafs-chat-line { background-color: @tafs_panel; border-radius: 12px; padding: 0 14px 0 0; }
@@ -263,6 +268,11 @@ button.tafs-chip-button:checked { background-color: @tafs_ink; color: @tafs_on_f
 .tafs-taf-dot { border-radius: 4px; min-width: 8px; min-height: 8px; }
 .tafs-day { font-family: monospace; font-size: 11px; font-weight: 500; color: @tafs_dim; }
 .tafs-record-row { background-color: @tafs_panel; border: 1px solid @tafs_line; border-radius: 14px; padding: 14px; }
+/* A row that opens its receipt: the row itself, at the column's edges like the heading (no
+   button padding around it). */
+button.tafs-record-line { padding: 0; margin: 0; border-radius: 14px; min-height: 0; }
+/* The Record's search, as the iPad's: a white field with the line colour's edge. */
+entry.tafs-record-search { background-color: @tafs_panel; border: 1px solid @tafs_line; border-radius: 12px; min-height: 44px; box-shadow: none; outline: none; }
 .tafs-kind-dot { border-radius: 5px; min-width: 9px; min-height: 9px; }
 .tafs-kind-dot.ok { background-color: @tafs_ok; }
 .tafs-kind-dot.amber { background-color: @tafs_amber; }
@@ -320,7 +330,8 @@ button.tafs-back { background: none; border: none; box-shadow: none; color: @taf
 button.tafs-list-button { background-color: @tafs_panel; background-image: none; border: none; border-radius: 18px; padding: 16px; box-shadow: none; color: @tafs_amber_text; font-size: 17px; font-weight: 400; }
 button.tafs-list-button label { font-size: 17px; }
 button.tafs-list-button > label { margin: 0; }
-entry.tafs-search, .tafs-search { border-radius: 999px; min-height: 36px; }
+/* The search capsule (`.searchable`): white with the line colour's edge, as the iPad's. */
+entry.tafs-search, .tafs-search { border-radius: 999px; min-height: 36px; background-color: @tafs_panel; border: 1px solid @tafs_line; box-shadow: none; outline: none; }
 button.tafs-outline.compact { min-height: 30px; padding: 8px 16px; }
 button.tafs-list-button label { margin: 0; }
 .tafs-ok { color: @tafs_ok; }

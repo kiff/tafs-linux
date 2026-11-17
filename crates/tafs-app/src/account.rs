@@ -22,11 +22,13 @@ pub fn page(a: &AccountLines, actions: &Actions) -> gtk::Widget {
     let column = gtk::Box::new(gtk::Orientation::Vertical, 0);
     column.set_margin_start(24);
     column.set_margin_end(24);
-    column.set_margin_top(32);
+    column.set_margin_top(12);
     column.set_margin_bottom(24);
-    let title = text(&a.title, 34, 700, &["tafs-ink"]);
-    title.set_width_chars(16);
-    title.set_margin_bottom(12);
+    // Its title in the bar's place, small and centred (`inlineTitle`), as Calendar's and Plan &
+    // usage's.
+    let title = text(&a.title, 17, 600, &["tafs-ink"]);
+    title.set_halign(gtk::Align::Center);
+    title.set_margin_bottom(20);
     column.append(&title);
     for section in &a.sections {
         let head: gtk::Widget = if let Some(header) = &section.header {

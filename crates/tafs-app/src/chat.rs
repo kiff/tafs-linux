@@ -30,6 +30,184 @@ pub async fn post(
     .unwrap_or_else(|_| Err(String::new()))
 }
 
+/// The steps of a chat's pin check: send the message, take one of its stream's events, and end
+/// the run as tafs cloud's reload does (its copy of the message, and the answer recorded).
+pub struct PinSteps {
+    pub send: Box<dyn Fn()>,
+    pub event: Box<dyn Fn(&tafs_core::stream::Event)>,
+    pub finish: Box<dyn Fn()>,
+    pub root: gtk::Widget,
+}
+
+/// `ChatPinUITests`, in the window as drawn: the sent message reaches the top within a second of
+/// Send, before any answer; stays there while the taf works (its work block under it) and
+/// writes; and when tafs cloud's copy takes its place at the end of the run, nothing moves (the
+/// 845 and 859 tests). Prints what it saw and quits: 0 when every check held.
+pub fn pin_check(jump: std::rc::Rc<Jump>, events: Vec<tafs_core::stream::Event>, steps: PinSteps) {
+    use std::cell::RefCell;
+    use std::rc::Rc;
+    const AT_TOP: f64 = 90.0;
+    let failures: Rc<RefCell<Vec<String>>> = Rc::default();
+    let check = {
+        let (jump, failures) = (jump.clone(), failures.clone());
+        move |what: &str, ok: bool| {
+            let seen = format!(
+                "{what}: pinned {:?}, {:?} px down",
+                jump.pinned(),
+                jump.pinned_offset().map(|o| o.round())
+            );
+            println!("pin-check {} {seen}", if ok { "ok" } else { "FAILED" });
+            if !ok {
+                failures.borrow_mut().push(seen);
+            }
+        }
+    };
+    let steps = Rc::new(steps);
+    let at = |ms: u64, f: Box<dyn FnOnce()>| {
+        glib::timeout_add_local_once(std::time::Duration::from_millis(ms), f);
+    };
+    // Send, once the chat has drawn and landed.
+    let mut t = 2000;
+    {
+        let s = steps.clone();
+        at(t, Box::new(move || (s.send)()));
+    }
+    t += 1000;
+    {
+        let (j, c) = (jump.clone(), check.clone());
+        at(
+            t,
+            Box::new(move || {
+                c(
+                    "at the top within a second of Send",
+                    j.pinned_offset().is_some_and(|o| o < AT_TOP),
+                )
+            }),
+        );
+    }
+    for e in events {
+        t += 300;
+        let is_activity = matches!(e, tafs_core::stream::Event::Activity { .. });
+        let is_text = matches!(e, tafs_core::stream::Event::Text(_));
+        let s = steps.clone();
+        at(t, Box::new(move || (s.event)(&e)));
+        if is_activity || is_text {
+            let (j, c, root) = (jump.clone(), check.clone(), steps.root.clone());
+            let what = if is_activity {
+                "at the top while it works, its work block under it"
+            } else {
+                "at the top while the answer streams"
+            };
+            at(
+                t + 250,
+                Box::new(move || {
+                    let top = j.pinned_offset().is_some_and(|o| o < AT_TOP);
+                    let under = !is_activity
+                        || crate::coach::named(&root, "work-block")
+                            .and_then(|w| {
+                                w.compute_point(&j.scroller, &gtk::graphene::Point::new(0.0, 0.0))
+                            })
+                            .zip(j.pinned_foot())
+                            .is_some_and(|(w, foot)| f64::from(w.y()) >= foot - 1.0);
+                    c(what, top && under)
+                }),
+            );
+        }
+    }
+    // The run's end: tafs cloud's copy takes the message's place, under another id.
+    /// The pinned message and where it was, before the run's end.
+    type Seen = Option<(Option<String>, Option<f64>)>;
+    let before: Rc<RefCell<Seen>> = Rc::default();
+    t += 600;
+    {
+        let (j, b, s) = (jump.clone(), before.clone(), steps.clone());
+        at(
+            t,
+            Box::new(move || {
+                *b.borrow_mut() = Some((j.pinned(), j.pinned_offset()));
+                (s.finish)();
+            }),
+        );
+    }
+    t += 1500;
+    {
+        let (j, b, c) = (jump.clone(), before.clone(), check.clone());
+        at(
+            t,
+            Box::new(move || {
+                let (id, offset) = b.borrow().clone().unwrap_or_default();
+                let moved = j.pinned().is_some() && j.pinned() != id;
+                let still = offset
+                    .zip(j.pinned_offset())
+                    .is_some_and(|(a, b)| (a - b).abs() < 2.0);
+                c(
+                    "the stored copy took the pin and nothing moved (859)",
+                    moved && still,
+                )
+            }),
+        );
+    }
+    t += 300;
+    at(
+        t,
+        Box::new(move || {
+            let failed = failures.borrow().len();
+            println!(
+                "pin-check: {}",
+                if failed == 0 {
+                    "every check held"
+                } else {
+                    "failed"
+                }
+            );
+            std::process::exit(if failed == 0 { 0 } else { 1 });
+        }),
+    );
+}
+
+/// A stream's events from a file of `event:` and `data:` lines.
+pub fn events_from(path: &std::path::Path) -> Vec<tafs_core::stream::Event> {
+    let Ok(lines) = std::fs::read_to_string(path) else {
+        eprintln!("{} isn't a stream's events", path.display());
+        std::process::exit(2);
+    };
+    let mut reader = tafs_core::stream::Reader::default();
+    lines.lines().filter_map(|l| reader.line(l)).collect()
+}
+
+/// What the pin can hold in a chat's draw, in its order: the owner's messages in the thread, then
+/// what was written to the run (`steer|`) and what tafs cloud holds (`queued`), each with the words
+/// as sent; and what wasn't sent (`u|`), which lets the pin go.
+pub fn pin_candidates(
+    pins: &[(usize, tafs_core::pin::Candidate)],
+    unsent: impl IntoIterator<Item = (u64, String)>,
+    steering: &[(String, String)],
+    queued: Option<&(String, String)>,
+) -> Vec<tafs_core::pin::Candidate> {
+    use tafs_core::pin::Candidate;
+    let bubble = |id: String, words: &str| Candidate {
+        unsent: id.starts_with("u|"),
+        id,
+        words: words.to_string(),
+        message: false,
+    };
+    pins.iter()
+        .map(|(_, c)| c.clone())
+        .chain(
+            unsent
+                .into_iter()
+                .map(|(id, w)| bubble(format!("u|{id}"), &w)),
+        )
+        .chain(
+            steering
+                .iter()
+                .enumerate()
+                .map(|(i, (w, _))| bubble(format!("steer|{i}"), w)),
+        )
+        .chain(queued.map(|(w, _)| bubble("queued".into(), w)))
+        .collect()
+}
+
 /// How a message went out (`openStream`): streamed, refused, or to send plainly.
 pub enum Streamed {
     Opened(async_channel::Receiver<tafs_core::stream::Event>),
@@ -400,7 +578,7 @@ fn step_list(rows: &[tafs_core::coach_lines::StepRow]) -> gtk::Box {
             StepStatus::Done => ("tafs-checkmark-symbolic", "tafs-dim"),
             StepStatus::Error => ("dialog-error-symbolic", "tafs-no"),
             StepStatus::NotMade => ("edit-undo-symbolic", "tafs-dim"),
-            StepStatus::Held => ("process-stop-symbolic", "tafs-amber"),
+            StepStatus::Held => (crate::widgets::icon_for("hand.raised"), "tafs-amber"),
             StepStatus::Running => ("content-loading-symbolic", "tafs-dim"),
         };
         let mark = symbol(icon, 11);
@@ -467,6 +645,9 @@ thread_local! {
     /// For a screenshot (`--page coach-read-back`): once landed, the thread is read back to its
     /// top, so ↓ and the bar show.
     pub static READ_BACK: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    /// `--pin-check`: the chat sends a message and plays its stream's events, checking the pin
+    /// as the iPad's `ChatPinUITests` does, then quits with the outcome.
+    pub static PIN_CHECK: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
 }
 
 /// Over a thread, at its foot: the pill for what waits for the owner while it's out of view
@@ -489,6 +670,13 @@ pub struct Jump {
     held: std::cell::Cell<bool>,
     waiting: std::cell::RefCell<Option<gtk::Widget>>,
     latest: (String, String),
+    /// The chat pin (`pinNext`, `pinned`): a sent message at the top while the answer grows.
+    pin: std::cell::RefCell<tafs_core::pin::Pin>,
+    /// What the pin can hold in this draw, by id; and the ids of the last draw's.
+    rows: std::cell::RefCell<Vec<(String, gtk::Widget)>>,
+    last_ids: std::cell::RefCell<Vec<String>>,
+    /// The room under the pinned message's turn, at the thread's foot.
+    room: std::cell::RefCell<Option<gtk::Box>>,
 }
 
 impl Jump {
@@ -559,7 +747,34 @@ impl Jump {
                 w.line("chat.jump_to_latest").unwrap_or_default(),
                 w.line("chat.jump_latest_something_new").unwrap_or_default(),
             ),
+            pin: Default::default(),
+            rows: Default::default(),
+            last_ids: Default::default(),
+            room: Default::default(),
         });
+        // The owner scrolling, by wheel, touchpad or the scrollbar: the view is theirs, and a
+        // pinned message stays where they leave it.
+        {
+            let jw = std::rc::Rc::downgrade(&j);
+            let wheel = gtk::EventControllerScroll::new(gtk::EventControllerScrollFlags::VERTICAL);
+            wheel.set_propagation_phase(gtk::PropagationPhase::Capture);
+            wheel.connect_scroll(move |_, _, _| {
+                if let Some(j) = jw.upgrade() {
+                    j.touched();
+                }
+                glib::Propagation::Proceed
+            });
+            scroller.add_controller(wheel);
+            let jw = std::rc::Rc::downgrade(&j);
+            let bar = gtk::GestureClick::new();
+            bar.set_propagation_phase(gtk::PropagationPhase::Capture);
+            bar.connect_pressed(move |_, _, _, _| {
+                if let Some(j) = jw.upgrade() {
+                    j.touched();
+                }
+            });
+            scroller.vscrollbar().add_controller(bar);
+        }
         {
             let jw = std::rc::Rc::downgrade(&j);
             j.down.connect_clicked(move |_| {
@@ -586,7 +801,9 @@ impl Jump {
                 if let Some(j) = jw.upgrade() {
                     if !j.held.get() {
                         let bottom = j.at_bottom();
-                        j.following.set(bottom);
+                        // A pinned message stays at the top: seeing the foot under it doesn't
+                        // make the thread follow what arrives.
+                        j.following.set(bottom && j.pin.borrow().pinned().is_none());
                         if bottom {
                             j.unseen.set(false);
                         }
@@ -607,14 +824,23 @@ impl Jump {
         j
     }
 
-    /// The thread's latest is in view.
+    /// The thread's latest is in view: its foot, above the room under a pinned turn.
     pub fn at_bottom(&self) -> bool {
         let adj = self.scroller.vadjustment();
-        adj.value() + adj.page_size() >= adj.upper() - 24.0
+        let room = self
+            .room
+            .borrow()
+            .as_ref()
+            .map_or(0.0, |r| f64::from(r.height()));
+        adj.value() + adj.page_size() >= adj.upper() - room - 24.0
     }
 
-    /// ↓: to the latest, following again.
+    /// ↓: to the latest, following again; a pinned message is let go.
     pub fn to_latest(&self) {
+        self.pin.borrow_mut().release();
+        if let Some(room) = self.room.borrow_mut().take() {
+            room.set_size_request(-1, 0);
+        }
         self.following.set(true);
         self.unseen.set(false);
         let adj = self.scroller.vadjustment();
@@ -707,6 +933,161 @@ impl Jump {
         } else {
             keep
         }
+    }
+
+    /// The owner scrolled.
+    fn touched(&self) {
+        self.pin.borrow_mut().touch();
+        if self.pin.borrow().pinned().is_none() {
+            return;
+        }
+        self.following.set(false);
+    }
+
+    /// Send: the next message the owner sends goes to the top and stays (`pinNext`).
+    pub fn sent(&self, words: &str) {
+        let before = self.last_ids.borrow().clone();
+        self.pin.borrow_mut().sent(words, before);
+    }
+
+    /// A draw is under way: what the pin can hold is registered again as it's drawn.
+    pub fn begin(&self) {
+        self.rows.borrow_mut().clear();
+        self.room.borrow_mut().take();
+    }
+
+    /// A row the pin can hold, as drawn: the owner's message, one not sent, or one written to the
+    /// run or held by tafs cloud.
+    pub fn row(&self, id: &str, widget: &impl IsA<gtk::Widget>) {
+        self.rows
+            .borrow_mut()
+            .push((id.to_string(), widget.clone().upcast()));
+    }
+
+    /// After a draw of `column` (the thread's rows, in order) with these candidates: the pin's
+    /// move (`onChange(of: items)`), then where the view goes (`put`). A pinned message has the
+    /// room under its turn at the column's foot, so it sits at the top and the answer grows into
+    /// the room without anything moving.
+    pub fn drawn(
+        self: &std::rc::Rc<Self>,
+        column: &gtk::Box,
+        candidates: &[tafs_core::pin::Candidate],
+        keep: f64,
+        ready: bool,
+        near_end: bool,
+    ) {
+        use tafs_core::pin::Move;
+        *self.last_ids.borrow_mut() = candidates.iter().map(|c| c.id.clone()).collect();
+        let mv = self.pin.borrow_mut().drawn(candidates);
+        let pinned = self.pin.borrow().pinned().map(str::to_string);
+        let widget = pinned.as_ref().and_then(|id| {
+            self.rows
+                .borrow()
+                .iter()
+                .find(|(r, _)| r == id)
+                .map(|(_, w)| w.clone())
+        });
+        // The room, while something is pinned: a whole view until the turn is laid out.
+        if pinned.is_some() {
+            let room = gtk::Box::new(gtk::Orientation::Vertical, 0);
+            room.set_widget_name("pin-room");
+            room.set_size_request(-1, self.scroller.height().max(1));
+            column.append(&room);
+            *self.room.borrow_mut() = Some(room);
+        }
+        match (mv, widget) {
+            (Move::ToLatest, _) => {
+                self.held.set(false);
+                self.landed.set(true);
+                self.to_latest();
+            }
+            (Move::Pin { .. } | Move::Repin { .. }, Some(w)) => {
+                self.held.set(false);
+                self.landed.set(true);
+                self.following.set(false);
+                self.pin_to_top(w);
+            }
+            _ => {
+                if pinned.is_some() {
+                    self.following.set(false);
+                }
+                self.put(keep, ready, near_end);
+                if let Some(w) = self.pinned_widget() {
+                    self.size_room(&w);
+                }
+            }
+        }
+    }
+
+    fn pinned_widget(&self) -> Option<gtk::Widget> {
+        let pin = self.pin.borrow();
+        let id = pin.pinned()?;
+        self.rows
+            .borrow()
+            .iter()
+            .find(|(r, _)| r == id)
+            .map(|(_, w)| w.clone())
+    }
+
+    /// The room under the pinned turn: the view less the turn (`PinnedTurn.room`).
+    fn size_room(&self, pinned: &gtk::Widget) -> Option<f64> {
+        let room = self.room.borrow().clone()?;
+        let column = room.parent()?;
+        let top = pinned.compute_point(&column, &gtk::graphene::Point::new(0.0, 0.0))?;
+        let foot = room.compute_point(&column, &gtk::graphene::Point::new(0.0, 0.0))?;
+        let view = self.scroller.vadjustment().page_size();
+        let height =
+            tafs_core::pin::room(view, Some(f64::from(top.y())), Some(f64::from(foot.y())));
+        room.set_size_request(-1, height.round() as i32);
+        Some(f64::from(top.y()))
+    }
+
+    /// `pinToTop`: the pinned message at the top of the view, once its room is laid out, and
+    /// again as the rows settle, unless the owner has scrolled meanwhile.
+    fn pin_to_top(self: &std::rc::Rc<Self>, widget: gtk::Widget) {
+        let place = {
+            let j = std::rc::Rc::downgrade(self);
+            move || {
+                let Some(j) = j.upgrade() else { return };
+                if j.pin.borrow().touched || j.pin.borrow().pinned().is_none() {
+                    return;
+                }
+                if let Some(top) = j.size_room(&widget) {
+                    let adj = j.scroller.vadjustment();
+                    // A margin above it, as the thread's own top.
+                    let value = (top - 12.0).clamp(0.0, (adj.upper() - adj.page_size()).max(0.0));
+                    j.held.set(true);
+                    adj.set_value(value);
+                    j.held.set(false);
+                    j.refresh();
+                }
+            }
+        };
+        let now = place.clone();
+        glib::idle_add_local_once(now);
+        for ms in [100, 350, 700] {
+            let again = place.clone();
+            glib::timeout_add_local_once(std::time::Duration::from_millis(ms), again);
+        }
+    }
+
+    /// What the pin is doing, for the pin's check: its message, if any.
+    pub fn pinned(&self) -> Option<String> {
+        self.pin.borrow().pinned().map(str::to_string)
+    }
+
+    /// How far the pinned message is from the top of the view, as laid out.
+    pub fn pinned_offset(&self) -> Option<f64> {
+        let w = self.pinned_widget()?;
+        let at = w.compute_point(&self.scroller, &gtk::graphene::Point::new(0.0, 0.0))?;
+        Some(f64::from(at.y()))
+    }
+
+    /// Where the pinned message's foot is in the view.
+    fn pinned_foot(&self) -> Option<f64> {
+        let w = self.pinned_widget()?;
+        let at = w.compute_point(&self.scroller, &gtk::graphene::Point::new(0.0, 0.0))?;
+        Some(f64::from(at.y()) + f64::from(w.height()))
     }
 
     /// Opened again (another conversation): it lands again.

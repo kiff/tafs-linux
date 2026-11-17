@@ -1019,6 +1019,8 @@ pub struct ChatLines {
     pub queued: Option<(String, String)>,
     /// An owner's message's menu: Send again, Edit and send, Copy.
     pub menu: (String, String, String),
+    /// The owner's messages among `lines`, by their line: what the pin can hold.
+    pub pins: Vec<(usize, crate::pin::Candidate)>,
 }
 
 /// What a taf's chat is with: its name, and what this person may do there.
@@ -1155,6 +1157,7 @@ pub fn lines(
     };
     let mut out = Vec::new();
     let mut live_at = None;
+    let mut pins = Vec::new();
     for (i, item) in items.iter().enumerate() {
         // The answer streaming now starts at its first words: its work block goes just before.
         if live_at.is_none() && matches!(item, Item::Streaming { .. }) {
@@ -1163,6 +1166,19 @@ pub fn lines(
         let at = item.at();
         if i == 0 || (at - items[i - 1].at()).num_seconds() >= 3600 {
             out.push(Line::Gap(gap(w.language(), at, now)));
+        }
+        if let Item::Message(m) = item {
+            if m.from == From::Owner && m.kind != MessageKind::Kickoff {
+                pins.push((
+                    out.len(),
+                    crate::pin::Candidate {
+                        id: item.id(),
+                        words: m.text.clone(),
+                        message: true,
+                        unsent: false,
+                    },
+                ));
+            }
         }
         out.push(match item {
             Item::Streaming { text, .. } => Line::Taf {
@@ -1264,6 +1280,7 @@ pub fn lines(
             w.line("chat.edit_and_send")?,
             w.line("common.copy")?,
         ),
+        pins,
     })
 }
 

@@ -103,7 +103,23 @@ struct Cloud {
     coach_setup: Option<String>,
 }
 
-/// The window's size, a laptop's, as the screenshots are saved.
+/// The window's first size on this display's first screen (`window::first_size`), or a laptop's
+/// when the display names no screen.
+fn first_size(display: &gtk::gdk::Display) -> (i32, i32) {
+    let monitor = display
+        .monitors()
+        .item(0)
+        .and_then(|m| m.downcast::<gtk::gdk::Monitor>().ok());
+    match monitor {
+        Some(m) => {
+            let g = m.geometry();
+            tafs_core::window::first_size(g.width(), g.height())
+        }
+        None => (WIDTH, HEIGHT),
+    }
+}
+
+/// The screenshots' size, a laptop's.
 const WIDTH: i32 = 1280;
 const HEIGHT: i32 = 800;
 
@@ -217,7 +233,7 @@ struct Options {
 }
 
 const USAGE: &str = "tafs [--lang en|de|fr|es|it|pt|nl|pl] [--theme light|dark] [--sample] [--signed-in] [--view-only [--paired]]
-     [--home contract.json] [--usage answers.json] [--people answers.json] [--connect answers.json] [--knob answer.json] [--setup answer.json] [--taf-activity answer.json] [--unproven answers.json] [--recipes answers.json] [--gallery answers.json] [--halt answer.json] [--record-search answers.json] [--access answer.json] [--receipts answer.json] [--activity answer.json] [--calls answer.json] [--receipt answer.json] [--work answer.json] [--doors answer.json] [--account-reads answers.json] [--me answer.json] [--attach files.json] [--held answers.json] [--versions answer.json [--trial answer.json]] [--memory answer.json] [--runs answer.json] [--request answer.json] [--balance answer.json] [--coach answer.json] [--coach-chats answer.json] [--coach-drafts answers.json] [--chat answer.json [--report] [--chat-stream events.txt]] [--brief answer.json] [--mission-log answer.json] [--coach-setup answer.json] [--coach-stream events.txt] [--unreachable network|error] [--app-event item.json] [--size WxH] [--page welcome|sign-in|pair|recipe:<id>|gallery|new-taf|halt-all|halt:<id>|halt-resume:<id>|record-search:<q>|record-export|receipt:<proposal id>|run:<taf id>|pin-sheet|share:<key>|share-step2:<key>|coach|coach-tools|coach-full|coach-read-back|coach-hand:<id>|coach-improve:<key>|overview|overview-label:<id>|needs-you|discard-setup|needs-you-set-all-aside|needs-you-dismiss|needs-you-hold:<id>|versions:<key>|trial:<key>|brief-answer:<decision id>|mission-log:<mission id>|record|calendar|calendar-week|usage|usage-ask|usage-decline|connect-apps|connect-app|connect-connection|connect-remove|connect-which-taf|connect-approve|account|kiff-account|time-zone|time-zone-use|alerts|devices|devices-sign-out|people|people-rename|people-add|taf|taf-card|taf-setup|taf-setup:<id>|starts:<id>|results:<id>|doors:<id>[:<door>]|consent|connected|sign-in-code] [--screenshot out.png]";
+     [--home contract.json] [--usage answers.json] [--people answers.json] [--connect answers.json] [--knob answer.json] [--setup answer.json] [--taf-activity answer.json] [--unproven answers.json] [--recipes answers.json] [--gallery answers.json] [--halt answer.json] [--record-search answers.json] [--access answer.json] [--receipts answer.json] [--activity answer.json] [--calls answer.json] [--receipt answer.json] [--work answer.json] [--doors answer.json] [--account-reads answers.json] [--me answer.json] [--attach files.json] [--held answers.json] [--versions answer.json [--trial answer.json]] [--memory answer.json] [--runs answer.json] [--request answer.json] [--balance answer.json] [--coach answer.json] [--coach-chats answer.json] [--coach-drafts answers.json] [--chat answer.json [--report] [--chat-stream events.txt [--pin-check]]] [--brief answer.json] [--mission-log answer.json] [--coach-setup answer.json] [--coach-stream events.txt] [--unreachable network|error] [--app-event item.json] [--size WxH] [--page welcome|sign-in|pair|recipe:<id>|gallery|new-taf|halt-all|halt:<id>|halt-resume:<id>|record-search:<q>|record-export|receipt:<proposal id>|run:<taf id>|pin-sheet|share:<key>|share-step2:<key>|coach|coach-tools|coach-full|coach-read-back|coach-hand:<id>|coach-improve:<key>|overview|overview-label:<id>|needs-you|discard-setup|needs-you-set-all-aside|needs-you-dismiss|needs-you-hold:<id>|versions:<key>|trial:<key>|brief-answer:<decision id>|mission-log:<mission id>|record|calendar|calendar-week|usage|usage-ask|usage-decline|connect-apps|connect-app|connect-connection|connect-remove|connect-which-taf|connect-approve|account|kiff-account|time-zone|time-zone-use|alerts|devices|devices-sign-out|people|people-rename|people-add|taf|taf-card|taf-setup|taf-setup:<id>|starts:<id>|results:<id>|doors:<id>[:<door>]|consent|connected|sign-in-code] [--screenshot out.png]";
 
 fn options() -> Result<Options, String> {
     let mut o = Options::default();
@@ -265,6 +281,7 @@ fn options() -> Result<Options, String> {
             "--coach-stream" => o.coach_stream = Some(value()?),
             "--chat" => o.chat = Some(value()?),
             "--chat-stream" => o.chat_stream = Some(value()?),
+            "--pin-check" => crate::chat::PIN_CHECK.with(|c| c.set(true)),
             "--report" => o.report = true,
             "--brief" => o.brief = Some(value()?),
             "--mission-log" => o.mission_log = Some(value()?),
@@ -462,13 +479,20 @@ fn activate(app: &adw::Application, o: &Options) {
     let display = gtk::gdk::Display::default().expect("a display");
     style::install(&display);
 
+    // Its first size: a screenshot's own, else sized to the screen near 4:3; 900×600 is the
+    // least it can be made, never the size it opens at.
+    let (width, height) = match (o.size, screenshot) {
+        (Some(s), _) => s,
+        (None, true) => (WIDTH, HEIGHT),
+        (None, false) => first_size(&display),
+    };
     let window = adw::ApplicationWindow::builder()
         .application(app)
-        .default_width(o.size.map_or(WIDTH, |s| s.0))
-        .default_height(o.size.map_or(HEIGHT, |s| s.1))
+        .default_width(width)
+        .default_height(height)
         .title(words.line("app.name").unwrap_or_default())
         .build();
-    window.set_size_request(900, 600);
+    window.set_size_request(tafs_core::window::MIN.0, tafs_core::window::MIN.1);
 
     let app_state = Rc::new(App {
         window: window.clone(),
@@ -792,6 +816,7 @@ fn activate(app: &adw::Application, o: &Options) {
                             .and_then(|r| r.labels.clone()),
                         gallery: g,
                         may_use_coach: true,
+                        close: app_state.words.line("common.close").unwrap_or_default(),
                     };
                     recipes::gallery(&pane, mode, &window);
                 }
@@ -2357,6 +2382,7 @@ impl App {
                         gallery,
                         labels: c.recipes.as_ref().and_then(|r| r.labels.clone()),
                         may_use_coach: model.may_use_coach,
+                        close: self.words.line("common.close").unwrap_or_default(),
                     })
                 }),
                 _ => None,
