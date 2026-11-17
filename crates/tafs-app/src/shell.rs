@@ -1094,6 +1094,8 @@ fn sidebar(
     unreachable.set_widget_name("unreachable");
     unreachable_line(&unreachable, lines.unreachable.as_ref());
     foot.append(&unreachable);
+    // A newer tafs for Linux is out: one line that opens its page; nothing when there's none.
+    foot.append(&crate::update::line(w));
     // The plan, only when it needs the owner (`PlanLine`): tafs cloud's words, then Plan & usage,
     // which it opens.
     let mut plan_button = None;

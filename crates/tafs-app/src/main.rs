@@ -47,6 +47,7 @@ mod store;
 mod style;
 mod taf;
 mod taf_chat;
+mod update;
 mod usage;
 mod versions;
 mod welcome;
@@ -224,6 +225,9 @@ struct Options {
     /// With `--home`: Home couldn't be read just now (`network` or `error`), and the app tries
     /// again, for the Unreachable line's screenshot. Nothing is read again.
     unreachable: Option<String>,
+    /// `--new-version v1.0.2`: a newer published release, as GitHub's answer would say it, for
+    /// the sidebar's "A new version of tafs is out" line. Nothing is read from GitHub.
+    new_version: Option<String>,
     /// A dial's stop with its approval, as tafs cloud sends it in the knob's `wakes`: its sheet
     /// opens over the window, for its screenshot. Nothing is signed or subscribed.
     app_event: Option<String>,
@@ -233,7 +237,7 @@ struct Options {
 }
 
 const USAGE: &str = "tafs [--lang en|de|fr|es|it|pt|nl|pl] [--theme light|dark] [--sample] [--signed-in] [--view-only [--paired]]
-     [--home contract.json] [--usage answers.json] [--people answers.json] [--connect answers.json] [--knob answer.json] [--setup answer.json] [--taf-activity answer.json] [--unproven answers.json] [--recipes answers.json] [--gallery answers.json] [--halt answer.json] [--record-search answers.json] [--access answer.json] [--receipts answer.json] [--activity answer.json] [--calls answer.json] [--receipt answer.json] [--work answer.json] [--doors answer.json] [--account-reads answers.json] [--me answer.json] [--attach files.json] [--held answers.json] [--versions answer.json [--trial answer.json]] [--memory answer.json] [--runs answer.json] [--request answer.json] [--balance answer.json] [--coach answer.json] [--coach-chats answer.json] [--coach-drafts answers.json] [--chat answer.json [--report] [--chat-stream events.txt [--pin-check]]] [--brief answer.json] [--mission-log answer.json] [--coach-setup answer.json] [--coach-stream events.txt] [--unreachable network|error] [--app-event item.json] [--size WxH] [--page welcome|sign-in|pair|recipe:<id>|gallery|new-taf|halt-all|halt:<id>|halt-resume:<id>|record-search:<q>|record-export|receipt:<proposal id>|run:<taf id>|pin-sheet|share:<key>|share-step2:<key>|coach|coach-tools|coach-full|coach-read-back|coach-hand:<id>|coach-improve:<key>|overview|overview-label:<id>|needs-you|discard-setup|needs-you-set-all-aside|needs-you-dismiss|needs-you-hold:<id>|versions:<key>|trial:<key>|brief-answer:<decision id>|mission-log:<mission id>|record|calendar|calendar-week|usage|usage-ask|usage-decline|connect-apps|connect-app|connect-connection|connect-remove|connect-which-taf|connect-approve|account|kiff-account|time-zone|time-zone-use|alerts|devices|devices-sign-out|people|people-rename|people-add|taf|taf-card|taf-setup|taf-setup:<id>|starts:<id>|results:<id>|doors:<id>[:<door>]|consent|connected|sign-in-code] [--screenshot out.png]";
+     [--home contract.json] [--usage answers.json] [--people answers.json] [--connect answers.json] [--knob answer.json] [--setup answer.json] [--taf-activity answer.json] [--unproven answers.json] [--recipes answers.json] [--gallery answers.json] [--halt answer.json] [--record-search answers.json] [--access answer.json] [--receipts answer.json] [--activity answer.json] [--calls answer.json] [--receipt answer.json] [--work answer.json] [--doors answer.json] [--account-reads answers.json] [--me answer.json] [--attach files.json] [--held answers.json] [--versions answer.json [--trial answer.json]] [--memory answer.json] [--runs answer.json] [--request answer.json] [--balance answer.json] [--coach answer.json] [--coach-chats answer.json] [--coach-drafts answers.json] [--chat answer.json [--report] [--chat-stream events.txt [--pin-check]]] [--brief answer.json] [--mission-log answer.json] [--coach-setup answer.json] [--coach-stream events.txt] [--unreachable network|error] [--new-version vX.Y.Z] [--app-event item.json] [--size WxH] [--page welcome|sign-in|pair|recipe:<id>|gallery|new-taf|halt-all|halt:<id>|halt-resume:<id>|record-search:<q>|record-export|receipt:<proposal id>|run:<taf id>|pin-sheet|share:<key>|share-step2:<key>|coach|coach-tools|coach-full|coach-read-back|coach-hand:<id>|coach-improve:<key>|overview|overview-label:<id>|needs-you|discard-setup|needs-you-set-all-aside|needs-you-dismiss|needs-you-hold:<id>|versions:<key>|trial:<key>|brief-answer:<decision id>|mission-log:<mission id>|record|calendar|calendar-week|usage|usage-ask|usage-decline|connect-apps|connect-app|connect-connection|connect-remove|connect-which-taf|connect-approve|account|kiff-account|time-zone|time-zone-use|alerts|devices|devices-sign-out|people|people-rename|people-add|taf|taf-card|taf-setup|taf-setup:<id>|starts:<id>|results:<id>|doors:<id>[:<door>]|consent|connected|sign-in-code] [--screenshot out.png]";
 
 fn options() -> Result<Options, String> {
     let mut o = Options::default();
@@ -286,6 +290,7 @@ fn options() -> Result<Options, String> {
             "--brief" => o.brief = Some(value()?),
             "--mission-log" => o.mission_log = Some(value()?),
             "--unreachable" => o.unreachable = Some(value()?),
+            "--new-version" => o.new_version = Some(value()?),
             "--app-event" => o.app_event = Some(value()?),
             "--size" => {
                 let v = value()?;
@@ -717,6 +722,21 @@ fn activate(app: &adw::Application, o: &Options) {
     // What opens: the sample when asked, else the kept session, else the welcome. A screenshot
     // never reads or writes the keyring.
     let now = chrono::Utc::now().timestamp();
+    // "A new version of tafs is out": `--new-version`'s release, else GitHub's, read at start and
+    // once a day by the app itself, never by a screenshot, the sample or a fixture.
+    match &o.new_version {
+        Some(tag) => {
+            let page = format!("{}/tag/{tag}", tafs_core::update::RELEASES);
+            let answer = serde_json::json!({
+                "tag_name": tag, "draft": false, "prerelease": false, "html_url": page,
+            });
+            if let Some(new) = tafs_core::update::newer(tafs_core::update::VERSION, &answer) {
+                update::found(new);
+            }
+        }
+        None if !screenshot && !o.sample && o.home.is_none() => update::start(),
+        None => {}
+    }
     let kept = if screenshot || o.sample {
         None
     } else {
