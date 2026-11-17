@@ -158,7 +158,6 @@ pub fn build(
     // Coach mode over whatever is open (`CoachPanel`), signed in with KIFF.
     let mode = crate::coach_mode::CoachMode::new(&w, &screens);
     root.append(&mode.widget());
-    let has_coach = !matches!(coach, crate::coach::CoachSource::None);
 
     let detail = gtk::Box::new(gtk::Orientation::Vertical, 0);
     detail.set_hexpand(true);

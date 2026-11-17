@@ -8,8 +8,8 @@ mod brief;
 mod calendar;
 mod chat;
 mod coach;
-mod coach_start;
 mod coach_mode;
+mod coach_start;
 mod connect;
 mod connected;
 mod connections;
@@ -177,7 +177,8 @@ struct Options {
     /// With `--coach`: KIFF's answers to the drafts its approvals name, by draft id, each
     /// `{"status": …, "answer": …}`: nothing is read.
     coach_drafts: Option<String>,
-    /// With `--coach`: tafs cloud's `GET /v1/setup` answer, for Coach's tools: nothing is read.
+    /// Coach as tafs cloud answers `GET /v1/setup`: with `--coach`, for Coach's tools; with
+    /// `--home`, for Finish setting up. Nothing is read.
     coach_setup: Option<String>,
     /// With `--home`: a taf's chat as tafs cloud answers `GET /v1/tafs/{id}/conversation`, read
     /// from a file: nothing is sent.
@@ -190,8 +191,6 @@ struct Options {
     /// With `--brief`: a mission's log as tafs cloud answers `GET /v1/missions/{id}/log`, for
     /// every mission's Evidence.
     mission_log: Option<String>,
-    /// With `--home`: Coach as tafs cloud answers `GET /v1/setup`, for Finish setting up.
-    coach_setup: Option<String>,
     /// With `--home`: Home couldn't be read just now (`network` or `error`), and the app tries
     /// again, for the Unreachable line's screenshot. Nothing is read again.
     unreachable: Option<String>,
@@ -246,7 +245,6 @@ fn options() -> Result<Options, String> {
             "--report" => o.report = true,
             "--brief" => o.brief = Some(value()?),
             "--mission-log" => o.mission_log = Some(value()?),
-            "--coach-setup" => o.coach_setup = Some(value()?),
             "--unreachable" => o.unreachable = Some(value()?),
             "--size" => {
                 let v = value()?;
