@@ -6,15 +6,18 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use gtk::prelude::*;
+use adw::prelude::*;
+use tafs_core::approval::NotReady;
 use tafs_core::sidebar::Mode;
+use tafs_core::signed::Act;
 use tafs_core::usage::{
     answered, credits_path, sample_balance, sample_credits, taf_credits_path, tone, Balance,
     Credits, TafCredits, Tone, BALANCE_PATH,
 };
 use tafs_core::usage::{
-    asked_line, asks, billing_line, last_answer, open_requests, request_line, solo_still_renews,
-    waiting, KiffUsage,
+    ask_request, ask_sheet, asked_line, asks, billing_line, can_ask, decline_act, decline_sheet,
+    last_answer, not_sent, not_withdrawn, offered_packs, open_requests, request_line,
+    solo_still_renews, waiting, withdraw_request, KiffUsage, PackRequest,
 };
 use tafs_core::words::WordBook;
 
@@ -61,6 +64,50 @@ struct State {
     /// KIFF's usage read, and why it couldn't be read.
     usage: Option<KiffUsage>,
     usage_error: Option<String>,
+    /// `planMessage`: why asking or withdrawing didn't go.
+    plan_message: Option<String>,
+    /// Where a tap would have signed, this computer's words: under the balance's Raise (the iPad's
+    /// `why`), and where the plan's message goes (answering a raise request).
+    raise_refused: Option<NotReady>,
+    plan_refused: Option<NotReady>,
+}
+
+thread_local! {
+    /// `--page usage-ask` or `usage-decline`: Ask an admin's sheet, or the first request's
+    /// Decline, opens once the page is read, for its screenshot.
+    pub static OPEN: std::cell::Cell<Option<&'static str>> = const { std::cell::Cell::new(None) };
+}
+
+/// What the screen's buttons act on: the words, what was read, and reading again.
+#[derive(Clone)]
+struct Ctx {
+    w: Rc<WordBook>,
+    state: Rc<RefCell<State>>,
+    redraw: Redraw,
+    source: UsageSource,
+    /// `refreshUsage`: KIFF's usage and the balance, read again.
+    reload: Rc<dyn Fn()>,
+}
+
+impl Ctx {
+    /// Signed in with KIFF, or a screenshot's account: the iPad signs only there.
+    fn mode(&self) -> Mode {
+        if kiff_billing(&self.source).is_some() {
+            Mode::Kiff
+        } else {
+            Mode::SignedOut
+        }
+    }
+
+    /// The tap that would sign `act`: what this computer says, kept with `put`, and nothing sent.
+    fn refuse(&self, act: &Act, put: fn(&mut State, Option<NotReady>)) {
+        let n = tafs_core::signed::tap(&self.w, self.mode(), act)
+            .ok()
+            .flatten();
+        put(&mut self.state.borrow_mut(), n);
+        let redraw = self.redraw.clone();
+        gtk::glib::idle_add_local_once(move || redraw());
+    }
 }
 
 type Redraw = Rc<dyn Fn()>;
@@ -196,14 +243,93 @@ pub fn page(w: Rc<WordBook>, source: UsageSource, names: Names) -> gtk::Widget {
             screens.set_visible_child_name("runs");
         })
     };
+    // `refreshUsage`: the balance, the credits and KIFF's usage, read as the session.
+    let reload: Rc<dyn Fn()> = {
+        let (w, source, state, redraw) = (w.clone(), source.clone(), state.clone(), redraw.clone());
+        Rc::new(move || {
+            if !matches!(source, UsageSource::Cloud { .. }) {
+                return;
+            }
+            let (words, source, state, redraw) =
+                ((*w).clone(), source.clone(), state.clone(), redraw.clone());
+            gtk::glib::spawn_future_local(async move {
+                let read = gtk::gio::spawn_blocking(move || {
+                    let what = words.line("usage.the_balance").unwrap_or_default();
+                    let b = cloud_read(&words, &source, BALANCE_PATH, &what, Balance::read);
+                    let what = words.line("usage.credits").unwrap_or_default();
+                    let c = cloud_read(&words, &source, &credits_path(false), &what, Credits::read);
+                    // KIFF's read, alongside: a failure says so once, under the credits.
+                    let u = match &source {
+                        UsageSource::Cloud {
+                            token, languages, ..
+                        } => match crate::kiff::usage(token, languages) {
+                            Ok(a) if (200..300).contains(&a.status) => KiffUsage::read(&a.body)
+                                .ok_or_else(|| {
+                                    tafs_core::signin::plain_words(&words, 200).unwrap_or_default()
+                                }),
+                            Ok(a) => Err(tafs_core::signin::refusal(&a, Some(&words))
+                                .words(&words)
+                                .unwrap_or_default()),
+                            Err(e) => Err(e.words(&words).unwrap_or_default()),
+                        }
+                        .map_err(|why| {
+                            words
+                                .get("billing.plan_could_not_read_kiff", &[("why", &why)])
+                                .unwrap_or(why)
+                        }),
+                        _ => Ok(KiffUsage::default()),
+                    };
+                    (b, c, u)
+                })
+                .await;
+                {
+                    let mut s = state.borrow_mut();
+                    if let Ok((b, c, u)) = read {
+                        // A read that works says nothing of the last one's failure.
+                        match u {
+                            Ok(u) => {
+                                s.usage = Some(u);
+                                s.usage_error = None;
+                            }
+                            Err(e) => s.usage_error = Some(e),
+                        }
+                        match b {
+                            Ok(b) => {
+                                s.balance = b;
+                                s.balance_error = None;
+                            }
+                            Err(e) => s.balance_error = Some(e),
+                        }
+                        match c {
+                            Ok(c) => {
+                                s.credits = c;
+                                s.credits_error = None;
+                            }
+                            Err(e) => s.credits_error = Some(e),
+                        }
+                    }
+                    s.read = true;
+                }
+                redraw();
+            });
+        })
+    };
+    let ctx = Ctx {
+        w: w.clone(),
+        state: state.clone(),
+        redraw: redraw.clone(),
+        source: source.clone(),
+        reload: reload.clone(),
+    };
     *draw.borrow_mut() = Some(Rc::new({
-        let (w, column, state, read_previous, redraw, source) = (
+        let (w, column, state, read_previous, redraw, source, ctx) = (
             w.clone(),
             column.clone(),
             state.clone(),
             read_previous.clone(),
             redraw.clone(),
             source.clone(),
+            ctx.clone(),
         );
         move || {
             while let Some(c) = column.first_child() {
@@ -220,11 +346,22 @@ pub fn page(w: Rc<WordBook>, source: UsageSource, names: Names) -> gtk::Widget {
                 column.append(&p);
                 return;
             }
-            balance_panel(&w, &column, &s, kiff_billing(&source).is_some());
+            balance_panel(&ctx, &column, &s, kiff_billing(&source).is_some());
+            // `planMessage`: why asking or withdrawing didn't go; or this computer's words.
+            if let Some(message) = &s.plan_message {
+                let p = panel(false);
+                p.append(&text(message, 14, 400, &["tafs-soft"]));
+                column.append(&p);
+            }
+            if let Some(n) = &s.plan_refused {
+                let p = panel(false);
+                p.append(&crate::approval::not_ready(n));
+                column.append(&p);
+            }
             if let (Some(manages_billing), Some(u)) = (kiff_billing(&source), &s.usage) {
                 billing_panel(&w, &column, u);
-                ask_panel(&w, &column, u, manages_billing, &s);
-                requests_panel(&w, &column, u, manages_billing, &s);
+                ask_panel(&ctx, &column, u, manages_billing, &s);
+                requests_panel(&ctx, &column, u, manages_billing, &s);
             }
             // Left out where tafs cloud says so: no plan and no run lately.
             let shows_credits = s.balance.as_ref().is_none_or(|b| b.balance.credits_panel);
@@ -270,71 +407,20 @@ pub fn page(w: Rc<WordBook>, source: UsageSource, names: Names) -> gtk::Widget {
             s.usage = KiffUsage::read(&part("usage"));
             s.read = true;
         }
-        UsageSource::Cloud { .. } => {
-            let (words, source, state, redraw) =
-                ((*w).clone(), source.clone(), state.clone(), redraw.clone());
-            gtk::glib::spawn_future_local(async move {
-                let read = gtk::gio::spawn_blocking(move || {
-                    let what = words.line("usage.the_balance").unwrap_or_default();
-                    let b = cloud_read(&words, &source, BALANCE_PATH, &what, Balance::read);
-                    let what = words.line("usage.credits").unwrap_or_default();
-                    let c = cloud_read(&words, &source, &credits_path(false), &what, Credits::read);
-                    // KIFF's read, alongside: a failure says so once, under the credits.
-                    let u = match &source {
-                        UsageSource::Cloud {
-                            token, languages, ..
-                        } => match crate::kiff::usage(token, languages) {
-                            Ok(a) if (200..300).contains(&a.status) => KiffUsage::read(&a.body)
-                                .ok_or_else(|| {
-                                    tafs_core::signin::plain_words(&words, 200).unwrap_or_default()
-                                }),
-                            Ok(a) => Err(tafs_core::signin::refusal(&a, Some(&words))
-                                .words(&words)
-                                .unwrap_or_default()),
-                            Err(e) => Err(e.words(&words).unwrap_or_default()),
-                        }
-                        .map_err(|why| {
-                            words
-                                .get("billing.plan_could_not_read_kiff", &[("why", &why)])
-                                .unwrap_or(why)
-                        }),
-                        _ => Ok(KiffUsage::default()),
-                    };
-                    (b, c, u)
-                })
-                .await;
-                {
-                    let mut s = state.borrow_mut();
-                    if let Ok((b, c, u)) = read {
-                        match u {
-                            Ok(u) => s.usage = Some(u),
-                            Err(e) => s.usage_error = Some(e),
-                        }
-                        match b {
-                            Ok(b) => s.balance = b,
-                            Err(e) => s.balance_error = Some(e),
-                        }
-                        match c {
-                            Ok(c) => s.credits = c,
-                            Err(e) => s.credits_error = Some(e),
-                        }
-                    }
-                    s.read = true;
-                }
-                redraw();
-            });
-        }
+        UsageSource::Cloud { .. } => {}
     }
+    reload();
+    open_sheet(&ctx, &column);
     redraw();
     crate::widgets::ground(&screens);
     screens.upcast()
 }
 
 /// `BalancePanel`: the words, a bar at `meter_pct`, the detail and the warning; else why it
-/// couldn't be read. Signed in with KIFF, tafs cloud's Raise offer under it behind
-/// `ApprovalGate`: raising is signed, so this computer says why it can't in the button's place.
-/// Buying waits for a store.
-fn balance_panel(w: &WordBook, column: &gtk::Box, s: &State, kiff: bool) {
+/// couldn't be read. Signed in with KIFF, tafs cloud's Raise offer under it: raising is signed,
+/// so its tap says this computer can't approve, under it where the iPad says why it wasn't
+/// raised, and sends nothing. Buying waits for the money question.
+fn balance_panel(ctx: &Ctx, column: &gtk::Box, s: &State, kiff: bool) {
     let Some(b) = &s.balance else {
         if let Some(why) = &s.balance_error {
             let p = panel(false);
@@ -372,9 +458,15 @@ fn balance_panel(w: &WordBook, column: &gtk::Box, s: &State, kiff: bool) {
     }
     column.append(&p);
     if let (true, Some(raise)) = (kiff, &line.raise) {
+        // `ApprovalGate`, as the iPad's: while this computer can't approve, why in Raise's place.
         let b = crate::widgets::primary(&raise.words);
-        b.set_sensitive(false);
-        column.append(&crate::approval::gate(w, Mode::Kiff, &b));
+        b.set_widget_name("raise-limit");
+        let ctx2 = ctx.clone();
+        b.connect_clicked(move |_| ctx2.refuse(&Act::RaiseLimit, |s, n| s.raise_refused = n));
+        column.append(&crate::approval::gate(&ctx.w, ctx.mode(), &b));
+        if let Some(n) = &s.raise_refused {
+            column.append(&crate::approval::not_ready(n));
+        }
     }
 }
 
@@ -842,12 +934,13 @@ fn billing_panel(w: &WordBook, column: &gtk::Box, u: &KiffUsage) {
 }
 
 /// `askPanel`, for someone who doesn't manage billing: their request waiting, with Withdraw;
-/// else the last answer, and Ask an admin where the plan lets them ask. The buttons are there,
-/// dimmed, until asking is ported.
-fn ask_panel(w: &WordBook, column: &gtk::Box, u: &KiffUsage, manages_billing: bool, s: &State) {
+/// else the last answer, and Ask an admin where the plan lets them ask. Both are unsigned, as the
+/// session: Withdraw takes the request back, and Ask an admin opens its sheet.
+fn ask_panel(ctx: &Ctx, column: &gtk::Box, u: &KiffUsage, manages_billing: bool, s: &State) {
     if manages_billing {
         return;
     }
+    let w = &ctx.w;
     let l = |k: &str| w.line(k).unwrap_or_default();
     if let Some(mine) = waiting(u, false) {
         let p = panel(false);
@@ -861,7 +954,18 @@ fn ask_panel(w: &WordBook, column: &gtk::Box, u: &KiffUsage, manages_billing: bo
             &["tafs-ink"],
         ));
         let withdraw = outline(&l("usage.requests.withdraw"));
-        withdraw.set_sensitive(false);
+        withdraw.set_widget_name("usage.withdraw");
+        let (ctx, id) = (ctx.clone(), mine.id.clone());
+        withdraw.connect_clicked(move |b| {
+            b.set_sensitive(false);
+            let reload = ctx.reload.clone();
+            send(
+                &ctx,
+                withdraw_request(&id),
+                not_withdrawn,
+                Rc::new(move |_| reload()),
+            );
+        });
         p.append(&withdraw);
         column.append(&p);
         return;
@@ -871,7 +975,7 @@ fn ask_panel(w: &WordBook, column: &gtk::Box, u: &KiffUsage, manages_billing: bo
         p.append(&text(&answer, 14, 400, &["tafs-soft"]));
         column.append(&p);
     }
-    if asks(u).is_some() {
+    if let Some(raise) = asks(u) {
         // In the primary style while the balance waits on it.
         let waits = s.balance.as_ref().is_some_and(|b| b.balance.waiting());
         let ask = if waits {
@@ -879,26 +983,250 @@ fn ask_panel(w: &WordBook, column: &gtk::Box, u: &KiffUsage, manages_billing: bo
         } else {
             outline(&l("usage.requests.ask_admin"))
         };
-        ask.set_sensitive(false);
+        ask.set_widget_name("usage.ask-admin");
+        let ctx = ctx.clone();
+        ask.connect_clicked(move |b| ask_admin(&ctx, raise, b.upcast_ref()));
         column.append(&ask);
     }
 }
 
-/// `requestsPanel`, for someone who manages billing: members' open requests, in the amber,
-/// each its line and reason, then Raise the limit (where tafs cloud offers it) behind
-/// `ApprovalGate`, so this computer's why in its place, and Decline, dimmed until answering is
-/// ported. Approving a pack buys it in the App Store: none here.
-fn requests_panel(
-    w: &WordBook,
-    column: &gtk::Box,
-    u: &KiffUsage,
-    manages_billing: bool,
-    s: &State,
+/// Sends `call` as the session, unsigned (asking an admin, withdrawing): done says whether it went.
+/// When it didn't, why, in the plan's message (`failed`'s words). A screenshot's account sends
+/// nothing.
+fn send(
+    ctx: &Ctx,
+    call: Option<tafs_core::signed::Unsigned>,
+    failed: fn(&WordBook, &str) -> Result<String, tafs_core::words::WordsError>,
+    done: Rc<dyn Fn(bool)>,
 ) {
+    let (
+        Some(call),
+        UsageSource::Cloud {
+            token, languages, ..
+        },
+    ) = (call, ctx.source.clone())
+    else {
+        return done(false);
+    };
+    ctx.state.borrow_mut().plan_message = None;
+    let (words, ctx) = ((*ctx.w).clone(), ctx.clone());
+    gtk::glib::spawn_future_local(async move {
+        let why = gtk::gio::spawn_blocking(move || {
+            match crate::kiff::kiff_send(&token, &languages, &call) {
+                Ok(a) if (200..300).contains(&a.status) => None,
+                Ok(a) => Some(
+                    tafs_core::signin::refusal(&a, Some(&words))
+                        .words(&words)
+                        .unwrap_or_default(),
+                ),
+                Err(e) => Some(e.words(&words).unwrap_or_default()),
+            }
+        })
+        .await
+        .unwrap_or_else(|_| Some(String::new()));
+        if let Some(why) = &why {
+            ctx.state.borrow_mut().plan_message = failed(&ctx.w, why).ok();
+            (ctx.redraw)();
+        }
+        done(why.is_none());
+    });
+}
+
+/// `AskAdminView`, its own sheet: what asking does, Which pack (on Solo), Why (optional), why it
+/// didn't go, and Ask, unsigned as the session. Asked, the sheet closes and the screen reads again.
+fn ask_admin(ctx: &Ctx, raise: bool, over: &gtk::Widget) {
+    let w = &ctx.w;
+    let Ok(lines) = ask_sheet(w, raise) else {
+        return;
+    };
+    let packs: Vec<(String, String)> = {
+        let s = ctx.state.borrow();
+        s.usage
+            .as_ref()
+            .map(|u| {
+                offered_packs(u, s.balance.as_ref())
+                    .into_iter()
+                    .map(|p| (p.id.clone(), p.line.clone()))
+                    .collect()
+            })
+            .unwrap_or_default()
+    };
+    let sheet = crate::sheet::new(&lines.title, &lines.cancel, None, 520);
+    sheet
+        .column
+        .append(&text(&lines.line, 15, 400, &["tafs-soft"]));
+    let chosen: Rc<RefCell<Option<String>>> = Rc::new(RefCell::new(None));
+    let ask = crate::widgets::primary(&lines.ask);
+    ask.set_widget_name("usage.ask");
+    let sending = Rc::new(std::cell::Cell::new(false));
+    let refresh: Rc<dyn Fn()> = {
+        let (ask, chosen, sending) = (ask.clone(), chosen.clone(), sending.clone());
+        Rc::new(move || {
+            ask.set_sensitive(can_ask(
+                Some(raise),
+                chosen.borrow().as_deref(),
+                sending.get(),
+            ))
+        })
+    };
+    if !raise {
+        let p = panel(false);
+        p.append(&eyebrow(&lines.which_pack, false));
+        let mut first: Option<gtk::CheckButton> = None;
+        for (id, line) in &packs {
+            let c = gtk::CheckButton::with_label(line);
+            c.set_widget_name(&format!("usage.pack.{id}"));
+            match &first {
+                Some(f) => c.set_group(Some(f)),
+                None => first = Some(c.clone()),
+            }
+            let (chosen, refresh, id) = (chosen.clone(), refresh.clone(), id.clone());
+            c.connect_toggled(move |c| {
+                if c.is_active() {
+                    *chosen.borrow_mut() = Some(id.clone());
+                    refresh();
+                }
+            });
+            p.append(&c);
+        }
+        sheet.column.append(&p);
+    }
+    let p = panel(false);
+    p.append(&eyebrow(&lines.why, false));
+    let reason = gtk::Entry::new();
+    reason.set_placeholder_text(Some(&lines.hint));
+    reason.set_widget_name("usage.reason");
+    p.append(&reason);
+    sheet.column.append(&p);
+    let failed = text("", 14, 400, &["tafs-no"]);
+    failed.set_visible(false);
+    sheet.column.append(&failed);
+    sheet.column.append(&ask);
+    refresh();
+    {
+        let (ctx, dialog, chosen, sending, refresh, failed, asking, words) = (
+            ctx.clone(),
+            sheet.dialog.downgrade(),
+            chosen.clone(),
+            sending.clone(),
+            refresh.clone(),
+            failed.clone(),
+            lines.asking.clone(),
+            lines.ask.clone(),
+        );
+        ask.connect_clicked(move |b| {
+            let call = ask_request(raise, chosen.borrow().as_deref(), &reason.text());
+            if call.is_none() || sending.get() {
+                return;
+            }
+            sending.set(true);
+            b.set_label(&asking);
+            refresh();
+            let (ctx2, dialog, sending, refresh, failed, b, words) = (
+                ctx.clone(),
+                dialog.clone(),
+                sending.clone(),
+                refresh.clone(),
+                failed.clone(),
+                b.clone(),
+                words.clone(),
+            );
+            send(
+                &ctx,
+                call,
+                not_sent,
+                Rc::new(move |asked| {
+                    sending.set(false);
+                    b.set_label(&words);
+                    refresh();
+                    if asked {
+                        if let Some(d) = dialog.upgrade() {
+                            d.close();
+                        }
+                        (ctx2.reload)();
+                    } else if let Some(m) = ctx2.state.borrow().plan_message.clone() {
+                        failed.set_label(&m);
+                        failed.set_visible(true);
+                    }
+                }),
+            );
+        });
+    }
+    sheet.dialog.present(Some(over));
+}
+
+/// `DeclineRequestView`, its own sheet: the question, Note (optional), and Decline in red. Declining
+/// is signed, so its tap says this computer can't approve, where the iPad says why it wasn't
+/// declined, and sends nothing; the sheet stays open.
+fn decline(ctx: &Ctx, r: &PackRequest, u: &KiffUsage, over: &gtk::Widget) {
+    let w = &ctx.w;
+    let Ok(lines) = decline_sheet(w, r, u) else {
+        return;
+    };
+    let sheet = crate::sheet::new(&lines.title, &lines.cancel, None, 520);
+    sheet
+        .column
+        .append(&text(&lines.question, 16, 600, &["tafs-ink"]));
+    let p = panel(false);
+    p.append(&eyebrow(&lines.note, false));
+    let note = gtk::Entry::new();
+    note.set_placeholder_text(Some(&lines.hint));
+    note.set_widget_name("usage.note");
+    p.append(&note);
+    sheet.column.append(&p);
+    let refused = crate::approval::refusal_slot();
+    sheet.column.append(&refused);
+    let b = outline(&lines.decline);
+    b.add_css_class("refuse");
+    b.set_widget_name("usage.decline");
+    let (w2, mode, act) = (w.clone(), ctx.mode(), decline_act(r));
+    b.connect_clicked(move |_| crate::approval::refuse(&w2, mode, &act, &refused));
+    sheet.column.append(&b);
+    sheet.dialog.present(Some(over));
+    if OPEN.with(|o| o.get()) == Some("decline-tapped") {
+        OPEN.with(|o| o.set(None));
+        gtk::glib::timeout_add_local_once(std::time::Duration::from_millis(400), move || {
+            b.emit_clicked()
+        });
+    }
+}
+
+/// A screenshot's sheet, once the page is read: Ask an admin's, or the first request's Decline
+/// with Decline tapped.
+fn open_sheet(ctx: &Ctx, column: &gtk::Box) {
+    let Some(which) = OPEN.with(|o| o.get()) else {
+        return;
+    };
+    let (ctx, column) = (ctx.clone(), column.clone());
+    gtk::glib::timeout_add_local_once(std::time::Duration::from_millis(300), move || {
+        let s = ctx.state.borrow();
+        let Some(u) = s.usage.clone() else { return };
+        drop(s);
+        if which == "ask" {
+            OPEN.with(|o| o.set(None));
+            if let Some(raise) = asks(&u) {
+                ask_admin(&ctx, raise, column.upcast_ref());
+            }
+        } else if let Some(r) = u
+            .requests
+            .as_ref()
+            .and_then(|r| r.iter().find(|r| r.status == "open"))
+        {
+            decline(&ctx, r, &u, column.upcast_ref());
+        }
+    });
+}
+
+/// `requestsPanel`, for someone who manages billing: members' open requests, in the amber,
+/// each its line and reason, then Raise the limit (where tafs cloud offers it) and Decline, which
+/// opens its sheet. Both are signed: their tap says this computer can't approve, and sends
+/// nothing. Approving a pack buys it, which waits for the money question: not drawn.
+fn requests_panel(ctx: &Ctx, column: &gtk::Box, u: &KiffUsage, manages_billing: bool, s: &State) {
     let open = open_requests(u, manages_billing);
     if open.is_empty() {
         return;
     }
+    let w = &ctx.w;
     let l = |k: &str| w.line(k).unwrap_or_default();
     let p = panel(false);
     p.add_css_class("edge-amber");
@@ -920,13 +1248,20 @@ fn requests_panel(
             .as_ref()
             .is_some_and(|b| b.balance.raise.is_some());
         if r.kind == "raise" && offers_raise {
+            // `answerRaise`: raising answers every open request for one.
             let raise = crate::widgets::primary(&l("usage.raise_limit_button"));
-            raise.set_sensitive(false);
-            buttons.append(&crate::approval::gate(w, Mode::Kiff, &raise));
+            raise.set_widget_name(&format!("usage.raise.{}", r.id));
+            let ctx2 = ctx.clone();
+            raise
+                .connect_clicked(move |_| ctx2.refuse(&Act::RaiseLimit, |s, n| s.plan_refused = n));
+            // `ApprovalGate`, as the iPad's: while this computer can't approve, why in its place.
+            buttons.append(&crate::approval::gate(&ctx.w, ctx.mode(), &raise));
         }
-        let decline = outline(&l("usage.requests.decline"));
-        decline.set_sensitive(false);
-        buttons.append(&decline);
+        let decline_button = outline(&l("usage.requests.decline"));
+        decline_button.set_widget_name(&format!("usage.decline.{}", r.id));
+        let (ctx, r, u) = (ctx.clone(), r.clone(), u.clone());
+        decline_button.connect_clicked(move |b| decline(&ctx, &r, &u, b.upcast_ref()));
+        buttons.append(&decline_button);
         one.append(&buttons);
         p.append(&one);
     }

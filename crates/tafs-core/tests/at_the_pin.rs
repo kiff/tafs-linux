@@ -312,7 +312,7 @@ const LINES: &[(&str, &[&str])] = &[
     ("settings.change_language", &[]),
     ("settings.time_zone_title", &[]),
     ("sign_in.how_works", &[]),
-    ("sign_in.every_action_taf_takes_goes", &["device"]),
+    ("sign_in.every_action_taf_takes_goes_view", &[]),
     ("settings.legal", &[]),
     ("settings.about", &[]),
     ("settings.version", &[]),
@@ -840,7 +840,7 @@ fn account_is_the_ipads_in_its_order() {
     assert!(matches!(actions[0], Row::Action(t, _) if t == "Sign in with KIFF"));
     assert!(matches!(actions[1], Row::Destructive(t, _) if t == "Clear the sample"));
     assert!(
-        matches!(&sample.sections[4].rows[0], Row::Text(t) if t.ends_with("Your answers are signed on this computer."))
+        matches!(&sample.sections[4].rows[0], Row::Text(t) if t.ends_with("Your approvals are signed on your phone."))
     );
 
     let acme = Account {
@@ -868,7 +868,9 @@ fn account_is_the_ipads_in_its_order() {
         kiff.sections.iter().map(|s| s.slot).collect();
     assert_eq!(slots[3], Some(tafs_core::account::Slot::Suggestions));
     assert_eq!(slots[7], Some(tafs_core::account::Slot::Consent));
-    assert_eq!(slots.iter().flatten().count(), 2);
+    // Export my chats, after the time zone.
+    assert_eq!(slots[9], Some(tafs_core::account::Slot::Export));
+    assert_eq!(slots.iter().flatten().count(), 3);
     assert_eq!(
         headers,
         [
@@ -879,6 +881,7 @@ fn account_is_the_ipads_in_its_order() {
             None,
             Some("Theme"),
             Some("Language"),
+            None,
             None,
             None,
             Some("How it works"),
@@ -896,6 +899,29 @@ fn account_is_the_ipads_in_its_order() {
     );
     assert!(
         matches!(&kiff.sections[8].rows[0], Row::Opens { value: Some(v), .. } if v == "Europe/Paris")
+    );
+    // `PlanRow`: the title alone until tafs cloud's balance gives its line.
+    assert!(
+        matches!(&kiff.sections[2].rows[0], Row::Opens { title, value: None, .. } if title == "Plan & usage")
+    );
+    let balance = tafs_core::usage::Balance::read(
+        br#"{"balance":{"state":"warning","words":"w"},"plan_line":"Company, 140 credits left","plan_tone":"warning"}"#,
+    )
+    .unwrap();
+    let planned = tafs_core::account::with_plan(kiff.clone(), &w, Some(&balance)).unwrap();
+    assert_eq!(
+        planned.sections[2].rows[0],
+        Row::Plan {
+            line: "Company, 140 credits left".into(),
+            tone: tafs_core::usage::Tone::Amber,
+            title: "Plan & usage".into(),
+        }
+    );
+    let unlined =
+        tafs_core::usage::Balance::read(br#"{"balance":{"state":"ok","words":"w"}}"#).unwrap();
+    assert_eq!(
+        tafs_core::account::with_plan(kiff.clone(), &w, Some(&unlined)).unwrap(),
+        kiff
     );
     let last = &kiff.sections.last().unwrap().rows;
     assert!(matches!(&last[0], Row::Destructive(t, _) if t == "Sign out"));

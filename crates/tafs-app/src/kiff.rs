@@ -281,6 +281,28 @@ pub fn kiff_get(token: &str, languages: &[&str], path: &str) -> Result<Answer, K
     get(&format!("{KIFF_API}{path}"), token, languages)
 }
 
+/// A change at KIFF as the session, unsigned: asking an admin, or withdrawing the request. Only an
+/// `Unsigned` is sent, which can't be one of the calls KIFF takes only signed.
+pub fn kiff_send(
+    token: &str,
+    languages: &[&str],
+    call: &tafs_core::signed::Unsigned,
+) -> Result<Answer, KiffError> {
+    let url = format!("{KIFF_API}{}", call.path());
+    if !may_send_to(&url) {
+        return Err(KiffError::Unreadable);
+    }
+    Kiff::read(
+        agent()
+            .request(call.method(), &url)
+            .set("Accept", "application/json")
+            .set("Accept-Language", &accept_language(languages))
+            .set("Authorization", &format!("Bearer {token}"))
+            .set("Content-Type", "application/json")
+            .send_bytes(call.body()),
+    )
+}
+
 /// `GET /v1/me/devices` at KIFF as the session (`devices()`).
 pub fn devices(token: &str, languages: &[&str]) -> Result<Answer, KiffError> {
     get(

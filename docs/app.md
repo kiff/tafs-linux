@@ -100,7 +100,7 @@ KIFF from synthetic answers (managing billing, and as a member), Connect apps, D
 calendar's Day and Week (and Day at an upright iPad's size, `--size 1032x1376`), a tafs cloud
 taf's page and its Card tab from the contracts (and with its Card's own lines) (and with its work and runs, and a run's own page), the sidebar over the plain sample (and with an agent not run by tafs, and with the plan's line), and Home with no taf and a recipe's sheet, the strip and the gallery, the halt screens, a Record search, the receipts export open, a Record line's receipt, the Delete account sheet, the security key's PIN sheet,
 Coach's conversation from the contract (and with an approval waiting under tafs cloud's wider line, with a confirm and a questions card waiting and a message not sent, with Previous conversations open, empty, and before it's started), a taf's chat (and while it works, and with Report this answer open), Your brief (and with a signed answer tapped, with nothing to decide, and a mission's log), the Overview with Home's label chips (and filtered to one), the
-view-only notice (and once paired), and the boards' empty states (the Overview with no taf, Needs you with nothing waiting, Halt all once halted, the brief with nothing to decide) in en, fr and pt, light and dark: 450 pictures, as the `screenshots`
+view-only notice (and once paired), and the boards' empty states (the Overview with no taf, Needs you with nothing waiting, Halt all once halted, the brief with nothing to decide) in en, fr and pt, light and dark: 486 pictures, as the `screenshots`
 artifact of the run. The job fails if any is missing.
 
 ## The AppImage

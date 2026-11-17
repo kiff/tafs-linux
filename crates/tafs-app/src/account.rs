@@ -14,6 +14,8 @@ pub struct Actions {
     pub words: Rc<tafs_core::words::WordBook>,
     pub act: Rc<dyn Fn(Action)>,
     pub open: Rc<dyn Fn(Screen, String)>,
+    /// Where Export my chats reads, signed in with KIFF from a kept session; none dims it.
+    pub export: Option<Rc<crate::kiff_account::ExportSource>>,
 }
 
 pub fn page(a: &AccountLines, actions: &Actions) -> gtk::Widget {
@@ -42,6 +44,28 @@ pub fn page(a: &AccountLines, actions: &Actions) -> gtk::Widget {
         let list = gtk::ListBox::new();
         list.set_selection_mode(gtk::SelectionMode::None);
         list.add_css_class("tafs-group");
+        // Export my chats (`ExportChatsSection`): its row, and what it exports under it.
+        if section.slot == Some(Slot::Export) {
+            column.append(&head);
+            column.append(&crate::kiff_account::export_section(
+                &actions.words,
+                actions.export.clone(),
+            ));
+            let footer = text(
+                &actions
+                    .words
+                    .line("export.own_chats_each_taf_coach")
+                    .unwrap_or_default(),
+                13,
+                400,
+                &["tafs-dim"],
+            );
+            footer.set_margin_start(20);
+            footer.set_margin_end(20);
+            footer.set_margin_top(8);
+            column.append(&footer);
+            continue;
+        }
         // A part read when Account opens: hidden, header and all, until it's read; never drawn
         // when it can't be, or isn't this person's.
         if let Some(slot) = section.slot {
@@ -78,14 +102,17 @@ pub fn page(a: &AccountLines, actions: &Actions) -> gtk::Widget {
                     into,
                     shown,
                 ),
+                Slot::Export => {}
             }
             continue;
         }
         let mut opens = Vec::new();
         for row in &section.rows {
             let r = row_widget(row, actions);
-            if let Row::Opens { title, screen, .. } = row {
-                opens.push((r.clone(), *screen, title.clone()));
+            match row {
+                Row::Opens { title, screen, .. } => opens.push((r.clone(), *screen, title.clone())),
+                Row::Plan { title, .. } => opens.push((r.clone(), Screen::Usage, title.clone())),
+                _ => {}
             }
             list.append(&r);
         }
@@ -103,7 +130,32 @@ pub fn page(a: &AccountLines, actions: &Actions) -> gtk::Widget {
     scroller.set_child(Some(&column));
     scroller.set_vexpand(true);
     crate::widgets::ground(&scroller);
-    scroller.upcast()
+    // Until the list's end is in sight, a chevron at the foot says there's more, over a fade to
+    // the background; it takes no taps.
+    let hint = gtk::Box::new(gtk::Orientation::Vertical, 0);
+    hint.add_css_class("tafs-more-below");
+    hint.set_valign(gtk::Align::End);
+    hint.set_can_target(false);
+    let chevron = gtk::Image::from_icon_name("pan-down-symbolic");
+    chevron.add_css_class("tafs-dim");
+    chevron.set_margin_top(16);
+    chevron.set_margin_bottom(8);
+    hint.append(&chevron);
+    hint.set_accessible_role(gtk::AccessibleRole::Presentation);
+    let overlay = gtk::Overlay::new();
+    overlay.set_child(Some(&scroller));
+    overlay.add_overlay(&hint);
+    let adjustment = scroller.vadjustment();
+    let at_end = {
+        let hint = hint.clone();
+        move |a: &gtk::Adjustment| {
+            hint.set_visible(a.value() + a.page_size() < a.upper() - 1.0);
+        }
+    };
+    at_end(&adjustment);
+    adjustment.connect_value_changed(at_end.clone());
+    adjustment.connect_changed(at_end);
+    overlay.upcast()
 }
 
 fn line(label: &str, value: Option<&str>, chevron: bool) -> gtk::Box {
@@ -139,6 +191,31 @@ fn row_widget(row: &Row, actions: &Actions) -> gtk::ListBoxRow {
             r.set_child(Some(&line(title, value.as_deref(), true)));
             r.set_activatable(true);
             let _ = screen;
+        }
+        Row::Plan { line, tone, title } => {
+            // `PlanRow`: tafs cloud's line in its tone's colour, and Plan & usage under it.
+            let b = gtk::Box::new(gtk::Orientation::Horizontal, 12);
+            let v = gtk::Box::new(gtk::Orientation::Vertical, 2);
+            v.set_hexpand(true);
+            v.append(&text(
+                line,
+                16,
+                600,
+                &[match tone {
+                    tafs_core::usage::Tone::No => "tafs-no",
+                    tafs_core::usage::Tone::Amber => "tafs-amber-text",
+                    tafs_core::usage::Tone::Calm => "tafs-ink",
+                }],
+            ));
+            v.append(&text(title, 13, 400, &["tafs-amber-text"]));
+            b.append(&v);
+            let c = gtk::Image::from_icon_name("go-next-symbolic");
+            c.add_css_class("tafs-dim");
+            c.set_valign(gtk::Align::Center);
+            b.append(&c);
+            r.set_child(Some(&b));
+            r.set_activatable(true);
+            r.set_widget_name("plan-card");
         }
         Row::Link(words, url) => {
             let b = row_button(words);

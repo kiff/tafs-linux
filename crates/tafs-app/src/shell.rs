@@ -375,6 +375,7 @@ pub fn build(
                     crate::account::page(
                         &account,
                         &crate::account::Actions {
+                            export: export.clone(),
                             reads: account_reads.clone(),
                             words: w.clone(),
                             act: actions.clone(),

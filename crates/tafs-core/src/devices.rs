@@ -252,6 +252,38 @@ pub fn sample(w: &WordBook, now: DateTime<Utc>) -> Result<Vec<Device>, WordsErro
     ])
 }
 
+/// The question before another device is signed out (`DevicesView`'s confirmation): "Sign Rae's
+/// iPhone out?", or "Sign this device out?" for one with no name; Sign out in red, and Cancel. None
+/// for this computer, which signs out with Sign out of KIFF.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SignOutQuestion {
+    pub title: String,
+    pub button: String,
+    pub cancel: String,
+    /// What the iPad signs once Sign out is tapped (`removeDevice`).
+    pub act: crate::signed::Act,
+}
+
+pub fn sign_out_question(
+    w: &WordBook,
+    device: &Device,
+) -> Result<Option<SignOutQuestion>, WordsError> {
+    if device.this_device {
+        return Ok(None);
+    }
+    Ok(Some(SignOutQuestion {
+        title: match &device.name {
+            Some(name) => w.get("settings.devices.sign_out_named", &[("device", name)])?,
+            None => w.line("settings.devices.sign_out_this")?,
+        },
+        button: w.line("settings.devices.sign_out")?,
+        cancel: w.line("common.cancel")?,
+        act: crate::signed::Act::SignOutDevice {
+            device: device.id.clone(),
+        },
+    }))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -310,5 +342,35 @@ mod tests {
         );
         assert!(Device::read_all(br#"{"devices":[{"name":"x"}]}"#).is_none());
         assert!(Device::read_all(br#"{}"#).is_none());
+    }
+
+    #[test]
+    fn signing_another_device_out_is_asked_then_signed() {
+        let w = WordBook::load(&WordBook::default_root(), "en").unwrap();
+        let now = chrono::Utc::now();
+        let devices = sample(&w, now).unwrap();
+        let here = devices.iter().find(|d| d.this_device).unwrap();
+        assert_eq!(sign_out_question(&w, here).unwrap(), None);
+        let other = devices.iter().find(|d| !d.this_device).unwrap();
+        let q = sign_out_question(&w, other).unwrap().unwrap();
+        assert_eq!(
+            q.title,
+            format!("Sign {} out?", other.name.as_deref().unwrap())
+        );
+        assert_eq!(
+            (q.button.as_str(), q.cancel.as_str()),
+            ("Sign out", "Cancel")
+        );
+        let unnamed = Device {
+            name: None,
+            ..other.clone()
+        };
+        assert_eq!(
+            sign_out_question(&w, &unnamed).unwrap().unwrap().title,
+            "Sign this device out?"
+        );
+        // Signed by the approval key: it can't be sent from here.
+        let (method, path) = q.act.route();
+        assert!(crate::signed::Unsigned::new(method, path, vec![]).is_none());
     }
 }

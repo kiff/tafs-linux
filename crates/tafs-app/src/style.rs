@@ -279,6 +279,8 @@ button.tafs-list-button label { margin: 0; }
 .tafs-ok { color: @tafs_ok; }
 
 /* Devices: the round back button, a text button in red. */
+/* Account: the chevron at the foot while there's more below, over a fade to the background. */
+.tafs-more-below { background-image: linear-gradient(to bottom, alpha(@tafs_background, 0), @tafs_background); }
 button.tafs-round-back { background-color: @tafs_panel; border-radius: 999px; min-width: 44px; min-height: 44px; padding: 0; box-shadow: none; border: none; color: @tafs_ink; }
 button.tafs-text-button { background: none; border: none; box-shadow: none; padding: 4px 0; font-size: 17px; }
 button.tafs-text-button.refuse { color: @tafs_no; }

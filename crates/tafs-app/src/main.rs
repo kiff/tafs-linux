@@ -31,6 +31,7 @@ mod record_search;
 mod report_sheet;
 mod runs_panel;
 mod setup_pane;
+mod sheet;
 mod shell;
 mod sign_in;
 mod store;
@@ -171,7 +172,7 @@ struct Options {
 }
 
 const USAGE: &str = "tafs [--lang en|de|fr|es|it|pt|nl|pl] [--theme light|dark] [--sample] [--signed-in] [--view-only [--paired]]
-     [--home contract.json] [--usage answers.json] [--people answers.json] [--unproven answers.json] [--recipes answers.json] [--gallery answers.json] [--halt answer.json] [--record-search answers.json] [--access answer.json] [--receipts answer.json] [--activity answer.json] [--calls answer.json] [--receipt answer.json] [--work answer.json] [--doors answer.json] [--account-reads answers.json] [--me answer.json] [--memory answer.json] [--runs answer.json] [--request answer.json] [--balance answer.json] [--coach answer.json] [--coach-chats answer.json] [--chat answer.json [--report]] [--brief answer.json] [--mission-log answer.json] [--size WxH] [--page welcome|sign-in|pair|recipe:<id>|gallery|halt-all|halt:<id>|record-search:<q>|record-export|receipt:<proposal id>|run:<taf id>|pin-sheet|coach|overview|overview-label:<id>|needs-you|brief-answer:<decision id>|mission-log:<mission id>|record|calendar|calendar-week|usage|connect-apps|account|kiff-account|time-zone|alerts|devices|people|taf|taf-card|taf-setup|consent|connected|sign-in-code] [--screenshot out.png]";
+     [--home contract.json] [--usage answers.json] [--people answers.json] [--unproven answers.json] [--recipes answers.json] [--gallery answers.json] [--halt answer.json] [--record-search answers.json] [--access answer.json] [--receipts answer.json] [--activity answer.json] [--calls answer.json] [--receipt answer.json] [--work answer.json] [--doors answer.json] [--account-reads answers.json] [--me answer.json] [--memory answer.json] [--runs answer.json] [--request answer.json] [--balance answer.json] [--coach answer.json] [--coach-chats answer.json] [--chat answer.json [--report]] [--brief answer.json] [--mission-log answer.json] [--size WxH] [--page welcome|sign-in|pair|recipe:<id>|gallery|halt-all|halt:<id>|record-search:<q>|record-export|receipt:<proposal id>|run:<taf id>|pin-sheet|coach|overview|overview-label:<id>|needs-you|brief-answer:<decision id>|mission-log:<mission id>|record|calendar|calendar-week|usage|usage-ask|usage-decline|connect-apps|account|kiff-account|time-zone|time-zone-use|alerts|devices|devices-sign-out|people|people-rename|people-add|taf|taf-card|taf-setup|consent|connected|sign-in-code] [--screenshot out.png]";
 
 fn options() -> Result<Options, String> {
     let mut o = Options::default();
@@ -260,13 +261,13 @@ fn selection_of(page: Option<&str>) -> Selection {
         Some(other) if other.starts_with("mission-log:") => Selection::NeedsYou,
         Some("record") => Selection::Record,
         Some("calendar") | Some("calendar-week") => Selection::Calendar,
-        Some("usage") => Selection::Usage,
+        Some("usage") | Some("usage-ask") | Some("usage-decline") => Selection::Usage,
         Some("connect-apps") => Selection::ConnectApps,
         Some("account") => Selection::Account,
-        Some("devices") => Selection::Devices,
-        Some("people") => Selection::People,
+        Some("devices") | Some("devices-sign-out") => Selection::Devices,
+        Some("people") | Some("people-rename") | Some("people-add") => Selection::People,
         Some("kiff-account") | Some("delete-account") => Selection::KiffAccount,
-        Some("time-zone") => Selection::TimeZone,
+        Some("time-zone") | Some("time-zone-use") => Selection::TimeZone,
         Some("alerts") => Selection::Alerts,
         Some("language") => Selection::Language,
         Some("coach") => Selection::Coach,
@@ -444,6 +445,15 @@ fn activate(app: &adw::Application, o: &Options) {
     }
     if o.page.as_deref() == Some("delete-account") {
         kiff_account::OPEN_DELETE.with(|d| d.set(true));
+    }
+    match o.page.as_deref() {
+        Some("people-rename") => people::OPEN.with(|p| p.set(Some("rename"))),
+        Some("people-add") => people::OPEN.with(|p| p.set(Some("add"))),
+        Some("devices-sign-out") => devices::OPEN_SIGN_OUT.with(|d| d.set(true)),
+        Some("time-zone-use") => zones::TAP_USE_HERE.with(|t| t.set(true)),
+        Some("usage-ask") => usage::OPEN.with(|u| u.set(Some("ask"))),
+        Some("usage-decline") => usage::OPEN.with(|u| u.set(Some("decline-tapped"))),
+        _ => {}
     }
     // A hold's notification, clicked (`app.open-hold`): Needs you, read again. A screenshot
     // sends none.
@@ -1638,6 +1648,14 @@ impl App {
             tafs_core::account::privacy_url(words.language()),
             env!("CARGO_PKG_VERSION"),
         )
+        .and_then(|l| {
+            // `PlanRow`: tafs cloud's plan line, once the balance is read.
+            tafs_core::account::with_plan(
+                l,
+                words,
+                cloud.as_deref().and_then(|c| c.balance.as_ref()),
+            )
+        })
         .unwrap_or_else(|e| fail(e));
         let me = self.clone();
         let actions: Rc<dyn Fn(AccountAction)> =

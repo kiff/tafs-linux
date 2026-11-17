@@ -14,7 +14,10 @@ order:
   KIFF account with its name, and Signed in as with the email, said once (`AccountLines`): none
   when the account is named after it, as a Solo account is.
 - **People & apps** (KIFF): People & groups, Devices, Connect apps.
-- **Plan** (KIFF): Plan & usage, its title alone until the balance is read (`PlanRow`).
+- **Plan** (KIFF, `PlanRow`): once tafs cloud's balance is read with its `plan_line`, that line
+  (16 semibold, in `plan_tone`'s colour: amber for a warning, red while waiting) with Plan & usage
+  under it (13, amber); else Plan & usage alone. Either opens Plan & usage. It's the balance read
+  with Home, for the sidebar's plan line.
 - **Coach** (KIFF, for someone who may use Coach, once read): Show suggestions, a switch, with
   tafs cloud's words for what it does now under it (13, soft), read when Account opens
   (`GET /v1/me/suggestions`). It works for someone who manages Cards (`cards.manage`, none listed
@@ -31,12 +34,18 @@ order:
 - **Language:** the app's language by its own name ("English", "Français"), and Change language.
 - **The AI-data consent** (KIFF, once read, `GET /v1/me/ai-consent`; see below).
 - **Time zone** (KIFF): the account's, from KIFF, else UTC.
-- **How it works:** "Every action a taf takes goes through KIFF, … Your answers are signed on this
-  computer."
+- **Export my chats** (KIFF, `ExportChatsSection`), with what it exports under it: the same row
+  as the KIFF account's (below).
+- **How it works:** "Every action a taf takes goes through KIFF, … Your approvals are signed on
+  your phone." (`sign_in.every_action_taf_takes_goes_view`, the line for a computer that only
+  views, in place of the phones' "signed on this {device}").
 - **Legal:** Terms and Privacy policy, tafs's own pages, saying "(in English)" outside English.
 - **About:** Version, and "They taf. You kiff."
 - **Account actions:** in the sample, Sign in with KIFF and Clear the sample; signed in, Sign out,
   and under it why signing out didn't work.
+
+Until the list's end is in sight, a chevron at its foot, over a fade to the background, says
+there's more below, as the iPad's does. It takes no taps.
 
 ## KIFF's account
 
@@ -79,6 +88,8 @@ The screenshots read `--account-reads` (`{"suggestions": …, "consent": …}`, 
 answers it; nothing is sent): `account-kiff` with `--me crates/tafs-app/fixtures/me-manager.json`
 (an account that may use Coach and manages Cards) and `account-reads.json` (consent given), and
 `consent` (`--page consent`, the screen as after sign-in, `account-reads-not-given.json`).
+`account-kiff` also reads `--balance crates/tafs-app/fixtures/balance-home-line.json`, for the
+Plan row's line.
 
 ## Signing out
 
@@ -96,9 +107,16 @@ Then (`AppModel.signOut`):
 **Clear the sample** forgets the sample and opens the welcome; **Sign in with KIFF** from the
 sample opens the sign-in over it.
 
-## Not yet
+## Against the iPad's, line by line
 
-- Nothing on this screen: every row opens its screen.
+Each section and row of `SettingsView` is here, in its order, with `AccountLines` and `PlanRow`.
+What differs:
+- **The theme's segments** have their words alone: `ThemePicker`'s labels carry SF Symbols,
+  which this computer doesn't have.
+- **How it works** says the approvals are signed on the phone (`…_view`), since this computer
+  signs nothing; the iPad's line says they're signed on this device.
+- **Under Account in the sidebar** is the account's name (`accountLabel`), as the iPad's; its
+  email is on Account itself, in Signed in as.
 
 ## Time zone
 
@@ -110,9 +128,13 @@ only the newest search's answer kept; the account's zone checked. Why the zones 
 in red, under the first row. Read as strictly as the iPad's decoder: a zone without its `id` or
 `title` fails the read.
 
-Not yet: **choosing a zone** and **using this computer's** are the owner's act, signed
-(`tafs.time-zone.v1`) and then a signed setup call to KIFF: Use this computer's is there, dimmed,
-and the rows don't choose, until this computer can sign it.
+**Choosing a zone** and **using this computer's** are the owner's act, which the iPad signs
+(`setAccountTimeZone`: `tafs.time-zone.v1` behind Face ID, then `PUT /v1/me/time-zone` as a
+signed setup call). The rows are buttons, as the iPad's are, and so is Use this computer's.
+Their tap is the tap that would sign. Under the first row, where the iPad says why the zone
+didn't change, it says "This device can't approve. Approve on another device signed in to your
+account." Nothing is sent (`docs/approval.md` › A view-only computer). `--page time-zone-use`
+taps Use this computer's (CI's `time-zone-use`).
 
 ## KIFF account
 
@@ -122,8 +144,9 @@ button, then the account's name, its id when it isn't its name, and who is signe
 when this computer is in another zone, "Use this computer's: {identifier}" (this computer's zone
 by `TZ`, else `/etc/localtime`), and "Holds' deadlines, Activity, the Record and what your tafs
 write use this time zone."; Export my chats with what it exports; and Delete account with what it
-deletes, for whoever may (`account.delete`). The time zone row opens its picker; using
-this computer's zone (a signed setup call) is there, dimmed.
+deletes, for whoever may (`account.delete`). The time zone row opens its picker. Using
+this computer's zone is signed: its tap says this computer can't approve, under it, and sends
+nothing.
 
 Export my chats (`ExportChatsView.swift`, kiff/tafs#424) reads `GET /v1/me/chats/export` as the
 session, signed in with KIFF from a kept session. While it reads, "Preparing your chats…" shows
@@ -174,10 +197,31 @@ without `subject`, `role` or `status`, fails the read. The sample has no account
 `--people <file>` with `--home` draws it from synthetic answers
 (`crates/tafs-app/fixtures/people-kiff.json`), CI's `people`.
 
-Not yet: **every change** (a group, its name, deleting it, adding or removing someone, making a
-manager), each the person's act signed with an approval key: "+ Group", the group's actions and
-Add someone are there, dimmed, and removing or changing someone (the iPad's swipe and context
-menu) isn't drawn, until this computer can approve.
+**Every change is signed on the iPad** (`changePeople`, behind Face ID, each a call KIFF takes
+only signed). This computer only views, so it draws each one as the iPad does, up to the
+signature, and sends nothing (`tafs-core/src/signed.rs`, `docs/approval.md` › A view-only
+computer):
+- **+ Group** opens `GroupNameSheet` with Cancel, "New group", and Create, which works once a
+  name is typed (trimmed). Under the field: "Add its people next, then share a taf with it from
+  the taf's page."
+- **A group's actions** (the ⋯ button, for whoever manages people, never on Everyone):
+  - **Rename** opens the same sheet, "Rename Finance", with its name in the field, Save, and "Only
+    the name changes: its people and tafs stay.";
+  - **Delete** asks "Delete Finance?", with what it does and Delete Finance in red.
+- **A person's menu** (the iPad's context menu and swipe: a right click or a long press here):
+  - Make the manager, or Make a member, for whoever manages people;
+  - Remove from Finance, in red, where the iPad's `mayRemove` lets them.
+- **Add someone to Finance** opens `AddToGroupSheet`, "Add to Finance": As the group's manager,
+  with what a manager does (for whoever manages people), then THE ACCOUNT'S PEOPLE not in it yet,
+  each with their badge; "Everyone on the account is here. …" when no one is left.
+
+Create, Save, Delete, each menu item and each person in the add sheet is the tap that would
+sign. It says "This device can't approve. Approve on another device signed in to your account."
+In a sheet, the words go under its content and the sheet stays open. On the screen, they go
+where the iPad says why a change didn't go, above the groups.
+
+`--page people-rename` opens the rename sheet over Finance with Save tapped (CI's
+`people-rename`), and `--page people-add` opens the add sheet (`people-add`).
 
 ## Devices
 
@@ -195,20 +239,28 @@ fails the read. The sample shows the reference set's three (this computer, used 
 hours ago; a Mac a day ago) in a screenshot, and none otherwise, as the iPad's sample.
 `--page devices` opens it, as `devices.png`.
 
-Not yet: **signing another device out**, an approval signed by an approval key (Sign out is
-there, dimmed, until this computer can approve). **Add a device** isn't for Linux: a phone
-pairs a computer (`PairComputerView`), never the computer itself.
-- **Change language** opens **Account › Language** (`LanguagePicker`, `language_picker.rs`):
-  "This computer's language" first, then the app's 8 languages in tafs's order, each named in
-  itself ("Français", "Polski"), the one in use checked (`tafs-core/account.rs` ›
-  `language_rows`). The one in use does nothing. Any other applies at once: it's kept in the
-  config folder (`~/.config/tafs/language`), and the window is drawn again in it, on Account,
-  with no relaunch. Every read is made again, asking tafs cloud and KIFF in the new language
-  first. This computer's language removes the pick, and tafs speaks the desktop's again
-  (`LANGUAGE`, `LANG`). `--lang` still wins, and a screenshot never reads the pick.
-- **Coach's suggestions, the AI-data consent, Export my chats:** with their reads; the iPad draws
-  none until they're read either.
-- **The plan's line** (`plan_line`) in Plan, with tafs cloud's balance.
+**Signing another device out** is an approval the iPad signs with its approval key
+(`removeDevice`). Sign out asks first, as the iPad's confirmation does: "Sign tafs on iPhone
+out?" ("Sign this device out?" for one with no name), Sign out in red, and Cancel. Its Sign out
+is the tap that would sign. Above the list, where the iPad says why a device wasn't signed out,
+it says "This device can't approve. Approve on another device signed in to your account." Nothing
+is sent (`docs/approval.md` › A view-only computer). The sample signs nothing, so there it does
+nothing. `--page devices-sign-out` opens the question over the sample's iPhone (CI's
+`devices-sign-out`).
+
+Not on Linux: **Add a device**, since a phone pairs a computer (`PairComputerView`), never the
+computer itself; and **the account's passkeys** (`DevicesView`'s passkeys section), which the
+iPad draws only signed in with KIFF and which aren't ported yet.
+## Language
+
+**Change language** opens **Account › Language** (`LanguagePicker`, `language_picker.rs`):
+"This computer's language" first, then the app's 8 languages in tafs's order, each named in
+itself ("Français", "Polski"), the one in use checked (`tafs-core/account.rs` ›
+`language_rows`). The one in use does nothing. Any other applies at once: it's kept in the
+config folder (`~/.config/tafs/language`), and the window is drawn again in it, on Account,
+with no relaunch. Every read is made again, asking tafs cloud and KIFF in the new language
+first. This computer's language removes the pick, and tafs speaks the desktop's again
+(`LANGUAGE`, `LANG`). `--lang` still wins, and a screenshot never reads the pick.
 
 ## Alerts
 

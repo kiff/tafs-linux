@@ -51,6 +51,10 @@
           {
             "subject": "u-lee",
             "role": "member"
+          },
+          {
+            "subject": "u-kim",
+            "role": "member"
           }
         ],
         "agents": []
@@ -77,6 +81,12 @@
         "role": "member",
         "status": "active",
         "email": "lee@example.test"
+      },
+      {
+        "subject": "u-kim",
+        "role": "member",
+        "status": "active",
+        "email": "kim@example.test"
       },
       {
         "subject": "u-new",
