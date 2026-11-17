@@ -395,6 +395,11 @@ impl Files {
         PER_MESSAGE.saturating_sub(self.files.len())
     }
 
+    /// No file in the tray.
+    pub fn is_empty(&self) -> bool {
+        self.files.is_empty()
+    }
+
     /// `filesUploading`.
     pub fn uploading(&self) -> bool {
         self.files.iter().any(|f| f.state == State::Uploading)

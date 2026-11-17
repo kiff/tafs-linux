@@ -1,0 +1,23 @@
+event: session
+data: {"session":"sess1","new_session":false,"run":"run9","message":{"id":"run9.in"}}
+
+event: activity
+data: {"tool":"tafs_state","call_id":"c1"}
+
+event: step
+data: {"call_id":"c1","status":"done"}
+
+event: activity
+data: {"tool":"kiff__kiff_pending","call_id":"c2"}
+
+event: step
+data: {"call_id":"c2","status":"done"}
+
+event: activity
+data: {"tool":"kiff_draft","call_id":"c3"}
+
+event: text
+data: {"text":"Two refunds over €500 came in this week. I'm drafting the card for the larger one, "}
+
+event: text
+data: {"text":"so you can approve it here."}

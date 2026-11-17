@@ -16,8 +16,8 @@ use adw::prelude::*;
 use gtk::glib;
 use tafs_core::coach::{self, Kind, SetupThread};
 use tafs_core::coach_lines::{
-    ApprovalLines, Card, CoachLines, ComposerLines, DraftShown, Line, Listed, Mark, Outcome,
-    PlanLines, PlanStep, ResultLines, SignInLines, Tone, UnsentLines,
+    ApprovalLines, Card, CoachLines, ComposerLines, DraftShown, EndedLines, Line, Listed, Mark,
+    Outcome, PlanLines, PlanStep, ResultLines, SignInLines, Tone, UnsentLines,
 };
 use tafs_core::coach_send::{
     self, CardSend, Conversation, Delivery, Polls, QuestionSelection, Refusal, Steered, Submit,
@@ -43,6 +43,9 @@ pub enum CoachSource {
         drafts: Option<std::path::PathBuf>,
         /// tafs cloud's `GET /v1/setup` answer, for Coach's tools.
         setup: Option<std::path::PathBuf>,
+        /// A stream's events (`event:` and `data:` lines): an answer as it streams, from a
+        /// message just sent, after the thread.
+        stream: Option<std::path::PathBuf>,
     },
     /// tafs cloud, as the session, with this device's proof when it has a key and KIFF names
     /// this computer. `signed_out` is called when tafs cloud says the session is over.
@@ -118,6 +121,8 @@ struct Page {
     /// conversation (`CoachToolsRow`).
     coach_tools: RefCell<Option<CoachTools>>,
     tools_row: gtk::Button,
+    /// `coach.improve_no_files`, under the tray while Coach improves a taf and files wait.
+    files_wait: gtk::Label,
     /// The files picked for the next message (`setupFiles`).
     attach: Rc<crate::attach::Attach>,
     /// "Taking shape" beside the conversation, and what it holds.
@@ -126,12 +131,19 @@ struct Page {
     shape_drawn: RefCell<Option<tafs_core::setup_shape::ShapeLines>>,
 }
 
+/// How a message to Coach went out (`openStream`): streamed, refused, or to send plainly.
+enum Streamed {
+    Opened(async_channel::Receiver<tafs_core::stream::Event>),
+    Refused(Answer),
+    Plain,
+}
+
 /// What a draw shows, to compare with the last.
 #[derive(PartialEq)]
 struct Drawn {
     lines: Result<CoachLines, String>,
     unsent: Vec<UnsentLines>,
-    ended: Option<String>,
+    ended: Option<tafs_core::coach_lines::EndedLines>,
     answered: Vec<String>,
     notes: Vec<(String, String)>,
     chatting: Vec<String>,
@@ -230,6 +242,21 @@ pub fn page(
     // Coach's files go to Coach's taf at tafs cloud, once it's read (`filesTarget`).
     let attach = crate::attach::Attach::new(w.clone(), None);
     attach.place(&composer);
+    // While Coach improves a taf, the files in the tray wait for the next message.
+    let files_wait = text(
+        &w.line("coach.improve_no_files").unwrap_or_default(),
+        13,
+        400,
+        &["tafs-dim"],
+    );
+    files_wait.set_widget_name("coach.improve-no-files");
+    files_wait.set_margin_start(14);
+    files_wait.set_margin_end(14);
+    files_wait.set_margin_top(8);
+    files_wait.set_visible(false);
+    composer
+        .bar
+        .insert_child_after(&files_wait, Some(&attach.tray));
     let side = gtk::Box::new(gtk::Orientation::Horizontal, 0);
     side.append(&gtk::Separator::new(gtk::Orientation::Vertical));
     let shape = gtk::Box::new(gtk::Orientation::Vertical, 22);
@@ -281,6 +308,7 @@ pub fn page(
         coach_tools: RefCell::new(None),
         tools_row,
         attach,
+        files_wait,
         side,
         shape,
         shape_drawn: RefCell::new(None),
@@ -350,6 +378,7 @@ pub fn page(
             chats,
             drafts,
             setup,
+            stream,
         } => {
             if let Some(setup) = setup {
                 *page.coach_tools.borrow_mut() = std::fs::read(&setup)
@@ -373,6 +402,9 @@ pub fn page(
                     }
                     if let Some(drafts) = drafts {
                         page.drafts_from(&drafts);
+                    }
+                    if let Some(stream) = stream {
+                        page.stream_from(&stream);
                     }
                     page.draw();
                     if OPEN_TOOLS.with(|t| t.replace(false)) {
@@ -600,6 +632,31 @@ impl Page {
         }
     }
 
+    /// A screenshot's stream, from its file: each line read as the stream's are, taken as
+    /// `follow_stream` takes them, with no thread read between.
+    fn stream_from(&self, path: &std::path::Path) {
+        let Ok(lines) = std::fs::read_to_string(path) else {
+            eprintln!("{} isn't a stream's events", path.display());
+            std::process::exit(2);
+        };
+        let mut c = self.conv.borrow_mut();
+        c.streaming(chrono::Utc::now());
+        let (mut reader, mut f) = (
+            tafs_core::stream::Reader::default(),
+            coach_send::Following::default(),
+        );
+        for line in lines.lines() {
+            if let Some(e) = reader.line(line) {
+                let mut moved = false;
+                if let Ok(coach_send::Then::Load(l)) =
+                    c.stream_event(&self.w, &e, None, &mut f, &mut moved)
+                {
+                    c.after_load(l);
+                }
+            }
+        }
+    }
+
     /// A screenshot's drafts, from its file: each KIFF's answer, as a read would take it.
     fn drafts_from(&self, path: &std::path::Path) {
         let Some(map) = std::fs::read(path)
@@ -765,8 +822,14 @@ impl Page {
             return;
         }
         let words = self.draft();
-        // A message with files goes as a message of its own (`deliverSetup(text, files:)`).
-        let taken = self.attach.take();
+        // A message with files goes as a message of its own (`deliverSetup(text, files:)`);
+        // while Coach improves a taf, they wait for the next message.
+        let improving = self.conv.borrow().improving.is_some();
+        let taken = if improving {
+            Vec::new()
+        } else {
+            self.attach.take()
+        };
         if !taken.is_empty() {
             let refs: Vec<_> = taken
                 .iter()
@@ -847,7 +910,30 @@ impl Page {
                 coach_send::message_body(&d.text, &d.target, &d.files),
             ),
         };
-        let answer = self.post(path, body).await;
+        // Streamed, so Coach's words show as it writes them; sent plainly when the stream can't
+        // open (`openStream`). A refusal (the flood guard, the consent) is read as the plain
+        // send's would be.
+        let answer = if improving.is_some() {
+            self.post(path, body).await
+        } else {
+            match self.open_stream(&setup, body.clone()).await {
+                Streamed::Opened(events) => {
+                    if self.conv.borrow().generation != d.generation {
+                        return false;
+                    }
+                    self.conv.borrow_mut().streaming(chrono::Utc::now());
+                    self.draw();
+                    let p = self.clone();
+                    let (text, local, generation) = (d.text.clone(), d.local.clone(), d.generation);
+                    glib::spawn_future_local(async move {
+                        p.follow_stream(events, text, generation, Some(local)).await;
+                    });
+                    return true;
+                }
+                Streamed::Refused(a) => Some(Ok(a)),
+                Streamed::Plain => self.post(path, body).await,
+            }
+        };
         if improving.is_some()
             && !matches!(&answer, Some(Ok(a)) if (200..300).contains(&a.status))
             && self.conv.borrow().generation == d.generation
@@ -910,6 +996,113 @@ impl Page {
         };
         self.draw();
         taken
+    }
+
+    /// `openStream`: the message to Coach with its run streamed. Plain when it can't open (no
+    /// network to it, the route missing or failing); a refusal tafs cloud means (a 4xx but 404 or
+    /// 408) is the send's answer.
+    async fn open_stream(&self, setup: &str, body: Vec<u8>) -> Streamed {
+        let CoachSource::Cloud {
+            kept, languages, ..
+        } = &self.source
+        else {
+            return Streamed::Plain;
+        };
+        let (token, languages) = (kept.token.clone(), languages.clone());
+        let path = tafs_core::stream::message_path(setup);
+        let opened = gtk::gio::spawn_blocking(move || {
+            crate::kiff::cloud_stream(&token, &languages, "POST", &path, Some(&body))
+        })
+        .await;
+        match opened {
+            Ok(Ok(crate::kiff::Opened::Events(events))) => Streamed::Opened(events),
+            Ok(Ok(crate::kiff::Opened::Refused(a)))
+                if (400..500).contains(&a.status) && a.status != 404 && a.status != 408 =>
+            {
+                Streamed::Refused(a)
+            }
+            _ => Streamed::Plain,
+        }
+    }
+
+    /// `followSetupStream`: Coach's answer drawn as it streams. At each tool call or card the
+    /// words written so far are the thread's, so it's read and the live words start again. A
+    /// stream that drops leaves the thread to show the rest, as it does without one; a new or
+    /// another conversation, or leaving the page, ends following it.
+    async fn follow_stream(
+        self: &Rc<Self>,
+        events: async_channel::Receiver<tafs_core::stream::Event>,
+        text: String,
+        mut generation: u64,
+        sent: Option<String>,
+    ) {
+        let mut f = coach_send::Following::default();
+        let here = |p: &Rc<Self>, generation: u64| p.conv.borrow().generation == generation;
+        while let Ok(e) = events.recv().await {
+            if !self.open() {
+                self.conv.borrow_mut().live_gone();
+                return;
+            }
+            if !here(self, generation) {
+                return;
+            }
+            let mut moved = false;
+            let then = self.conv.borrow_mut().stream_event(
+                &self.w,
+                &e,
+                sent.as_deref(),
+                &mut f,
+                &mut moved,
+            );
+            if moved {
+                generation = self.conv.borrow().generation;
+            }
+            // Words come many a second: drawn once the ones already here are taken.
+            if matches!(then, Ok(coach_send::Then::Draw)) && !events.is_empty() {
+                continue;
+            }
+            self.draw();
+            if let Ok(coach_send::Then::Load(loaded)) = then {
+                self.read_thread_now().await;
+                if !here(self, generation) {
+                    return;
+                }
+                self.conv.borrow_mut().after_load(loaded);
+                self.draw();
+            }
+        }
+        if !self.open() {
+            self.conv.borrow_mut().live_gone();
+            return;
+        }
+        if !here(self, generation) {
+            return;
+        }
+        // The run is over: the recorded answer first, then the live one goes, with no gap.
+        self.conv.borrow_mut().stream_over(&f, &text);
+        self.read_thread_now().await;
+        if !here(self, generation) {
+            return;
+        }
+        self.conv.borrow_mut().live_gone();
+        self.draw();
+    }
+
+    /// The thread read now, after a read already going ends: what the stream recorded is in it.
+    async fn read_thread_now(self: &Rc<Self>) {
+        while self.reading.get() {
+            glib::timeout_future(std::time::Duration::from_millis(50)).await;
+        }
+        self.load_thread().await;
+    }
+
+    /// Retry on a run that stopped part way (`retrySetupRun`): the message that started it, sent
+    /// again.
+    fn retry_run(self: &Rc<Self>) {
+        let retry = self.conv.borrow_mut().retry_run();
+        if let Some(text) = retry {
+            self.send_now(&text);
+        }
     }
 
     /// Written to Coach's run while it works (`steer`): true once taken, held or kept as not sent.
@@ -1155,7 +1348,17 @@ impl Page {
         };
         self.composer.bar.set_visible(c.setup.is_some());
         self.tools.set_visible(c.setup.is_some());
-        let (ready, held) = self.attach.send_state(&send, thinking);
+        // An improvement's first message carries no files (`improvementHoldsFiles`): the words go
+        // alone, the files wait for the next message, and the paperclip isn't offered meanwhile.
+        let improving = c.improving.is_some();
+        let files_wait = improving && !self.attach.files.borrow().is_empty();
+        self.files_wait.set_visible(files_wait);
+        self.attach.button.set_visible(!improving);
+        let (ready, held) = if files_wait {
+            (false, None)
+        } else {
+            self.attach.send_state(&send, thinking)
+        };
         self.composer.show_with(
             &placeholder,
             &send,
@@ -1341,7 +1544,9 @@ impl Page {
         let ended = if c.thinking() {
             None
         } else {
-            tafs_core::coach_lines::ended(w, c.ended).ok().flatten()
+            tafs_core::coach_lines::ended(w, c.ended.as_ref())
+                .ok()
+                .flatten()
         };
         let mut answered: Vec<String> = c.answered.iter().cloned().collect();
         answered.sort();
@@ -1688,7 +1893,12 @@ fn draw_thread(page: &Rc<Page>, lines: &CoachLines, drawn: &Drawn) {
     if let Some(i) = &lines.improve {
         column.append(&improving(page, i));
     }
-    for line in &lines.lines {
+    // Coach's answer streaming now: its work block, before the first item it recorded.
+    let live_at = lines.live.as_ref().and_then(|(_, at)| *at);
+    for (i, line) in lines.lines.iter().enumerate() {
+        if let (Some((work, _)), true) = (&lines.live, live_at == Some(i)) {
+            column.append(&crate::chat::live_work(work));
+        }
         column.append(&match line {
             Line::Gap(at) => crate::chat::gap(at),
             Line::Owner {
@@ -1783,19 +1993,51 @@ fn draw_thread(page: &Rc<Page>, lines: &CoachLines, drawn: &Drawn) {
     for u in &drawn.unsent {
         column.append(&unsent(page, u, busy));
     }
-    // Coach at work: the dots where its words will be.
-    if let Some(answering) = &lines.thinking {
-        column.append(&crate::chat::dots(answering));
+    // What Coach is doing and the steps it took, in one block under the owner's message, with
+    // its answer streaming below it; the dots while nothing streams.
+    match &lines.live {
+        Some((work, None)) => column.append(&crate::chat::live_work(work)),
+        Some(_) => {}
+        None => {
+            if let Some(answering) = &lines.thinking {
+                column.append(&crate::chat::dots(answering));
+            }
+        }
     }
-    // How the last run ended, when the owner stopped it.
-    if let Some(stopped) = &drawn.ended {
-        let h = gtk::Box::new(gtk::Orientation::Horizontal, 6);
-        let m = symbol("media-playback-stop-symbolic", 13);
-        m.add_css_class("tafs-dim");
-        m.set_accessible_role(gtk::AccessibleRole::Presentation);
-        h.append(&m);
-        h.append(&text(stopped, 13, 400, &["tafs-dim"]));
-        column.append(&h);
+    if let Some(words) = &lines.live_text {
+        let live = crate::chat::answer(None, words);
+        live.set_widget_name("live");
+        column.append(&live);
+    }
+    // How the last run ended: the owner stopped it, or it stopped part way, to try again.
+    match &drawn.ended {
+        Some(EndedLines::Stopped(stopped)) => {
+            let h = gtk::Box::new(gtk::Orientation::Horizontal, 6);
+            let m = symbol("media-playback-stop-symbolic", 13);
+            m.add_css_class("tafs-dim");
+            m.set_accessible_role(gtk::AccessibleRole::Presentation);
+            h.append(&m);
+            h.append(&text(stopped, 13, 400, &["tafs-dim"]));
+            column.append(&h);
+        }
+        Some(EndedLines::Failed { line, retry }) => {
+            let h = gtk::Box::new(gtk::Orientation::Horizontal, 10);
+            h.add_css_class("tafs-failed-run");
+            let l = text(line, 14, 400, &["tafs-ink"]);
+            l.set_hexpand(true);
+            h.append(&l);
+            let b = gtk::Button::with_label(retry);
+            b.add_css_class("flat");
+            b.set_sensitive(!busy);
+            let pg = page.clone();
+            b.connect_clicked(move |_| {
+                let pg = pg.clone();
+                pg.retry_run();
+            });
+            h.append(&b);
+            column.append(&h);
+        }
+        None => {}
     }
     for (words, note) in &lines.steering {
         let v = gtk::Box::new(gtk::Orientation::Vertical, 4);

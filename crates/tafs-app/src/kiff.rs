@@ -569,3 +569,124 @@ impl Transport for Kiff {
         )
     }
 }
+
+/// A stream tafs cloud opened (`TafsCloud.events`): its events as they come, read on a thread of
+/// their own; or its refusal, read as any other answer.
+pub enum Opened {
+    Events(async_channel::Receiver<tafs_core::stream::Event>),
+    Refused(Answer),
+}
+
+/// The longest line of a stream read: an event's JSON is far smaller.
+const STREAM_LINE: u64 = 1 << 20;
+
+/// A run streamed from tafs cloud's stream host as the session (`streamMessage`, `resumeRun`):
+/// `POST` with the message, or `GET` to pick a run back up. Only the two stream routes go there
+/// (`may_stream_to`). A run can think for minutes between two words: each read waits up to
+/// fifteen. The events stop when the stream ends, breaks, or nothing takes them any more.
+pub fn cloud_stream(
+    token: &str,
+    languages: &[&str],
+    method: &str,
+    path: &str,
+    body: Option<&[u8]>,
+) -> Result<Opened, KiffError> {
+    let Some(url) = tafs_core::stream::stream_url(path) else {
+        return Err(KiffError::Unreadable);
+    };
+    if !tafs_core::stream::may_stream_to(method, &url) {
+        return Err(KiffError::Unreadable);
+    }
+    let agent = ureq::AgentBuilder::new()
+        .timeout_connect(Duration::from_secs(15))
+        .timeout_read(Duration::from_secs(900))
+        .timeout_write(Duration::from_secs(30))
+        .redirects(0)
+        .user_agent("tafs-linux")
+        .try_proxy_from_env(true)
+        .build();
+    let request = agent
+        .request(method, &url)
+        .set("Accept", "text/event-stream")
+        .set("Accept-Language", &accept_language(languages))
+        .set("Authorization", &format!("Bearer {token}"));
+    let result = match body {
+        Some(b) => request
+            .set("Content-Type", "application/json")
+            .send_bytes(b),
+        None => request.call(),
+    };
+    let response = match result {
+        Ok(r) if r.status() == 200 => r,
+        other => return Kiff::read(other).map(Opened::Refused),
+    };
+    let (events, taken) = async_channel::unbounded();
+    std::thread::spawn(move || read_stream(response.into_reader(), &events));
+    Ok(Opened::Events(taken))
+}
+
+/// A stream's lines read into its events, each handed on as it completes, until the stream ends
+/// or breaks, a line is longer than any event, or nothing takes them any more.
+fn read_stream(from: impl Read, events: &async_channel::Sender<tafs_core::stream::Event>) {
+    use std::io::BufRead;
+    let mut from = std::io::BufReader::new(from);
+    let mut reader = tafs_core::stream::Reader::default();
+    let mut line = Vec::new();
+    loop {
+        line.clear();
+        match (&mut from).take(STREAM_LINE).read_until(b'\n', &mut line) {
+            Ok(0) | Err(_) => return,
+            Ok(_) => {}
+        }
+        if line.last() != Some(&b'\n') && line.len() as u64 >= STREAM_LINE {
+            return;
+        }
+        let text = String::from_utf8_lossy(&line);
+        if let Some(e) = reader.line(text.trim_end_matches(['\n', '\r'])) {
+            if events.send_blocking(e).is_err() {
+                return;
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tafs_core::stream::Event;
+
+    fn read(bytes: &[u8]) -> Vec<Event> {
+        let (tx, rx) = async_channel::unbounded();
+        read_stream(bytes, &tx);
+        drop(tx);
+        std::iter::from_fn(|| rx.try_recv().ok()).collect()
+    }
+
+    #[test]
+    fn a_streams_lines_become_its_events_in_order() {
+        let events = read(
+            b"event: text\r\ndata: {\"text\":\"Hel\"}\r\n\r\nevent: text\ndata: {\"text\":\"lo\"}\n\n\
+              : a comment\nevent: unknown\ndata: {}\n\nevent: end\ndata: {\"status\":\"DONE\"}",
+        );
+        assert_eq!(events.len(), 3);
+        assert_eq!(events[0], Event::Text("Hel".into()));
+        assert_eq!(events[1], Event::Text("lo".into()));
+        assert!(matches!(&events[2], Event::End { status, .. } if status == "DONE"));
+    }
+
+    #[test]
+    fn a_line_longer_than_any_event_ends_the_stream() {
+        let mut bytes = b"event: text\ndata: {\"text\":\"a\"}\n".to_vec();
+        bytes.extend(std::iter::repeat_n(b'x', STREAM_LINE as usize + 10));
+        bytes.extend(b"\nevent: text\ndata: {\"text\":\"b\"}\n");
+        assert_eq!(read(&bytes), vec![Event::Text("a".into())]);
+    }
+
+    #[test]
+    fn nothing_taking_the_events_stops_the_read() {
+        let (tx, rx) = async_channel::unbounded();
+        drop(rx);
+        // Returns at the first event, rather than reading on.
+        read_stream(&b"event: text\ndata: {\"text\":\"a\"}\n"[..], &tx);
+    }
+}

@@ -80,7 +80,26 @@ out, as every other read does.
   with the answer's chat, as a taf's answer does ([chat.md](chat.md#reporting-an-answer)).
 - **Reading again** (`followSetup`): while the page is open, every second while Coach works, else
   every three, for 100 reads after the owner last wrote; one read at a time, and none once the page
-  is closed. Linux has no stream: there's no live work, no reveal and no pin of a sent message.
+  is closed.
+- **The answer as it's written** (`openStream`, `followSetupStream`): a message goes to Coach
+  streamed, `POST /v1/tafs/{setup}/messages/stream` as the session, unsigned. It goes to tafs
+  cloud's stream host (`TafsCloud.defaultStreamURL`, the function itself, as a run streams for
+  longer than a CDN waits between bytes), which takes the session for the two stream routes only
+  and nothing else (`stream::may_stream_to`). Each read waits up to fifteen minutes. When the
+  stream can't open (no network to it, the route missing or failing), the message is sent plainly;
+  a refusal tafs cloud means (a 4xx other than 404 or 408) reads as the plain send's would. While
+  it streams, `LiveWork` stands in for the dots: the live line (tafs cloud's, else the step
+  running, else Writing… or Thinking…) and the steps done under it, just before the first item
+  the answer recorded, else under the rest. Coach's words show under it as they're written,
+  unless the thread already holds them (`alreadyRecorded`), and the cards that come with them
+  wait until they're written (`textBeforeCards`). At each tool call, card or message the thread
+  is read and the live words start again; after a pause the steps start again. At its end the
+  thread is read, then the live answer goes. A run that ended with `ERROR` shows "It stopped part
+  way…" with Retry, which sends its message again (`retrySetupRun`); one cancelled shows Stopped.
+  A stream that drops leaves Coach at work, and the reads every second show the rest. A new or
+  another conversation, or leaving the page, stops following it (the run goes on at tafs cloud).
+  Not ported: the reveal of an answer letter by letter, which the iPad does only with no stream,
+  the pin of a sent message, and Home's read at the stream's end (Linux reads Home when it opens).
 - **New conversation** (the pencil in the bar, `newSetupChat`): an empty chat, and the next
   message starts it (`new_chat: true`); the chat tafs cloud answers is the one shown from then on.
   One that's empty already stays, and shows its top.
@@ -97,7 +116,9 @@ out, as every other read does.
   the taf, as the iPad's `askCoachAbout` and `canDiscuss`: anyone else reads the card or the line
   without its button, and the page's Coach is Coach on no taf. Its first message goes to
   `POST /v1/tafs/{taf}/improve` with `{"text"}` alone (`improve`: tafs cloud adds the taf's
-  context, so it takes no files and the files stay), the dots from the send; then the conversation
+  context, so it takes no files: the words go alone, the files in the tray wait for the next
+  message with `coach.improve_no_files` under them, and the paperclip isn't offered meanwhile, as
+  the iPad's `improvementHoldsFiles`), the dots from the send; then the conversation
   goes on in the chat tafs cloud answered with, as any other. A new conversation, or another
   reopened, is on no taf. Empty, it says what it's about as a choice at its top (`startSwitch`: New
   taf starts a new conversation; "Improve Rae" is chosen), then "Improve Rae" and "Say what should
@@ -255,8 +276,8 @@ For an approval, a sign-in or a drive it gives none, whatever the text, so nothi
   the switch shows only while Coach is on a taf.
 - The microphone and attachments; the recipes on an empty chat.
 - What the iPad reads beside the thread: planque's grant (its words, terms and profile).
-- The live stream (`LiveWork`, revealing, pinning a sent message, a run that failed part-way with
-  Retry); and a dial card (`KnobDraftCard`).
+- Revealing an answer with no stream, pinning a sent message, and Home's read at the stream's end;
+  and a dial card (`KnobDraftCard`).
 - A refused connection's lines are decoded but not drawn: the iPad's Coach doesn't draw them.
 
 ## Screenshots
@@ -267,6 +288,9 @@ Stop), `coach-wider` (tafs's own contract, `contracts/coach-wider.json`: an appr
 its wider line; the tests read the same contract, so a change in tafs cloud's shape fails them
 here), `coach-asks` (`crates/tafs-app/fixtures/coach-asks.json`: Coach at rest with a confirm and a
 questions card waiting, a message its run never read as Not sent, and one tafs cloud holds),
+`coach-stream` (`--coach-stream crates/tafs-app/fixtures/coach-stream.txt`: a stream's
+`event:`/`data:` lines taken after the contract's conversation, as the app takes them, so an answer
+shows mid-stream: its live line, the steps done and its words so far),
 `coach-empty` (`crates/tafs-app/fixtures/coach-empty.json` with no taf: board 7 over the empty
 chat), `coach-start` (`shared/contracts/setup-start.json`: no Coach yet, board 9) and
 `coach-chats` (`--coach-chats shared/contracts/coach-chats.json`: Previous conversations open over

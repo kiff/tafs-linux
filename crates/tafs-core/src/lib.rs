@@ -57,6 +57,7 @@ pub mod share;
 pub mod sidebar;
 pub mod signed;
 pub mod signin;
+pub mod stream;
 pub mod taf_chat;
 pub mod taf_page;
 pub mod theme;

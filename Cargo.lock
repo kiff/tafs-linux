@@ -2222,6 +2222,7 @@ dependencies = [
 name = "tafs"
 version = "1.0.0"
 dependencies = [
+ "async-channel",
  "chrono",
  "futures-lite",
  "glib-build-tools",

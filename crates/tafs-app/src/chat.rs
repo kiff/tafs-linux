@@ -316,25 +316,7 @@ pub fn work_summary(work: &WorkLines) -> gtk::Box {
         gtk::accessible::Property::Description(&work.shows),
     ]);
     v.append(&b);
-    let steps = gtk::Box::new(gtk::Orientation::Vertical, 4);
-    steps.add_css_class("tafs-step-list");
-    for row in &work.steps {
-        let h = gtk::Box::new(gtk::Orientation::Horizontal, 8);
-        let (icon, class) = match row.status {
-            StepStatus::Done => ("tafs-checkmark-symbolic", "tafs-dim"),
-            StepStatus::Error => ("dialog-error-symbolic", "tafs-no"),
-            StepStatus::NotMade => ("edit-undo-symbolic", "tafs-dim"),
-        };
-        let mark = symbol(icon, 11);
-        mark.add_css_class(class);
-        mark.set_size_request(14, -1);
-        h.append(&mark);
-        h.append(&text(&row.words, 13, 400, &["tafs-soft"]));
-        if let Some(note) = &row.note {
-            h.append(&text(note, 12, 400, &["tafs-dim"]));
-        }
-        steps.append(&h);
-    }
+    let steps = step_list(&work.steps);
     steps.set_visible(false);
     v.append(&steps);
     let (shows, hides) = (work.shows.clone(), work.hides.clone());
@@ -353,6 +335,52 @@ pub fn work_summary(work: &WorkLines) -> gtk::Box {
         })]);
     });
     v
+}
+
+/// The work of the answer streaming now (`LiveWork`): a spinner and the live line, then the steps
+/// done so far.
+pub fn live_work(work: &tafs_core::coach_lines::LiveWorkLines) -> gtk::Box {
+    let v = gtk::Box::new(gtk::Orientation::Vertical, 6);
+    v.set_widget_name("work-block");
+    let h = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+    let spinner = gtk::Spinner::new();
+    spinner.start();
+    spinner.add_css_class("tafs-dim");
+    spinner.set_size_request(12, 12);
+    h.append(&spinner);
+    h.append(&text(&work.line, 13, 400, &["tafs-dim"]));
+    h.set_accessible_role(gtk::AccessibleRole::Status);
+    v.append(&h);
+    if !work.steps.is_empty() {
+        v.append(&step_list(&work.steps));
+    }
+    v
+}
+
+/// `StepList`: each step with its mark, in its past words, and its note.
+fn step_list(rows: &[tafs_core::coach_lines::StepRow]) -> gtk::Box {
+    let steps = gtk::Box::new(gtk::Orientation::Vertical, 4);
+    steps.add_css_class("tafs-step-list");
+    for row in rows {
+        let h = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+        let (icon, class) = match row.status {
+            StepStatus::Done => ("tafs-checkmark-symbolic", "tafs-dim"),
+            StepStatus::Error => ("dialog-error-symbolic", "tafs-no"),
+            StepStatus::NotMade => ("edit-undo-symbolic", "tafs-dim"),
+            StepStatus::Held => ("process-stop-symbolic", "tafs-amber"),
+            StepStatus::Running => ("content-loading-symbolic", "tafs-dim"),
+        };
+        let mark = symbol(icon, 11);
+        mark.add_css_class(class);
+        mark.set_size_request(14, -1);
+        h.append(&mark);
+        h.append(&text(&row.words, 13, 400, &["tafs-soft"]));
+        if let Some(note) = &row.note {
+            h.append(&text(note, 12, 400, &["tafs-dim"]));
+        }
+        steps.append(&h);
+    }
+    steps
 }
 
 /// A message's menu, on a right click or a long press: each item's words and what it does.
