@@ -758,7 +758,7 @@ fn the_sample_overview_is_the_reference_sets() {
             (
                 "Support replies",
                 "Waiting for you · Promise a replacement on ticket #7802",
-                "39 calls left today of 40",
+                "28 calls left today of 40",
                 "–"
             ),
             (
@@ -1197,7 +1197,7 @@ fn the_sample_support_page_is_the_reference_sets() {
     let bar = card_bar(&w, &card, &meta, 1, false).unwrap();
     assert_eq!(
         (bar.line.as_str(), bar.details.as_str()),
-        ("39 calls left today of 40", "Support replies")
+        ("28 calls left today of 40", "Support replies")
     );
     let test_card = CardMeta {
         title: "Support replies",

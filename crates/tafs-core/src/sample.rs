@@ -160,8 +160,9 @@ pub fn card(w: &WordBook, key: &str) -> Result<Card, WordsError> {
         "deploys" => calls(10, 1),
         // Late parcels: order #5120's delay message, 1 of 100 today.
         "parcels" => calls(100, 1),
-        // Support replies: ticket #7781's reply, 1 of 40 today.
-        "support" => calls(40, 1),
+        // Support replies: ticket #7781's reply and the day's earlier ones, 12 of 40 today, as its
+        // live Card on the Card tab counts.
+        "support" => calls(40, 12),
         // Lead follow-up: Studio Kaya's reply and Nord Atelier's call, 2 of 50 today.
         "leads" => calls(50, 2),
         // Access: Ana's role, 1 of 40 today.
