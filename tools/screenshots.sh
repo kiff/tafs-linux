@@ -98,7 +98,8 @@ for screen in welcome sign-in sign-in-code sign-in-narrow pair connected overvie
     # Starts when and Results go to over its dial from a file (synthetic, the iPad's
     # `Screenshots.setupKnob` with a version waiting). Nothing is sent.
     taf-setup-apps) opts=(--home shared/contracts/home.json --access crates/tafs-app/fixtures/access-manage.json --me crates/tafs-app/fixtures/me-manager.json --setup shared/contracts/taf-setup-reconnect.json --knob crates/tafs-app/fixtures/taf-knob-setup.json --page taf-setup:taf-aaaa0000000000000000) ;;
-    taf-starts) opts=(--home shared/contracts/home.json --access crates/tafs-app/fixtures/access-manage.json --me crates/tafs-app/fixtures/me-manager.json --knob crates/tafs-app/fixtures/taf-knob-setup.json --doors crates/tafs-app/fixtures/taf-doors-dial.json --page starts:taf-aaaa0000000000000000) ;;
+    # Taller than the rest, so the app events' card shows whole, Approve's note under it included.
+    taf-starts) opts=(--size 1280x1000 --home shared/contracts/home.json --access crates/tafs-app/fixtures/access-manage.json --me crates/tafs-app/fixtures/me-manager.json --knob crates/tafs-app/fixtures/taf-knob-setup.json --doors crates/tafs-app/fixtures/taf-doors-dial.json --page starts:taf-aaaa0000000000000000) ;;
     taf-results) opts=(--home shared/contracts/home.json --access crates/tafs-app/fixtures/access-manage.json --me crates/tafs-app/fixtures/me-manager.json --knob crates/tafs-app/fixtures/taf-knob-setup.json --work crates/tafs-app/fixtures/taf-work.json --page results:taf-aaaa0000000000000000) ;;
     # A taf's chat from a file (synthetic: no contract for a taf's own thread at the pin): at rest, and at work.
     # Files attached in a chat's box (synthetic): one ready, one going up, one that didn't go, each
