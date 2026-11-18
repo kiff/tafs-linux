@@ -54,10 +54,7 @@ pub enum ConnectSource {
 
 /// The sample's connections' KIFF agents, and the sample taf each is for, by its template
 /// (`SampleScreens.grantAgents`).
-const SAMPLE_AGENTS: [(&str, &str); 2] = [
-    ("sample-refunds", "refunds"),
-    ("sample-chargebacks", "chargebacks"),
-];
+const SAMPLE_AGENTS: [(&str, &str); 2] = [("sample-support", "support"), ("sample-leads", "leads")];
 
 thread_local! {
     /// A screenshot's page: `connect-app` opens the app with the most connections,

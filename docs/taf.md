@@ -40,8 +40,8 @@ the page is `crates/tafs-app/src/taf.rs`.
 - **Who issued a Card** (`issuer(of:)`): "You" in the sample and for a taf this person manages;
   for any other KIFF taf, the account's name, else "The account".
 
-`--page taf` opens the sample's Refunds, as `taf.png`; `--page taf-card` opens it on its Card
-tab, with the reference set's three Cards, as `taf-card.png`; `--page taf-card:<id>` opens a taf
+`--page taf` opens the sample's Support replies, as `taf.png`; `--page taf-card` opens it on its
+Card tab, with its one Card named for its helpdesk and its replies counted, as `taf-card.png`; `--page taf-card:<id>` opens a taf
 of `--home` on it.
 
 ## A tafs cloud taf's Activity

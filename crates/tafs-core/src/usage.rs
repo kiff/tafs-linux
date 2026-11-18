@@ -425,8 +425,8 @@ pub fn sample_credits(w: &WordBook, previous: bool) -> Result<Credits, WordsErro
             runs: 126,
             words: l("last_period")?,
             tafs: vec![
-                taf("sample-refunds", 1480, 74, "refunds_last")?,
-                taf("sample-invoices", 830, 52, "invoices_last")?,
+                taf("sample-support", 1480, 74, "refunds_last")?,
+                taf("sample-parcels", 830, 52, "invoices_last")?,
             ],
             coach: None,
             not_counted: None,
@@ -446,8 +446,8 @@ pub fn sample_credits(w: &WordBook, previous: bool) -> Result<Credits, WordsErro
         runs: 69,
         words: l("this_period")?,
         tafs: vec![
-            taf("sample-refunds", 820, 41, "refunds_this")?,
-            taf("sample-invoices", 420, 28, "invoices_this")?,
+            taf("sample-support", 820, 41, "refunds_this")?,
+            taf("sample-parcels", 420, 28, "invoices_this")?,
         ],
         coach: None,
         not_counted: Some(NotCounted {

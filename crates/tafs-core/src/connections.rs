@@ -682,16 +682,17 @@ mod tests {
     fn the_ipads_sample_reads() {
         let g = sample();
         assert_eq!(g.len(), 3);
-        assert_eq!(g[0].name().as_deref(), Some("Stripe · Demo Shop"));
-        assert!(g[0].takes_key() && g[0].row_from_planque() && g[0].connected());
-        assert!(!g[0].digest_matches);
+        // Gmail for Support replies and for Lead follow-up, then Zendesk by its key.
+        assert_eq!(g[2].name().as_deref(), Some("Zendesk · Demo Shop"));
+        assert!(g[2].takes_key() && g[2].row_from_planque() && g[2].connected());
+        assert!(!g[2].digest_matches);
         assert_eq!(
-            g[2].request.connector.as_ref().unwrap().toolkit.as_deref(),
+            g[0].request.connector.as_ref().unwrap().toolkit.as_deref(),
             Some("gmail")
         );
-        assert!(g[2].signs_in_through_provider());
-        assert_eq!(g[0].known_actions().len(), 1);
-        assert!(g[0].known_actions()[0].removes());
+        assert!(g[0].signs_in_through_provider());
+        assert_eq!(g[2].known_actions().len(), 1);
+        assert!(g[2].known_actions()[0].removes());
     }
 
     #[test]

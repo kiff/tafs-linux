@@ -393,8 +393,8 @@ fn selection_of(page: Option<&str>) -> Selection {
         Some(other) if other.starts_with("coach-hand:") || other.starts_with("coach-improve:") => {
             Selection::Coach
         }
-        // The sample's Refunds, as the reference set's taf.png opens it.
-        Some("taf") | Some("taf-card") => Selection::Taf("refunds".into()),
+        // The sample's Support replies, as the reference set's taf.png opens it.
+        Some("taf") | Some("taf-card") => Selection::Taf("support".into()),
         // With `--home`, the contract's first taf.
         Some(other) if other.starts_with("taf:") => Selection::Taf(other["taf:".len()..].into()),
         Some(other) if other.starts_with("run:") => Selection::Taf(other["run:".len()..].into()),
@@ -1634,7 +1634,7 @@ impl App {
             })
             .collect();
         let order: Vec<String> = match (mode, cloud) {
-            (Mode::Sample, _) => ["refunds", "bill_pay", "access", "deploys", "chargebacks"]
+            (Mode::Sample, _) => ["support", "parcels", "access", "deploys", "leads"]
                 .map(String::from)
                 .to_vec(),
             (_, Some(c)) => c

@@ -20,8 +20,8 @@ first. What it says is `tafs-core/src/record.rs`, tested there; the page is
   ([app.md](app.md#time)). A line's time has the zone's short name after it when the account's
   clock isn't this computer's ("14:05 JST").
 - **Each line** (`RecordRow`), on the panel with corners of 14: a dot in its kind's colour (green
-  done, amber waiting, red stopped), the taf's colour and "Chargebacks · Accept dispute on #3342
-  · €35" (14 semibold), its time (12, monospaced), and under it what became of it (13, soft):
+  done, amber waiting, red stopped), the taf's colour and "Lead follow-up · Confirm the call with
+  Nord Atelier" (14 semibold), its time (12, monospaced), and under it what became of it (13, soft):
   what it acted on, then who decided and what the tool did when KIFF says, else its own line. A
   held line KIFF no longer holds says "no longer waiting · nothing sent". A screen reader reads
   the line as one.
