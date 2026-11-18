@@ -887,16 +887,9 @@ impl Screens {
             }
             p.append(&v);
         }
-        // "Approve signs on this computer": the approval is this computer's, not a phone's.
-        let note = self
-            .knobs
-            .w
-            .get(
-                "setup.approve_note_device",
-                &[("device", &self.l("device.linux"))],
-            )
-            // A pin without the key: the phone's words, never an empty line.
-            .unwrap_or_else(|_| self.l("setup.approve_note"));
+        // "Approve signs on this phone": this computer never signs (docs/approval.md), so the
+        // approval is the phone's, and Approve above is greyed out here.
+        let note = self.l("setup.approve_note");
         p.append(&text(&note, 12, 400, &["tafs-dim"]));
         self.column.append(&p);
     }
