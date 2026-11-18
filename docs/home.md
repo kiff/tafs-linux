@@ -128,7 +128,7 @@ its part out.
 
 `--sample` (and Try it with sample data) draws the iPad's five sample tafs, each with its Card as
 the sample's Record used it (Deploys 1 of 10 deploys today, Late parcels 1 of 100 delay messages,
-Support replies 1 of 40 replies, Lead follow-up 2 of 50 replies, Access 1 of 40 roles today; no
+Support replies 12 of 40 replies, Lead follow-up 2 of 50 replies, Access 1 of 40 roles today; no
 sample moves money), and the three calls their Cards held (`TafTemplates`, `AppModel.propose`):
 Deploys' migration, Late parcels' reship and Support replies' promise, each of which its Card always
 asks about. A held call lapses 10 minutes after it was

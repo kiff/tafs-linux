@@ -170,7 +170,7 @@ pub fn card(w: &WordBook, key: &str) -> Result<Card, WordsError> {
     }
 }
 
-/// The Overview's tafs over the sample, in the list's order: a call waits on the first two.
+/// The Overview's tafs over the sample, in the list's order: a call waits on three of them (Support replies, Late parcels and Deploys).
 pub fn overview(w: &WordBook, now: DateTime<Local>) -> Result<Vec<OverviewTaf>, WordsError> {
     let model = sidebar(w, now, false)?;
     let mut out = Vec::new();
