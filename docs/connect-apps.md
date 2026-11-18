@@ -113,8 +113,8 @@ can't approve, under the list or the row; nothing is sent, and this computer can
 at all (`session::may_send_to`). The sample, which signs nothing, does nothing on that tap.
 
 The sample's screenshot draws the reference set's connections (the iPad's `Samples/grants.json`,
-kept as `crates/tafs-app/fixtures/grants.json`): Stripe for Refunds and Chargebacks, Gmail for
-Refunds. `--page connect-app` opens the app with the most connections, `connect-connection` its
+kept as `crates/tafs-app/fixtures/grants.json`): Gmail for Support replies and for Lead
+follow-up, and Zendesk for Support replies. `--page connect-app` opens the app with the most connections, `connect-connection` its
 first connection, `connect-remove` its Remove access question. Signed in with KIFF,
 `--connect crates/tafs-app/fixtures/connect-kiff.json` (the contract's first page with Qonto
 needed by Rae) with `--page connect-which-taf` draws "Which taf?", and `connect-approve` Rae

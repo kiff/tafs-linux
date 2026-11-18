@@ -1570,7 +1570,7 @@ mod tests {
         assert!(t.components.iter().any(|c| c
             .component
             .wider_words()
-            .is_some_and(|w| w.starts_with("The sign-in for Google Sheets"))));
+            .is_some_and(|w| w.starts_with("Composio connects your Google Sheets account"))));
     }
 
     #[test]

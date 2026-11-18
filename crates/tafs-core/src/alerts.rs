@@ -94,10 +94,10 @@ mod tests {
         assert_eq!(l.foot, "Get an alert when a taf needs you");
         assert_eq!(l.examples.len(), 2);
         assert!(l.examples[0].loud && !l.examples[1].loud);
-        assert_eq!(l.examples[1].title, "Refunds answered maria@…");
+        assert_eq!(l.examples[1].title, "Support replies answered maria@…");
         assert_eq!(
             l.examples[1].spoken,
-            "Silent: Refunds answered maria@…. By email"
+            "Silent: Support replies answered maria@…. By email"
         );
         assert_eq!(lines(&w, Some(true)).unwrap().foot, l.foot);
     }

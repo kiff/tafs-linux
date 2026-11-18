@@ -127,10 +127,11 @@ its part out.
 ## The sample
 
 `--sample` (and Try it with sample data) draws the iPad's five sample tafs, each with its Card as
-the sample's Record used it (Deploys 1 of 10 deploys today, Bill pay €1,240 of €25,000 this week,
-Refunds €40 of €2,000 today, Chargebacks €35 of €500 this week, Access 1 of 40 roles today), and
-the two calls their Cards held (`TafTemplates`, `AppModel.propose`): Deploys' migration, which its Card always asks
-about, and Bill pay's €8,400 bill, over €5,000 each. A held call lapses 10 minutes after it was
+the sample's Record used it (Deploys 1 of 10 deploys today, Late parcels 1 of 100 delay messages,
+Support replies 12 of 40 replies, Lead follow-up 2 of 50 replies, Access 1 of 40 roles today; no
+sample moves money), and the three calls their Cards held (`TafTemplates`, `AppModel.propose`):
+Deploys' migration, Late parcels' reship and Support replies' promise, each of which its Card always
+asks about. A held call lapses 10 minutes after it was
 held. `--signed-in` draws it with the account's items, as the reference set's `overview.png`.
 
 ## The view-only notice

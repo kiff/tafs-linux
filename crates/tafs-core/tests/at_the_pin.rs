@@ -612,8 +612,8 @@ fn the_sample_sidebar_is_the_reference_sets() {
             "Connect apps"
         ]
     );
-    assert_eq!(lines.screens[0].badge.as_deref(), Some("2"));
-    assert_eq!(lines.screens[0].accessible, "Needs you, 2");
+    assert_eq!(lines.screens[0].badge.as_deref(), Some("3"));
+    assert_eq!(lines.screens[0].accessible, "Needs you, 3");
     assert_eq!(lines.held_label.as_deref(), Some("NEEDS YOU"));
     assert_eq!(
         lines.held[0].title,
@@ -623,8 +623,22 @@ fn the_sample_sidebar_is_the_reference_sets() {
         lines.held[0].line,
         "Schema migrations: always asks you · answer by 03:02"
     );
-    assert_eq!(lines.held[1].title, "Bill pay: Pay Atlas Freight");
-    assert_eq!(lines.held[1].line, "Over €5,000 each · answer by 03:02");
+    assert_eq!(
+        lines.held[1].title,
+        "Late parcels: Send a new parcel for order #5098"
+    );
+    assert_eq!(
+        lines.held[1].line,
+        "Reships: always asks you · answer by 03:02"
+    );
+    assert_eq!(
+        lines.held[2].title,
+        "Support replies: Promise a replacement on ticket #7802"
+    );
+    assert_eq!(
+        lines.held[2].line,
+        "Promises: always asks you · answer by 03:02"
+    );
     assert_eq!(lines.your_tafs_label.as_deref(), Some("YOUR TAFS"));
     let rows: Vec<(&str, &str)> = lines
         .your_tafs
@@ -638,7 +652,14 @@ fn the_sample_sidebar_is_the_reference_sets() {
                 "Deploys",
                 "Waiting for you · Run migration 0042_orders_index"
             ),
-            ("Bill pay", "Waiting for you · Pay Atlas Freight")
+            (
+                "Late parcels",
+                "Waiting for you · Send a new parcel for order #5098"
+            ),
+            (
+                "Support replies",
+                "Waiting for you · Promise a replacement on ticket #7802"
+            )
         ]
     );
     assert_eq!(lines.coach.as_deref(), Some("Coach"));
@@ -667,7 +688,7 @@ fn the_sidebar_reads_in_every_language() {
             .lines(&w)
             .unwrap();
         assert_eq!(lines.screens.len(), 5, "{lang}");
-        assert_eq!(lines.held.len(), 2, "{lang}");
+        assert_eq!(lines.held.len(), 3, "{lang}");
     }
 }
 
@@ -695,7 +716,14 @@ fn the_sample_overview_is_the_reference_sets() {
                 "Deploys · Run migration 0042_orders_index",
                 "answer by 03:02"
             ),
-            ("Bill pay · Pay Atlas Freight", "answer by 03:02")
+            (
+                "Late parcels · Send a new parcel for order #5098",
+                "answer by 03:02"
+            ),
+            (
+                "Support replies · Promise a replacement on ticket #7802",
+                "answer by 03:02"
+            )
         ]
     );
     assert_eq!(o.rest, None);
@@ -722,21 +750,21 @@ fn the_sample_overview_is_the_reference_sets() {
                 "–"
             ),
             (
-                "Bill pay",
-                "Waiting for you · Pay Atlas Freight",
-                "€23,760 left this week of €25,000",
+                "Late parcels",
+                "Waiting for you · Send a new parcel for order #5098",
+                "99 calls left today of 100",
                 "–"
             ),
             (
-                "Refunds",
-                "Credit on account #2290",
-                "€1,960 left today of €2,000",
+                "Support replies",
+                "Waiting for you · Promise a replacement on ticket #7802",
+                "28 calls left today of 40",
                 "–"
             ),
             (
-                "Chargebacks",
-                "Accept dispute on #3342",
-                "€465 left this week of €500",
+                "Lead follow-up",
+                "Confirm the call with Nord Atelier",
+                "48 calls left today of 50",
                 "–"
             ),
             (
@@ -989,32 +1017,41 @@ fn the_sample_record_is_the_reference_sets() {
         .collect();
     let expect = [
         (
-            "Chargebacks · Accept dispute on #3342",
-            "€35, within the Card",
+            "Lead follow-up · Confirm the call with Nord Atelier",
+            "Within the Card",
         ),
         (
             "Deploys · Held: Run migration 0042_orders_index",
             "Schema migrations: always asks you",
         ),
         ("Access · Deactivate Tom's accounts", "Within the Card"),
-        ("Bill pay · Held: Pay Atlas Freight", "Over €5,000 each"),
-        ("Refunds · Credit on account #2290", "€25, within the Card"),
         (
-            "Chargebacks · Answer dispute on #3318",
-            "€120, within the Card",
+            "Late parcels · Held: Send a new parcel for order #5098",
+            "Reships: always asks you",
         ),
+        (
+            "Support replies · Held: Promise a replacement on ticket #7802",
+            "Promises: always asks you",
+        ),
+        ("Lead follow-up · Reply to Studio Kaya", "Within the Card"),
         ("Deploys · Deploy api v2.14.1", "Within the Card"),
         ("Access · Give Ana the Sales role", "Within the Card"),
         (
-            "Bill pay · Pay Northwind Packaging",
-            "€1,240, within the Card",
+            "Late parcels · Tell order #5120 it's running late",
+            "Within the Card",
         ),
-        ("Refunds · Refund order #4471", "€40, within the Card"),
-        ("Refunds · Refunds started", "Card issued by You"),
-        ("Bill pay · Bill pay started", "Card issued by You"),
+        ("Support replies · Reply to ticket #7781", "Within the Card"),
+        (
+            "Support replies · Support replies started",
+            "Card issued by You",
+        ),
+        ("Late parcels · Late parcels started", "Card issued by You"),
         ("Access · Access started", "Card issued by You"),
         ("Deploys · Deploys started", "Card issued by You"),
-        ("Chargebacks · Chargebacks started", "Card issued by You"),
+        (
+            "Lead follow-up · Lead follow-up started",
+            "Card issued by You",
+        ),
     ];
     let got: Vec<(&str, &str)> = lines
         .iter()
@@ -1026,7 +1063,7 @@ fn the_sample_record_is_the_reference_sets() {
         days(&w, &record, Filter::Waiting, None, now).unwrap()[0]
             .lines
             .len(),
-        2
+        3
     );
     assert!(days(&w, &record, Filter::Stopped, None, now)
         .unwrap()
@@ -1035,7 +1072,7 @@ fn the_sample_record_is_the_reference_sets() {
         .unwrap()
         .is_empty());
     assert_eq!(
-        days(&w, &record, Filter::All, Some("refunds"), now).unwrap()[0]
+        days(&w, &record, Filter::All, Some("support"), now).unwrap()[0]
             .lines
             .len(),
         3
@@ -1100,12 +1137,12 @@ fn kiffs_activity_reads_as_the_ipad_shows_it() {
 }
 
 #[test]
-fn the_sample_refunds_page_is_the_reference_sets() {
+fn the_sample_support_page_is_the_reference_sets() {
     use tafs_core::taf_page::{activity, card_bar, ActivityFilter, CardMeta, TafState};
     let w = book("en");
     let now = Local.with_ymd_and_hms(2026, 11, 15, 2, 56, 0).unwrap();
     let record = sample::record(&w, now).unwrap();
-    let days = activity(&w, &record, "refunds", ActivityFilter::All, now).unwrap();
+    let days = activity(&w, &record, "support", ActivityFilter::All, now).unwrap();
     assert_eq!(days.len(), 1);
     assert_eq!(days[0].title, "Today · Nov 15");
     let lines: Vec<(String, String)> = days[0]
@@ -1125,9 +1162,12 @@ fn the_sample_refunds_page_is_the_reference_sets() {
     assert_eq!(
         got,
         [
-            ("Credit on account #2290", "€25, within the Card"),
-            ("Refund order #4471", "€40, within the Card"),
-            ("Refunds started", "Card issued by You"),
+            (
+                "Held: Promise a replacement on ticket #7802",
+                "Promises: always asks you"
+            ),
+            ("Reply to ticket #7781", "Within the Card"),
+            ("Support replies started", "Card issued by You"),
         ]
     );
     let titles: Vec<String> = ActivityFilter::ALL
@@ -1136,23 +1176,20 @@ fn the_sample_refunds_page_is_the_reference_sets() {
         .collect();
     assert_eq!(titles, ["All", "Done", "Held", "Refused"]);
     assert_eq!(
-        activity(&w, &record, "refunds", ActivityFilter::Done, now).unwrap()[0]
-            .lines
-            .len(),
-        2
-    );
-    assert!(activity(&w, &record, "refunds", ActivityFilter::Held, now)
-        .unwrap()
-        .is_empty());
-    assert_eq!(
-        activity(&w, &record, "deploys", ActivityFilter::Held, now).unwrap()[0]
+        activity(&w, &record, "support", ActivityFilter::Done, now).unwrap()[0]
             .lines
             .len(),
         1
     );
-    let card = sample::card(&w, "refunds").unwrap();
+    assert_eq!(
+        activity(&w, &record, "support", ActivityFilter::Held, now).unwrap()[0]
+            .lines
+            .len(),
+        1
+    );
+    let card = sample::card(&w, "support").unwrap();
     let meta = CardMeta {
-        title: "Refunds",
+        title: "Support replies",
         environment: "",
         live: true,
         active: true,
@@ -1160,91 +1197,56 @@ fn the_sample_refunds_page_is_the_reference_sets() {
     let bar = card_bar(&w, &card, &meta, 1, false).unwrap();
     assert_eq!(
         (bar.line.as_str(), bar.details.as_str()),
-        ("€1,960 left today of €2,000", "Refunds")
+        ("28 calls left today of 40", "Support replies")
     );
     let test_card = CardMeta {
-        title: "Refunds",
+        title: "Support replies",
         environment: "test",
         live: false,
         active: true,
     };
     assert_eq!(
         card_bar(&w, &card, &test_card, 3, false).unwrap().details,
-        "Refunds · Test · 3 Cards"
+        "Support replies · Test · 3 Cards"
     );
     assert_eq!(TafState::Working.label(&w).unwrap(), "Working");
 }
 
 #[test]
-fn refunds_card_tab_is_the_reference_sets() {
-    use tafs_core::cards::stack;
+fn support_card_tab_is_the_reference_sets() {
     let w = book("en");
-    let cards = sample::full_cards(&w, "refunds", true).unwrap();
+    // The screenshot's Card: Support replies' one Card, named for its helpdesk, its replies counted.
+    let cards = sample::full_cards(&w, "support", true).unwrap();
     let titles: Vec<&str> = cards.iter().map(|c| c.title.as_str()).collect();
-    assert_eq!(
-        titles,
-        ["Refunds · Stripe", "Read Stripe", "Refunds · Stripe test"]
-    );
-    // The furthest back on top: the test Card, then Read Stripe, then Refunds · Stripe in front.
-    let order: Vec<&str> = stack(&cards, None)
-        .iter()
-        .map(|(i, _)| cards[*i].title.as_str())
-        .collect();
-    assert_eq!(
-        order,
-        ["Refunds · Stripe test", "Read Stripe", "Refunds · Stripe"]
-    );
-    assert_eq!(cards[2].environment_label().as_deref(), Some("TEST"));
+    assert_eq!(titles, ["Support replies · Zendesk"]);
     let front = &cards[0];
     assert_eq!(
         front.totals.hero(&w).unwrap(),
-        Some(("€1,520".into(), "left today of €2,000".into()))
-    );
-    assert_eq!(
-        front.facts(&w).unwrap(),
-        ["up to €150 each; more asks you first", "2 tools"]
+        Some(("28".into(), "calls left today of 40".into()))
     );
     assert_eq!(
         front.ends(&w, false).unwrap(),
         ("Ends".into(), "No end date".into())
     );
-    let lines: Vec<(String, String, String)> = front
-        .rules
-        .iter()
-        .map(|r| {
-            (
-                r.label.clone(),
-                r.outside(&w).unwrap(),
-                r.summary(&w).unwrap(),
-            )
-        })
-        .collect();
+    let summaries: Vec<String> = front.rules.iter().map(|r| r.summary(&w).unwrap()).collect();
     assert_eq!(
-        lines,
+        summaries,
         [
-            (
-                "Refunds".into(),
-                "Outside: held for you".into(),
-                "up to €150 each; more asks you first · €2,000 in total a day, then it asks you"
-                    .into()
-            ),
-            (
-                "Credits".into(),
-                "Outside: held for you".into(),
-                "up to €100 each; more asks you first · €1,000 in total a day, then it asks you"
-                    .into()
-            ),
+            "40 calls a day, then it asks you",
+            "always asks you",
+            "never"
         ]
     );
-    assert_eq!(
-        cards[1].totals.hero(&w).unwrap(),
-        Some(("180".into(), "calls left today of 200".into()))
-    );
-    // The app's own sample: Refunds' one Card, its payouts never.
-    let own = sample::full_cards(&w, "refunds", false).unwrap();
-    assert_eq!(own.len(), 1);
-    assert_eq!(own[0].rules[2].summary(&w).unwrap(), "never");
-    assert_eq!(own[0].rules[2].outside(&w).unwrap(), "Outside: refused");
+    assert_eq!(front.rules[2].outside(&w).unwrap(), "Outside: refused");
+    // No sample's Card moves money.
+    for key in ["support", "parcels", "leads", "access", "deploys"] {
+        let own = sample::full_cards(&w, key, false).unwrap();
+        assert_eq!(own.len(), 1, "{key}");
+        assert!(own[0]
+            .rules
+            .iter()
+            .all(|r| r.per_action.is_none() && r.per_window.is_none()));
+    }
     let deploys = sample::full_cards(&w, "deploys", false).unwrap();
     let summaries: Vec<String> = deploys[0]
         .rules
@@ -1280,8 +1282,8 @@ fn plan_and_usage_is_the_reference_sets() {
     assert_eq!(
         tafs,
         [
-            "Refunds · 820 credits · 41 runs",
-            "Overdue invoices · 420 credits · 28 runs"
+            "Support replies · 820 credits · 41 runs",
+            "Late parcels · 420 credits · 28 runs"
         ]
     );
     let not = c.shows_not_counted().unwrap();
@@ -1357,10 +1359,10 @@ fn connect_apps_is_the_reference_sets() {
     let names = |a: &[&tafs_core::connect::App]| -> Vec<String> {
         a.iter().map(|a| a.display_name().to_string()).collect()
     };
-    assert_eq!(names(&yours), ["Gmail", "Stripe"]);
+    assert_eq!(names(&yours), ["Gmail", "Zendesk"]);
     assert_eq!(
         names(&discover),
-        ["Google Sheets", "Slack", "Qonto", "HubSpot"]
+        ["Google Sheets", "Slack", "Pipedrive", "HubSpot"]
     );
     assert!(apps.by_key);
     let w = book("en");
