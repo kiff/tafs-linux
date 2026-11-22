@@ -13,7 +13,7 @@ use tafs_core::taf_page::{
 };
 use tafs_core::words::{upper, WordBook};
 
-use crate::widgets::{avatar, eyebrow, one_line, symbol, text};
+use crate::widgets::{eyebrow, one_line, symbol, text};
 
 /// Draws the filters and the days again, after a choice.
 type Redraw = Rc<dyn Fn()>;
@@ -24,6 +24,8 @@ pub struct TafPage {
     pub name: String,
     pub initial: String,
     pub color: i64,
+    /// The rim round its avatar while a door is open (`DoorRim`).
+    pub rim: Option<tafs_core::rim::Rim>,
     pub state: TafState,
     pub attention: bool,
     pub card: Option<Card>,
@@ -154,7 +156,7 @@ pub fn page(
 
     // One row: avatar, name and state.
     let head = gtk::Box::new(gtk::Orientation::Horizontal, 10);
-    head.append(&avatar(&t.initial, t.color, 34));
+    head.append(&crate::widgets::taf_avatar(&t.initial, t.color, 34, t.rim));
     let name = one_line(&t.name, 20, 700, &["tafs-ink"]);
     name.set_hexpand(true);
     head.append(&name);

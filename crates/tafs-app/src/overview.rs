@@ -8,7 +8,7 @@ use gtk::prelude::*;
 use tafs_core::overview::OverviewLines;
 use tafs_core::sidebar::Selection;
 
-use crate::widgets::{avatar, eyebrow, one_line, symbol, text};
+use crate::widgets::{eyebrow, one_line, symbol, text};
 
 thread_local! {
     /// `--page overview-label:<id>`: the Overview opens filtered to that label, for a screenshot.
@@ -193,7 +193,12 @@ fn table(o: &OverviewLines, open: &Rc<dyn Fn(Selection)>, label: Option<&str>) -
         y += 1;
 
         let taf = gtk::Box::new(gtk::Orientation::Horizontal, 10);
-        taf.append(&avatar(&row.initial, row.color_index, 30));
+        taf.append(&crate::widgets::taf_avatar(
+            &row.initial,
+            row.color_index,
+            30,
+            row.rim,
+        ));
         let names = gtk::Box::new(gtk::Orientation::Vertical, 2);
         names.set_valign(gtk::Align::Center);
         names.append(&one_line(&row.name, 15, 600, &["tafs-ink"]));

@@ -1735,6 +1735,7 @@ impl App {
                         name: t.name.clone(),
                         initial: t.initial.clone(),
                         color: t.color_index,
+                        rim: None,
                         state: if paused {
                             tafs_core::taf_page::TafState::Paused
                         } else if waits {
@@ -1902,6 +1903,7 @@ impl App {
                         }),
                         initial: tafs_core::sidebar::initial(&t.name),
                         cloud_id: t.cloud.then(|| t.key.clone()),
+                        rim: t.rim,
                         key: t.key,
                         name: t.name,
                         color: t.color_index,

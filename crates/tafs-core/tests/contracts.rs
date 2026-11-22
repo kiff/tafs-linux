@@ -1155,3 +1155,28 @@ fn a_fill_in_chrome_is_never_answered_with_this_computers_key() {
         assert_eq!(card.needs_release, release);
     }
 }
+
+#[test]
+fn a_taf_with_a_door_open_has_its_rim() {
+    let w = en();
+    // At the pin, Home's taf has no door: no rim.
+    let h = Home::read(&contract("home.json")).unwrap();
+    assert_eq!(home::taf(&w, &h.tafs[0]).unwrap().rim, None);
+    // With tafs cloud's `avatar_rim`, the taf, its row and its Overview line carry it.
+    let mut answer: Value = serde_json::from_slice(&contract("home.json")).unwrap();
+    answer["tafs"][0]["avatar_rim"] =
+        serde_json::json!({"visible": true, "tint": "resting", "length": 0.22});
+    let h = Home::read(&serde_json::to_vec(&answer).unwrap()).unwrap();
+    let t = home::taf(&w, &h.tafs[0]).unwrap();
+    let rim = Some(tafs_core::rim::Rim {
+        tint: tafs_core::rim::Tint::Resting,
+        length: 220,
+    });
+    assert_eq!(t.rim, rim);
+    assert_eq!(home::row(&t).rim, rim);
+    assert_eq!(home::overview_taf(&t).rim, rim);
+    // Another shape is no rim, and Home still reads.
+    answer["tafs"][0]["avatar_rim"] = serde_json::json!("open");
+    let h = Home::read(&serde_json::to_vec(&answer).unwrap()).unwrap();
+    assert_eq!(home::taf(&w, &h.tafs[0]).unwrap().rim, None);
+}

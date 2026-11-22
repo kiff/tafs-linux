@@ -93,6 +93,84 @@ pub fn mascot(size: i32) -> gtk::Image {
     i
 }
 
+/// `TafAvatar` with its `DoorRim`: while a door is open, an arc travels round the avatar's edge, 4
+/// out from it, once every 4.5 s (still with the desktop's animations off), in the amber while a
+/// knock waits, dim while every open door rests, else the taf's colour. No rim: the avatar alone.
+pub fn taf_avatar(
+    initial: &str,
+    color_index: i64,
+    size: i32,
+    rim: Option<tafs_core::rim::Rim>,
+) -> gtk::Widget {
+    use tafs_core::rim::Tint;
+    let a = avatar(initial, color_index, size);
+    let Some(rim) = rim else {
+        return a.upcast();
+    };
+    let o = gtk::Overlay::new();
+    let area = gtk::DrawingArea::new();
+    area.set_content_width(size + 8);
+    area.set_content_height(size + 8);
+    area.set_accessible_role(gtk::AccessibleRole::Presentation);
+    o.set_child(Some(&area));
+    o.add_overlay(&a);
+    let phase = std::rc::Rc::new(std::cell::Cell::new(0.0_f64));
+    {
+        let phase = phase.clone();
+        area.set_draw_func(move |_, cr, w, h| {
+            let hex = match rim.tint {
+                Tint::Knock => tone_hex("amber"),
+                Tint::Resting => tone_hex("dim"),
+                Tint::Active => tafs_core::theme::taf_color(color_index),
+            };
+            crate::illustrations::rgb(cr, hex, 1.0);
+            cr.set_line_width(2.0);
+            cr.set_line_cap(gtk::cairo::LineCap::Round);
+            cr.set_line_join(gtk::cairo::LineJoin::Round);
+            // The edge 1 in from the area's, so the 2-wide line stays inside it.
+            let radius = size as f64 * 0.3 + 4.0 - 1.0;
+            let points = tafs_core::rim::arc(
+                w as f64 - 2.0,
+                h as f64 - 2.0,
+                radius,
+                phase.get(),
+                rim.length as f64 / 1000.0,
+            );
+            if let Some((x, y)) = points.first() {
+                cr.move_to(x + 1.0, y + 1.0);
+                for (x, y) in &points[1..] {
+                    cr.line_to(x + 1.0, y + 1.0);
+                }
+                let _ = cr.stroke();
+            }
+        });
+    }
+    if gtk::Settings::default().is_some_and(|s| s.is_gtk_enable_animations()) {
+        let start = std::cell::Cell::new(None::<i64>);
+        area.add_tick_callback(move |area, clock| {
+            let now = clock.frame_time();
+            let from = start.get().unwrap_or(now);
+            start.set(Some(from));
+            phase.set(((now - from) as f64 / 1_000_000.0 / 4.5).rem_euclid(1.0));
+            area.queue_draw();
+            gtk::glib::ControlFlow::Continue
+        });
+    }
+    o.set_valign(gtk::Align::Center);
+    o.set_halign(gtk::Align::Center);
+    o.upcast()
+}
+
+/// A palette colour as this appearance draws it.
+fn tone_hex(name: &str) -> u32 {
+    let t = tafs_core::theme::tone(name).expect("the palette has it");
+    if adw::StyleManager::default().is_dark() {
+        t.dark.0
+    } else {
+        t.light.0
+    }
+}
+
 /// `TafAvatar`: the initial in white on the taf's colour, corners of 30%.
 pub fn avatar(initial: &str, color_index: i64, size: i32) -> gtk::Label {
     let l = gtk::Label::new(Some(initial));

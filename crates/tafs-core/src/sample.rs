@@ -115,6 +115,7 @@ pub fn sidebar(
             now: now_line,
             badge: None,
             tone: Default::default(),
+            rim: None,
         };
         tafs.push((
             row,
@@ -188,6 +189,7 @@ pub fn overview(w: &WordBook, now: DateTime<Local>) -> Result<Vec<OverviewTaf>, 
             used_by: String::new(),
             // The sample's labels are the iPad's screenshots' only.
             labels: vec![],
+            rim: None,
         });
     }
     Ok(out)
