@@ -381,6 +381,7 @@ mod tests {
             reason: None,
             refused_by_tool: false,
             refused_by: None,
+            report: Default::default(),
         }
     }
 

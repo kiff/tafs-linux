@@ -1,0 +1,167 @@
+{
+ "about": "A taf's Activity page with two payments (synthetic): the first offered \"Report this payment\" by tafs cloud, the second already reported, so it has no button. Nothing is sent.",
+ "answer": {
+  "entries": [
+   {
+    "id": "pay-1",
+    "at": "2026-11-01T09:12:00.000Z",
+    "kind": "done",
+    "title": "Refund order 1042",
+    "detail": "Done, within its Card",
+    "time": "09:12",
+    "day": "2026-11-01",
+    "day_title": "Today",
+    "call": {
+     "proposal_id": "proposal-pay-1",
+     "actor_id": "agent-example",
+     "action_name": "stripe.refund",
+     "title": "Refund order 1042",
+     "outcome": "allowed",
+     "created_at": "2026-11-01T09:12:00.000Z",
+     "amount": {
+      "value": "150.00",
+      "unit": "EUR"
+     },
+     "receipt": {
+      "trace_id": "01KPAYTRACE0001",
+      "status": "signed"
+     },
+     "tool_outcome": {
+      "status": "done"
+     }
+    },
+    "amount_text": "€150",
+    "report": {
+     "trace_id": "01KPAYTRACE0001",
+     "at": "2026-11-01T09:12:00.000Z"
+    }
+   },
+   {
+    "id": "pay-2",
+    "at": "2026-11-01T08:40:00.000Z",
+    "kind": "done",
+    "title": "Refund order 1043",
+    "detail": "Done, within its Card",
+    "time": "08:40",
+    "day": "2026-11-01",
+    "day_title": "Today",
+    "call": {
+     "proposal_id": "proposal-pay-2",
+     "actor_id": "agent-example",
+     "action_name": "stripe.refund",
+     "title": "Refund order 1043",
+     "outcome": "allowed",
+     "created_at": "2026-11-01T08:40:00.000Z",
+     "amount": {
+      "value": "150.00",
+      "unit": "EUR"
+     },
+     "receipt": {
+      "trace_id": "01KPAYTRACE0002",
+      "status": "signed"
+     },
+     "tool_outcome": {
+      "status": "done"
+     }
+    },
+    "amount_text": "€150",
+    "reported_at": "2026-11-01T10:00:00.000Z"
+   }
+  ],
+  "groups": [
+   {
+    "id": "2026-11-01",
+    "title": "Today",
+    "entries": [
+     {
+      "id": "pay-1",
+      "at": "2026-11-01T09:12:00.000Z",
+      "kind": "done",
+      "title": "Refund order 1042",
+      "detail": "Done, within its Card",
+      "time": "09:12",
+      "day": "2026-11-01",
+      "day_title": "Today",
+      "call": {
+       "proposal_id": "proposal-pay-1",
+       "actor_id": "agent-example",
+       "action_name": "stripe.refund",
+       "title": "Refund order 1042",
+       "outcome": "allowed",
+       "created_at": "2026-11-01T09:12:00.000Z",
+       "amount": {
+        "value": "150.00",
+        "unit": "EUR"
+       },
+       "receipt": {
+        "trace_id": "01KPAYTRACE0001",
+        "status": "signed"
+       },
+       "tool_outcome": {
+        "status": "done"
+       }
+      },
+      "amount_text": "€150",
+      "report": {
+       "trace_id": "01KPAYTRACE0001",
+       "at": "2026-11-01T09:12:00.000Z"
+      }
+     },
+     {
+      "id": "pay-2",
+      "at": "2026-11-01T08:40:00.000Z",
+      "kind": "done",
+      "title": "Refund order 1043",
+      "detail": "Done, within its Card",
+      "time": "08:40",
+      "day": "2026-11-01",
+      "day_title": "Today",
+      "call": {
+       "proposal_id": "proposal-pay-2",
+       "actor_id": "agent-example",
+       "action_name": "stripe.refund",
+       "title": "Refund order 1043",
+       "outcome": "allowed",
+       "created_at": "2026-11-01T08:40:00.000Z",
+       "amount": {
+        "value": "150.00",
+        "unit": "EUR"
+       },
+       "receipt": {
+        "trace_id": "01KPAYTRACE0002",
+        "status": "signed"
+       },
+       "tool_outcome": {
+        "status": "done"
+       }
+      },
+      "amount_text": "€150",
+      "reported_at": "2026-11-01T10:00:00.000Z"
+     }
+    ]
+   }
+  ],
+  "filters": [
+   {
+    "id": "all",
+    "title": "All"
+   },
+   {
+    "id": "done",
+    "title": "Done"
+   },
+   {
+    "id": "held",
+    "title": "Held"
+   },
+   {
+    "id": "refused",
+    "title": "Refused"
+   }
+  ],
+  "filter": "all",
+  "revision": "874037533c5ce2a46531f4ac67d1278c72224e7d332c1134bbb7b2f7e82a5aa3",
+  "card_unit_exceptions": [],
+  "end_words": "Nothing older in this view"
+ }
+}

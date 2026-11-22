@@ -42,6 +42,7 @@ pub mod overview;
 pub mod pairing;
 pub mod pairing_key;
 pub mod passkey;
+pub mod payment_report;
 pub mod people;
 pub mod pin;
 pub mod planque;

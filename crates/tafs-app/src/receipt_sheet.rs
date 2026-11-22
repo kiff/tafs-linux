@@ -413,15 +413,26 @@ fn clear(b: &gtk::Box) {
     }
 }
 
+thread_local! {
+    /// A screenshot's (`--page taf-report:<entry>`): the next receipt opens its report sheet.
+    static OPEN_REPORT: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// The next receipt drawn opens "Report this payment" at once, for a screenshot.
+pub fn open_report_next() {
+    OPEN_REPORT.with(|o| o.set(true));
+}
+
 /// The sheet for `e`, whose taf is `taf_name` (`ReceiptView`). `source`: signed in with KIFF,
 /// where its receipt is read; none in the sample, which reads nothing. `open_taf`: the taf's page,
-/// by its key.
+/// by its key. `shows_halt`: the taf's halt row, which a reported payment's answer redraws.
 pub fn present(
     w: Rc<WordBook>,
     source: Option<Rc<ReceiptSource>>,
     e: Entry,
     taf_name: Option<String>,
     open_taf: Rc<dyn Fn(String)>,
+    shows_halt: Option<crate::halt::Shows>,
     parent: &impl IsA<gtk::Widget>,
 ) {
     let column = gtk::Box::new(gtk::Orientation::Vertical, 16);
@@ -487,7 +498,7 @@ pub fn present(
     let receipt = gtk::Box::new(gtk::Orientation::Vertical, 0);
     column.append(&receipt);
     if e.receipt.is_some() {
-        match source {
+        match source.clone() {
             Some(source) => load(w.clone(), source, e.clone(), happened, receipt),
             None => {
                 let none: Rc<dyn Fn()> = Rc::new(|| {});
@@ -495,6 +506,13 @@ pub fn present(
             }
         }
     }
+    // "Report this payment", red and outlined, where tafs cloud offers it; gone once reported.
+    let report = tafs_core::payment_report::offers_report(&e, false).then(|| {
+        let b = outline(&l("record.report.button"));
+        b.add_css_class("tafs-no");
+        column.append(&b);
+        b
+    });
     let open = primary(&l("record.open_taf_chat"));
     column.append(&open);
 
@@ -532,4 +550,35 @@ pub fn present(
         });
     }
     dialog.present(Some(parent));
+    if let Some(button) = report {
+        let ask: Rc<dyn Fn()> = {
+            let (w, button2, dialog) = (w.clone(), button.clone(), dialog.clone());
+            Rc::new(move || {
+                let reported: crate::payment_report_sheet::Reported = {
+                    let (button, shows_halt) = (button2.clone(), shows_halt.clone());
+                    Rc::new(move |halt| {
+                        button.set_visible(false);
+                        if let Some(show) = &shows_halt {
+                            show(&halt);
+                        }
+                    })
+                };
+                crate::payment_report_sheet::present(
+                    w.clone(),
+                    source.clone(),
+                    e.clone(),
+                    taf_name.clone(),
+                    &dialog,
+                    reported,
+                );
+            })
+        };
+        {
+            let ask = ask.clone();
+            button.connect_clicked(move |_| ask());
+        }
+        if OPEN_REPORT.with(|o| o.replace(false)) {
+            ask();
+        }
+    }
 }

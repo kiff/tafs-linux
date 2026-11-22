@@ -31,6 +31,7 @@ mod needs_you;
 mod onboarding;
 mod overview;
 mod pairing;
+mod payment_report_sheet;
 mod people;
 mod pin_sheet;
 mod receipt_sheet;
@@ -244,7 +245,7 @@ struct Options {
 }
 
 const USAGE: &str = "tafs [dev.kiff.tafs:/oauth?…] [--lang <a language tafs speaks: en, de, fr, ar, ja, zh-Hant, pt-BR…>] [--theme light|dark] [--sample] [--signed-in] [--view-only [--paired]]
-     [--home contract.json] [--usage answers.json] [--people answers.json] [--connect answers.json] [--knob answer.json] [--setup answer.json] [--taf-activity answer.json] [--unproven answers.json] [--recipes answers.json] [--gallery answers.json] [--halt answer.json] [--record-search answers.json] [--access answer.json] [--receipts answer.json] [--activity answer.json] [--calls answer.json] [--receipt answer.json] [--work answer.json] [--doors answer.json] [--account-reads answers.json] [--me answer.json] [--attach files.json] [--held answers.json] [--versions answer.json [--trial answer.json]] [--memory answer.json] [--runs answer.json] [--request answer.json] [--balance answer.json] [--coach answer.json] [--coach-chats answer.json] [--coach-drafts answers.json] [--chat answer.json [--report] [--chat-stream events.txt [--pin-check]]] [--brief answer.json] [--mission-log answer.json] [--coach-setup answer.json] [--coach-stream events.txt] [--unreachable network|error] [--new-version vX.Y.Z] [--app-event item.json] [--size WxH] [--page welcome|sign-in|pair|recipe:<id>|gallery|new-taf|halt-all|halt:<id>|halt-resume:<id>|record-search:<q>|record-export|receipt:<proposal id>|run:<taf id>|pin-sheet|share:<key>|share-step2:<key>|coach|coach-tools|coach-full|coach-read-back|coach-hand:<id>|coach-improve:<key>|overview|overview-label:<id>|needs-you|discard-setup|needs-you-set-all-aside|needs-you-dismiss|needs-you-hold:<id>|versions:<key>|trial:<key>|brief-answer:<decision id>|mission-log:<mission id>|record|calendar|calendar-week|usage|usage-ask|usage-decline|connect-apps|connect-app|connect-connection|connect-remove|connect-which-taf|connect-approve|account|kiff-account|time-zone|time-zone-use|alerts|devices|devices-sign-out|people|people-rename|people-add|taf|taf-card|taf-setup|taf-setup:<id>|starts:<id>|results:<id>|doors:<id>[:<door>]|consent|connected|sign-in-code] [--screenshot out.png]";
+     [--home contract.json] [--usage answers.json] [--people answers.json] [--connect answers.json] [--knob answer.json] [--setup answer.json] [--taf-activity answer.json] [--unproven answers.json] [--recipes answers.json] [--gallery answers.json] [--halt answer.json] [--record-search answers.json] [--access answer.json] [--receipts answer.json] [--activity answer.json] [--calls answer.json] [--receipt answer.json] [--work answer.json] [--doors answer.json] [--account-reads answers.json] [--me answer.json] [--attach files.json] [--held answers.json] [--versions answer.json [--trial answer.json]] [--memory answer.json] [--runs answer.json] [--request answer.json] [--balance answer.json] [--coach answer.json] [--coach-chats answer.json] [--coach-drafts answers.json] [--chat answer.json [--report] [--chat-stream events.txt [--pin-check]]] [--brief answer.json] [--mission-log answer.json] [--coach-setup answer.json] [--coach-stream events.txt] [--unreachable network|error] [--new-version vX.Y.Z] [--app-event item.json] [--size WxH] [--page welcome|sign-in|pair|recipe:<id>|gallery|new-taf|halt-all|halt:<id>|halt-resume:<id>|record-search:<q>|record-export|receipt:<proposal id>|run:<taf id>|pin-sheet|share:<key>|share-step2:<key>|coach|coach-tools|coach-full|coach-read-back|coach-hand:<id>|coach-improve:<key>|overview|overview-label:<id>|needs-you|discard-setup|needs-you-set-all-aside|needs-you-dismiss|needs-you-hold:<id>|versions:<key>|trial:<key>|brief-answer:<decision id>|mission-log:<mission id>|record|calendar|calendar-week|usage|usage-ask|usage-decline|connect-apps|connect-app|connect-connection|connect-remove|connect-which-taf|connect-approve|account|kiff-account|time-zone|time-zone-use|alerts|devices|devices-sign-out|people|people-rename|people-add|taf|taf-card|taf-setup|taf-setup:<id>|starts:<id>|results:<id>|doors:<id>[:<door>]|taf-receipt:<key>:<entry>|taf-report:<key>:<entry>|consent|connected|sign-in-code] [--screenshot out.png]";
 
 fn options() -> Result<Options, String> {
     let mut o = Options::default();
@@ -449,6 +450,11 @@ fn selection_of(page: Option<&str>) -> Selection {
         }
         Some(other) if other.starts_with("share-step2:") => {
             Selection::Taf(other["share-step2:".len()..].into())
+        }
+        // `taf-receipt:<key>:<entry>` and `taf-report:<key>:<entry>`: that taf's page.
+        Some(other) if other.starts_with("taf-receipt:") || other.starts_with("taf-report:") => {
+            let rest = other.split_once(':').map(|(_, r)| r).unwrap_or_default();
+            Selection::Taf(rest.split_once(':').map(|(k, _)| k).unwrap_or(rest).into())
         }
         Some("halt-all") => Selection::HaltAll,
         Some(other) if other.starts_with("record-search:") => Selection::Record,
@@ -688,6 +694,19 @@ fn activate(app: &adw::Application, o: &Options) {
             .and_then(|r| r.recipes.into_iter().find(|x| x.id == id))
         {
             coach::set_draft(&r.say);
+        }
+    }
+    // `--page taf-receipt:<key>:<entry>`: that Activity entry's receipt over its taf's page; and
+    // `taf-report:…`, "Report this payment" over the receipt.
+    if let Some(page) = o.page.as_deref() {
+        let rest = page
+            .strip_prefix("taf-receipt:")
+            .or_else(|| page.strip_prefix("taf-report:"));
+        if let Some((_, entry)) = rest.and_then(|r| r.split_once(':')) {
+            taf::open_receipt_on_draw(entry);
+            if page.starts_with("taf-report:") {
+                receipt_sheet::open_report_next();
+            }
         }
     }
     // `--page share:<key>` (and `share-step2:<key>`): Share's sheet over that taf's page.

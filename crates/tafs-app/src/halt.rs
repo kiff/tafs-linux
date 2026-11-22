@@ -23,6 +23,9 @@ pub struct HaltSource {
     pub canned: Option<Halt>,
 }
 
+/// Draws a halt on its row, as read or as an answer gave it (a payment reported halts its taf).
+pub type Shows = Rc<dyn Fn(&Halt)>;
+
 /// A taf's halt by tafs cloud's id and its name, or with none every taf's.
 #[derive(Clone)]
 pub struct Whose {
@@ -320,7 +323,7 @@ pub fn row(
     source: Rc<HaltSource>,
     whose: Whose,
     open: Rc<dyn Fn(Selection)>,
-) -> gtk::Button {
+) -> (gtk::Button, Shows) {
     let p = panel(false);
     let h = gtk::Box::new(gtk::Orientation::Horizontal, 12);
     // The iPad's hand: open while it runs, filled once it's halted.
@@ -355,20 +358,18 @@ pub fn row(
             })
         });
     }
-    let (w2, alive) = (w.clone(), Rc::new(Cell::new(true)));
-    b.connect_destroy({
-        let alive = alive.clone();
-        move |_| alive.set(false)
-    });
-    glib::spawn_future_local(async move {
-        let id = whose.id.clone();
-        let source: HaltSource = (*source).clone();
-        let got = gio::spawn_blocking(move || read(&source, id.as_deref()))
-            .await
-            .ok()
-            .flatten();
-        if let (true, Some(h)) = (alive.get(), got) {
-            if let Ok((_, line, stopped)) = halt::row(&w2, &h, all) {
+    // Where it stands, drawn on the row: its line, red and the hand filled once it stops.
+    let shows: Shows = {
+        let (w, alive) = (w.clone(), Rc::new(Cell::new(true)));
+        b.connect_destroy({
+            let alive = alive.clone();
+            move |_| alive.set(false)
+        });
+        Rc::new(move |h: &Halt| {
+            if !alive.get() {
+                return;
+            }
+            if let Ok((_, line, stopped)) = halt::row(&w, h, all) {
                 state.set_label(&line);
                 state.remove_css_class("tafs-dim");
                 state.add_css_class(if stopped { "tafs-no" } else { "tafs-dim" });
@@ -378,7 +379,21 @@ pub fn row(
                     "hand.raised"
                 })));
             }
-        }
-    });
-    b
+        })
+    };
+    {
+        let shows = shows.clone();
+        glib::spawn_future_local(async move {
+            let id = whose.id.clone();
+            let source: HaltSource = (*source).clone();
+            let got = gio::spawn_blocking(move || read(&source, id.as_deref()))
+                .await
+                .ok()
+                .flatten();
+            if let Some(h) = got {
+                shows(&h);
+            }
+        });
+    }
+    (b, shows)
 }
