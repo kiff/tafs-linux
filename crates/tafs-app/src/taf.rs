@@ -1121,7 +1121,7 @@ fn side(w: &Rc<WordBook>, t: &TafPage, card_tab: &gtk::ToggleButton) -> gtk::Box
     v
 }
 
-fn face(
+pub(crate) fn face(
     w: &WordBook,
     card: &tafs_core::cards::FullCard,
     color: i64,

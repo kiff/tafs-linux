@@ -524,6 +524,7 @@ pub fn build(
                 }
                 Selection::Account => {
                     let open = open.clone();
+                    let (sheet_over, sheet_words) = (stack.clone(), w.clone());
                     crate::account::page(
                         &account,
                         &crate::account::Actions {
@@ -545,6 +546,16 @@ pub fn build(
                                     }
                                     tafs_core::account::Screen::Usage => Selection::Usage,
                                     tafs_core::account::Screen::Alerts => Selection::Alerts,
+                                    // A sheet over Account, as the cards are.
+                                    tafs_core::account::Screen::HowItWorks => {
+                                        if let Some(root) = sheet_over.root() {
+                                            crate::onboarding::how_it_works(
+                                                &root,
+                                                sheet_words.clone(),
+                                            );
+                                        }
+                                        return;
+                                    }
                                 })
                             }),
                         },

@@ -4,6 +4,7 @@ mod account;
 mod ai_consent;
 mod alerts;
 mod app_event_sheet;
+mod app_sign_in;
 mod approval;
 mod attach;
 mod brief;
@@ -26,6 +27,7 @@ mod kiff_account;
 mod knocks;
 mod language_picker;
 mod needs_you;
+mod onboarding;
 mod overview;
 mod pairing;
 mod people;
@@ -37,6 +39,7 @@ mod record;
 mod record_search;
 mod report_sheet;
 mod runs_panel;
+mod scheme;
 mod setup_pane;
 mod share;
 mod sheet;
@@ -234,9 +237,12 @@ struct Options {
     /// `--size WxH`: the window's size, for a screenshot of a narrower layout.
     size: Option<(i32, i32)>,
     screenshot: Option<String>,
+    /// KIFF's way back after its sign-in page (`dev.kiff.tafs:/oauth?…`), handed over by the
+    /// desktop: it goes to the running app's waiting attempt (`app_sign_in::link`).
+    link: Option<String>,
 }
 
-const USAGE: &str = "tafs [--lang en|de|fr|es|it|pt|nl|pl] [--theme light|dark] [--sample] [--signed-in] [--view-only [--paired]]
+const USAGE: &str = "tafs [dev.kiff.tafs:/oauth?…] [--lang <a language tafs speaks: en, de, fr, ar, ja, zh-Hant, pt-BR…>] [--theme light|dark] [--sample] [--signed-in] [--view-only [--paired]]
      [--home contract.json] [--usage answers.json] [--people answers.json] [--connect answers.json] [--knob answer.json] [--setup answer.json] [--taf-activity answer.json] [--unproven answers.json] [--recipes answers.json] [--gallery answers.json] [--halt answer.json] [--record-search answers.json] [--access answer.json] [--receipts answer.json] [--activity answer.json] [--calls answer.json] [--receipt answer.json] [--work answer.json] [--doors answer.json] [--account-reads answers.json] [--me answer.json] [--attach files.json] [--held answers.json] [--versions answer.json [--trial answer.json]] [--memory answer.json] [--runs answer.json] [--request answer.json] [--balance answer.json] [--coach answer.json] [--coach-chats answer.json] [--coach-drafts answers.json] [--chat answer.json [--report] [--chat-stream events.txt [--pin-check]]] [--brief answer.json] [--mission-log answer.json] [--coach-setup answer.json] [--coach-stream events.txt] [--unreachable network|error] [--new-version vX.Y.Z] [--app-event item.json] [--size WxH] [--page welcome|sign-in|pair|recipe:<id>|gallery|new-taf|halt-all|halt:<id>|halt-resume:<id>|record-search:<q>|record-export|receipt:<proposal id>|run:<taf id>|pin-sheet|share:<key>|share-step2:<key>|coach|coach-tools|coach-full|coach-read-back|coach-hand:<id>|coach-improve:<key>|overview|overview-label:<id>|needs-you|discard-setup|needs-you-set-all-aside|needs-you-dismiss|needs-you-hold:<id>|versions:<key>|trial:<key>|brief-answer:<decision id>|mission-log:<mission id>|record|calendar|calendar-week|usage|usage-ask|usage-decline|connect-apps|connect-app|connect-connection|connect-remove|connect-which-taf|connect-approve|account|kiff-account|time-zone|time-zone-use|alerts|devices|devices-sign-out|people|people-rename|people-add|taf|taf-card|taf-setup|taf-setup:<id>|starts:<id>|results:<id>|doors:<id>[:<door>]|consent|connected|sign-in-code] [--screenshot out.png]";
 
 fn options() -> Result<Options, String> {
@@ -305,6 +311,7 @@ fn options() -> Result<Options, String> {
             "--view-only" => o.view_only = true,
             "--paired" => o.paired = true,
             "--help" | "-h" => return Err(USAGE.into()),
+            link if link.starts_with("dev.kiff.tafs:") => o.link = Some(link.to_string()),
             other => return Err(format!("{other}?\n{USAGE}")),
         }
     }
@@ -349,13 +356,51 @@ fn main() -> glib::ExitCode {
         }
     };
     gio::resources_register_include!("tafs.gresource").expect("the app's resources");
+    // Run plainly (with no option, or only KIFF's link back), tafs is one app on the desktop: a
+    // second launch, as the browser makes with `dev.kiff.tafs:/oauth?…`, hands its link to the
+    // window that waits for it. With options (a screenshot, the pin check), each run is its own.
+    let plain = std::env::args()
+        .skip(1)
+        .all(|a| a.starts_with("dev.kiff.tafs:"));
+    let flags = if plain {
+        gio::ApplicationFlags::HANDLES_OPEN
+    } else {
+        gio::ApplicationFlags::NON_UNIQUE
+    };
+    if plain {
+        scheme::register_appimage();
+    }
     let app = adw::Application::builder()
         .application_id("dev.kiff.tafs")
-        .flags(gio::ApplicationFlags::NON_UNIQUE)
+        .flags(flags)
         .build();
-    app.connect_activate(move |app| activate(app, &options));
-    // GTK reads no arguments of ours.
-    app.run_with_args::<&str>(&[])
+    let options = Rc::new(options);
+    {
+        let options = options.clone();
+        app.connect_activate(move |app| activate(app, &options));
+    }
+    app.connect_open(move |app, files, _| {
+        // Launched by the link itself: the window first, then the link, which no attempt in this
+        // new window waits for, so it's dropped.
+        if app.active_window().is_none() {
+            activate(app, &options);
+        }
+        for f in files {
+            app_sign_in::link(&f.uri());
+        }
+    });
+    // GTK reads no arguments of ours, only the link back.
+    match options_link() {
+        Some(link) => app.run_with_args(&["tafs", link.as_str()]),
+        None => app.run_with_args::<&str>(&[]),
+    }
+}
+
+/// The link back, if the desktop launched tafs with one.
+fn options_link() -> Option<String> {
+    std::env::args()
+        .skip(1)
+        .find(|a| a.starts_with("dev.kiff.tafs:"))
 }
 
 /// The page a screenshot or `--page` opens beside the sidebar.
@@ -822,6 +867,19 @@ fn activate(app: &adw::Application, o: &Options) {
             if o.page.as_deref() == Some("connected") {
                 connected::present(&app_state.window, &app_state.words);
             }
+            // `--page cards:<1|2|3>`: one of the three cards on how tafs works, over the shell.
+            if let Some(n) = o.page.as_deref().and_then(|p| p.strip_prefix("cards:")) {
+                let page = match n {
+                    "2" => onboarding::Page::Card,
+                    "3" => onboarding::Page::Control,
+                    _ => onboarding::Page::Tafs,
+                };
+                onboarding::present(&app_state.window, app_state.words.clone(), page, false);
+            }
+            // `--page how-it-works`: How tafs works, from Account.
+            if o.page.as_deref() == Some("how-it-works") {
+                onboarding::how_it_works(&app_state.window, app_state.words.clone());
+            }
             // `--page consent`: the AI-data consent's screen, as after sign-in, from `--account-reads`.
             if o.page.as_deref() == Some("consent") {
                 if let Some(file) = &app_state.account_reads_file {
@@ -871,9 +929,22 @@ fn activate(app: &adw::Application, o: &Options) {
             }
         }
         _ if o.view_only => app_state.open_shell(Mode::Kiff, true, None),
-        (Some("welcome") | Some("sign-in") | Some("sign-in-code") | Some("pair"), _)
+        (
+            Some("welcome")
+            | Some("welcome-ticked")
+            | Some("welcome-terms-changed")
+            | Some("sign-in")
+            | Some("sign-in-code")
+            | Some("pair"),
+            _,
+        )
         | (_, None) => {
             app_state.show_welcome();
+            match o.page.as_deref() {
+                Some("welcome-ticked") => welcome::show_as(true, false),
+                Some("welcome-terms-changed") => welcome::show_as(false, true),
+                _ => {}
+            }
             // `--page sign-in-code`: Continue already tapped, the code on screen.
             if o.page.as_deref() == Some("sign-in-code") {
                 sign_in::CONTINUED.with(|c| c.set(true));
@@ -1101,20 +1172,104 @@ impl App {
         *self.sign_out_error.borrow_mut() = None;
         *self.first.borrow_mut() = Selection::Overview;
         let welcome = welcome::build(&self.words);
-        self.window.set_content(Some(&welcome.root));
+        // The welcome scrolls in a short window: the tick and the phone's way stay reachable.
+        let scroller = gtk::ScrolledWindow::new();
+        scroller.set_hscrollbar_policy(gtk::PolicyType::Never);
+        scroller.set_child(Some(&welcome.root));
+        crate::widgets::ground(&scroller);
+        self.window.set_content(Some(&scroller));
         *self.problem.borrow_mut() = Some(welcome.problem.clone());
+        // The terms version in force, read as the tick shows: the one sent with the sign-in is
+        // the one the person saw. Read again when KIFF says it changed.
+        let terms: Rc<RefCell<Option<String>>> = Rc::new(RefCell::new(None));
+        let read_terms = {
+            let (terms, languages) = (terms.clone(), self.languages.clone());
+            Rc::new(move || {
+                let (terms, languages) = (terms.clone(), languages.clone());
+                glib::spawn_future_local(async move {
+                    *terms.borrow_mut() = app_sign_in::terms_version(languages).await;
+                });
+            })
+        };
+        if !self.screenshot {
+            read_terms();
+        }
+        let ui = Rc::new(welcome);
+        // How Continue ends when it doesn't sign in (`continueOutcome`).
+        let ended: Rc<dyn Fn(app_sign_in::Outcome)> = {
+            let (ui, w, read_terms) = (ui.clone(), self.words.clone(), read_terms.clone());
+            Rc::new(move |outcome| {
+                ui.sign_in.set_sensitive(ui.tick.is_active());
+                let say = |line: Option<String>| {
+                    ui.problem.set_visible(line.is_some());
+                    ui.problem.set_text(&line.unwrap_or_default());
+                };
+                match outcome {
+                    // Declined on KIFF's page: nothing is said.
+                    app_sign_in::Outcome::Declined => say(None),
+                    app_sign_in::Outcome::NotOn => say(w.line("sign_in.in_app_not_on").ok()),
+                    // Unticked, why, and the new version for the new tick.
+                    app_sign_in::Outcome::TermsChanged => {
+                        say(None);
+                        ui.tick.set_active(false);
+                        ui.terms_changed.set_visible(true);
+                        read_terms();
+                    }
+                    app_sign_in::Outcome::Failed(_) => say(w.line("sign_in.didnt_work").ok()),
+                }
+            })
+        };
         let me = self.clone();
-        welcome
-            .sign_in
-            .connect_clicked(move |_| me.present_sign_in(None));
+        let signed_in: Rc<dyn Fn(KeptSession)> = Rc::new(move |kept| me.connected(kept));
+        let ends = Rc::new(app_sign_in::Ends {
+            signed_in,
+            ended: ended.clone(),
+        });
+        {
+            let (me, ui, terms) = (self.clone(), ui.clone(), terms.clone());
+            ui.clone().sign_in.connect_clicked(move |_| {
+                ui.problem.set_visible(false);
+                ui.terms_changed.set_visible(false);
+                // No version, no sign-in: consent is never skipped.
+                let Some(version) = terms.borrow().clone() else {
+                    ui.problem
+                        .set_text(&me.words.line("sign_in.didnt_work").unwrap_or_default());
+                    ui.problem.set_visible(true);
+                    return;
+                };
+                app_sign_in::begin(
+                    me.window.upcast_ref(),
+                    me.words.clone(),
+                    me.languages.clone(),
+                    version,
+                    ends.clone(),
+                );
+            });
+        }
         let me = self.clone();
-        welcome
-            .sample
-            .connect_clicked(move |_| me.open_shell(Mode::Sample, false, None));
-        let me = self.clone();
-        welcome
-            .pair
-            .connect_clicked(move |_| me.present_pairing(false));
+        ui.sample.connect_clicked(move |_| {
+            app_sign_in::forget();
+            me.open_shell(Mode::Sample, false, None)
+        });
+        {
+            // "Sign in with your phone": its claim carries the version the tick agreed to; terms
+            // that changed close it and untick the box, as Continue does.
+            let (me, ui, terms) = (self.clone(), ui.clone(), terms.clone());
+            ui.clone().pair.connect_clicked(move |_| {
+                let Some(version) = terms.borrow().clone() else {
+                    ui.problem
+                        .set_text(&me.words.line("sign_in.didnt_work").unwrap_or_default());
+                    ui.problem.set_visible(true);
+                    return;
+                };
+                let ended = ended.clone();
+                pairing::after_tick(
+                    version,
+                    Rc::new(move || ended(app_sign_in::Outcome::TermsChanged)),
+                );
+                me.present_pairing(false);
+            });
+        }
     }
 
     /// Adding this computer with a phone, over what's open. A session kept here (view-only) is
@@ -1149,8 +1304,16 @@ impl App {
     /// Signed in just now, by KIFF or by pairing: the account opens, and the celebration shows
     /// over it, once (`justConnected`, `ConnectedView`).
     fn connected(self: &Rc<Self>, kept: KeptSession) {
+        // Signed in, whichever way: a link back from another attempt is never used.
+        app_sign_in::forget();
         self.open_account(kept);
-        connected::present(&self.window, &self.words);
+        // The three cards follow the celebration, once on this computer.
+        let (window, words) = (self.window.clone(), self.words.clone());
+        connected::present_then(&self.window, &self.words, move || {
+            if tafs_core::onboarding::shows_cards(onboarding::seen()) {
+                onboarding::present(&window, words.clone(), onboarding::Page::Tafs, true);
+            }
+        });
     }
 
     /// Signed in: the shell at once, then the account (`GET /v1/me`), Home and the held calls,

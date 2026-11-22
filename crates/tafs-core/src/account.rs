@@ -187,6 +187,8 @@ pub enum Screen {
     TimeZone,
     /// Account › Language (`LanguagePicker`).
     Language,
+    /// How tafs works: the three cards again and the legal pages (`HowTafsWorksView`).
+    HowItWorks,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -393,7 +395,15 @@ pub fn lines(
     sections.push(Section {
         slot: None,
         header: Some(l("sign_in.how_works")?),
-        rows: vec![Row::Text(l("sign_in.every_action_taf_takes_goes_view")?)],
+        rows: vec![
+            Row::Text(l("sign_in.every_action_taf_takes_goes_view")?),
+            // The three cards again, with the privacy and terms pages (`HowTafsWorksView`).
+            Row::Opens {
+                title: l("onboarding.how_it_works")?,
+                value: None,
+                screen: Screen::HowItWorks,
+            },
+        ],
     });
     // tafs's own pages, in the app's language where kiff.dev has them.
     let legal = |key: &str| legal_label(w, key);

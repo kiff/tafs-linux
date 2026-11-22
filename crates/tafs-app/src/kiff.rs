@@ -556,6 +556,22 @@ pub fn held(token: &str, languages: &[&str]) -> Result<Answer, KiffError> {
     )
 }
 
+/// `GET /v1/auth/app/terms` at KIFF with no session: the terms version in force, read as the
+/// welcome's tick shows, so the version sent with the sign-in is the one the person saw.
+pub fn app_terms(languages: &[&str]) -> Result<Answer, KiffError> {
+    let url = format!("{KIFF_API}/v1/auth/app/terms");
+    if !may_send_to(&url) {
+        return Err(KiffError::Unreadable);
+    }
+    Kiff::read(
+        agent()
+            .get(&url)
+            .set("Accept", "application/json")
+            .set("Accept-Language", &accept_language(languages))
+            .call(),
+    )
+}
+
 impl Transport for Kiff {
     fn post(&self, path: &str, body: &[u8]) -> Result<Answer, KiffError> {
         let url = format!("{}{}", self.base, path);

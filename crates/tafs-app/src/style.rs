@@ -233,6 +233,9 @@ AVATARS
 .tafs-point.ok { background-color: @tafs_ok; }
 .tafs-point.amber { background-color: @tafs_amber; }
 .tafs-point.no { background-color: @tafs_no; }
+.tafs-point.dim { background-color: alpha(@tafs_dim, 0.4); }
+/* The onboarding cards' taf rows, as Home lists them: raised, corners of 14, padded 14. */
+.tafs-raised-row { background-color: @tafs_raised; border-radius: 14px; padding: 14px; }
 
 /* The Overview: a held call on the raised colour, corners of 12; a line between the grid's rows. */
 button.tafs-held-row { background-color: @tafs_raised; background-image: none; border-radius: 12px; padding: 12px; border: none; box-shadow: none; min-height: 0; }

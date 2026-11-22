@@ -187,6 +187,18 @@ pub fn claim_body(nonce: &str, pub_key: &str, proof: &str) -> Value {
     json!({ "nonce": nonce, "pub": pub_key, "proof": proof })
 }
 
+/// The claim's body from the welcome, after its tick: it also carries the terms version the tick
+/// agreed to, so KIFF records the consent for this computer with the session (kiff/cloud#24). KIFF
+/// checks it before anything is claimed: 409 `terms_outdated` (`is_terms_outdated`).
+pub fn claim_body_with_terms(nonce: &str, pub_key: &str, proof: &str, terms: &str) -> Value {
+    json!({ "nonce": nonce, "pub": pub_key, "proof": proof, "terms_version": terms })
+}
+
+/// Whether KIFF refused a claim because the terms changed since the tick.
+pub fn is_terms_outdated(e: &KiffError) -> bool {
+    matches!(e, KiffError::Server { status: 409, message } if message == "terms_outdated")
+}
+
 /// One claim (`POST /v1/pair/claim`): the session, or why not yet. KIFF's answers map as
 /// `KIFFError(status:body:)`: 400 `authorization_pending`, `slow_down`, `expired_token`, and
 /// 403 `invalid_proof`; anything else is KIFF's refusal as it said it.
@@ -581,5 +593,18 @@ mod tests {
             Err(Stopped::Cancelled)
         );
         assert_eq!(t.sent.borrow().len(), 1);
+    }
+
+    #[test]
+    fn a_claim_after_the_tick_carries_the_terms() {
+        let b = claim_body_with_terms("n", "p", "pr", "2026-11-14");
+        assert_eq!(b["terms_version"], "2026-11-14");
+        assert_eq!(b["nonce"], "n");
+        assert!(claim_body("n", "p", "pr").get("terms_version").is_none());
+        assert!(is_terms_outdated(&KiffError::Server {
+            status: 409,
+            message: "terms_outdated".into()
+        }));
+        assert!(!is_terms_outdated(&KiffError::Expired));
     }
 }
