@@ -55,6 +55,11 @@ pub fn connected_art() -> gtk::DrawingArea {
 /// `ConnectedView`, over the window after signing in either way: the drawing, the two lines (30
 /// bold), Let's go. Closing it is Let's go.
 pub fn present(parent: &impl IsA<gtk::Widget>, w: &Rc<WordBook>) {
+    present_then(parent, w, || {});
+}
+
+/// The celebration, then `after` once it closes (the three cards follow it).
+pub fn present_then(parent: &impl IsA<gtk::Widget>, w: &Rc<WordBook>, after: impl Fn() + 'static) {
     let column = gtk::Box::new(gtk::Orientation::Vertical, 32);
     column.set_margin_start(32);
     column.set_margin_end(32);
@@ -92,5 +97,6 @@ pub fn present(parent: &impl IsA<gtk::Widget>, w: &Rc<WordBook>) {
             dialog.close();
         });
     }
+    dialog.connect_closed(move |_| after());
     dialog.present(Some(parent));
 }

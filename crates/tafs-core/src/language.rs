@@ -15,15 +15,56 @@ pub fn preferred_from_env() -> Vec<String> {
     out
 }
 
-/// Each language by its shipped code, once, at most four (`screenLanguages`).
+/// A tag's words' folder, if the app speaks it: "pt_BR" is "pt-BR", "zh_TW" and "zh-Hant" are
+/// "zh-Hant", "de_AT" is "de". Simplified Chinese isn't spoken.
+pub fn words_language(tag: &str) -> Option<&'static str> {
+    // glibc writes Latin Serbian as a modifier, `sr_RS@latin`.
+    let latin_modifier = tag.contains("@latin");
+    let tag = tag.split(['.', '@']).next().unwrap_or("");
+    let parts: Vec<&str> = tag.split(['-', '_']).filter(|p| !p.is_empty()).collect();
+    let code = parts.first()?.to_lowercase();
+    let find = |c: &str| SHIPPED.iter().find(|s| **s == c).copied();
+    match code.as_str() {
+        "zh" => is_traditional_chinese(&parts)
+            .then(|| find("zh-Hant"))
+            .flatten(),
+        // Serbian ships in Latin script: a Cyrillic tag isn't the language the app ships
+        // (`isLatinScript`).
+        "sr" => (latin_modifier || parts.iter().skip(1).any(|p| p.eq_ignore_ascii_case("latn")))
+            .then(|| find("sr-Latn"))
+            .flatten(),
+        "pt" if parts.iter().skip(1).any(|p| p.eq_ignore_ascii_case("BR")) => {
+            find("pt-BR").or_else(|| find("pt"))
+        }
+        other => find(other),
+    }
+}
+
+/// `isTraditionalChinese`: the script says so, or no script and a region that writes it.
+fn is_traditional_chinese(parts: &[&str]) -> bool {
+    let rest = &parts[1.min(parts.len())..];
+    if let Some(script) = rest.iter().find(|p| p.len() == 4) {
+        return script.eq_ignore_ascii_case("hant");
+    }
+    rest.iter()
+        .find(|p| p.len() == 2)
+        .is_some_and(|r| ["TW", "HK", "MO"].contains(&r.to_uppercase().as_str()))
+}
+
+/// The code KIFF and kiff.dev know a words' language by (`screenLanguages`' codes): "pt-BR" is
+/// "pt", "zh-Hant" is "zh".
+pub fn kiff_code(language: &str) -> &str {
+    crate::locale::base(language)
+}
+
+/// Each language by its code as KIFF knows it, once, at most four (`screenLanguages`).
 pub fn screen_languages(preferred: &[String]) -> Vec<&'static str> {
     let mut out: Vec<&'static str> = Vec::new();
     for tag in preferred {
-        let code = tag.to_lowercase();
-        let code = code.split(['-', '_', '.', '@']).next().unwrap_or("");
-        if let Some(shipped) = SHIPPED.iter().find(|s| **s == code) {
-            if !out.contains(shipped) {
-                out.push(shipped);
+        if let Some(lang) = words_language(tag) {
+            let code = kiff_code(lang);
+            if !out.contains(&code) {
+                out.push(code);
             }
         }
         if out.len() == 4 {
@@ -33,9 +74,12 @@ pub fn screen_languages(preferred: &[String]) -> Vec<&'static str> {
     out
 }
 
-/// The one language the app's screens are in (`appLanguage`).
+/// The one language the app's screens are in (`Words.locale`), by its words' folder.
 pub fn app_language(preferred: &[String]) -> &'static str {
-    screen_languages(preferred).first().copied().unwrap_or("en")
+    preferred
+        .iter()
+        .find_map(|t| words_language(t))
+        .unwrap_or("en")
 }
 
 /// `Accept-Language` (`acceptLanguage`): the person's first four, English last when missing,
@@ -72,13 +116,26 @@ mod tests {
 
     #[test]
     fn picks_the_first_shipped_language() {
-        assert_eq!(app_language(&v(&["pt_BR.UTF-8"])), "pt");
-        assert_eq!(app_language(&v(&["ja_JP", "fr_FR.UTF-8"])), "fr");
+        assert_eq!(app_language(&v(&["pt_BR.UTF-8"])), "pt-BR");
+        assert_eq!(app_language(&v(&["pt_PT.UTF-8"])), "pt");
+        assert_eq!(app_language(&v(&["ja_JP", "fr_FR.UTF-8"])), "ja");
+        assert_eq!(app_language(&v(&["zh_TW.UTF-8"])), "zh-Hant");
+        assert_eq!(app_language(&v(&["zh-Hant-HK"])), "zh-Hant");
+        assert_eq!(app_language(&v(&["zh_CN", "ar_EG"])), "ar");
+        assert_eq!(app_language(&v(&["sr_RS", "fr"])), "fr");
+        assert_eq!(app_language(&v(&["sr_RS@latin"])), "sr-Latn");
+        assert_eq!(app_language(&v(&["sr-Latn-RS"])), "sr-Latn");
+        assert_eq!(app_language(&v(&["he_IL.UTF-8"])), "he");
+        assert_eq!(screen_languages(&v(&["sr_RS@latin"])), vec!["sr"]);
         assert_eq!(app_language(&v(&["C.UTF-8"])), "en");
         assert_eq!(app_language(&v(&[])), "en");
         assert_eq!(
             screen_languages(&v(&["de", "de_AT", "fr", "es", "it", "nl"])),
             vec!["de", "fr", "es", "it"]
+        );
+        assert_eq!(
+            screen_languages(&v(&["pt_BR", "pt_PT", "zh_TW"])),
+            vec!["pt", "zh"]
         );
     }
 

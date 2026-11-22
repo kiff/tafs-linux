@@ -79,6 +79,30 @@ impl Clock for Waiting {
 /// The sign-in. `done` gets the kept session once KIFF hands it over, or the phone pairs this
 /// computer, and the keyring holds it. `preview`: a screenshot's, which reaches nothing: Continue
 /// shows the code given, and the phone's half a code made here, never claimed.
+/// A session KIFF just handed over, kept (on a worker thread): a session it replaces signs itself
+/// out at KIFF first, best effort, so its device doesn't stay there out of the app's reach; then
+/// the new one is kept before the window moves on, so a relaunch opens signed in. A keyring that
+/// refuses ends the new session at KIFF at once: it would be gone at the next launch while its
+/// device stayed at KIFF.
+pub fn keep(
+    token: &tafs_core::signin::DeviceToken,
+    key: &DeviceKey,
+) -> Result<KeptSession, KiffError> {
+    let now = chrono::Utc::now().timestamp();
+    if let Some(old) = crate::store::load(now) {
+        if old.token != token.access_token {
+            let _ = Kiff::new(vec![]).sign_out(&old.token);
+        }
+    }
+    let kept = KeptSession::from_token(token, key, now);
+    if let Err(refused) = crate::store::save(&kept, now) {
+        eprintln!("the keyring refused the session: {}", refused.0);
+        let _ = Kiff::new(vec![]).sign_out(&token.access_token);
+        return Err(KiffError::Unreadable);
+    }
+    Ok(kept)
+}
+
 pub fn present(
     parent: &impl IsA<gtk::Widget>,
     window: &gtk::Window,
@@ -335,24 +359,7 @@ pub fn present(
                         let _ = Kiff::new(vec![]).sign_out(&token.access_token);
                         return Err(Stopped::Cancelled);
                     }
-                    let now = chrono::Utc::now().timestamp();
-                    // A session this one replaces signs itself out at KIFF first, best effort: its
-                    // device doesn't stay there out of the app's reach.
-                    if let Some(old) = crate::store::load(now) {
-                        if old.token != token.access_token {
-                            let _ = Kiff::new(vec![]).sign_out(&old.token);
-                        }
-                    }
-                    // Kept before the window moves on: a relaunch opens signed in.
-                    let kept = KeptSession::from_token(&token, &token_key, now);
-                    if let Err(refused) = crate::store::save(&kept, now) {
-                        eprintln!("the keyring refused the session: {}", refused.0);
-                        // The keyring refused: the session would be gone at the next launch while
-                        // its device stayed at KIFF, so it ends at KIFF now.
-                        let _ = Kiff::new(vec![]).sign_out(&token.access_token);
-                        return Err(Stopped::Failed(KiffError::Unreadable));
-                    }
-                    Ok::<KeptSession, Stopped>(kept)
+                    keep(&token, &token_key).map_err(Stopped::Failed)
                 })
                 .await
                 .unwrap_or(Err(Stopped::Failed(KiffError::Unreadable)));

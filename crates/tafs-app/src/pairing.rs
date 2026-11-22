@@ -446,11 +446,13 @@ pub fn body(
                     check: pairing::check_code(&key.public_spki_der()),
                 };
                 show(&ui, &w, &Step::Code(code));
-                let body = pairing::claim_body(
-                    &nonce,
-                    &payload.pub_key,
-                    &pairing::claim_proof(&key, &nonce),
-                );
+                let proof = pairing::claim_proof(&key, &nonce);
+                let body = match ticked_terms() {
+                    Some(terms) => {
+                        pairing::claim_body_with_terms(&nonce, &payload.pub_key, &proof, &terms)
+                    }
+                    None => pairing::claim_body(&nonce, &payload.pub_key, &proof),
+                };
                 let clock = Waiting {
                     started: Instant::now(),
                     cancelled: cancelled.clone(),
@@ -492,6 +494,13 @@ pub fn body(
                     Err(Ended::Stopped(Stopped::Cancelled)) => {}
                     Err(Ended::Stopped(Stopped::Failed(KiffError::Expired))) => {
                         show(&ui, &w, &Step::Expired)
+                    }
+                    // The terms changed since the welcome's tick: the pairing stops, and the
+                    // welcome asks for the tick again.
+                    Err(Ended::Stopped(Stopped::Failed(e))) if pairing::is_terms_outdated(&e) => {
+                        if let Some(changed) = take_terms_changed() {
+                            changed();
+                        }
                     }
                     Err(Ended::Stopped(Stopped::Failed(e))) => {
                         show(&ui, &w, &Step::Failed(why(&e, &w)))
@@ -547,6 +556,35 @@ pub fn body(
     }
 }
 
+/// The terms version the welcome's tick agreed to, and what to do when KIFF says they changed.
+type Ticked = (String, Rc<dyn Fn()>);
+
+thread_local! {
+    /// From the welcome, after its tick: the terms version the claim carries, and what to do when
+    /// KIFF says they changed (close, untick, say why). None from anywhere else.
+    static AFTER_TICK: std::cell::RefCell<Option<Ticked>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+/// The next pairing comes from the welcome's tick: its claim carries `terms`, and `changed` runs
+/// if KIFF says the terms changed since.
+pub fn after_tick(terms: String, changed: Rc<dyn Fn()>) {
+    AFTER_TICK.with(|t| *t.borrow_mut() = Some((terms, changed)));
+}
+
+/// However the pairing ends, the ticked version goes with it: the next one reads a fresh one.
+pub fn forget_tick() {
+    AFTER_TICK.with(|t| *t.borrow_mut() = None);
+}
+
+fn ticked_terms() -> Option<String> {
+    AFTER_TICK.with(|t| t.borrow().as_ref().map(|(v, _)| v.clone()))
+}
+
+fn take_terms_changed() -> Option<Rc<dyn Fn()>> {
+    AFTER_TICK.with(|t| t.borrow_mut().take().map(|(_, f)| f))
+}
+
 /// The pairing alone, as a dialog over what's open, with Cancel: from the welcome, or to pair a
 /// view-only computer again.
 pub fn present(
@@ -559,6 +597,19 @@ pub fn present(
 ) {
     let device = w.line("device.linux").unwrap_or_default();
     let dialog = adw::Dialog::new();
+    // From the welcome's tick: terms that changed close the pairing before the welcome unticks.
+    let ticked = AFTER_TICK.with(|t| t.borrow_mut().take());
+    if let Some((terms, changed)) = ticked {
+        let d = dialog.clone();
+        after_tick(
+            terms,
+            Rc::new(move || {
+                d.close();
+                changed();
+            }),
+        );
+    }
+    dialog.connect_closed(|_| forget_tick());
     let close_and_done: Rc<dyn Fn(KeptSession)> = {
         let dialog = dialog.clone();
         Rc::new(move |kept| {

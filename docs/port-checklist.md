@@ -9,7 +9,7 @@ ports a file updates its line here.
 
 | iPad file | Lines | What | Models | Linux |
 | :- | -: | :- | :- | :- |
-| OnboardingView.swift | 63 | The welcome: what tafs is, Sign in with KIFF, Try it with sample data | AppModel.startSample | `welcome.rs`, with board 1 (first run) drawn in shapes (`illustrations.rs`) |
+| OnboardingView.swift | 187 | The welcome: what tafs is, the one tick for the terms with the privacy links and the age line, Continue (KIFF's sign-in inside the app, K5), Try it with sample data, Sign in with your phone | AppModel.startSample, signInInApp, appTermsVersion; `ConsentTick`, `Onboarding.ageLine` | `welcome.rs`, with board 1 (first run) drawn in shapes (`illustrations.rs`); the tick, the links, the age line (`tafs-core/onboarding.rs`); Continue in the browser with PKCE and the way back at `dev.kiff.tafs:/oauth` (`app_sign_in.rs`, `tafs-core/app_signin.rs`, `scheme.rs`); the phone's claim with the terms version ([sign-in](sign-in.md#signing-in-inside-the-app-continue)) |
 | AIConsentView.swift | 74 | The AI-data consent screen and Account's row | `AIConsent`, `allowAI`, `notNowAI`, `withdrawAI`, `loadAIConsent` | `ai_consent.rs`, `tafs-core/ai_consent.rs`: the screen after sign-in and from Account, Allow with the words' version (a 409 shows the newer words), Not now for the session, Withdraw; and a turn refused for want of it, in Coach's and a taf's chat |
 | ApprovalSetupView.swift | 102 | Why this device can't approve, in an approval's place: `ApprovalGate`, `ApprovalNotice`, `ApprovalNotReady` | `ApprovalReadiness` (Biometry.swift): every state's words, `approvalBlocked` | `approval.rs`, `tafs-core/approval.rs`: this computer is `Unsupported` (no Face ID or Touch ID), so its line alone; `ReadinessReader` reads a value that never changes here, and `openTafsSettings` opens iOS settings |
 | DeleteAccountView.swift | 60 | Deleting the account: the warning, What goes, Delete account, Cancel | `deleteAccount` (signed: not on Linux) | `kiff_account.rs` › `delete_sheet`, `tafs-core/account.rs` › `delete_lines`; Delete account is `ApprovalGate`'s line, since this computer can't confirm, and the footer naming Face ID goes with it |
@@ -35,6 +35,7 @@ ports a file updates its line here.
 | DevicesView.swift | 166 | Account › Devices | AppModel.devices, passkeys, removeDevice | The list with each device's name, last use (`lastUsed`, iOS's relative words) and This device, the note, KIFF's error; the sample's three; Sign out's question, drawn up to the signature, whose Sign out says this computer can't approve and sends nothing; the account's passkeys, listed as the iPad lists them on a computer (`devices.rs`, `tafs-core/devices.rs`, `tafs-core/signed.rs`). Not here: a passkey's Remove (the approval key's) and Add (an iPhone's); Add a device (a phone pairs a computer) |
 | QuestionsCard.swift | 121 | Several questions at once | QuestionSelection, answerCard | Whole: Coach's words, its title, "N of M answered", each question and choice with its line, picked (`QuestionSelection`, several on a multi question), Something else… with its own-answer field, the note, Send answers (`answerCard` with `QuestionAnswers.encode`), Chat about this and Show them again, `CardNote`; answered, `OutcomeLine` with `QuestionAnswers.words` (`coach.rs`, `coach_lines.rs`, `tafs-core/coach_send.rs`) |
 
+| OnboardingCards.swift | 234 | The three cards on how tafs works, and How tafs works | `Onboarding`, `OnboardingSteps`, `HowTafsWorksView` | `onboarding.rs`, `tafs-core/onboarding.rs`: the three cards with the sample's words and the app's own components, Skip, Next, Get started, the dots; once after the first sign-in on this computer, and again from Account › How tafs works with the four legal pages ([sign-in](sign-in.md#the-three-cards)) |
 ## Partial
 
 | iPad file | Lines | What | Linux has | Missing |
@@ -62,7 +63,29 @@ ports a file updates its line here.
 
 ## Not started
 
-None.
+New at the pin moved to kiff/tafs `85c8a17` (22 Nov). Each is a batch of its own, named on
+kiff/work#17.
+
+| iPad file | Lines | What | Batch |
+| :- | -: | :- | :- |
+| ReportPaymentSheet.swift | 64 | "Report this payment" from a payment's receipt: its taf halted | (b), with the Record's changes |
+| FilesViews.swift | 453 | Files: the account's or a taf's, newest first, and one open beside the list | (c) |
+| APIDoorViews.swift | 406 | A door "From another application": its count, last request, keys, New key, Revoke | (d) |
+| ChromeViews.swift | 178 | Account › Chrome: the Chromes paired, Pair a Chrome, Unpair | (d) |
+| WatchDaysViews.swift | 93 | "From your watch" in Coach's Previous conversations | (d) |
+
+**Changed since the old pin (`b3c80a8`), checked in the pin's PR:**
+- **`chevron.right` → `chevron.forward`** (UsageView, TafDialPanel, HomeRecipes, HaltScreen,
+  CreditsViews, CoachToolsStep, ShareViews, RecipeGallery, WorkLog) and **`chevron.left` →
+  `chevron.backward`** (CoachMode): right to left, the arrow turns. Linux takes Adwaita's `-rtl`
+  icons in a right-to-left window, so nothing changes here.
+- **TafKnobView:** the kicker's tracking, none in Hangul, kana, Han or Arabic: ported (`dial.rs`),
+  with the tracking itself, which Linux didn't have.
+- **Batch (a):** OnboardingView and OnboardingCards ported; SignInView's raised age line (for an app whose onboarding is off: Linux's is always on) and its Account rows (How tafs works here; Chrome and Files with (d) and (c)); PairSignInView's terms changed.
+- **For the batches:** RecordView,
+  TafPresentationViews' report offer and ShareViews' `heroLine` (b); NeedsYouView, TafDetailView,
+  SetupChatView, DoorsView, CalendarView, BriefView, TafChatView's day headers, HomeView (not for
+  Linux) (e).
 
 ## Not for Linux
 
@@ -126,4 +149,4 @@ None.
 
 ## Coverage
 
-Ported 25, partial 20, not started 0, not for Linux 6: the 51 view files at the pin.
+Ported 26, partial 20, not started 5, not for Linux 6: the 57 view files at the pin.

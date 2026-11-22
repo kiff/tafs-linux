@@ -52,7 +52,8 @@ impl DeviceStart {
         let names_one = link.contains("?lang=") || link.contains("&lang=");
         if !link.is_empty() && !names_one {
             let sep = if link.contains('?') { '&' } else { '?' };
-            self.verification_uri_complete = format!("{link}{sep}lang={language}");
+            let code = crate::language::kiff_code(language);
+            self.verification_uri_complete = format!("{link}{sep}lang={code}");
         }
         self
     }

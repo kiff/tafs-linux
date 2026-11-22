@@ -3,7 +3,7 @@
 //! `executed`, `counted`), and the Record's own rules (`RecordFilter`, `RecordEntry`'s lines,
 //! `RecordView.spent`, `dayTitle`).
 
-use chrono::{DateTime, Datelike, Local, Utc};
+use chrono::{DateTime, Local, Utc};
 use serde::{Deserialize, Deserializer};
 use sha2::{Digest, Sha256};
 
@@ -715,126 +715,12 @@ pub fn day_title(
 
 /// `.dateTime.day().month(.abbreviated)` in a shipped language.
 pub fn short_date(language: &str, day: chrono::NaiveDate) -> String {
-    let m = day.month0() as usize;
-    let d = day.day();
-    const EN: [&str; 12] = [
-        "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
-    ];
-    const DE: [&str; 12] = [
-        "Jan.", "Feb.", "März", "Apr.", "Mai", "Juni", "Juli", "Aug.", "Sept.", "Okt.", "Nov.",
-        "Dez.",
-    ];
-    const FR: [&str; 12] = [
-        "janv.", "févr.", "mars", "avr.", "mai", "juin", "juil.", "août", "sept.", "oct.", "nov.",
-        "déc.",
-    ];
-    const ES: [&str; 12] = [
-        "ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sept", "oct", "nov", "dic",
-    ];
-    const IT: [&str; 12] = [
-        "gen", "feb", "mar", "apr", "mag", "giu", "lug", "ago", "set", "ott", "nov", "dic",
-    ];
-    const PT: [&str; 12] = [
-        "jan.", "fev.", "mar.", "abr.", "mai.", "jun.", "jul.", "ago.", "set.", "out.", "nov.",
-        "dez.",
-    ];
-    const NL: [&str; 12] = [
-        "jan", "feb", "mrt", "apr", "mei", "jun", "jul", "aug", "sep", "okt", "nov", "dec",
-    ];
-    const PL: [&str; 12] = [
-        "sty", "lut", "mar", "kwi", "maj", "cze", "lip", "sie", "wrz", "paź", "lis", "gru",
-    ];
-    match language {
-        "de" => format!("{d}. {}", DE[m]),
-        "fr" => format!("{d} {}", FR[m]),
-        "es" => format!("{d} {}", ES[m]),
-        "it" => format!("{d} {}", IT[m]),
-        "pt" => format!("{d} de {}", PT[m]),
-        "nl" => format!("{d} {}", NL[m]),
-        "pl" => format!("{d} {}", PL[m]),
-        _ => format!("{} {d}", EN[m]),
-    }
+    crate::locale::short_date(language, day)
 }
 
 /// `.dateTime.weekday(.wide)` in a shipped language.
-pub fn weekday(language: &str, day: chrono::NaiveDate) -> &'static str {
-    let i = day.weekday().num_days_from_monday() as usize;
-    const EN: [&str; 7] = [
-        "Monday",
-        "Tuesday",
-        "Wednesday",
-        "Thursday",
-        "Friday",
-        "Saturday",
-        "Sunday",
-    ];
-    const DE: [&str; 7] = [
-        "Montag",
-        "Dienstag",
-        "Mittwoch",
-        "Donnerstag",
-        "Freitag",
-        "Samstag",
-        "Sonntag",
-    ];
-    const FR: [&str; 7] = [
-        "lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche",
-    ];
-    const ES: [&str; 7] = [
-        "lunes",
-        "martes",
-        "miércoles",
-        "jueves",
-        "viernes",
-        "sábado",
-        "domingo",
-    ];
-    const IT: [&str; 7] = [
-        "lunedì",
-        "martedì",
-        "mercoledì",
-        "giovedì",
-        "venerdì",
-        "sabato",
-        "domenica",
-    ];
-    const PT: [&str; 7] = [
-        "segunda-feira",
-        "terça-feira",
-        "quarta-feira",
-        "quinta-feira",
-        "sexta-feira",
-        "sábado",
-        "domingo",
-    ];
-    const NL: [&str; 7] = [
-        "maandag",
-        "dinsdag",
-        "woensdag",
-        "donderdag",
-        "vrijdag",
-        "zaterdag",
-        "zondag",
-    ];
-    const PL: [&str; 7] = [
-        "poniedziałek",
-        "wtorek",
-        "środa",
-        "czwartek",
-        "piątek",
-        "sobota",
-        "niedziela",
-    ];
-    match language {
-        "de" => DE[i],
-        "fr" => FR[i],
-        "es" => ES[i],
-        "it" => IT[i],
-        "pt" => PT[i],
-        "nl" => NL[i],
-        "pl" => PL[i],
-        _ => EN[i],
-    }
+pub fn weekday(language: &str, day: chrono::NaiveDate) -> String {
+    crate::locale::weekday(language, day)
 }
 
 #[cfg(test)]

@@ -38,10 +38,76 @@ made-up code; `--size 700x900` narrow; `--page connected` the celebration (CI's 
 ## The welcome
 
 Board 1, first run (a card opening, in shapes: [illustrations](app.md#illustrations)), "tafs" (48 bold), the lead (16, soft), and its three points: Inside the Card,
-Outside it, Revoked, each with a dot in green, amber and red. At the foot, Sign in with KIFF (the
-brand's button) and Try it with sample data (the outlined one), which opens the
-[sidebar](home.md) over the sample. Under them, tafs-macos's line: "Already use tafs on your
-phone? Add this computer with it.", which opens the [pairing](pairing.md).
+Outside it, Revoked, each with a dot in green, amber and red. The welcome scrolls in a short
+window.
+
+**The one tick** (K5, kiff/tafs `docs/onboarding.md` step 1; `OnboardingView`, `ConsentTick`):
+"I agree to KIFF's Terms of Service and the tafs Terms", each name a link to its page in the app's
+language (KIFF's at `kiff.dev/<lang>/terms`, tafs's at `kiff.dev/<lang>/tafs/terms`). Under it,
+privacy as two links, never ticked, and the age line: this computer's country's own age where the
+law asks more than 16 (`onboarding::age_line`, from `ages.json` at the pin and the region of
+`LC_ALL`, `LC_MESSAGES` or `LANG`), else the line every country reads. The box is its own control,
+so a link opens its page and never ticks it.
+
+At the foot, **Continue** (the brand's button), off until the box is ticked, and Try it with
+sample data (the outlined one), which never waits on the tick and opens the [sidebar](home.md)
+over the sample. Under them, "Already use tafs on your phone? Add this computer with it.", which
+opens the [pairing](pairing.md), also waiting on the tick.
+
+## Signing in inside the app (Continue)
+
+`tafs-core/src/app_signin.rs`, `crates/tafs-app/src/app_sign_in.rs`; KIFF's contract is
+kiff/cloud's `api/internal/appsignin/README.md`.
+
+1. **The terms version** in force is read as the welcome shows (`GET /v1/auth/app/terms`), so the
+   version sent is the one the person saw. With none, Continue says signing in didn't work, and
+   nothing opens: consent is never skipped.
+2. **Continue opens KIFF's page in the person's browser:** `/oauth/authorize` with
+   `client_id=tafs-app`, `redirect_uri=dev.kiff.tafs:/oauth`, a fresh S256 challenge over a
+   43-character verifier, a fresh 256-bit `state`, and `ui_locales` where KIFF's page speaks the
+   app's language. There's no private browser on a computer: the browser's own cookies come in,
+   and KIFF's rule that the person acts on its page for each request is the guard (kiff/cloud#23).
+3. **The way back:** KIFF sends the browser to `dev.kiff.tafs:/oauth?code=…&state=…`. The desktop
+   hands it to tafs through the `.desktop` file's `x-scheme-handler/dev.kiff.tafs`. Run plainly,
+   tafs is one app on the desktop (`HANDLES_OPEN`), so a second launch hands the link to the window
+   that waits for it. **A window started with options** (`--lang fr`, a screenshot) is its own
+   (`NON_UNIQUE`) and never hears the link: to try Continue by hand, start tafs with no options.
+   GIO hands the link to `open` byte for byte (`app_sign_in` tests it through
+   `g_file_new_for_commandline_arg`). Only this attempt's link is taken: `dev.kiff.tafs:/oauth` exactly, its
+   `state`, each field once. Any other link is dropped, not even read as a refusal.
+   - **An AppImage** has no install step, so on its first run it writes its own entry to
+     `~/.local/share/applications/dev.kiff.tafs.desktop` (its `Exec` is the AppImage where it
+     is, escaped as the Desktop Entry spec asks; a path with a control character isn't written)
+     and asks `xdg-mime` to make it the scheme's handler (`scheme.rs`). An entry a package
+     installed is left alone.
+4. **The token:** `POST /v1/auth/app/token` with the code, the verifier, the terms version and
+   the device exactly as `/v1/auth/device/start` sends it (`start_body`). The session is kept as
+   the device sign-in keeps one (`sign_in::keep`), then the celebration, then the three cards.
+5. **How Continue ends otherwise:**
+   - declined on KIFF's page (`access_denied`): nothing is said;
+   - signing in inside the app is off (`unsupported_client`): "Signing in inside the app isn't
+     on yet.";
+   - the terms changed since the tick (409 `terms_outdated`): the box is unticked, "The Terms
+     changed since you ticked the box…", and the new version is read. The code is kept for 50 of
+     its 60 seconds, so the new tick sends it again without opening KIFF's page twice;
+   - anything else: "Signing in didn't work.", the tick kept, Continue free again.
+   - A browser closed with no answer leaves the welcome as it is, Continue free: a computer has
+     no "came back from the tab" signal.
+6. **The phone's way** carries the same terms version on its claim (`terms_version` on
+   `/v1/pair/claim`, `pairing::claim_body_with_terms`). Terms that changed close the pairing and
+   untick the box, as Continue does.
+
+## The three cards
+
+After the celebration, once on this computer (kept in the user's config), and again from
+Account › How tafs works (`onboarding.rs`, the iPad's `OnboardingCards`, `HowTafsWorksView`):
+Your tafs (the sample's three tafs that move no money, as Home lists them), A Card is your
+permission (the sample's Support replies Card, 12 of 40 used today, issued by you, drawn by the
+Card tab's own face), You stay in control (Needs you's card over the sample's Deploys). Skip, Next
+and Get started; Escape is Skip. The last card names how this computer approves:
+`onboarding.control_lead_desktop` (until tafs#1710 is on main and pinned, that card shows its
+title and picture alone). How tafs works lists the three cards and the four legal pages,
+KIFF's and tafs's, each titled as its page is.
 
 ## The flow
 

@@ -381,6 +381,7 @@ pub fn page(
                     let h = gtk::Label::new(Some(&upper(&day.title)));
                     h.set_xalign(0.0);
                     h.add_css_class("tafs-day");
+                    crate::widgets::plain_if_ideographic(&h, &day.title);
                     h.set_margin_top(6);
                     days_box.append(&h);
                     for e in day.lines {
@@ -1120,7 +1121,7 @@ fn side(w: &Rc<WordBook>, t: &TafPage, card_tab: &gtk::ToggleButton) -> gtk::Box
     v
 }
 
-fn face(
+pub(crate) fn face(
     w: &WordBook,
     card: &tafs_core::cards::FullCard,
     color: i64,
@@ -1146,6 +1147,7 @@ fn face(
     if let Some(env) = card.environment_label() {
         let pill = gtk::Label::new(Some(&env));
         pill.add_css_class("tafs-env-pill");
+        crate::widgets::plain_if_ideographic(&pill, &env);
         top.append(&pill);
     }
     v.append(&top);

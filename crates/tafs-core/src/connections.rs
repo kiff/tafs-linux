@@ -892,7 +892,7 @@ mod tests {
             .unwrap()
         ));
         assert!(sign_in.ends_with("Connecting again asks you to approve and sign in again."));
-        assert!(sign_in.contains(" Other tafs that use Gmail keep their access. If no other taf uses this sign-in, it's revoked at Gmail."));
+        assert!(sign_in.contains(" Other tafs that use Gmail keep their access. If no other taf uses the same account there, the sign-in is revoked at Gmail; otherwise, when the last one is removed."));
         let key = disconnect_message(&w, "Stripe", None, &["A".into(), "B".into()], true).unwrap();
         assert_eq!(
             key,

@@ -43,10 +43,19 @@ pub fn eyebrow(s: &str, amber: bool) -> gtk::Label {
     let l = gtk::Label::new(Some(&tafs_core::words::upper(s)));
     l.set_xalign(0.0);
     l.add_css_class("tafs-eyebrow");
+    plain_if_ideographic(&l, s);
     if amber {
         l.add_css_class("amber");
     }
     l
+}
+
+/// A caption set monospaced and spaced out takes the plain face with no spacing when its text is in
+/// Hangul, kana, Han or Arabic (`Eyebrow.ideographic`), which spacing pulls apart.
+pub fn plain_if_ideographic(l: &gtk::Label, text: &str) {
+    if tafs_core::words::ideographic(text) {
+        l.add_css_class("ideographic");
+    }
 }
 
 /// `PrimaryButtonStyle`.

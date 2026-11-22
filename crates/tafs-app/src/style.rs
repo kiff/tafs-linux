@@ -38,6 +38,8 @@ window, .tafs-ground { background-color: @tafs_background; color: @tafs_ink; }
 
 /* Eyebrow: capitals, monospaced 12, tracked 0.7. */
 .tafs-eyebrow { font-family: monospace; font-size: 12px; letter-spacing: 0.7px; color: @tafs_dim; }
+/* Hangul, kana, Han and Arabic: the plain face, no spacing (`Eyebrow.ideographic`). */
+.tafs-eyebrow.ideographic, .tafs-day.ideographic, .tafs-env-pill.ideographic { font-family: inherit; letter-spacing: 0; }
 .tafs-eyebrow.amber { color: @tafs_amber; }
 .tafs-eyebrow.tafs-no { color: @tafs_no; }
 
@@ -231,6 +233,9 @@ AVATARS
 .tafs-point.ok { background-color: @tafs_ok; }
 .tafs-point.amber { background-color: @tafs_amber; }
 .tafs-point.no { background-color: @tafs_no; }
+.tafs-point.dim { background-color: alpha(@tafs_dim, 0.4); }
+/* The onboarding cards' taf rows, as Home lists them: raised, corners of 14, padded 14. */
+.tafs-raised-row { background-color: @tafs_raised; border-radius: 14px; padding: 14px; }
 
 /* The Overview: a held call on the raised colour, corners of 12; a line between the grid's rows. */
 button.tafs-held-row { background-color: @tafs_raised; background-image: none; border-radius: 12px; padding: 12px; border: none; box-shadow: none; min-height: 0; }
