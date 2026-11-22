@@ -146,6 +146,11 @@ pub fn page(
     outer.set_margin_start(16);
     outer.set_margin_end(16);
     outer.set_margin_top(12);
+    // The line under the name and the Card bar fold away while the person scrolls down.
+    let fold = crate::fold::Fold::new();
+    if crate::fold::OPEN_FOLDED.with(|f| f.get()) {
+        fold.set(true);
+    }
 
     // One row: avatar, name and state.
     let head = gtk::Box::new(gtk::Orientation::Horizontal, 10);
@@ -191,7 +196,7 @@ pub fn page(
                 open,
             ));
         }
-        outer.append(&line);
+        outer.append(&fold.part(&line));
     }
 
     // Chat, Activity, Card, Setup, as the system's segmented control. Chat is a tafs cloud taf's,
@@ -256,7 +261,7 @@ pub fn page(
             click.connect_released(move |_, _, _, _| opens.set_active(true));
             bar.add_controller(click);
             bar.set_cursor_from_name(Some("pointer"));
-            outer.append(&bar);
+            outer.append(&fold.part(&bar));
             card_bar_box = Some(bar);
         }
     }
@@ -457,6 +462,12 @@ pub fn page(
     }
     card_scroller.set_child(Some(&card));
     card_scroller.set_vexpand(true);
+    // The chat, the Card, Setup and the sample's Activity fold the head; a tafs cloud taf's
+    // Activity (`TafActivityList`) doesn't, as on the iPad.
+    fold.watch(&card_scroller);
+    if t.sample || t.cloud_id.is_none() {
+        fold.watch(&scroller);
+    }
     let panes = gtk::Stack::new();
     panes.add_named(&scroller, Some("activity"));
     panes.add_named(&card_scroller, Some("card"));
@@ -495,6 +506,7 @@ pub fn page(
         let setup_scroller = gtk::ScrolledWindow::new();
         setup_scroller.set_hscrollbar_policy(gtk::PolicyType::Never);
         setup_scroller.set_vexpand(true);
+        fold.watch(&setup_scroller);
         // At the page's own edges, with the tabs, as the Card tab and the iPad's Setup.
         let column = gtk::Box::new(gtk::Orientation::Vertical, 0);
         setup_scroller.set_child(Some(&column));
@@ -576,12 +588,14 @@ pub fn page(
             record: chat_record,
             doors: t.doors.clone(),
         }));
-        let panes = panes.clone();
+        let (panes, fold) = (panes.clone(), fold.clone());
         chat_tab.connect_toggled(move |b| {
             if b.is_active() {
                 if !made.replace(true) {
                     if let Some(taf) = taf.borrow_mut().take() {
-                        holder.append(&crate::taf_chat::pane(w.clone(), taf, source.clone()));
+                        let pane = crate::taf_chat::pane(w.clone(), taf, source.clone());
+                        fold.watch_in(&pane);
+                        holder.append(&pane);
                     }
                 }
                 panes.set_visible_child_name("chat");
