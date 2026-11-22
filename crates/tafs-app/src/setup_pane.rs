@@ -775,7 +775,13 @@ fn app_sheet(
                 let b = gtk::Button::with_label(&l("connect.disconnect_button"));
                 b.add_css_class("tafs-link");
                 b.add_css_class("tafs-no");
-                let ask = disconnect_question(w, &app.name, other.id.clone(), slot.clone());
+                let ask = disconnect_question(
+                    w,
+                    &app.name,
+                    other.id.clone(),
+                    slot.clone(),
+                    closes(&s.dialog),
+                );
                 b.connect_clicked(move |b| ask(b.upcast_ref()));
                 row.append(&b);
             }
@@ -801,7 +807,13 @@ fn app_sheet(
         remove.add_css_class("tafs-link");
         remove.add_css_class("tafs-no");
         remove.set_halign(gtk::Align::Start);
-        let ask = disconnect_question(w, &app.name, app.id.clone(), slot.clone());
+        let ask = disconnect_question(
+            w,
+            &app.name,
+            app.id.clone(),
+            slot.clone(),
+            closes(&s.dialog),
+        );
         remove.connect_clicked(move |b| ask(b.upcast_ref()));
         acts.append(&remove);
     }
@@ -818,13 +830,25 @@ fn app_sheet(
     s.dialog.present(Some(parent));
 }
 
-/// Remove access's question; its yes would end the connection at planque, signed by the device:
-/// this computer says it can't approve, and the connection stays.
+/// What closes a sheet once its act went: its closing reads Setup again.
+fn closes(dialog: &adw::Dialog) -> Rc<dyn Fn()> {
+    let d = dialog.downgrade();
+    Rc::new(move || {
+        if let Some(d) = d.upgrade() {
+            d.close();
+        }
+    })
+}
+
+/// Remove access's question; its yes ends the connection at planque, signed by the device once
+/// this computer's security key checked the person (the owner's 22 Nov rule), and `then` once it
+/// went; with no key here, this computer says it can't approve, and the connection stays.
 fn disconnect_question(
     w: &Rc<WordBook>,
     app: &str,
     grant: String,
     slot: gtk::Box,
+    then: Rc<dyn Fn()>,
 ) -> impl Fn(&gtk::Widget) {
     let w = w.clone();
     let app = app.to_string();
@@ -842,16 +866,23 @@ fn disconnect_question(
         ask.set_response_appearance("remove", adw::ResponseAppearance::Destructive);
         ask.set_default_response(Some("cancel"));
         ask.set_close_response("cancel");
-        let (w, grant, slot) = (w.clone(), grant.clone(), slot.clone());
+        // Named to the security key as the question names it (the iPad's `DisconnectWords.title`).
+        let what = w
+            .get("connect.disconnect_app_question", &[("app", &app)])
+            .unwrap_or_default();
+        let (w, grant, slot, then) = (w.clone(), grant.clone(), slot.clone(), then.clone());
         ask.connect_response(None, move |_, r| {
             if r == "remove" {
-                crate::approval::refuse(
+                crate::approval::refuse_then(
                     &w,
                     tafs_core::sidebar::Mode::Kiff,
                     &tafs_core::signed::Act::Disconnect {
                         grant: grant.clone(),
                     },
+                    Some(what.clone()),
+                    vec![],
                     &slot,
+                    Some(then.clone()),
                 );
             }
         });

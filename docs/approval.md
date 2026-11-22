@@ -262,6 +262,18 @@ from a screen recording or a clipboard manager's history.
   once nor Extra room on it, and the card says "Approve on your phone instead"
   (`held::needs_release`, `CardLines::needs_release`), and the key's answer refuses one too
   (`signed::Act::answer`, `held::release_needed`). KIFF's own page stays where it was.
+- **Disconnect and Clear** (as macOS 12's with Touch ID):
+  ending a connection only takes access away, so on a computer with a security key the key's
+  touch and PIN check the person, and then this computer's device key signs each connection's
+  `DELETE …/grants/{id}` at planque, one of its safe routes (`planque::Safe::Disconnect`,
+  `signedSafe` at planque, as Unpair). What the key signs is `tafs.presence.v1` (the tenant,
+  `signed_at`, each `DELETE grants/{id}`), never sent and never a message KIFF takes; its answer
+  is checked as KIFF checks one (kiff.dev's, present and verified, the credential asked, not a
+  synced passkey) before anything goes. The sheet names it as the question did ("Remove access
+  to Slack?", "Clear 2 connections from removed tafs?"), and Setup's sheet closes once it went, so Setup is read
+  again. A connection planque already ended (404) counts as ended. Anything that grants access
+  (connecting, Sign in again, keys, approvals) never goes this way, and a computer with no key
+  gets "Approve on your phone instead" (`key_approval::end_with_presence`, `can_end`).
 - **Removing a taf for good** goes in the iPad's order (`AppModel.removeTaf`): the key approves,
   then its Cards are revoked at KIFF with the session, one plain call each, then tafs cloud's
   `DELETE` goes with the approval. What didn't go is said in the app's words: Cards KIFF didn't

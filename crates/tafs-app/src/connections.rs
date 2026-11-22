@@ -26,7 +26,9 @@ thread_local! {
     pub static OPEN: std::cell::Cell<Option<&'static str>> = const { std::cell::Cell::new(None) };
 }
 
-type Refuse = Rc<dyn Fn(Act)>;
+/// An act's tap, with what its question named it (`what`): the security key's sheet says it, as
+/// the iPad's Face ID reason (`DisconnectWords.title`, `ConnectionGroupWords.clearTitle`).
+type Refuse = Rc<dyn Fn(Act, Option<String>)>;
 
 /// A screen's head: Back with the screen under it, and its title, inline.
 fn head(back_words: &str, title: &str, back: Rc<dyn Fn()>) -> gtk::CenterBox {
@@ -73,8 +75,8 @@ fn refusal(ctx: &Rc<Ctx>, column: &gtk::Box) -> Refuse {
     panel.set_visible(false);
     column.append(&panel);
     let ctx = ctx.clone();
-    Rc::new(move |act: Act| {
-        crate::approval::refuse(&ctx.w, ctx.mode(), &act, &slot);
+    Rc::new(move |act: Act, what: Option<String>| {
+        crate::approval::refuse_as(&ctx.w, ctx.mode(), &act, what, &slot);
         panel.set_visible(slot.get_visible());
     })
 }
@@ -201,18 +203,24 @@ pub(crate) fn app_page(
                 let n = clear_ids.len() as i64;
                 let ids = clear_ids.clone();
                 let refuse = refuse.clone();
-                // Asked first, then one Face ID for all of them: here, the can't-approve line.
+                let title = w
+                    .count("connect.clear_removed.title", n, &[])
+                    .unwrap_or_default();
+                // Asked first, then the security key's touch and PIN for all of them (or the
+                // can't-approve line, with no key here).
                 ask(
                     b.upcast_ref(),
-                    &w.count("connect.clear_removed.title", n, &[])
-                        .unwrap_or_default(),
+                    &title.clone(),
                     Some(&w.line("connect.clear_removed.body").unwrap_or_default()),
                     &w.line("connect.clear_removed.clear").unwrap_or_default(),
                     &w.line("common.cancel").unwrap_or_default(),
                     move || {
-                        refuse(Act::ClearRemoved {
-                            grants: ids.clone(),
-                        })
+                        refuse(
+                            Act::ClearRemoved {
+                                grants: ids.clone(),
+                            },
+                            Some(title.clone()),
+                        )
                     },
                 );
             });
@@ -375,9 +383,10 @@ fn row(ctx: &Rc<Ctx>, app: &App, g: &Grant, refuse: &Refuse) -> gtk::Widget {
             };
             let refuse = refuse.clone();
             if grant.cancellable() {
+                let title = cancel_title(&w, &grant).unwrap_or_default();
                 ask(
                     b.upcast_ref(),
-                    &cancel_title(&w, &grant).unwrap_or_default(),
+                    &title.clone(),
                     Some(
                         &w.get("connect.cancel_sign_in.body", &[("vendor", grant.vendor())])
                             .unwrap_or_default(),
@@ -385,20 +394,23 @@ fn row(ctx: &Rc<Ctx>, app: &App, g: &Grant, refuse: &Refuse) -> gtk::Widget {
                     &cancel_word(&w, &grant).unwrap_or_default(),
                     &w.line("connect.cancel_sign_in.keep_waiting")
                         .unwrap_or_default(),
-                    move || refuse(act.clone()),
+                    move || refuse(act.clone(), Some(title.clone())),
                 );
             } else {
-                // Asked first, naming the one taf it ends; only then Face ID, in the same words.
+                // Asked first, naming the one taf it ends; only then the security key, in the same
+                // words.
+                let title =
+                    disconnect_title(&w, grant.vendor(), taf.as_deref(), &[]).unwrap_or_default();
                 ask(
                     b.upcast_ref(),
-                    &disconnect_title(&w, grant.vendor(), taf.as_deref(), &[]).unwrap_or_default(),
+                    &title.clone(),
                     Some(
                         &disconnect_message(&w, grant.vendor(), taf.as_deref(), &[], key)
                             .unwrap_or_default(),
                     ),
                     &w.line("connect.disconnect_button").unwrap_or_default(),
                     &w.line("common.cancel").unwrap_or_default(),
-                    move || refuse(act.clone()),
+                    move || refuse(act.clone(), Some(title.clone())),
                 );
             }
         });
@@ -528,7 +540,7 @@ fn connection_page(
 fn take(ctx: &Rc<Ctx>, g: &Grant, action: &Action, b: &gtk::Button, slot_column: &gtk::Box) {
     let refuse = {
         let (ctx, slot_column) = (ctx.clone(), slot_column.clone());
-        move |act: Act| {
+        move |act: Act, what: Option<String>| {
             while let Some(c) = slot_column.first_child() {
                 slot_column.remove(&c);
             }
@@ -536,7 +548,7 @@ fn take(ctx: &Rc<Ctx>, g: &Grant, action: &Action, b: &gtk::Button, slot_column:
             let panel = crate::widgets::panel(false);
             panel.append(&slot);
             slot_column.append(&panel);
-            crate::approval::refuse(&ctx.w, ctx.mode(), &act, &slot);
+            crate::approval::refuse_as(&ctx.w, ctx.mode(), &act, what, &slot);
             panel.set_visible(slot.get_visible());
         }
     };
@@ -545,13 +557,14 @@ fn take(ctx: &Rc<Ctx>, g: &Grant, action: &Action, b: &gtk::Button, slot_column:
         let act = Act::Disconnect {
             grant: g.id.clone(),
         };
+        let what = action.words.clone();
         ask(
             b.upcast_ref(),
             &action.words,
             action.stops.as_deref(),
             &action.words,
             &w.line("common.cancel").unwrap_or_default(),
-            move || refuse(act.clone()),
+            move || refuse(act.clone(), Some(what.clone())),
         );
     } else if action.how == "key" {
         let start = ConnectStart {
@@ -560,9 +573,12 @@ fn take(ctx: &Rc<Ctx>, g: &Grant, action: &Action, b: &gtk::Button, slot_column:
         };
         approval_sheet(ctx, &start, b.upcast_ref());
     } else {
-        refuse(Act::SignInAgain {
-            grant: g.id.clone(),
-        });
+        refuse(
+            Act::SignInAgain {
+                grant: g.id.clone(),
+            },
+            None,
+        );
     }
 }
 

@@ -99,36 +99,53 @@ pub fn refuse_then(
     }
     if mode == Mode::Kiff {
         let kept = crate::store::load(chrono::Utc::now().timestamp());
-        if crate::key_approval::can_approve(kept.as_ref(), act) {
-            if let Some(kept) = kept {
-                let slot2 = slot.clone();
-                let languages = tafs_core::language::screen_languages(
-                    &tafs_core::language::preferred_from_env(),
-                );
+        // Approved with the key (the act's own request or answer), or, for Disconnect and Clear,
+        // the key's touch and PIN and then the device key at planque (the owner's 22 Nov rule).
+        let approves = crate::key_approval::can_approve(kept.as_ref(), act);
+        let ends = crate::key_approval::can_end(kept.as_ref(), act);
+        if let (true, Some(kept)) = (approves || ends, kept) {
+            let slot2 = slot.clone();
+            let languages =
+                tafs_core::language::screen_languages(&tafs_core::language::preferred_from_env());
+            let done: crate::key_approval::Approved =
+                std::rc::Rc::new(move |outcome| match outcome {
+                    Some(Err(why)) => {
+                        slot2.append(&text(&why, 13, 400, &["tafs-no"]));
+                        slot2.set_visible(true);
+                    }
+                    Some(Ok(())) => {
+                        slot2.set_visible(false);
+                        if let Some(then) = &then {
+                            then();
+                        }
+                    }
+                    None => slot2.set_visible(false),
+                });
+            let what = what.or_else(|| act.own_prompt(w));
+            let w = std::rc::Rc::new(w.clone());
+            if approves {
                 crate::key_approval::approve(
-                    std::rc::Rc::new(w.clone()),
+                    w,
                     slot,
                     kept,
                     languages,
                     act,
-                    what.or_else(|| act.own_prompt(w)).as_deref(),
+                    what.as_deref(),
                     cards,
-                    std::rc::Rc::new(move |outcome| match outcome {
-                        Some(Err(why)) => {
-                            slot2.append(&text(&why, 13, 400, &["tafs-no"]));
-                            slot2.set_visible(true);
-                        }
-                        Some(Ok(())) => {
-                            slot2.set_visible(false);
-                            if let Some(then) = &then {
-                                then();
-                            }
-                        }
-                        None => slot2.set_visible(false),
-                    }),
+                    done,
                 );
-                return;
+            } else {
+                crate::key_approval::end_with_presence(
+                    w,
+                    slot,
+                    kept,
+                    languages,
+                    act,
+                    what.as_deref(),
+                    done,
+                );
             }
+            return;
         }
     }
     match tafs_core::signed::tap(w, mode, act) {

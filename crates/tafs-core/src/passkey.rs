@@ -36,6 +36,20 @@ pub fn request_v1(tenant: &str, method: &str, uri: &str, body: &[u8], signed_at:
     .into_bytes()
 }
 
+/// What the security key's check of the person signs before this computer ends connections at
+/// planque with its device key (`tafs.presence.v1`, the owner's 22 Nov rule: Disconnect and Clear,
+/// a touch and a PIN, never a password alone). It's never sent anywhere: its own first line keeps
+/// it from ever being a `kiff.request.v1` or `kiff.answer.v1` message KIFF would take.
+pub fn presence_v1(tenant: &str, grants: &[String], signed_at: &str) -> Vec<u8> {
+    let mut lines = vec![
+        "tafs.presence.v1".to_string(),
+        tenant.to_string(),
+        signed_at.to_string(),
+    ];
+    lines.extend(grants.iter().map(|g| format!("DELETE grants/{g}")));
+    lines.join("\n").into_bytes()
+}
+
 /// `kiff.requests.v1`: two requests signed together, by their messages' SHA-256 in hex.
 pub fn requests_v1(tenant: &str, signed_at: &str, one: &[u8], other: &[u8]) -> Vec<u8> {
     let (a, b) = (hex(&Sha256::digest(one)), hex(&Sha256::digest(other)));
@@ -255,6 +269,28 @@ impl SigningTime {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_presence_check_is_never_a_message_kiff_takes() {
+        let m = presence_v1(
+            "t_1",
+            &["g1".into(), "g/2".into()],
+            "2026-11-22T23:50:00.000Z",
+        );
+        assert_eq!(
+            String::from_utf8(m.clone()).unwrap(),
+            "tafs.presence.v1\nt_1\n2026-11-22T23:50:00.000Z\nDELETE grants/g1\nDELETE grants/g/2"
+        );
+        let r = request_v1(
+            "t_1",
+            "DELETE",
+            "grants/g1",
+            b"",
+            "2026-11-22T23:50:00.000Z",
+        );
+        assert_ne!(challenge(&m), challenge(&r));
+        assert!(!m.starts_with(b"kiff."));
+    }
     use p256::ecdsa::signature::{Signer, Verifier};
     use p256::ecdsa::{DerSignature, SigningKey, VerifyingKey};
 
