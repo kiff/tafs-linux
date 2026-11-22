@@ -205,6 +205,8 @@ pub enum Screen {
     HowItWorks,
     /// Files: every file the account's tafs delivered (`FilesView`).
     Files,
+    /// Chrome: the Chromes paired to the account (`ChromesView`), its row shown once planque offers them.
+    Chrome,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -322,6 +324,12 @@ pub fn lines(
                     title: l("settings.devices.title")?,
                     value: None,
                     screen: Screen::Devices,
+                },
+                // Chrome (docs/chrome.md): its row shows only once planque offers Chromes.
+                Row::Opens {
+                    title: l("chrome.title")?,
+                    value: None,
+                    screen: Screen::Chrome,
                 },
                 Row::Opens {
                     title: l("connect.apps.title")?,

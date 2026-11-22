@@ -1,0 +1,21 @@
+{
+ "about": "Synthetic answer for planque's GET /v1/accounts/{tenant}/chromes (PlanqueClient.chromes), for Account \u203a Chrome's screenshots. Nothing is sent.",
+ "answer": {
+  "chromes": [
+   {
+    "chrome_id": "chr_01",
+    "name": "Work laptop",
+    "browser": "Chrome 157",
+    "os": "Windows",
+    "paired_at": "2026-11-22T16:30:00Z"
+   },
+   {
+    "chrome_id": "chr_02",
+    "name": "Studio iMac",
+    "browser": "Chrome 157",
+    "os": "macOS",
+    "paired_at": "2026-11-21T09:05:00Z"
+   }
+  ]
+ }
+}

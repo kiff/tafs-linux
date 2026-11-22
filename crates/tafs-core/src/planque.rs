@@ -1,7 +1,13 @@
-//! planque, which keeps a taf's vendor sign-ins (`PlanqueClient`): the one thing this computer
-//! signs for it, its read of the account's grants (`grantsReadProof`), which tafs cloud forwards
-//! as the device's proof (`Planque-Device-Signature`). With it, tafs cloud marks Coach's cards
-//! with what a sign-in can't be narrowed to (`wider`); this computer signs no other request.
+//! planque, which keeps a taf's vendor sign-ins (`PlanqueClient`): what this computer signs for it,
+//! with its device key and no prompt, and nothing else. Only planque's *safe* routes, those that
+//! take a device key as it is because they read or only take authority away (planque's
+//! `signedSafe`, agentgabo's read, kiff/work#20, 22 Nov):
+//! - its read of the account's grants (`grantsReadProof`), which tafs cloud forwards as the
+//!   device's proof (`Planque-Device-Signature`), so Coach's cards say what a sign-in can't be
+//!   narrowed to (`wider`);
+//! - the Chromes paired to the account (Account › Chrome), and unpairing one.
+//!
+//! Pairing a Chrome, approving or confirming anything stays the phone's.
 
 use std::sync::Mutex;
 
@@ -77,33 +83,106 @@ pub fn grants_path(tenant: &str) -> String {
     format!("/v1/accounts/{}/grants", segment(tenant))
 }
 
-/// `grantsReadProof`: this device's signed read of the account's grants, `t={at},v1={sig},d={device}`.
-/// The device key signs it with no prompt (`signConfirmed`): it grants nothing on its own. `device`
-/// is this device's id in KIFF, which planque asks KIFF about.
-pub fn grants_read_proof(key: &DeviceKey, device: &str, tenant: &str, base: &str) -> String {
+/// Where a safe request may go: planque's exact host, over HTTPS, on the default port, with no user
+/// in the link.
+pub fn is_planque(link: &str) -> bool {
+    url::Url::parse(link).is_ok_and(|u| {
+        u.scheme() == "https"
+            && u.host_str() == Some("planque.kiff.dev")
+            && u.port().is_none()
+            && u.username().is_empty()
+            && u.password().is_none()
+    })
+}
+
+/// The only requests this computer signs at planque: its safe routes, each a read or a removal.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Safe<'a> {
+    /// `GET …/grants`.
+    Grants,
+    /// `GET …/chromes`: the Chromes paired to the account.
+    Chromes,
+    /// `DELETE …/chromes/{chrome}`: one unpaired. It only takes authority away.
+    Unpair(&'a str),
+}
+
+impl Safe<'_> {
+    pub fn method(self) -> &'static str {
+        match self {
+            Safe::Grants | Safe::Chromes => "GET",
+            Safe::Unpair(_) => "DELETE",
+        }
+    }
+
+    /// The path as sent and signed, each segment escaped.
+    pub fn path(self, tenant: &str) -> String {
+        match self {
+            Safe::Grants => grants_path(tenant),
+            Safe::Chromes => format!("/v1/accounts/{}/chromes", segment(tenant)),
+            Safe::Unpair(chrome) => {
+                format!(
+                    "/v1/accounts/{}/chromes/{}",
+                    segment(tenant),
+                    segment(chrome)
+                )
+            }
+        }
+    }
+}
+
+/// This device's signature over one safe request, `t={at},v1={sig},d={device}`. The device key
+/// signs it with no prompt (`signConfirmed`): it grants nothing on its own. `device` is this
+/// device's id in KIFF, which planque asks KIFF about.
+pub fn safe_proof(key: &DeviceKey, device: &str, tenant: &str, base: &str, route: Safe) -> String {
     let at = signing_time();
-    let bytes = message(base, tenant, "GET", &grants_path(tenant), b"", &at);
+    let bytes = message(base, tenant, route.method(), &route.path(tenant), b"", &at);
     format!("t={at},v1={},d={device}", key.sign_b64(&bytes))
+}
+
+/// `grantsReadProof`: this device's signed read of the account's grants.
+pub fn grants_read_proof(key: &DeviceKey, device: &str, tenant: &str, base: &str) -> String {
+    safe_proof(key, device, tenant, base, Safe::Grants)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    /// This computer is view-only: planque's one signature from it is the read of the account's
-    /// grants, a safe route. Nothing here can sign an approval, a confirm or any other call, and
-    /// no other file builds planque's message.
+    /// This computer signs only planque's safe routes: the grants read, the Chromes list and
+    /// unpairing one, each with an empty body. Nothing here can sign an approval, a confirm, a
+    /// pairing or a window, and no other file builds planque's message.
     #[test]
-    fn this_computer_signs_nothing_at_planque_but_the_grants_read() {
+    fn this_computer_signs_nothing_at_planque_but_its_safe_routes() {
         let root = env!("CARGO_MANIFEST_DIR");
         let source = std::fs::read_to_string(format!("{root}/src/planque.rs")).unwrap();
         let code = &source[..source.find("#[cfg(test)]").unwrap()];
-        // One signature, in `grants_read_proof`, over a GET of the grants and nothing else.
+        // One signature, in `safe_proof`, over a `Safe` route with no body, and nothing else.
         assert_eq!(code.matches("sign_b64(").count(), 1);
         assert_eq!(code.matches("message(base, tenant, ").count(), 1);
-        assert!(code.contains(r#"message(base, tenant, "GET", &grants_path(tenant), b"", &at)"#));
-        for route in ["approve", "confirm", "POST", "PUT", "DELETE", "w="] {
+        assert!(code
+            .contains(r#"message(base, tenant, route.method(), &route.path(tenant), b"", &at)"#));
+        for route in [
+            "approve", "confirm", "pairings", "POST", "PUT", "PATCH", "w=",
+        ] {
             assert!(!code.contains(&format!("\"{route}")), "{route}");
+        }
+        // DELETE only for unpairing a Chrome.
+        assert_eq!(code.matches("\"DELETE\"").count(), 1);
+        assert!(code.contains(r#"Safe::Unpair(_) => "DELETE""#));
+        assert_eq!(Safe::Chromes.path("t 1"), "/v1/accounts/t%201/chromes");
+        assert_eq!(
+            Safe::Unpair("c/1").path("t"),
+            "/v1/accounts/t/chromes/c%2F1"
+        );
+        assert!(is_planque(&format!("{PLANQUE}{}", Safe::Chromes.path("t"))));
+        for bad in [
+            "http://planque.kiff.dev/v1",
+            "https://planque.kiff.dev.evil.com/v1",
+            "https://planque.kiff.dev:444/v1",
+            "https://a@planque.kiff.dev/v1",
+            "https://api.kiff.dev/v1",
+        ] {
+            assert!(!is_planque(bad), "{bad}");
         }
         // No other file in either crate builds planque's request message.
         let mut files = vec![];

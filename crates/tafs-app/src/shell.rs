@@ -109,6 +109,8 @@ pub struct Screens {
     pub alerts: crate::alerts::AlertsSource,
     /// Where Files reads, signed in with KIFF.
     pub files: crate::files::FilesSource,
+    /// Where Account › Chrome reads, signed in with KIFF from a kept session.
+    pub chrome: crate::chrome::ChromeSource,
     /// Where People & groups reads, and what it knows besides.
     pub people: crate::people::PeopleSource,
     pub people_known: Rc<crate::people::Known>,
@@ -167,6 +169,7 @@ pub fn build(
         people_known,
         zones,
         files,
+        chrome,
         recipes,
         gallery,
         halt,
@@ -378,6 +381,7 @@ pub fn build(
                     )
                 }
                 Selection::Files(taf) => crate::files::page(w.clone(), files.clone(), taf.clone()),
+                Selection::Chrome => crate::chrome::page(w.clone(), chrome.clone()),
                 Selection::People => {
                     let open = open.clone();
                     crate::people::page(
@@ -543,6 +547,7 @@ pub fn build(
                         &account,
                         &crate::account::Actions {
                             export: export.clone(),
+                            chrome: chrome.clone(),
                             reads: account_reads.clone(),
                             words: w.clone(),
                             act: actions.clone(),
@@ -560,6 +565,7 @@ pub fn build(
                                     }
                                     tafs_core::account::Screen::Usage => Selection::Usage,
                                     tafs_core::account::Screen::Files => Selection::Files(None),
+                                    tafs_core::account::Screen::Chrome => Selection::Chrome,
                                     tafs_core::account::Screen::Alerts => Selection::Alerts,
                                     // A sheet over Account, as the cards are.
                                     tafs_core::account::Screen::HowItWorks => {
@@ -1293,6 +1299,7 @@ fn title_of(
         Selection::Devices => l("settings.devices.title"),
         Selection::People => l("people.title"),
         Selection::Files(_) => l("files.title"),
+        Selection::Chrome => l("chrome.title"),
         Selection::KiffAccount => l("settings.kiff_account"),
         Selection::TimeZone => l("settings.time_zone_title"),
         Selection::Language => l("settings.language_title"),

@@ -582,6 +582,41 @@ fn get_with(
     Kiff::read(request.call())
 }
 
+/// One of planque's safe routes (`planque::Safe`) at planque itself, signed by this computer's
+/// device key with no prompt: the Chromes paired to the account, or one unpaired. Only to
+/// planque's exact host, over HTTPS; **no session token goes**, only the device's signature and
+/// its id in KIFF, which planque asks KIFF about.
+pub fn planque_safe(
+    kept: &tafs_core::session::KeptSession,
+    device: &str,
+    languages: &[&str],
+    route: tafs_core::planque::Safe,
+) -> Result<Answer, KiffError> {
+    let tenant = kept
+        .tenant
+        .as_deref()
+        .filter(|t| !t.is_empty())
+        .ok_or(KiffError::Unreadable)?;
+    let key = kept.key().ok_or(KiffError::Unreadable)?;
+    let base = tafs_core::planque::PLANQUE;
+    let path = route.path(tenant);
+    let url = format!("{base}{path}");
+    if !tafs_core::planque::is_planque(&url) {
+        return Err(KiffError::Unreadable);
+    }
+    let proof = tafs_core::planque::safe_proof(&key, device, tenant, base, route);
+    let zone = tafs_core::account_time::local_identifier();
+    Kiff::read(
+        agent()
+            .request(route.method(), &url)
+            .set("Accept", "application/json")
+            .set("Accept-Language", &accept_language(languages))
+            .set("X-Time-Zone", &zone)
+            .set(tafs_core::planque::HEADER, &proof)
+            .call(),
+    )
+}
+
 /// `GET /v1/me/did-this-happen` at KIFF as the session (`didThisHappen`): the money calls KIFF
 /// can't prove, newest first.
 pub fn did_this_happen(token: &str, languages: &[&str]) -> Result<Answer, KiffError> {

@@ -9,6 +9,7 @@ ports a file updates its line here.
 
 | iPad file | Lines | What | Models | Linux |
 | :- | -: | :- | :- | :- |
+| ChromeViews.swift | 178 | Account › Chrome: the Chromes paired, Pair a Chrome, Unpair | `PlanqueClient.Chrome`, `chromes()`, `removeChrome`; `AppModel.refreshChromes` | `ChromesView`: Account's Chrome row (after Devices) only once planque lists Chromes for this person (hidden on 404 and 403), each Chrome's name and "{browser} on {system}", Unpair behind "Unpair {name}", none paired, the footers; read and unpaired at planque with this computer's device key, planque's safe routes only (`planque::Safe`, no session token), as agentgabo read planque (kiff/work#20, 22 Nov). `PairChromeView` stays the phone's (it binds the phone's approval key the extension trusts): Pair a Chrome says this computer can't, with "Approve on your phone instead" (`chrome.rs`, `tafs-core/chrome.rs`) |
 | WatchDaysViews.swift | 93 | "From your watch" in Coach's Previous conversations | `WatchDaysModel`, `TafsCloud.watchDays`, `watchDay`, `WatchTurn` | `WatchDaysSection` under Previous conversations' chats: each day the person asked from their watch, newest first, Today by tafs cloud's `today` (else this computer's in the account's zone) or the weekday, day and month, with how many; none drawn when tafs cloud has none or its switch is off; `WatchDayView` pushed over it, oldest first: "⌚ Sent from your watch" with the time in the account's zone, what was said, the taf and what came of it (tafs cloud's line, else its words), a reply set in; a message to a taf left out; read only, nothing kept (`coach.rs` › `watch_days`, `watch_day`; `tafs-core/watch_days.rs`) |
 | OnboardingView.swift | 187 | The welcome: what tafs is, the one tick for the terms with the privacy links and the age line, Continue (KIFF's sign-in inside the app, K5), Try it with sample data, Sign in with your phone | AppModel.startSample, signInInApp, appTermsVersion; `ConsentTick`, `Onboarding.ageLine` | `welcome.rs`, with board 1 (first run) drawn in shapes (`illustrations.rs`); the tick, the links, the age line (`tafs-core/onboarding.rs`); Continue in the browser with PKCE and the way back at `dev.kiff.tafs:/oauth` (`app_sign_in.rs`, `tafs-core/app_signin.rs`, `scheme.rs`); the phone's claim with the terms version ([sign-in](sign-in.md#signing-in-inside-the-app-continue)) |
 | AIConsentView.swift | 74 | The AI-data consent screen and Account's row | `AIConsent`, `allowAI`, `notNowAI`, `withdrawAI`, `loadAIConsent` | `ai_consent.rs`, `tafs-core/ai_consent.rs`: the screen after sign-in and from Account, Allow with the words' version (a 409 shows the newer words), Not now for the session, Withdraw; and a turn refused for want of it, in Coach's and a taf's chat |
@@ -70,9 +71,7 @@ ports a file updates its line here.
 New at the pin moved to kiff/tafs `85c8a17` (22 Nov). Each is a batch of its own, named on
 kiff/work#17.
 
-| iPad file | Lines | What | Batch |
-| :- | -: | :- | :- |
-| ChromeViews.swift | 178 | Account › Chrome: the Chromes paired, Pair a Chrome, Unpair | (d) |
+None: ChromeViews, the last, is ported (batch (d), to the "Your Chrome" contract).
 
 **Changed since the old pin (`b3c80a8`), checked in the pin's PR:**
 - **`chevron.right` → `chevron.forward`** (UsageView, TafDialPanel, HomeRecipes, HaltScreen,
@@ -150,4 +149,4 @@ kiff/work#17.
 
 ## Coverage
 
-Ported 28, partial 22, not started 1, not for Linux 6: the 57 view files at the pin.
+Ported 29, partial 22, not started 0, not for Linux 6: the 57 view files at the pin.
