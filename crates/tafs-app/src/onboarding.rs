@@ -31,14 +31,15 @@ impl Page {
         .unwrap_or_else(|e| panic!("{e}"))
     }
 
-    /// The last card names this computer's way to approve: on the phone.
-    fn lead(self, w: &WordBook) -> String {
-        w.line(match self {
-            Page::Tafs => "onboarding.tafs_lead",
-            Page::Card => "onboarding.card_lead",
-            Page::Control => "onboarding.control_lead_desktop",
-        })
-        .unwrap_or_else(|e| panic!("{e}"))
+    /// The last card names this computer's way to approve: on the phone
+    /// (`onboarding.control_lead_desktop`). Until tafs has that line (tafs#1710), the card shows
+    /// its title and picture alone: never another device's words, and never English.
+    fn lead(self, w: &WordBook) -> Option<String> {
+        match self {
+            Page::Tafs => w.line("onboarding.tafs_lead").ok(),
+            Page::Card => w.line("onboarding.card_lead").ok(),
+            Page::Control => w.line("onboarding.control_lead_desktop").ok(),
+        }
     }
 
     fn index(self) -> usize {
@@ -137,7 +138,9 @@ pub fn present(window: &impl IsA<gtk::Widget>, w: Rc<WordBook>, start: Page, fir
             }
             picture.append(&picture_of(&w, p));
             title.set_text(&p.title(&w));
-            lead.set_text(&p.lead(&w));
+            let line = p.lead(&w);
+            lead.set_visible(line.is_some());
+            lead.set_text(&line.unwrap_or_default());
             for (i, d) in dot_widgets.iter().enumerate() {
                 if i == p.index() {
                     d.add_css_class("amber");

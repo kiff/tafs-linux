@@ -16,15 +16,16 @@ samples: `ios/Tafs/Samples/connect-apps.json`, the reference set's Connect apps.
 - A missing key, or a value a line asks for and isn't given, is an error: no English fallback, no
   `{hole}` on screen.
 
-`tests/at_the_pin.rs` checks every line the ported screens read, in all 40 languages, with the
+`tests/at_the_pin.rs` checks every line the ported screens read, in all 34 languages, with the
 values English has. It also fills every line at the pin, in every language, and fails if a `{`
 is left, so a form this app doesn't read yet fails CI before the pin moves. A new key goes into kiff/tafs first, then the pin moves, in its own PR.
 
 ## Languages
 
-The app speaks every language tafs ships (`languages.json`'s `shipped`: 40, with pt-BR,
-zh-Hant and sr-Latn; Arabic and Hebrew right to left), `words::SHIPPED`. Greek waits until tafs
-ships it.
+The app speaks every language tafs ships (`languages.json`'s `shipped`: 34, with pt-BR,
+zh-Hant and sr-Latn; Arabic and Hebrew right to left), `words::SHIPPED`. The six of tafs#1710
+(ca, mk, mn, ne, km, lo) come with the pin once it's on main: their names, legal pages, plural
+forms, ordinals and currency are ready here. Greek waits until tafs ships it.
 
 - **A variant** (`variants`: pt-BR over pt) reads as its base's lines with its own on top, as
   `generate.py` builds it (`WordBook::load`).
