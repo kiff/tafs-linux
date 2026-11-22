@@ -136,15 +136,20 @@ pub fn refuse_with(
                 }
             }
             slot.set_visible(true);
-            // Measured as it was added, the wrapped line can keep a one-line height: it's
-            // measured again once drawn, so the sheet or screen around it makes room.
+            // Measured as it was added, a wrapped line can keep a one-line height: every part of
+            // it is measured again once drawn (an idle came too soon in a door's sheet), so the
+            // sheet or screen around it makes room.
             let slot = slot.clone();
-            gtk::glib::idle_add_local_once(move || {
-                let mut c = slot.first_child();
-                while let Some(w) = c {
+            gtk::glib::timeout_add_local_once(std::time::Duration::from_millis(150), move || {
+                fn resize(w: &gtk::Widget) {
                     w.queue_resize();
-                    c = w.first_child();
+                    let mut c = w.first_child();
+                    while let Some(child) = c {
+                        resize(&child);
+                        c = child.next_sibling();
+                    }
                 }
+                resize(slot.upcast_ref());
             });
         }
         _ => slot.set_visible(false),

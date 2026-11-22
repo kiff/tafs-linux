@@ -674,7 +674,18 @@ fn activate(app: &adw::Application, o: &Options) {
             .page
             .as_deref()
             .and_then(|p| p.strip_prefix("doors:"))
-            .map(|rest| rest.split_once(':').map(|(_, door)| door.to_string())),
+            .map(|rest| {
+                rest.split_once(':').map(|(_, door)| {
+                    // A screenshot's press after the door (`doors:<taf>:<door>:<button>`).
+                    match door.split_once(':') {
+                        Some((door, press)) => {
+                            doors::PRESS.with(|p| *p.borrow_mut() = Some(press.to_string()));
+                            door.to_string()
+                        }
+                        None => door.to_string(),
+                    }
+                })
+            }),
     });
     if let Some(id) = o
         .page

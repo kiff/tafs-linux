@@ -271,6 +271,18 @@ pub enum Act {
         group: Option<String>,
         subject: Option<String>,
     },
+    /// `DoorsModel.reopen`: a paused `api` door opened again. Pausing it is never signed.
+    ReopenDoor { taf: String, door: String },
+    /// `DoorsModel.newKey`: a new key for an `api` door, shown once.
+    NewDoorKey { taf: String, door: String },
+    /// `DoorsModel.revoke`: an `api` door's key revoked, after its question.
+    RevokeDoorKey {
+        taf: String,
+        door: String,
+        key: String,
+    },
+    /// `DoorsModel.removeAPI`: an `api` door removed, its keys with it.
+    RemoveApiDoor { taf: String, door: String },
 }
 
 /// A query's value, escaped (`KIFFClient.escapedQuery`): letters, digits and `-._~` as they are.
@@ -439,13 +451,35 @@ impl Act {
                     format!("/v1/agents/{}/grants?{query}", escaped(agent)),
                 )
             }
+            Act::ReopenDoor { taf, door } => ("PATCH", crate::doors::door_path(taf, door)),
+            Act::NewDoorKey { taf, door } => ("POST", crate::doors::keys_path(taf, door)),
+            Act::RevokeDoorKey { taf, door, key } => {
+                ("DELETE", crate::doors::key_path(taf, door, key))
+            }
+            Act::RemoveApiDoor { taf, door } => ("DELETE", crate::doors::door_path(taf, door)),
         }
     }
 
     /// An act this computer never sends anything for, not even the unsigned call before its
     /// signature: planque's, and a connection's start.
     pub fn sends_nothing(&self) -> bool {
-        self.at_planque() || self.at_device() || matches!(self, Act::Connect { .. })
+        self.at_planque()
+            || self.at_device()
+            || self.at_api_door()
+            || matches!(self, Act::Connect { .. })
+    }
+
+    /// An `api` door's signed change (`DoorsModel`'s reopen, newKey, revoke, removeAPI). tafs
+    /// cloud takes another door's open, keys and removal unsigned at the same paths, so the path
+    /// can't tell: the doors screen refuses these before any call (`doors::api::only_signed`).
+    pub fn at_api_door(&self) -> bool {
+        matches!(
+            self,
+            Act::ReopenDoor { .. }
+                | Act::NewDoorKey { .. }
+                | Act::RevokeDoorKey { .. }
+                | Act::RemoveApiDoor { .. }
+        )
     }
 
     /// Whether the device checks the person, or signs with its approval key, before a tafs
@@ -603,6 +637,23 @@ mod tests {
                 group: None,
                 subject: Some("auth0|rae".into()),
             },
+            Act::ReopenDoor {
+                taf: "t1".into(),
+                door: "d1".into(),
+            },
+            Act::NewDoorKey {
+                taf: "t1".into(),
+                door: "d1".into(),
+            },
+            Act::RevokeDoorKey {
+                taf: "t1".into(),
+                door: "d1".into(),
+                key: "k1".into(),
+            },
+            Act::RemoveApiDoor {
+                taf: "t1".into(),
+                door: "d1".into(),
+            },
         ]
     }
 
@@ -655,6 +706,12 @@ mod tests {
                     matches!(method, "POST" | "PUT" | "DELETE"),
                     "{act:?} changes something"
                 );
+                continue;
+            }
+            if act.at_api_door() {
+                // An `api` door's: refused before any call, whatever the path (`doors::api`).
+                assert!(path.starts_with("/v1/tafs/t1/doors/d1"), "{act:?}");
+                assert!(act.request().is_none(), "{act:?}");
                 continue;
             }
             if act.sends_nothing() {
