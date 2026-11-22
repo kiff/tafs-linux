@@ -87,7 +87,7 @@ request's Decline with Decline tapped (`usage-decline`).
   run that doesn't open, and the screenshots' file, stay plain lines.
 
 Pulled past its top (`.refreshable`: a touchpad's or a touch screen's pull, as GTK reports it),
-or on Ctrl+R or F5, the screen reads again in place (`refreshUsage`): the balance, the credits and
+or on Ctrl+R or F5 while the focus is in it, the screen reads again in place (`refreshUsage`): the balance, the credits and
 KIFF's usage, and the period before once it was asked for. A taf's runs read their credits and
 newest runs again the same way, and keep Try again while nothing is read, for a mouse. What was
 read stays in sight meanwhile, and a pull while a read is on its way asks nothing more.

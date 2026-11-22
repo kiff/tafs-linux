@@ -1102,16 +1102,10 @@ fn sidebar(
     scroller.set_child(Some(&list));
     pane.append(&scroller);
     // Pull to refresh: Home read again, signed in with KIFF; the sample's sidebar has nothing to
-    // read.
-    crate::widgets::refreshable(
-        &scroller,
-        &pane,
-        Rc::new(|| {
-            if let Some(f) = HOME_PULL.with(|h| h.borrow().clone()) {
-                f();
-            }
-        }),
-    );
+    // read, so it takes no pull and no keys.
+    if let Some(pull) = HOME_PULL.with(|h| h.borrow().clone()) {
+        crate::widgets::refreshable(&scroller, &pane, pull);
+    }
 
     // Coach, then the account just under it: always in sight.
     let foot = gtk::Box::new(gtk::Orientation::Vertical, 8);

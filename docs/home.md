@@ -202,7 +202,7 @@ touchpad's or a touch screen's pull, as GTK reports it), or Ctrl+R or F5 in it, 
 the iPad's pull does: in place, the screen beside it as it is, and the tries started over
 (`retries = 0`). A pull that fails says so at the sidebar's foot and tries again, as after any
 failed read (`refreshFailed`); while Home can't be read, a pull is the account's reads again
-from the first try. A 401 signs this computer out ([sign-in](sign-in.md)). The sample's sidebar
+from the first try. A pull while one is on its way asks nothing more. A 401 signs this computer out ([sign-in](sign-in.md)). The sample's sidebar
 has nothing to read.
 
 ## The plan's line

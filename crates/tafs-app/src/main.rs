@@ -594,6 +594,7 @@ fn activate(app: &adw::Application, o: &Options) {
         })),
         account_reads: Cell::new(0),
         home_rereads: Cell::new(0),
+        home_pulling: Cell::new(false),
         words,
         languages,
         signed_in: o.signed_in,
@@ -1101,6 +1102,9 @@ struct App {
     /// Each in-place reread of Home, numbered: only the newest's answer is drawn, so two that
     /// overlap (a stream's end, then a held call) can't leave the older one on screen.
     home_rereads: Cell<u64>,
+    /// A pull of the sidebar is on its way: another asks nothing more. Any read of Home that
+    /// ends lets the next pull through, so it can't stay stuck.
+    home_pulling: Cell<bool>,
     words: Rc<WordBook>,
     languages: Vec<&'static str>,
     /// `--signed-in`: the sample with the account's items, as the reference set draws it.
@@ -1417,6 +1421,7 @@ impl App {
             let read = gio::spawn_blocking(move || read_cloud(&token, &languages, &words))
                 .await
                 .unwrap_or(Read::Unreachable(tafs_core::sidebar::Unreachable::Error));
+            me.home_pulling.set(false);
             // Signed out, or another account's reads, since: this one's answer is dropped.
             if me.account_reads.get() != generation {
                 return;
@@ -2275,12 +2280,19 @@ impl App {
         let Some(kept) = self.kept.borrow().clone() else {
             return;
         };
+        if self.home_pulling.get() {
+            return;
+        }
         if let Some((why, _)) = self.unreachable.get() {
+            self.home_pulling.set(true);
             self.unreachable.set(Some((why, 0)));
             let view_only = kept.approval_mode.is_view_only();
             return self.read_account(kept, view_only);
         }
-        self.reread_home_as(true);
+        if self.cloud.borrow().is_some() {
+            self.home_pulling.set(true);
+            self.reread_home_as(true);
+        }
     }
 
     fn reread_home_as(self: &Rc<Self>, pulled: bool) {
@@ -2299,6 +2311,7 @@ impl App {
             let read = gio::spawn_blocking(move || read_cloud(&token, &languages, &words))
                 .await
                 .unwrap_or(Read::Unreachable(tafs_core::sidebar::Unreachable::Error));
+            me.home_pulling.set(false);
             // Another account's, or an older reread's answer, since: dropped.
             if me.account_reads.get() != generation || me.home_rereads.get() != reread {
                 return;

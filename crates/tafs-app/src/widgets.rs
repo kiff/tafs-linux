@@ -165,7 +165,8 @@ pub fn ground<W: IsA<gtk::Widget>>(w: &W) {
 
 /// Pull to refresh (`.refreshable`): `refresh` runs when `scroller` is pulled past its top (a
 /// touchpad's or a touch screen's pull, as GTK reports it), and on Ctrl+R or F5 while the focus is
-/// in `host`, a computer's way to ask. Whether a read is already on its way is `refresh`'s to say.
+/// in `host`, a computer's way to ask: only there (`Local`), so the sidebar and the screen beside
+/// it never compete for the keys. Whether a read is already on its way is `refresh`'s to say.
 pub fn refreshable<W: IsA<gtk::Widget>>(
     scroller: &gtk::ScrolledWindow,
     host: &W,
@@ -180,7 +181,7 @@ pub fn refreshable<W: IsA<gtk::Widget>>(
         });
     }
     let keys = gtk::ShortcutController::new();
-    keys.set_scope(gtk::ShortcutScope::Managed);
+    keys.set_scope(gtk::ShortcutScope::Local);
     for trigger in ["<Control>r", "F5"] {
         let refresh = refresh.clone();
         keys.add_shortcut(gtk::Shortcut::new(

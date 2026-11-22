@@ -292,7 +292,7 @@ impl Knobs {
         });
     }
 
-    /// Its work (`loadWork`), for the replies given up on.
+    /// Its work (`loadWork`), for the replies given up on; a read that fails changes nothing.
     pub(crate) fn load_work(&self) {
         let me = self.clone();
         glib::spawn_future_local(async move {
@@ -312,7 +312,10 @@ impl Knobs {
             .await
             .ok()
             .flatten();
-            *me.work.borrow_mut() = read;
+            // A read that fails keeps what was read before, as `loadWork` keeps `works`.
+            if read.is_some() {
+                *me.work.borrow_mut() = read;
+            }
             me.changed_now();
         });
     }

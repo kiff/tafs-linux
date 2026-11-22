@@ -368,8 +368,8 @@ version waits, `?version=` that one; a 404 then reads it again as it is now). Re
 the iPad's `Knob`: a field in the wrong shape and the dial isn't read ("The dial couldn't be read:
 …"); one missing takes the iPad's default. Until it's read, "Reading what starts it…" or "Reading
 where its results go…". Pulled past its top (`.refreshable`: a touchpad's or a touch screen's
-pull, as GTK reports it), or on Ctrl+R or F5, a screen reads its dial again (`loadKnob`), and
-Results go to its work too (`loadWork`); what was read stays in sight meanwhile, and a pull while
+pull, as GTK reports it), or on Ctrl+R or F5 while the focus is in it, a screen reads its dial again (`loadKnob`), and
+Results go to its work too (`loadWork`, whose failed read keeps what was read); what was read stays in sight meanwhile, and a pull while
 one is on its way asks nothing more.
 
 - **The waiting version** (`KnobPendingPanel`, for whoever manages it): DRAFT · V8 · NOT LIVE in
