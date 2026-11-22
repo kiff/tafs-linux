@@ -131,6 +131,19 @@ fn read_bytes(w: &WordBook, source: &FilesSource, id: &str) -> Result<Vec<u8>, S
     Ok(got.body)
 }
 
+/// A file that couldn't be written where the person picked: "Download didn't go through.", with no reason after it.
+fn not_saved(w: &WordBook) -> String {
+    w.get(
+        "common.didnt_go_through",
+        &[
+            ("what", &w.line("files.download").unwrap_or_default()),
+            ("why", ""),
+        ],
+    )
+    .map(|l| l.trim().to_string())
+    .unwrap_or_default()
+}
+
 /// Delete now, for everyone (`deleteFile`): once tafs cloud deleted it, or why not, as `read_bytes` says it.
 fn delete(w: &WordBook, source: &FilesSource, id: &str) -> Result<(), String> {
     let FilesSource::Cloud { token, languages } = source else {
@@ -555,9 +568,10 @@ fn detail(
                 let written = gio::spawn_blocking(move || read_bytes(&words, &source, &id))
                     .await
                     .unwrap_or(Err(offline))
-                    // Saved on this computer, or the system's words for why not.
+                    // Saved on this computer, or "Download didn't go through." in the reader's language: the
+                    // system's own reason is in English whatever the app's (desktop-windows' note on #87).
                     .and_then(|b| {
-                        crate::widgets::write_private(&path, &b).map_err(|e| e.to_string())
+                        crate::widgets::write_private(&path, &b).map_err(|_| not_saved(&w))
                     });
                 note.set_label(&saved);
                 note.set_visible(written.is_ok());
