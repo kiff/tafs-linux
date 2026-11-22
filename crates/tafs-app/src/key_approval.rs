@@ -1,0 +1,125 @@
+//! Approving one act with this computer's security key (kiff/tafs `docs/computer-passkeys.md`,
+//! "What a passkey approval carries"; the PM's decision (i), kiff/work#17, 22 Nov): the act's
+//! whole request (`Act::request`) is the message a device key would sign (`kiff.request.v1`), its
+//! hash the challenge; the PIN sheet asks the key registered with this computer when it was
+//! paired, once; the answer is checked as KIFF checks it; and the request goes with its
+//! `KIFF-Passkey-Assertion` header, those bytes and no others. One request, one approval: nothing
+//! is kept to approve another.
+//!
+//! Switched off with `passkey::ENABLED`: until KIFF takes a software-key computer's key, every
+//! signed act still shows that this computer can't approve.
+
+use std::sync::{Arc, Mutex};
+
+use std::rc::Rc;
+use tafs_core::passkey::{self, Assertion, SigningTime};
+use tafs_core::security_key::AssertionAsk;
+use tafs_core::session::{ApprovalMode, KeptSession};
+use tafs_core::signed::Act;
+use tafs_core::words::WordBook;
+
+use crate::fido_key::{KeyError, OpenKey};
+
+/// Hears once: `Ok` once KIFF took the act, `Err` with the line to show, nothing when cancelled.
+pub type Approved = Rc<dyn Fn(Option<Result<(), String>>)>;
+
+/// `signed_at` never repeats, across every approval this app makes.
+static SIGNING_TIME: Mutex<SigningTime> = Mutex::new(SigningTime::new());
+
+/// Whether `act` can be approved here: the key is on, the session approves with a passkey and
+/// holds this computer's key, and the act is one whose whole request this app writes.
+pub fn can_approve(kept: Option<&KeptSession>, act: &Act) -> bool {
+    passkey::ENABLED
+        && kept
+            .is_some_and(|k| k.approval_mode == ApprovalMode::Passkey && k.security_key.is_some())
+        && act.request().is_some()
+}
+
+/// Asks the key to approve `act` over `parent`, and sends it. `done` hears once: `Ok` once KIFF
+/// took it, or the line to show; nothing when the person cancelled.
+pub fn approve(
+    w: Rc<WordBook>,
+    parent: &impl gtk::prelude::IsA<gtk::Widget>,
+    kept: KeptSession,
+    languages: Vec<&'static str>,
+    act: &Act,
+    done: Approved,
+) {
+    let (Some((method, path, body)), Some(credential)) = (
+        act.request(),
+        kept.security_key
+            .as_deref()
+            .and_then(passkey::credential_id),
+    ) else {
+        return;
+    };
+    let tenant = kept.tenant.clone().unwrap_or_default();
+    let token = kept.token.clone();
+    let open = Arc::new(OpenKey::default());
+    // KIFF's answer when it refused what the key approved: said once the sheet closes.
+    let refused: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
+    let attempt: crate::pin_sheet::Attempt = {
+        let (open, refused, w2) = (open.clone(), refused.clone(), (*w).clone());
+        Arc::new(move |pin| {
+            let signed_at = SIGNING_TIME
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .next(chrono::Utc::now());
+            let message = passkey::request_v1(&tenant, method, &path, &body, &signed_at);
+            let client_data = passkey::client_data_json(&message);
+            let ask = AssertionAsk::new(&passkey::client_data_hash(&client_data), &credential)?;
+            let answer = open.get_assertion(&ask, Some(pin))?;
+            let assertion = Assertion {
+                credential_id: answer.credential_id.unwrap_or_else(|| credential.clone()),
+                authenticator_data: answer.authenticator_data,
+                signature: answer.signature,
+            };
+            // What KIFF would refuse is never sent.
+            let header = passkey::header(&signed_at, &credential, &client_data, &assertion, None)
+                .map_err(|_| KeyError::Unreadable)?;
+            match crate::kiff::send_with_key(&token, &languages, method, &path, &body, &header) {
+                Ok(a) if (200..300).contains(&a.status) => Ok(()),
+                Ok(a) => {
+                    let e = tafs_core::signin::refusal(&a, Some(&w2));
+                    *refused.lock().unwrap_or_else(|e| e.into_inner()) =
+                        Some(e.words(&w2).unwrap_or_default());
+                    Err(KeyError::Unreadable)
+                }
+                Err(e) => {
+                    *refused.lock().unwrap_or_else(|e| e.into_inner()) =
+                        Some(e.words(&w2).unwrap_or_default());
+                    Err(KeyError::Unreadable)
+                }
+            }
+        })
+    };
+    let read_tries: crate::pin_sheet::ReadTries = {
+        let open = Arc::new(OpenKey::default());
+        Arc::new(move || open.tries_left())
+    };
+    let stop: crate::pin_sheet::StopKey = {
+        let open = open.clone();
+        Arc::new(move || open.cancel())
+    };
+    let sheet_done: crate::pin_sheet::Done = Rc::new(move |e| match e {
+        None => done(Some(Ok(()))),
+        Some(KeyError::Cancelled) => done(None),
+        Some(other) => {
+            let kiff = refused.lock().unwrap_or_else(|e| e.into_inner()).take();
+            done(Some(Err(kiff.unwrap_or_else(|| format!("{other:?}")))))
+        }
+    });
+    crate::pin_sheet::present(w, parent, attempt, read_tries, stop, sheet_done);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn nothing_is_approved_while_the_key_is_off() {
+        let act = Act::CreateGroup { name: "x".into() };
+        // `passkey::ENABLED` is false: whatever the session, the tap says this computer can't.
+        assert!(!can_approve(None, &act));
+    }
+}

@@ -58,6 +58,16 @@ pub fn client_data_json(message: &[u8]) -> Vec<u8> {
     .into_bytes()
 }
 
+/// A credential id as a session keeps it (base64url, no padding), as bytes.
+pub fn credential_id(kept: &str) -> Option<Vec<u8>> {
+    URL_SAFE_NO_PAD.decode(kept).ok().filter(|c| !c.is_empty())
+}
+
+/// The client data's hash, which the key signs over (`sha256(clientData)`).
+pub fn client_data_hash(client_data: &[u8]) -> [u8; 32] {
+    Sha256::digest(client_data).into()
+}
+
 /// authenticatorData's fixed head: the relying party's hash, the flags, the sign count.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AuthenticatorData {
@@ -172,6 +182,11 @@ pub struct SigningTime {
 }
 
 impl SigningTime {
+    /// None given yet, for a `static`.
+    pub const fn new() -> SigningTime {
+        SigningTime { last: None }
+    }
+
     pub fn next(&mut self, now: chrono::DateTime<chrono::Utc>) -> String {
         use chrono::{SubsecRound, TimeDelta};
         let mut t = now.trunc_subsecs(3);

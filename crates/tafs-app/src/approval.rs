@@ -50,9 +50,38 @@ pub fn refusal_slot() -> gtk::Box {
 
 /// The tap that would sign `act` (`tafs_core::signed::tap`): this computer sends nothing, and
 /// `slot` says it can't approve here. In the sample, which signs nothing, the tap does nothing.
+///
+/// With this computer's security key on (`key_approval`), signed in with a session that approves
+/// with it, the tap asks the key instead, and `slot` says why when KIFF or the key refused.
 pub fn refuse(w: &WordBook, mode: Mode, act: &tafs_core::signed::Act, slot: &gtk::Box) {
     while let Some(c) = slot.first_child() {
         slot.remove(&c);
+    }
+    if mode == Mode::Kiff {
+        let kept = crate::store::load(chrono::Utc::now().timestamp());
+        if crate::key_approval::can_approve(kept.as_ref(), act) {
+            if let Some(kept) = kept {
+                let slot2 = slot.clone();
+                let languages = tafs_core::language::screen_languages(
+                    &tafs_core::language::preferred_from_env(),
+                );
+                crate::key_approval::approve(
+                    std::rc::Rc::new(w.clone()),
+                    slot,
+                    kept,
+                    languages,
+                    act,
+                    std::rc::Rc::new(move |outcome| match outcome {
+                        Some(Err(why)) => {
+                            slot2.append(&text(&why, 13, 400, &["tafs-no"]));
+                            slot2.set_visible(true);
+                        }
+                        _ => slot2.set_visible(false),
+                    }),
+                );
+                return;
+            }
+        }
     }
     match tafs_core::signed::tap(w, mode, act) {
         Ok(Some(n)) => {

@@ -22,6 +22,7 @@ mod doors;
 mod fido_key;
 mod halt;
 mod illustrations;
+mod key_approval;
 mod kiff;
 mod kiff_account;
 mod knocks;

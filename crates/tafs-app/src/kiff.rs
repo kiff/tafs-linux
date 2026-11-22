@@ -336,6 +336,43 @@ pub fn kiff_send(
     )
 }
 
+/// A call KIFF or tafs cloud takes only signed, approved by this computer's security key: the
+/// act's whole request (`Act::request`) with its `KIFF-Passkey-Assertion` header, which covers
+/// exactly these bytes. tafs cloud's own signed routes (`signed_at_cloud`) go there; the rest to
+/// KIFF. Switched off with `passkey::ENABLED`: nothing calls it until KIFF takes the key.
+pub fn send_with_key(
+    token: &str,
+    languages: &[&str],
+    method: &str,
+    path: &str,
+    body: &[u8],
+    assertion: &str,
+) -> Result<Answer, KiffError> {
+    if !tafs_core::signed::signed(method, path) && !tafs_core::signed::signed_at_cloud(method, path)
+    {
+        return Err(KiffError::Unreadable);
+    }
+    let base = if tafs_core::signed::signed_at_cloud(method, path) {
+        tafs_core::home::TAFS_CLOUD
+    } else {
+        KIFF_API
+    };
+    let url = format!("{base}{path}");
+    if !may_send_to(&url) {
+        return Err(KiffError::Unreadable);
+    }
+    Kiff::read(
+        agent()
+            .request(method, &url)
+            .set("Accept", "application/json")
+            .set("Accept-Language", &accept_language(languages))
+            .set("Authorization", &format!("Bearer {token}"))
+            .set("Content-Type", "application/json")
+            .set(tafs_core::passkey::HEADER, assertion)
+            .send_bytes(body),
+    )
+}
+
 /// A file's bytes, straight to storage where tafs cloud said (`TafsCloud.upload`): no session
 /// goes with them, only the headers tafs cloud gave, and only to an HTTPS address. Two minutes.
 pub fn upload(to: &tafs_core::attach::Upload, data: &[u8]) -> Result<u16, KiffError> {
