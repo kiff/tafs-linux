@@ -81,7 +81,8 @@ for screen in welcome welcome-ticked welcome-terms-changed cards-1 cards-2 cards
     people) opts=(--home shared/contracts/home.json --people crates/tafs-app/fixtures/people-kiff.json --page people) ;;
     # Files from tafs cloud's contracts: the account's, and its first file open.
     files) opts=(--home shared/contracts/home.json --files shared/contracts/files-list.json --page files) ;;
-    files-file) opts=(--home shared/contracts/home.json --files shared/contracts/files-list.json --page files-file) ;;
+    # A narrow window: the list alone, and a file's sheet over it. On a wide one (`files`), the file is beside the list.
+    files-file) opts=(--size 900x900 --home shared/contracts/home.json --files shared/contracts/files-list.json --page files-file) ;;
     # Account › Chrome: the Chromes planque lists (a fixture), Unpair, and Pair a Chrome (the phone's).
     chrome) opts=(--home shared/contracts/home.json --chromes crates/tafs-app/fixtures/chromes.json --page chrome) ;;
     # Renaming a group with Save tapped: this computer can't approve, and sends nothing.

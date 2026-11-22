@@ -269,6 +269,7 @@ button.tafs-row-button:disabled { opacity: 0.4; }
 
 /* The Record: chips (the chosen one inverts), day headings, rows on the panel with corners of 14. */
 button.tafs-chip-button { background-color: @tafs_panel; background-image: none; color: @tafs_soft; border: 1px solid @tafs_line; border-radius: 999px; padding: 5px 11px; min-height: 0; font-size: 13px; font-weight: 400; box-shadow: none; }
+button.tafs-plain.tafs-file-picked { background-color: alpha(@tafs_ink, 0.06); border-radius: 10px; }
 button.tafs-chip-button.selected { background-color: @tafs_ink; color: @tafs_on_fill; border-color: @tafs_ink; }
 button.tafs-chip-button:checked { background-color: @tafs_ink; color: @tafs_on_fill; border-color: @tafs_ink; }
 .tafs-taf-dot { border-radius: 4px; min-width: 8px; min-height: 8px; }
