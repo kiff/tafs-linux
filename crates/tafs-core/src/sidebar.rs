@@ -31,6 +31,8 @@ pub enum Selection {
     Language,
     /// Files: the account's (Account › Files), or one taf's by tafs cloud's id (its page's entry).
     Files(Option<String>),
+    /// Account › Chrome.
+    Chrome,
     /// Coach mode, from its button at the foot.
     Coach,
     /// A screen Account opens, by its title, until it's ported.

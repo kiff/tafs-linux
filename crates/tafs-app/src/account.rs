@@ -16,6 +16,8 @@ pub struct Actions {
     pub open: Rc<dyn Fn(Screen, String)>,
     /// Where Export my chats reads, signed in with KIFF from a kept session; none dims it.
     pub export: Option<Rc<crate::kiff_account::ExportSource>>,
+    /// Where the Chromes are read: Chrome's row shows only once planque offers them.
+    pub chrome: crate::chrome::ChromeSource,
 }
 
 pub fn page(a: &AccountLines, actions: &Actions) -> gtk::Widget {
@@ -110,6 +112,17 @@ pub fn page(a: &AccountLines, actions: &Actions) -> gtk::Widget {
         let mut opens = Vec::new();
         for row in &section.rows {
             let r = row_widget(row, actions);
+            if let Row::Opens {
+                screen: Screen::Chrome,
+                ..
+            } = row
+            {
+                crate::chrome::show_row_when_offered(
+                    actions.words.clone(),
+                    actions.chrome.clone(),
+                    &r,
+                );
+            }
             match row {
                 Row::Opens { title, screen, .. } => opens.push((r.clone(), *screen, title.clone())),
                 Row::Plan { title, .. } => opens.push((r.clone(), Screen::Usage, title.clone())),

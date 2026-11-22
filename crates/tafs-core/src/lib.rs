@@ -16,6 +16,7 @@ pub mod brief;
 pub mod calendar;
 pub mod card;
 pub mod cards;
+pub mod chrome;
 pub mod coach;
 pub mod coach_lines;
 pub mod coach_mode;
