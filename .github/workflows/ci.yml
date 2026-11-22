@@ -41,7 +41,7 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - name: GTK 4, libadwaita, a display and the fonts
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq libgtk-4-dev libadwaita-1-dev xvfb fonts-inter
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq libgtk-4-dev libadwaita-1-dev xvfb fonts-inter fonts-noto-core
       - name: Rust
         run: rustup toolchain install stable --profile minimal && rustup default stable
       - name: Words and contracts at the pin
