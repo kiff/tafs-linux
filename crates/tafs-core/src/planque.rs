@@ -104,12 +104,17 @@ pub enum Safe<'a> {
     Chromes,
     /// `DELETE …/chromes/{chrome}`: one unpaired. It only takes authority away.
     Unpair(&'a str),
+    /// `GET …/chromes/screenshots?op={operation}`: the pictures kept for one operation's Chrome
+    /// steps, without their bytes (planque#359).
+    Shots(&'a str),
+    /// `GET …/chromes/screenshots/{step}`: one step's picture.
+    Shot(&'a str),
 }
 
 impl Safe<'_> {
     pub fn method(self) -> &'static str {
         match self {
-            Safe::Grants | Safe::Chromes => "GET",
+            Safe::Grants | Safe::Chromes | Safe::Shots(_) | Safe::Shot(_) => "GET",
             Safe::Unpair(_) => "DELETE",
         }
     }
@@ -126,6 +131,17 @@ impl Safe<'_> {
                     segment(chrome)
                 )
             }
+            // The query is part of what's signed.
+            Safe::Shots(op) => format!(
+                "/v1/accounts/{}/chromes/screenshots?op={}",
+                segment(tenant),
+                segment(op)
+            ),
+            Safe::Shot(step) => format!(
+                "/v1/accounts/{}/chromes/screenshots/{}",
+                segment(tenant),
+                segment(step)
+            ),
         }
     }
 }
@@ -175,6 +191,16 @@ mod tests {
             "/v1/accounts/t/chromes/c%2F1"
         );
         assert!(is_planque(&format!("{PLANQUE}{}", Safe::Chromes.path("t"))));
+        // A Chrome step's pictures: reads, the operation in the signed query, escaped.
+        assert_eq!(Safe::Shots("op 1").method(), "GET");
+        assert_eq!(
+            Safe::Shots("prp_1&x=2").path("t"),
+            "/v1/accounts/t/chromes/screenshots?op=prp_1%26x%3D2"
+        );
+        assert_eq!(
+            Safe::Shot("s/1").path("t"),
+            "/v1/accounts/t/chromes/screenshots/s%2F1"
+        );
         for bad in [
             "http://planque.kiff.dev/v1",
             "https://planque.kiff.dev.evil.com/v1",

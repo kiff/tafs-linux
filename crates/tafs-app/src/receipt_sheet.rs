@@ -497,6 +497,17 @@ pub fn present(
     column.append(&happened);
     let receipt = gtk::Box::new(gtk::Orientation::Vertical, 0);
     column.append(&receipt);
+    // The pictures a paired Chrome kept before this operation's steps: a link for each, none
+    // while planque keeps none or can't be read. Signed in with KIFF only.
+    let shots = gtk::Box::new(gtk::Orientation::Vertical, 4);
+    column.append(&shots);
+    let shot_source = match source.as_ref() {
+        Some(source) => crate::chrome_shots::ShotSource::cloud(source.languages.clone()),
+        None => crate::chrome_shots::ShotSource::file(),
+    };
+    if let (Some(s), Some(op)) = (shot_source, e.proposal.clone()) {
+        crate::chrome_shots::links(w.clone(), s, op, &shots);
+    }
     if e.receipt.is_some() {
         match source.clone() {
             Some(source) => load(w.clone(), source, e.clone(), happened, receipt),

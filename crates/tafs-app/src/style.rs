@@ -389,6 +389,7 @@ button.tafs-link.tafs-no { color: @tafs_no; }
 .tafs-code { font-family: monospace; font-size: 34px; font-weight: 600; color: @tafs_ink; }
 .tafs-mono { font-family: monospace; }
 .tafs-code-block { border-radius: 12px; font-size: 12px; }
+.tafs-shot { border: 1px solid alpha(@tafs_dim, 0.3); border-radius: 6px; }
 .tafs-notice { background-color: @tafs_panel; border-bottom: 1px solid @tafs_line; padding: 12px 24px; }
 spinner { color: @tafs_amber; }
 headerbar { background-color: @tafs_background; box-shadow: none; color: @tafs_ink; }
