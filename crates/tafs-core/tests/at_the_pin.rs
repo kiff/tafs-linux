@@ -910,9 +910,11 @@ fn account_is_the_ipads_in_its_order() {
         kiff.sections.iter().map(|s| s.slot).collect();
     assert_eq!(slots[3], Some(tafs_core::account::Slot::Suggestions));
     assert_eq!(slots[7], Some(tafs_core::account::Slot::Consent));
+    // Sign-in's email-code setting, after the consent and before the time zone (tafs#1711).
+    assert_eq!(slots[8], Some(tafs_core::account::Slot::SignInCode));
     // Export my chats, after the time zone.
-    assert_eq!(slots[9], Some(tafs_core::account::Slot::Export));
-    assert_eq!(slots.iter().flatten().count(), 3);
+    assert_eq!(slots[10], Some(tafs_core::account::Slot::Export));
+    assert_eq!(slots.iter().flatten().count(), 4);
     assert_eq!(
         headers,
         [
@@ -924,6 +926,7 @@ fn account_is_the_ipads_in_its_order() {
             Some("Theme"),
             Some("Language"),
             None,
+            Some("Sign-in"),
             None,
             None,
             Some("How it works"),
@@ -940,7 +943,7 @@ fn account_is_the_ipads_in_its_order() {
         Row::Value("Signed in as".into(), "rae@acme.test".into())
     );
     assert!(
-        matches!(&kiff.sections[8].rows[0], Row::Opens { value: Some(v), .. } if v == "Europe/Paris")
+        matches!(&kiff.sections[9].rows[0], Row::Opens { value: Some(v), .. } if v == "Europe/Paris")
     );
     // `PlanRow`: the title alone until tafs cloud's balance gives its line.
     assert!(

@@ -23,6 +23,7 @@ pub mod coach_lines;
 pub mod coach_mode;
 pub mod coach_send;
 pub mod coach_tools;
+pub mod code_sign_in;
 pub mod connect;
 pub mod connections;
 pub mod devices;

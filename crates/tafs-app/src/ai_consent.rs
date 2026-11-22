@@ -70,7 +70,7 @@ fn why(w: &WordBook, a: &tafs_core::signin::Answer) -> String {
         })
 }
 
-fn file_part(path: &std::path::Path, key: &str) -> Option<Vec<u8>> {
+pub fn file_part(path: &std::path::Path, key: &str) -> Option<Vec<u8>> {
     let v: serde_json::Value = serde_json::from_slice(&std::fs::read(path).ok()?).ok()?;
     serde_json::to_vec(v.get(key)?).ok()
 }
