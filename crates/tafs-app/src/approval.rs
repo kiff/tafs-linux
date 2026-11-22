@@ -5,6 +5,7 @@
 
 use gtk::prelude::*;
 use tafs_core::approval::{self, Gate, NotReady};
+use tafs_core::security_key::words;
 use tafs_core::sidebar::Mode;
 use tafs_core::words::WordBook;
 
@@ -113,6 +114,27 @@ pub fn refuse_with(
     match tafs_core::signed::tap(w, mode, act) {
         Ok(Some(n)) => {
             slot.append(&not_ready(&n));
+            // With the key on, signed in with KIFF: no key with this computer says what one is,
+            // and wherever this computer can't approve (no key, or an act only the phone does),
+            // "Approve on your phone instead" (the PM's 20:12). Nothing is handed over: the act
+            // is done again on the phone, and the button puts this away.
+            if tafs_core::passkey::ENABLED && mode == Mode::Kiff {
+                let kept = crate::store::load(chrono::Utc::now().timestamp());
+                let has_key = kept.as_ref().is_some_and(|k| k.security_key.is_some());
+                if let (false, Ok(line)) = (has_key, words::none_paired(w)) {
+                    slot.append(&text(&line, 12, 400, &["tafs-dim"]));
+                }
+                if let Ok(label) = words::on_phone(w) {
+                    let row = gtk::Box::new(gtk::Orientation::Horizontal, 10);
+                    let on_phone = outline(&label);
+                    on_phone.set_hexpand(false);
+                    on_phone.set_widget_name("approval.on-phone");
+                    let s = slot.clone();
+                    on_phone.connect_clicked(move |_| s.set_visible(false));
+                    row.append(&on_phone);
+                    slot.append(&row);
+                }
+            }
             slot.set_visible(true);
             // Measured as it was added, the wrapped line can keep a one-line height: it's
             // measured again once drawn, so the sheet or screen around it makes room.

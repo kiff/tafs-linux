@@ -180,13 +180,14 @@ fn present_lines(
     let locked = Rc::new(Cell::new(false));
     let touching = Rc::new(Cell::new(false));
     let show = {
-        let (w, message, locked, field, approve, tries) = (
+        let (w, message, locked, field, approve, tries, cancel) = (
             w.clone(),
             message.clone(),
             locked.clone(),
             field.clone(),
             approve.clone(),
             tries.clone(),
+            cancel.clone(),
         );
         Rc::new(move |e: KeyError| {
             // The tries line never disagrees with the failure's: a wrong PIN with its count says
@@ -203,9 +204,14 @@ fn present_lines(
             message.set_label(&line);
             message.set_visible(true);
             if !again {
+                // A locked key can't approve: Cancel becomes "Approve on your phone instead"
+                // (the PM's 20:12); it closes the sheet, nothing approved here.
                 locked.set(true);
                 field.set_sensitive(false);
                 approve.set_sensitive(false);
+                if let Ok(label) = words::on_phone(&w) {
+                    cancel.set_label(&label);
+                }
             }
         })
     };
