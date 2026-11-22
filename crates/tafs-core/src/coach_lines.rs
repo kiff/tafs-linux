@@ -1829,6 +1829,12 @@ pub fn healed(text: &str) -> String {
         last = before.to_string();
     }
     if last.split("**").count() % 2 == 0 {
+        // Stopped inside the closing "**" ("**$20*"): that lone "*" is its first half, not an
+        // italic's close (one is when the single stars pair up), so it goes before "**" closes it.
+        let singles = last.replace("**", "").matches('*').count();
+        if singles % 2 == 1 && last.ends_with('*') && !last.ends_with("**") {
+            last.pop();
+        }
         last.push_str("**");
     }
     if last.matches('`').count() % 2 == 1 {
@@ -2504,10 +2510,14 @@ mod tests {
         let full = "Refunded **$20** to `order 42`, see [the order](https://shop.test/42).";
         for n in 0..=full.chars().count() {
             let drawn = markup(&healed_prefix(full, n));
+            // No italic in it, so no star at all (dev-android's note on #90: "**$20*" drew a stray one).
             assert!(
-                !drawn.contains("**") && !drawn.contains('`') && !drawn.contains("]("),
+                !drawn.contains('*') && !drawn.contains('`') && !drawn.contains("]("),
                 "{n}: {drawn}"
             );
         }
+        assert_eq!(healed("Refunded **$20*"), "Refunded **$20**");
+        // An italic closed inside an open bold keeps its star.
+        assert_eq!(healed("**x *a*"), "**x *a***");
     }
 }
