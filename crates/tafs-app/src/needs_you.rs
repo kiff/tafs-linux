@@ -100,6 +100,12 @@ pub fn page(
 }
 
 thread_local! {
+    /// `--page needs-you-key`: held calls drawn as a computer paired with a security key sees them,
+    /// for the screenshot. Pressing still needs that session: nothing is signed without it.
+    pub static KEY_SHOWN: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+thread_local! {
     /// The hold whose notification was clicked (`requestedHold`), until a Needs you that lists it
     /// is on screen: its id as KIFF keeps it.
     static REQUESTED: RefCell<Option<String>> = const { RefCell::new(None) };
@@ -537,8 +543,48 @@ pub fn held_card(w: &Rc<WordBook>, c: &CardLines) -> gtk::Box {
             page,
         } => {
             p.append(&text(nothing_sent, 14, 400, &["tafs-soft"]));
+            // With this computer's security key: Approve once here, signed in the answer's body
+            // (`kiff.answer.v1`, as the Mac's tafs-macos#162); KIFF taking it ends the hold, so its
+            // card goes. Otherwise it's answered in KIFF, as before.
+            let once = tafs_core::signed::Act::ApproveOnce {
+                call: c.kiff_id.clone().unwrap_or_else(|| c.id.clone()),
+                accounting_version: c.accounting_version,
+            };
+            let kept = crate::store::load(chrono::Utc::now().timestamp());
+            let shown = crate::key_approval::can_approve(kept.as_ref(), &once)
+                || (KEY_SHOWN.with(|k| k.get()) && once.answer().is_some());
+            let key_answers = c.approvable_once && shown;
+            if key_answers {
+                let b = primary(&w.line("needs_you.approve_once").unwrap_or_default());
+                b.set_widget_name("held.approve-once");
+                let slot = crate::approval::refusal_slot();
+                let (w2, card, slot2) = (w.clone(), p.downgrade(), slot.clone());
+                b.connect_clicked(move |_| {
+                    let card = card.clone();
+                    crate::approval::refuse_then(
+                        &w2,
+                        tafs_core::sidebar::Mode::Kiff,
+                        &once,
+                        None,
+                        vec![],
+                        &slot2,
+                        Some(Rc::new(move || {
+                            if let Some(card) = card.upgrade() {
+                                card.set_visible(false);
+                            }
+                        })),
+                    );
+                });
+                p.append(&b);
+                p.append(&slot);
+            }
             p.append(&text(line, 13, 400, &["tafs-soft"]));
-            let b = primary(button);
+            // Beside Approve once here, answering in KIFF is the other way, not the first.
+            let b = if key_answers {
+                crate::widgets::outline(button)
+            } else {
+                primary(button)
+            };
             let page = page.clone();
             b.connect_clicked(move |b| {
                 if is_kiff_link(&page) {

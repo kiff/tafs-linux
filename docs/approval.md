@@ -232,6 +232,14 @@ from a screen recording or a clipboard manager's history.
   request goes with `KIFF-Passkey-Assertion`, to KIFF, or to tafs cloud for what it takes signed
   (`Act::at_cloud`). `kiff::send_with_key` sends only the act's own request, byte for byte, and a
   call to KIFF only where KIFF takes it signed.
+- **Approve once on a held call** (as the Mac's tafs-macos#162): its answer is signed, not its
+  request. The key approves KIFF's `kiff.answer.v1` message (tenant, hold, `approve-once`, an empty
+  next step and note, the hold's `accounting_version`, `signed_at`), and the assertion goes in the
+  answer's body (`{"signature":{"signed_at", "passkey":{…}}}`, `passkey::answer_body`), to
+  `POST /v1/me/card-exceptions/{id}/approve-once`, with no `KIFF-Passkey-Assertion` header
+  (KIFF's `checkPasskeyAnswer`). It's offered on the taf's dial and on Needs you's card, where
+  "Answer in KIFF" stays as the other way. A hold whose accounting version wasn't read can't be
+  signed here: the phone.
 - **Removing a taf for good** goes in the iPad's order (`AppModel.removeTaf`): the key approves,
   then its Cards are revoked at KIFF with the session, one plain call each, then tafs cloud's
   `DELETE` goes with the approval. What didn't go is said in the app's words: Cards KIFF didn't

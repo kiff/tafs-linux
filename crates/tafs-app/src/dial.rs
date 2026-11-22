@@ -185,11 +185,20 @@ impl Dial {
         if let Face::Held(id) = &face {
             if let Some(call) = self.held.iter().find(|h| &h.id == id) {
                 if call.approvable_once && self.manages && !self.knobs.busy() {
-                    crate::approval::refuse(
+                    // With this computer's security key, signed here, then the taf read again;
+                    // else "Approve on your phone instead".
+                    let knobs = self.knobs.clone();
+                    crate::approval::refuse_then(
                         self.knobs.words(),
                         tafs_core::sidebar::Mode::Kiff,
-                        &tafs_core::signed::Act::ApproveOnce { call: id.clone() },
+                        &tafs_core::signed::Act::ApproveOnce {
+                            call: id.clone(),
+                            accounting_version: call.accounting_version,
+                        },
+                        None,
+                        vec![],
                         &self.slot,
+                        Some(Rc::new(move || knobs.reload())),
                     );
                 }
             }
@@ -1080,6 +1089,7 @@ pub fn held_faces(held: &[tafs_core::needs_you::CardLines]) -> Vec<HeldFace> {
             amount: c.amount.clone(),
             reason: c.reason.clone(),
             approvable_once: c.approvable_once,
+            accounting_version: c.accounting_version,
         })
         .collect()
 }

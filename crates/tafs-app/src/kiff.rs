@@ -364,6 +364,34 @@ pub fn kiff_send(
 /// act's whole request (`Act::request`) with its `KIFF-Passkey-Assertion` header, which covers
 /// exactly these bytes. tafs cloud's own signed routes (`signed_at_cloud`) go there; the rest to
 /// KIFF. Switched off with `passkey::ENABLED`: nothing calls it until KIFF takes the key.
+/// A held call's answer signed by this computer's security key, the assertion in its body
+/// (`answerSignature.passkey`): POSTed to the act's own route at KIFF, and only for an act that is
+/// such an answer (`Act::answer`).
+pub fn send_answer(
+    token: &str,
+    languages: &[&str],
+    act: &tafs_core::signed::Act,
+    body: &[u8],
+) -> Result<Answer, KiffError> {
+    let (method, path) = act.route();
+    if act.answer().is_none() || method != "POST" || !tafs_core::signed::signed(method, &path) {
+        return Err(KiffError::Unreadable);
+    }
+    let url = format!("{KIFF_API}{path}");
+    if !may_send_to(&url) {
+        return Err(KiffError::Unreadable);
+    }
+    Kiff::read(
+        agent()
+            .request(method, &url)
+            .set("Accept", "application/json")
+            .set("Accept-Language", &accept_language(languages))
+            .set("Authorization", &format!("Bearer {token}"))
+            .set("Content-Type", "application/json")
+            .send_bytes(body),
+    )
+}
+
 pub fn send_with_key(
     token: &str,
     languages: &[&str],
@@ -803,6 +831,23 @@ mod tests {
                 Err(KiffError::Unreadable)
             ));
         }
+        // Only a held call's answer goes as an answer.
+        assert!(matches!(
+            send_answer("tok", &["en"], &act, b"{}"),
+            Err(KiffError::Unreadable)
+        ));
+        assert!(matches!(
+            send_answer(
+                "tok",
+                &["en"],
+                &Act::ApproveOnce {
+                    call: "c".into(),
+                    accounting_version: None
+                },
+                b"{}"
+            ),
+            Err(KiffError::Unreadable)
+        ));
         // New key has no request here: nothing can be sent for it.
         let new_key = Act::NewDoorKey {
             taf: "t1".into(),

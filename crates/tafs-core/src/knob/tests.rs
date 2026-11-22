@@ -284,6 +284,7 @@ fn the_face_says_the_stop_the_call_or_the_job() {
         amount: Some("€150".into()),
         reason: "Over its €100 limit".into(),
         approvable_once: true,
+        accounting_version: Some(1),
     };
     let h = face_lines(
         &w,

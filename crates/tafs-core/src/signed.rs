@@ -254,7 +254,11 @@ pub enum Act {
     /// `answerYourStep`: Done or Skip it on a step a taf handed its owner.
     AnswerStep { handoff: String },
     /// `approveOnce`: a held call approved once, from the dial's face.
-    ApproveOnce { call: String },
+    ApproveOnce {
+        call: String,
+        /// The hold's `accounting_version`, which the signed answer names (`kiff.answer.v1`).
+        accounting_version: Option<i64>,
+    },
     /// `dismissCardUnit`: a Card unit request dismissed, signed like a refusal (`reject`).
     DismissCardUnit { exception: String },
     /// `approveKnobEvent`: an app event's subscription at planque, signed by the device.
@@ -421,7 +425,7 @@ impl Act {
                 "POST",
                 format!("/v1/home/setting-up/{}/discard", escaped(agent)),
             ),
-            Act::ApproveOnce { call } => (
+            Act::ApproveOnce { call, .. } => (
                 "POST",
                 format!("/v1/me/card-exceptions/{}/approve-once", escaped(call)),
             ),
@@ -479,6 +483,19 @@ impl Act {
     /// can't tell: the doors screen refuses these before any call (`doors::api::only_signed`).
     pub fn at_api_door(&self) -> bool {
         self.api_door_matches()
+    }
+
+    /// A held call's answer that a security key signs in its body (`kiff.answer.v1`, KIFF's
+    /// `checkPasskeyAnswer`): the hold, the answer and the accounting version it names. Approve
+    /// once only, and only when the hold's accounting version was read.
+    pub fn answer(&self) -> Option<(&str, &'static str, i64)> {
+        match self {
+            Act::ApproveOnce {
+                call,
+                accounting_version: Some(v),
+            } => Some((call.as_str(), "approve-once", *v)),
+            _ => None,
+        }
     }
 
     /// Whether the call goes to tafs cloud, not KIFF: what the device signs there (`at_device`),
@@ -634,7 +651,10 @@ mod tests {
             Act::AnswerStep {
                 handoff: "h1".into(),
             },
-            Act::ApproveOnce { call: "ce1".into() },
+            Act::ApproveOnce {
+                call: "ce1".into(),
+                accounting_version: Some(3),
+            },
             Act::DismissCardUnit {
                 exception: "ce2".into(),
             },
@@ -935,7 +955,12 @@ mod tests {
         );
         // Not this way: planque's, an answer signed in its body, Make live, Raise the limit.
         assert!(Act::Disconnect { grant: "g".into() }.request().is_none());
-        assert!(Act::ApproveOnce { call: "c".into() }.request().is_none());
+        assert!(Act::ApproveOnce {
+            call: "c".into(),
+            accounting_version: Some(1),
+        }
+        .request()
+        .is_none());
         assert!(Act::MakeLive {
             taf: "t".into(),
             version: 2
@@ -954,6 +979,30 @@ mod tests {
         ] {
             let (m, p, _) = act.request().unwrap();
             assert!(signed(m, &p) || signed_at_cloud(m, &p), "{m} {p}");
+        }
+    }
+
+    #[test]
+    fn only_approve_once_with_its_accounting_version_is_an_answer() {
+        let once = Act::ApproveOnce {
+            call: "ce_1".into(),
+            accounting_version: Some(4),
+        };
+        assert_eq!(once.answer(), Some(("ce_1", "approve-once", 4)));
+        assert_eq!(
+            once.route(),
+            ("POST", "/v1/me/card-exceptions/ce_1/approve-once".into())
+        );
+        // Without the hold's version there's nothing to sign: the phone.
+        let unread = Act::ApproveOnce {
+            call: "ce_1".into(),
+            accounting_version: None,
+        };
+        assert_eq!(unread.answer(), None);
+        for act in acts() {
+            if !matches!(act, Act::ApproveOnce { .. }) {
+                assert_eq!(act.answer(), None, "{act:?}");
+            }
         }
     }
 }
