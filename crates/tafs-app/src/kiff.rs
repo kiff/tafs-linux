@@ -131,6 +131,30 @@ pub fn halt(
     })
 }
 
+/// "Report this payment" (`TafsCloud.reportPayment`): `POST /v1/record/{trace_id}/report` at
+/// tafs cloud as the session, with an empty body. KIFF marks the receipt and tafs cloud halts the
+/// taf; it only takes authority away, so it signs nothing.
+pub fn report_payment(
+    token: &str,
+    languages: &[&str],
+    trace_id: &str,
+) -> Result<Answer, KiffError> {
+    let path = tafs_core::payment_report::path(trace_id);
+    let url = format!("{}{path}", tafs_core::home::TAFS_CLOUD);
+    if !may_send_to(&url) || tafs_core::signed::signed_at_cloud("POST", &path) {
+        return Err(KiffError::Unreadable);
+    }
+    Kiff::read(
+        agent()
+            .post(&url)
+            .set("Accept", "application/json")
+            .set("Accept-Language", &accept_language(languages))
+            .set("Authorization", &format!("Bearer {token}"))
+            .set("Content-Type", "application/json")
+            .send_bytes(b"{}"),
+    )
+}
+
 /// Run now (`TafsCloud.runNow`): `POST /v1/tafs/{id}/run` at tafs cloud as the session, with an
 /// empty body. It fires the taf's schedule; no signature, as the iPad's.
 pub fn run_now(token: &str, languages: &[&str], taf: &str) -> Result<Answer, KiffError> {

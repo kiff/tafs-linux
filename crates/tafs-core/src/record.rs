@@ -239,6 +239,8 @@ pub struct Entry {
     /// Who refused it at the tool (`refusedBy`): "the connection" for one the connection refused
     /// before sending, else the vendor as connected, when known.
     pub refused_by: Option<String>,
+    /// "Report this payment": where tafs cloud offers it, and whether it's reported.
+    pub report: crate::payment_report::Reportable,
 }
 
 /// `recordID`: KIFF's call id as a stable key.
@@ -417,6 +419,7 @@ pub fn record(
             } else {
                 vendors.get(&c.action_name).cloned()
             },
+            report: Default::default(),
         });
     }
     Ok(out)

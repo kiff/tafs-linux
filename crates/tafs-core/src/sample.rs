@@ -226,6 +226,7 @@ pub fn record(w: &WordBook, now: DateTime<Local>) -> Result<Vec<crate::record::E
         reason: None,
         refused_by_tool: false,
         refused_by: None,
+        report: Default::default(),
     };
     let held = held(w, now)?;
     let l = |k: &str| w.line(k);

@@ -46,6 +46,13 @@ pub struct ActivityEntry {
     pub call: ActivityCall,
     #[serde(default)]
     pub next: Option<NextStep>,
+    /// "Report this payment": only on a payment this reader may report and that isn't reported
+    /// yet. tafs cloud decides who sees the button; with no `report` there is none.
+    #[serde(default)]
+    pub report: Option<crate::payment_report::Offer>,
+    /// When it was reported, as KIFF keeps it on the receipt.
+    #[serde(default)]
+    pub reported_at: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
@@ -208,6 +215,8 @@ pub fn evidence(
     };
     entry.title = e.title.clone();
     entry.detail = e.detail.clone();
+    entry.report =
+        crate::payment_report::Reportable::from_cloud(e.report.as_ref(), e.reported_at.as_deref());
     Some(entry)
 }
 

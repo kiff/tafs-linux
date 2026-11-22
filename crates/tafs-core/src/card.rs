@@ -186,10 +186,94 @@ impl Card {
         Ok(None)
     }
 
-    /// `OverviewView.cardLine`: the hero's figure and words, "9 calls left today of 10".
+    /// `heroLine`, as `OverviewView.cardLine` reads it: the hero as one line, where the figure
+    /// isn't drawn apart. Calls left in the line's own word order (`card.calls_left_line`: "9
+    /// calls left today of 10", "오늘 10회 중 9회 남음"), else the figure, then its words.
     pub fn line(&self, w: &WordBook) -> Result<Option<String>, WordsError> {
+        if let (None, Some(c)) = (&self.total, &self.calls) {
+            if let Some(used) = c.used {
+                return Ok(Some(w.count(
+                    "card.calls_left_line",
+                    (c.limit - used).max(0),
+                    &[
+                        ("window", &c.window.current),
+                        ("limit", &crate::locale::number(c.limit, 0, w.language())),
+                    ],
+                )?));
+            }
+        }
         Ok(self
             .hero(w)?
             .map(|(figure, words)| format!("{figure} {words}")))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn calls(limit: i64, used: Option<i64>, current: &str) -> Card {
+        Card {
+            total: None,
+            calls: Some(CallsTotal {
+                limit,
+                used,
+                window: Window {
+                    raw: "day".into(),
+                    label: "a day".into(),
+                    current: current.into(),
+                },
+            }),
+        }
+    }
+
+    #[test]
+    fn calls_left_read_as_one_line_in_the_languages_own_order() {
+        let en = WordBook::load(&WordBook::default_root(), "en").unwrap();
+        assert_eq!(
+            calls(40, Some(12), "today").line(&en).unwrap().as_deref(),
+            Some("28 calls left today of 40")
+        );
+        assert_eq!(
+            calls(10, Some(9), "today").line(&en).unwrap().as_deref(),
+            Some("1 call left today of 10")
+        );
+        // Never below none left.
+        assert_eq!(
+            calls(1_000, Some(1_200), "today")
+                .line(&en)
+                .unwrap()
+                .as_deref(),
+            Some("0 calls left today of 1,000")
+        );
+        // Korean puts the window and the limit first (`card.calls_left_line`).
+        let ko = WordBook::load(&WordBook::default_root(), "ko").unwrap();
+        assert_eq!(
+            calls(40, Some(12), "오늘").line(&ko).unwrap().as_deref(),
+            Some("오늘 40회 중 28회 남음")
+        );
+        // Use KIFF couldn't read: the hero as before.
+        assert_eq!(
+            calls(40, None, "today").line(&en).unwrap(),
+            calls(40, None, "today")
+                .hero(&en)
+                .unwrap()
+                .map(|(f, w)| format!("{f} {w}"))
+        );
+    }
+
+    #[test]
+    fn every_shipped_language_has_the_calls_left_line() {
+        for lang in crate::words::SHIPPED {
+            let w = WordBook::load(&WordBook::default_root(), lang).unwrap();
+            for used in [0, 1, 2, 3, 11, 39, 40] {
+                let l = calls(40, Some(used), "x").line(&w);
+                assert!(
+                    l.as_ref()
+                        .is_ok_and(|l| l.as_ref().is_some_and(|l| !l.contains('{'))),
+                    "{lang} {used}: {l:?}"
+                );
+            }
+        }
     }
 }

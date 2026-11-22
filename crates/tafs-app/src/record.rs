@@ -238,6 +238,7 @@ pub fn page(w: Rc<WordBook>, data: Rc<RecordData>, open_taf: Rc<dyn Fn(String)>)
                 e.clone(),
                 name,
                 open_taf.clone(),
+                None,
                 s,
             );
         });
@@ -303,6 +304,7 @@ fn line(
             e.clone(),
             name,
             open_taf.clone(),
+            None,
             b,
         );
     });
