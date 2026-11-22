@@ -1,0 +1,44 @@
+{
+ "doors": [
+  {
+   "id": "door_ord7",
+   "app": "api",
+   "kind": "api",
+   "label": "From another application",
+   "open": false,
+   "address": "/v1/doors/api/door_ord7/requests",
+   "proof": "proven",
+   "how": "Your application's key",
+   "keys": [
+    {
+     "id": "key_0000000000000001",
+     "name": "ERP production",
+     "last4": "iXrW",
+     "made_at": "2026-11-19T08:00:00.000Z",
+     "last_used_at": "2026-11-19T09:42:15.000Z"
+    }
+   ],
+   "today": 37,
+   "limit": 100,
+   "resting": false,
+   "others_today": 0,
+   "others_limit": 0,
+   "counts": {
+    "today": 37,
+    "waiting": 2
+   },
+   "last_request": {
+    "status": "done",
+    "at": "2026-11-19T09:42:15.000Z",
+    "words": "Done"
+   },
+   "words": {
+    "state": "Paused: requests are refused until you open it.",
+    "tap": "Tap to open the From another application door.",
+    "settings": "Its keys and today's limits are below."
+   }
+  }
+ ],
+ "apps": [],
+ "knocks": []
+}

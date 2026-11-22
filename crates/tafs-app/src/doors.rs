@@ -346,6 +346,10 @@ impl DoorsModel {
     }
 
     pub fn set_open(&self, door: &Door, open: bool) {
+        // An `api` door opens again only signed (`reopen`): pausing it is always safe.
+        if doors::api::only_signed(door, "PATCH", open) {
+            return;
+        }
         self.work(
             "PATCH",
             doors::door_path(&self.id, &door.id),
@@ -356,6 +360,10 @@ impl DoorsModel {
 
     /// `DoorsModel.remove`: the door goes once tafs cloud has taken it away.
     pub fn remove(&self, door: &Door, done: Rc<dyn Fn()>) {
+        // An `api` door is never removed unsigned (`removeAPI`).
+        if doors::api::only_signed(door, "DELETE", false) {
+            return;
+        }
         let me = self.clone();
         let gone = door.id.clone();
         let state = self.state.clone();
@@ -382,6 +390,9 @@ impl DoorsModel {
 
     /// `DoorsModel.pair`: the sender trimmed; nothing when that leaves nothing.
     pub fn pair(&self, door: &Door, sender: &str, name: &str, done: Rc<dyn Fn()>) {
+        if doors::api::only_signed(door, "POST", false) {
+            return;
+        }
         let Some(body) = doors::pair_body(sender, name) else {
             return;
         };
@@ -394,6 +405,9 @@ impl DoorsModel {
     }
 
     pub fn unpair(&self, door: &Door, key: &Key) {
+        if doors::api::only_signed(door, "DELETE", false) {
+            return;
+        }
         self.work(
             "DELETE",
             doors::key_path(&self.id, &door.id, &key.id),
@@ -1113,6 +1127,38 @@ impl Dial {
     }
 }
 
+thread_local! {
+    /// A screenshot's button pressed once the door is drawn (`--page doors:<taf>:<door>:<name>`):
+    /// `door.api.new_key`, `door.api.instructions`.
+    pub static PRESS: RefCell<Option<String>> = const { RefCell::new(None) };
+}
+
+/// The screenshot's button, pressed once it's drawn: found by its name under `under`.
+fn press_for_screenshot(under: &gtk::Widget) {
+    let Some(name) = PRESS.with(|p| p.borrow().clone()) else {
+        return;
+    };
+    fn find(w: &gtk::Widget, name: &str) -> Option<gtk::Button> {
+        if w.widget_name() == name {
+            if let Ok(b) = w.clone().downcast::<gtk::Button>() {
+                return Some(b);
+            }
+        }
+        let mut c = w.first_child();
+        while let Some(child) = c {
+            if let Some(b) = find(&child, name) {
+                return Some(b);
+            }
+            c = child.next_sibling();
+        }
+        None
+    }
+    if let Some(b) = find(under, &name) {
+        PRESS.with(|p| *p.borrow_mut() = None);
+        glib::idle_add_local_once(move || b.emit_clicked());
+    }
+}
+
 /// `DoorsView`: the doors' dial over the door it's turned to, or one door's screen (`focus`).
 /// Read when it's shown.
 pub fn view(model: DoorsModel, taf: DoorsTaf, opens: Opens) -> gtk::Box {
@@ -1410,6 +1456,9 @@ impl Ctx {
 
     /// `panel(_:)`: the door, its address and its day; then who may give it work, and Remove.
     fn door_panels(self: &Rc<Self>, door: &Door) {
+        if doors::api::is_api(door) {
+            return self.api_panels(door);
+        }
         let w = &self.model.w;
         let manages = self.opens.manages;
         let busy = self.model.state.borrow().busy;
@@ -1546,6 +1595,227 @@ impl Ctx {
         self.details.append(&k);
     }
 
+    /// `APIDoorPanel`: a door "From another application". Its kind and name, the open switch,
+    /// today's requests against the limit and the last request in tafs cloud's words; then its
+    /// keys (made, last used, last four: never a key), New key, the API instructions and Remove.
+    /// Pausing goes from here, unsigned. Opening it again, a new key, revoking one and removing
+    /// the door are signed: this computer says it can't, with "Approve on your phone instead",
+    /// and sends nothing (`signed::Act::at_api_door`).
+    fn api_panels(self: &Rc<Self>, door: &Door) {
+        use doors::api;
+        use tafs_core::signed::Act;
+        let w = self.model.w.clone();
+        let manages = self.opens.manages;
+        let busy = self.model.state.borrow().busy;
+        let refuse = {
+            let (w, slot) = (w.clone(), self.slot.clone());
+            Rc::new(move |act: Act, what: Option<String>| {
+                crate::approval::refuse_as(&w, tafs_core::sidebar::Mode::Kiff, &act, what, &slot);
+            })
+        };
+        let (taf_id, door_id) = (self.model.id.clone(), door.id.clone());
+
+        let p = panel(false);
+        let head = gtk::Box::new(gtk::Orientation::Horizontal, 12);
+        head.append(&badge(&door.app, door.open, 34));
+        let names = gtk::Box::new(gtk::Orientation::Vertical, 2);
+        names.set_hexpand(true);
+        names.set_valign(gtk::Align::Center);
+        names.append(&eyebrow(&self.l("door.api.kind"), false));
+        names.append(&text(&door.label, 17, 600, &["tafs-ink"]));
+        head.append(&names);
+        if manages {
+            let s = gtk::Switch::new();
+            s.set_active(door.open);
+            s.set_valign(gtk::Align::Center);
+            s.set_sensitive(!busy);
+            s.add_css_class("tafs-ok-switch");
+            s.set_widget_name("door.api.open");
+            s.update_property(&[gtk::accessible::Property::Label(
+                &self.l("door.status.open"),
+            )]);
+            let (model, d, refuse, w) =
+                (self.model.clone(), door.clone(), refuse.clone(), w.clone());
+            let (taf_id, door_id) = (taf_id.clone(), door_id.clone());
+            s.connect_state_set(move |s, on| {
+                if on == d.open {
+                    return glib::Propagation::Stop;
+                }
+                if on {
+                    // Opening it again is signed: it stays paused here.
+                    s.set_active(false);
+                    refuse(
+                        Act::ReopenDoor {
+                            taf: taf_id.clone(),
+                            door: door_id.clone(),
+                        },
+                        w.get("door.api.open_reason", &[("app", &d.label)]).ok(),
+                    );
+                } else {
+                    model.set_open(&d, false);
+                }
+                glib::Propagation::Stop
+            });
+            head.append(&s);
+        }
+        p.append(&head);
+        if !door.open {
+            p.append(&text(
+                &self.l("door.api.paused"),
+                14,
+                400,
+                &["tafs-amber-text"],
+            ));
+        }
+        let today = api::today(door);
+        p.append(&eyebrow(&self.l("door.api.today"), false));
+        p.append(&meter(
+            today as f64 / door.limit.max(1) as f64,
+            tafs_core::theme::taf_color(self.taf.color),
+        ));
+        let limit = tafs_core::locale::number(door.limit, 0, w.language());
+        if let Ok(of) = w.count("door.api.of_limit", today, &[("limit", &limit)]) {
+            p.append(&text(&of, 13, 500, &["tafs-soft"]));
+        }
+        // Only in tafs cloud's words: none is drawn until they're sent.
+        if let Ok(Some(last)) = api::last_request(&w, door) {
+            let l = text(&last, 13, 400, &["tafs-soft"]);
+            l.set_widget_name("door.api.last_request");
+            p.append(&l);
+        }
+        self.details.append(&p);
+
+        let k = panel(false);
+        k.append(&eyebrow(&self.l("door.api.keys"), false));
+        for key in &door.keys {
+            let line = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+            let v = gtk::Box::new(gtk::Orientation::Vertical, 2);
+            v.set_hexpand(true);
+            v.append(&text(
+                key.name.as_deref().unwrap_or(&key.id),
+                15,
+                600,
+                &["tafs-ink"],
+            ));
+            if let Ok(l) = api::key_line(&w, key) {
+                v.append(&text(&l, 12, 400, &["tafs-dim"]));
+            }
+            line.append(&v);
+            if manages {
+                let b = gtk::Button::with_label(&self.l("taf.revoke"));
+                b.add_css_class("tafs-link");
+                b.add_css_class("tafs-no");
+                b.set_valign(gtk::Align::Start);
+                b.set_sensitive(!busy);
+                b.set_widget_name(&format!("door.api.revoke.{}", key.id));
+                let (me, key, refuse) = (Rc::downgrade(self), key.clone(), refuse.clone());
+                let (taf_id, door_id) = (taf_id.clone(), door_id.clone());
+                b.connect_clicked(move |_| {
+                    let Some(c) = me.upgrade() else { return };
+                    let name = api::name(&key);
+                    let w = &c.model.w;
+                    let ask = adw::AlertDialog::new(
+                        Some(
+                            &w.get("door.api.revoke_title", &[("key", &name)])
+                                .unwrap_or_default(),
+                        ),
+                        Some(&c.l("door.api.revoke_body")),
+                    );
+                    ask.add_response("cancel", &c.l("common.cancel"));
+                    ask.add_response("revoke", &c.l("taf.revoke"));
+                    ask.set_response_appearance("revoke", adw::ResponseAppearance::Destructive);
+                    ask.set_default_response(Some("cancel"));
+                    ask.set_close_response("cancel");
+                    let (refuse, taf_id, door_id, key_id) = (
+                        refuse.clone(),
+                        taf_id.clone(),
+                        door_id.clone(),
+                        key.id.clone(),
+                    );
+                    let what = w.get("door.api.revoke_reason", &[("key", &name)]).ok();
+                    ask.connect_response(None, move |_, answer| {
+                        if answer == "revoke" {
+                            refuse(
+                                Act::RevokeDoorKey {
+                                    taf: taf_id.clone(),
+                                    door: door_id.clone(),
+                                    key: key_id.clone(),
+                                },
+                                what.clone(),
+                            );
+                        }
+                    });
+                    ask.present(Some(&c.parent()));
+                });
+                line.append(&b);
+            }
+            k.append(&line);
+        }
+        if manages {
+            let b = outline(&self.l("door.api.new_key"));
+            b.set_widget_name("door.api.new_key");
+            b.set_sensitive(!busy && door.keys.len() < api::MAX_KEYS);
+            let (refuse, w2, label) = (refuse.clone(), w.clone(), door.label.clone());
+            let (taf_id, door_id) = (taf_id.clone(), door_id.clone());
+            b.connect_clicked(move |_| {
+                refuse(
+                    Act::NewDoorKey {
+                        taf: taf_id.clone(),
+                        door: door_id.clone(),
+                    },
+                    w2.get("door.api.new_key_reason", &[("app", &label)]).ok(),
+                );
+            });
+            k.append(&b);
+        }
+        k.append(&text(&self.l("door.api.two_keys"), 12, 400, &["tafs-dim"]));
+        let boundary = w
+            .get("door.api.boundary", &[("taf", &self.taf.name)])
+            .unwrap_or_default();
+        k.append(&text(&boundary, 13, 400, &["tafs-soft"]));
+        let instructions = gtk::Button::new();
+        instructions.add_css_class("flat");
+        instructions.set_widget_name("door.api.instructions");
+        let row = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+        let title = text(&self.l("door.api.instructions"), 15, 500, &["tafs-ink"]);
+        title.set_hexpand(true);
+        row.append(&title);
+        let chevron =
+            gtk::Image::from_icon_name(if tafs_core::locale::right_to_left(w.language()) {
+                "go-previous-symbolic"
+            } else {
+                "go-next-symbolic"
+            });
+        chevron.add_css_class("tafs-dim");
+        row.append(&chevron);
+        instructions.set_child(Some(&row));
+        {
+            let (w, d, taf, parent) = (
+                w.clone(),
+                door.clone(),
+                self.taf.name.clone(),
+                self.parent(),
+            );
+            instructions.connect_clicked(move |_| api_instructions(&w, &d, &taf, &parent));
+        }
+        k.append(&instructions);
+        if manages {
+            let b = gtk::Button::with_label(&self.l("door.remove_door"));
+            b.add_css_class("tafs-link");
+            b.add_css_class("tafs-no");
+            b.set_halign(gtk::Align::Start);
+            let (me, d) = (Rc::downgrade(self), door.clone());
+            b.connect_clicked(move |_| {
+                if let Some(c) = me.upgrade() {
+                    c.confirm_remove(&d);
+                }
+            });
+            k.append(&b);
+        }
+        self.details.append(&k);
+        press_for_screenshot(self.details.upcast_ref());
+    }
+
     /// Remove's question: what goes, and Remove in red. A Slack door's subscription at planque
     /// goes first, signed by the device: this computer can't, so it says so and the door stays.
     fn confirm_remove(self: &Rc<Self>, door: &Door) {
@@ -1569,6 +1839,18 @@ impl Ctx {
         ask.connect_response(None, move |_, response| {
             let Some(c) = me.upgrade() else { return };
             if response != "remove" {
+                return;
+            }
+            if doors::api::is_api(&d) {
+                crate::approval::refuse(
+                    &c.model.w,
+                    tafs_core::sidebar::Mode::Kiff,
+                    &tafs_core::signed::Act::RemoveApiDoor {
+                        taf: c.model.id.clone(),
+                        door: d.id.clone(),
+                    },
+                    &c.slot,
+                );
                 return;
             }
             if d.kind == "slack" && c.opens.removes_slack {
@@ -1747,6 +2029,80 @@ pub fn add_door_sheet(
 
 /// `PairSheet`: a sender paired with a door gives the taf work from now on. Pair is there while
 /// the sender isn't empty and nothing is on its way, and closes the sheet once taken.
+/// `APIInstructionsView`: where to send work, the example request (reading the key from the
+/// caller's own secret), that the key isn't here, and what a door's key can't do.
+fn api_instructions(w: &WordBook, door: &Door, taf: &str, parent: &gtk::Widget) {
+    let l = |k: &str| w.line(k).unwrap_or_default();
+    let endpoint = doors::api::endpoint(door);
+    let column = gtk::Box::new(gtk::Orientation::Vertical, 14);
+    column.set_margin_start(20);
+    column.set_margin_end(20);
+    column.set_margin_top(20);
+    column.set_margin_bottom(20);
+    column.append(&text(&l("door.api.instructions"), 24, 700, &["tafs-ink"]));
+    column.append(&eyebrow(&l("door.api.where"), false));
+    let address = text(&endpoint, 14, 400, &["tafs-ink", "tafs-mono"]);
+    address.set_selectable(true);
+    address.set_widget_name("door.api.endpoint");
+    // An address reads left to right in every language.
+    address.set_direction(gtk::TextDirection::Ltr);
+    address.set_xalign(0.0);
+    column.append(&address);
+    column.append(&eyebrow(&l("door.api.example"), false));
+    // Code, as written: monospaced, selectable, scrolled sideways rather than wrapped.
+    let code = gtk::Label::new(Some(&doors::api::example(&endpoint)));
+    code.add_css_class("tafs-mono");
+    code.add_css_class("tafs-ink");
+    code.set_selectable(true);
+    code.set_xalign(0.0);
+    code.set_direction(gtk::TextDirection::Ltr);
+    code.set_margin_start(12);
+    code.set_margin_end(12);
+    code.set_margin_top(12);
+    code.set_margin_bottom(12);
+    code.set_widget_name("door.api.example");
+    let scroller = gtk::ScrolledWindow::new();
+    // Code starts at the left in every language, scrolled from its start.
+    scroller.set_direction(gtk::TextDirection::Ltr);
+    scroller.set_vscrollbar_policy(gtk::PolicyType::Never);
+    // Its own viewport, left to right too: one made for it would take the language's direction
+    // and start scrolled to the end.
+    let viewport = gtk::Viewport::new(gtk::Adjustment::NONE, gtk::Adjustment::NONE);
+    viewport.set_direction(gtk::TextDirection::Ltr);
+    viewport.set_child(Some(&code));
+    scroller.set_child(Some(&viewport));
+    scroller.add_css_class("tafs-raised");
+    scroller.add_css_class("tafs-code-block");
+    column.append(&scroller);
+    column.append(&text(&l("door.api.key_not_here"), 14, 400, &["tafs-soft"]));
+    column.append(&text(
+        &w.get("door.api.boundary", &[("taf", taf)])
+            .unwrap_or_default(),
+        14,
+        400,
+        &["tafs-soft"],
+    ));
+    let done = gtk::Button::with_label(&l("common.done"));
+    done.add_css_class("flat");
+    column.append(&done);
+    crate::widgets::ground(&column);
+    let dialog = adw::Dialog::new();
+    dialog.set_title(&l("door.api.instructions"));
+    dialog.set_child(Some(&column));
+    dialog.set_content_width(520);
+    // Done takes the focus, so the address isn't shown selected.
+    dialog.set_focus(Some(&done));
+    {
+        let d = dialog.downgrade();
+        done.connect_clicked(move |_| {
+            if let Some(d) = d.upgrade() {
+                d.close();
+            }
+        });
+    }
+    dialog.present(Some(parent));
+}
+
 fn pair_sheet(model: &DoorsModel, door: &Door, parent: &gtk::Widget) {
     let w = model.w.clone();
     let l = |k: &str| w.line(k).unwrap_or_default();

@@ -162,6 +162,26 @@ sheet over the page.
 - **A Slack door's removal**, from one door's screen: planque's subscription is stopped first,
   signed by the device; this computer can't, so Remove's yes shows the can't-approve line and the
   door stays ([approval](approval.md)). Adding one through Slack's own sheet is Starts when's.
+- **A door "From another application"** (`kind: "api"`, `APIDoorPanel`): FROM ANOTHER APPLICATION
+  over its name, the switch; while paused, "Requests are refused until you open it…" in amber;
+  TODAY, a meter in the taf's colour and "37 of 100"; "Last request {time} · {status}" only in
+  tafs cloud's words (none drawn until it sends them, never its raw `status`), the time in the
+  account's zone (`locale::date_time`, the iPad's `.abbreviated` date and `.shortened` time). Then
+  KEYS, each with its name and "Made … · last used … · ends …iXrW" (never a key), Revoke in red;
+  New key (off at two keys); the two-keys note and what a door's key can't do; **API
+  instructions**, a dialog with where to send work (the whole address on tafs cloud), the example
+  request reading `$TAFS_API_KEY` (monospaced, left to right in every language, scrolled sideways)
+  and that the key isn't here; Remove door.
+  - **Pausing it** is the one change sent from here (`PATCH …/doors/{door} {"open": false}`).
+    Opening it again, New key, Revoke (after its question) and Remove (after its) are signed at tafs
+    cloud by the phone's approval key: this computer shows the can't-approve line with "Approve on
+    your phone instead" and sends nothing (`signed::Act::at_api_door`). Another door's changes go
+    unsigned at the same paths, so the path can't tell them apart: `DoorsModel` asks
+    `doors::api::only_signed` before every call and drops these.
+  - `--page doors:<taf>:<door>:<button>` presses a button once the door is drawn, for the
+    screenshots: `crates/tafs-app/fixtures/taf-doors-api.json` (tafs cloud's contract) and
+    `taf-doors-api-paused.json` (synthetic: paused, one key), CI's `doors-api`,
+    `doors-api-new-key` and `doors-api-instructions`.
 
 ### The taf's dial
 

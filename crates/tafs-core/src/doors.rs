@@ -9,11 +9,15 @@ use serde_json::Value;
 use crate::words::{WordBook, WordsError};
 
 /// A paired sender (`Door.Key`): its id; the rest read when it can be.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct Key {
     pub id: String,
     pub name: Option<String>,
     pub auto: bool,
+    /// An `api` door's key: its last four, when it was made and last used. Never the key.
+    pub last4: Option<String>,
+    pub made_at: Option<String>,
+    pub last_used_at: Option<String>,
 }
 
 impl<'de> Deserialize<'de> for Key {
@@ -27,6 +31,12 @@ impl<'de> Deserialize<'de> for Key {
             id: id.to_string(),
             name: v.get("name").and_then(Value::as_str).map(str::to_string),
             auto: v.get("auto").and_then(Value::as_bool).unwrap_or(false),
+            last4: v.get("last4").and_then(Value::as_str).map(str::to_string),
+            made_at: v.get("made_at").and_then(Value::as_str).map(str::to_string),
+            last_used_at: v
+                .get("last_used_at")
+                .and_then(Value::as_str)
+                .map(str::to_string),
         })
     }
 }
@@ -67,6 +77,132 @@ pub struct Door {
     pub channel: Option<String>,
     #[serde(default)]
     pub trigger: Option<String>,
+    /// An `api` door's counts (`today` the requests today), and its last request.
+    #[serde(default)]
+    pub counts: Option<Counts>,
+    #[serde(default)]
+    pub last_request: Option<LastRequest>,
+}
+
+/// An `api` door's counts (`Door.Counts`).
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+pub struct Counts {
+    #[serde(default)]
+    pub today: Option<i64>,
+}
+
+/// An `api` door's last request (`Door.LastRequest`): its state in tafs cloud's words, and when.
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+pub struct LastRequest {
+    #[serde(default)]
+    pub status: Option<String>,
+    #[serde(default)]
+    pub at: Option<String>,
+    #[serde(default)]
+    pub words: Option<String>,
+}
+
+/// The `api` door's lines that aren't words (`APIDoorText`): dates, a key's name, the endpoint and
+/// the example.
+pub mod api {
+    use super::{Door, Key};
+    use crate::words::{WordBook, WordsError};
+
+    /// A door holds at most two live keys, so one can be replaced without stopping the other.
+    pub const MAX_KEYS: usize = 2;
+
+    /// A door "From another application".
+    pub fn is_api(door: &Door) -> bool {
+        door.kind == "api"
+    }
+
+    /// A change tafs cloud takes on an `api` door only signed: opening it again, its keys, its
+    /// removal. Pausing (`PATCH` with `open: false`) is the one this computer sends. The doors
+    /// screen asks before each call, and refuses these (`signed::Act::at_api_door`).
+    pub fn only_signed(door: &Door, method: &str, opens: bool) -> bool {
+        is_api(door) && !(method == "PATCH" && !opens)
+    }
+
+    /// A door's address on tafs cloud, whole.
+    pub fn endpoint(door: &Door) -> String {
+        if door.address.starts_with("https://") {
+            door.address.clone()
+        } else {
+            format!("{}{}", crate::home::TAFS_CLOUD, door.address)
+        }
+    }
+
+    /// Today's requests: the counts' when sent, else the door's own.
+    pub fn today(door: &Door) -> i64 {
+        door.counts
+            .as_ref()
+            .and_then(|c| c.today)
+            .unwrap_or(door.today)
+    }
+
+    /// The last request's state in tafs cloud's words, trimmed; none until it sends them, never
+    /// the raw `status`.
+    pub fn last_request_words(door: &Door) -> Option<String> {
+        let words = door.last_request.as_ref()?.words.as_deref()?.trim();
+        (!words.is_empty()).then(|| words.to_string())
+    }
+
+    /// An ISO time from tafs cloud, in the account's zone: its date and time, abbreviated; none
+    /// when it isn't one.
+    pub fn when(language: &str, iso: Option<&str>) -> Option<String> {
+        let at = chrono::DateTime::parse_from_rfc3339(iso?).ok()?;
+        Some(crate::locale::date_time(
+            language,
+            crate::account_time::local(&at),
+        ))
+    }
+
+    /// "Last request {time} · {status}", in tafs cloud's words only.
+    pub fn last_request(w: &WordBook, door: &Door) -> Result<Option<String>, WordsError> {
+        let Some(words) = last_request_words(door) else {
+            return Ok(None);
+        };
+        let at = door.last_request.as_ref().and_then(|l| l.at.as_deref());
+        let time = when(w.language(), at)
+            .or_else(|| at.map(str::to_string))
+            .unwrap_or_default();
+        Ok(Some(w.get(
+            "door.api.last_request",
+            &[("time", &time), ("status", &words)],
+        )?))
+    }
+
+    /// What a key is called: its name, else its last four, else its id.
+    pub fn name(key: &Key) -> String {
+        key.name
+            .clone()
+            .or_else(|| key.last4.as_ref().map(|l| format!("…{l}")))
+            .unwrap_or_else(|| key.id.clone())
+    }
+
+    /// The key's line: made, last used or not yet, and its last four. Never the key.
+    pub fn key_line(w: &WordBook, key: &Key) -> Result<String, WordsError> {
+        let made = when(w.language(), key.made_at.as_deref()).unwrap_or_default();
+        let last4 = key.last4.clone().unwrap_or_default();
+        match when(w.language(), key.last_used_at.as_deref()) {
+            Some(used) => w.get(
+                "door.api.key_line",
+                &[("made", &made), ("used", &used), ("last4", &last4)],
+            ),
+            None => w.get(
+                "door.api.key_never_used",
+                &[("made", &made), ("last4", &last4)],
+            ),
+        }
+    }
+
+    /// An example request. It reads the key from the caller's own secret, `$TAFS_API_KEY`: the key
+    /// is never written in it.
+    pub fn example(endpoint: &str) -> String {
+        format!(
+            "curl -X POST {endpoint} \\\n  -H \"Authorization: Bearer $TAFS_API_KEY\" \\\n  -H \"Idempotency-Key: <your request id>\" \\\n  -H \"Content-Type: application/json\" \\\n  -d '{{\"input\": {{}}}}'"
+        )
+    }
 }
 
 /// An app a door can open on (`DoorApp`).
@@ -1013,12 +1149,12 @@ mod tests {
         door.keys.push(Key {
             id: "Ana@Example.com".into(),
             name: Some("ana@example.com".into()),
-            auto: false,
+            ..Key::default()
         });
         door.keys.push(Key {
             id: "bo@example.com".into(),
             name: Some("Bo".into()),
-            auto: false,
+            ..Key::default()
         });
         let l = door_lines(&w, &door, "Rae", true, Some("ME@example.com")).unwrap();
         assert_eq!(l.named, "Email door");
@@ -1101,6 +1237,108 @@ mod tests {
             door_lines(&w, &d.doors[0], "Rae", true, None).unwrap();
             rest_line(&w, &d.knocks[3]).unwrap();
             pair_hint(&w, &d.doors[0]).unwrap();
+        }
+    }
+
+    #[test]
+    fn an_api_door_reads_its_keys_counts_and_last_request() {
+        let body = std::fs::read(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../tafs-app/fixtures/taf-doors-api.json"
+        ))
+        .unwrap();
+        let d = read(&body).unwrap();
+        let door = &d.doors[0];
+        assert_eq!(door.kind, "api");
+        assert_eq!(door.keys.len(), 2);
+        assert_eq!(door.keys[0].last4.as_deref(), Some("iXrW"));
+        assert_eq!(door.keys[1].last_used_at, None);
+        assert_eq!(api::today(door), 37);
+        assert_eq!(
+            api::endpoint(door),
+            "https://cloud.tafs.kiff.dev/v1/doors/api/door_ord7/requests"
+        );
+        let w = words();
+        let last = api::last_request(&w, door).unwrap().unwrap();
+        assert!(
+            last.starts_with("Last request ") && last.ends_with(" · Done"),
+            "{last}"
+        );
+        assert!(last.contains("2026"), "{last}");
+        let used = api::key_line(&w, &door.keys[0]).unwrap();
+        assert!(
+            used.contains("last used") && used.ends_with("ends …iXrW"),
+            "{used}"
+        );
+        let never = api::key_line(&w, &door.keys[1]).unwrap();
+        assert!(
+            never.contains("not used yet") && never.ends_with("…Qp0z"),
+            "{never}"
+        );
+        assert_eq!(api::name(&door.keys[0]), "ERP production");
+        // Only pausing goes unsigned; another door's changes all do.
+        assert!(!api::only_signed(door, "PATCH", false));
+        assert!(api::only_signed(door, "PATCH", true));
+        assert!(api::only_signed(door, "POST", false));
+        assert!(api::only_signed(door, "DELETE", false));
+        let mut email = door.clone();
+        email.kind = "email".into();
+        assert!(!api::only_signed(&email, "DELETE", false));
+    }
+
+    #[test]
+    fn an_api_door_never_words_a_state_itself() {
+        let mut door = read(
+            &std::fs::read(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../tafs-app/fixtures/taf-doors-api.json"
+            ))
+            .unwrap(),
+        )
+        .unwrap()
+        .doors
+        .remove(0);
+        door.last_request = Some(LastRequest {
+            status: Some("done".into()),
+            at: Some("2026-11-19T09:42:15Z".into()),
+            words: Some("  ".into()),
+        });
+        assert_eq!(api::last_request(&words(), &door).unwrap(), None);
+        door.counts = None;
+        door.today = 4;
+        assert_eq!(api::today(&door), 4);
+        let k = Key {
+            id: "key_9".into(),
+            name: None,
+            auto: false,
+            last4: Some("AbCd".into()),
+            made_at: Some("not a time".into()),
+            last_used_at: None,
+        };
+        assert_eq!(api::name(&k), "…AbCd");
+        assert_eq!(api::when("en", k.made_at.as_deref()), None);
+        let ex = api::example("https://x/y");
+        assert!(ex.starts_with("curl -X POST https://x/y \\\n"));
+        assert!(ex.contains("$TAFS_API_KEY") && !ex.contains("key_"));
+    }
+
+    #[test]
+    fn every_shipped_language_has_an_api_doors_lines() {
+        let body = std::fs::read(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../tafs-app/fixtures/taf-doors-api.json"
+        ))
+        .unwrap();
+        let door = read(&body).unwrap().doors.remove(0);
+        for lang in crate::words::SHIPPED {
+            let w = WordBook::load(&WordBook::default_root(), lang).unwrap();
+            for line in [
+                api::last_request(&w, &door).unwrap().unwrap(),
+                api::key_line(&w, &door.keys[0]).unwrap(),
+                api::key_line(&w, &door.keys[1]).unwrap(),
+            ] {
+                assert!(!line.contains('{'), "{lang}: {line}");
+            }
         }
     }
 }

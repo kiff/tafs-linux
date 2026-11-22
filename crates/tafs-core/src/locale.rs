@@ -54,6 +54,27 @@ pub fn short_date(language: &str, day: chrono::NaiveDate) -> String {
     f.format(&d).to_string()
 }
 
+/// `Date.shown(date: .abbreviated, time: .shortened)`: "Nov 22, 2026, 4:30 PM", "22 nov. 2026, 16:30".
+pub fn date_time(language: &str, at: chrono::NaiveDateTime) -> String {
+    use chrono::Timelike;
+    use icu::datetime::options::TimePrecision;
+    let fallback = || at.format("%Y-%m-%d %H:%M").to_string();
+    let (Some(d), Ok(t)) = (
+        date(at.date()),
+        icu::time::Time::try_new(at.hour() as u8, at.minute() as u8, 0, 0),
+    ) else {
+        return fallback();
+    };
+    let Ok(f) = DateTimeFormatter::try_new(
+        locale(language).into(),
+        fieldsets::YMDT::medium().with_time_precision(TimePrecision::Minute),
+    ) else {
+        return fallback();
+    };
+    f.format(&icu::time::DateTime { date: d, time: t })
+        .to_string()
+}
+
 /// `.dateTime.weekday(.abbreviated).day().month(.abbreviated)`: "Thu, Nov 19", "jeu. 19 nov.", "11月19日(木)".
 pub fn weekday_day_month(language: &str, day: chrono::NaiveDate) -> String {
     let (Some(d), Ok(f)) = (
@@ -208,6 +229,22 @@ pub fn number(minor: i64, decimals: u32, language: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_date_and_time_is_abbreviated_with_the_language_s_clock() {
+        let at = chrono::NaiveDate::from_ymd_opt(2026, 11, 19)
+            .unwrap()
+            .and_hms_opt(16, 30, 0)
+            .unwrap();
+        let en = date_time("en", at);
+        assert!(en.contains("Nov 19, 2026") && en.contains("4:30"), "{en}");
+        let fr = date_time("fr", at);
+        assert!(fr.contains("19 nov. 2026") && fr.contains("16:30"), "{fr}");
+        assert!(date_time("ar", at).contains("16:30") || date_time("ar", at).contains("4:30"));
+        for lang in crate::words::SHIPPED {
+            assert!(!date_time(lang, at).is_empty(), "{lang}");
+        }
+    }
 
     fn day(y: i32, m: u32, d: u32) -> chrono::NaiveDate {
         chrono::NaiveDate::from_ymd_opt(y, m, d).unwrap()
