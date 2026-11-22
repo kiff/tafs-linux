@@ -107,6 +107,8 @@ pub struct Screens {
     pub devices: crate::devices::DevicesSource,
     /// Account › Alerts: signed in with KIFF, whether this person may answer held calls.
     pub alerts: crate::alerts::AlertsSource,
+    /// Where Files reads, signed in with KIFF.
+    pub files: crate::files::FilesSource,
     /// Where People & groups reads, and what it knows besides.
     pub people: crate::people::PeopleSource,
     pub people_known: Rc<crate::people::Known>,
@@ -164,6 +166,7 @@ pub fn build(
         people,
         people_known,
         zones,
+        files,
         recipes,
         gallery,
         halt,
@@ -374,6 +377,7 @@ pub fn build(
                         actions.clone(),
                     )
                 }
+                Selection::Files(taf) => crate::files::page(w.clone(), files.clone(), taf.clone()),
                 Selection::People => {
                     let open = open.clone();
                     crate::people::page(
@@ -463,11 +467,21 @@ pub fn build(
                                 _ => None,
                             };
                             let (o1, o2, o3) = (open.clone(), open.clone(), open.clone());
+                            let files_entry = match (&files, &t.cloud_id) {
+                                (crate::files::FilesSource::None, _) | (_, None) => None,
+                                (source, Some(id)) => {
+                                    let (open, id) = (open.clone(), id.clone());
+                                    let to: Rc<dyn Fn()> =
+                                        Rc::new(move || open(Selection::Files(Some(id.clone()))));
+                                    Some((source.clone(), to))
+                                }
+                            };
                             let page = crate::taf::page(
                                 w.clone(),
                                 t,
                                 entries.clone(),
                                 halt_row,
+                                files_entry,
                                 Rc::new(move || o1(Selection::Usage)),
                                 Rc::new(move || o2(Selection::Coach)),
                                 Rc::new(move || o3(Selection::ConnectApps)),
@@ -545,6 +559,7 @@ pub fn build(
                                         Selection::ConnectApps
                                     }
                                     tafs_core::account::Screen::Usage => Selection::Usage,
+                                    tafs_core::account::Screen::Files => Selection::Files(None),
                                     tafs_core::account::Screen::Alerts => Selection::Alerts,
                                     // A sheet over Account, as the cards are.
                                     tafs_core::account::Screen::HowItWorks => {
@@ -1277,6 +1292,7 @@ fn title_of(
         Selection::Coach => l("coach.coach_mode"),
         Selection::Devices => l("settings.devices.title"),
         Selection::People => l("people.title"),
+        Selection::Files(_) => l("files.title"),
         Selection::KiffAccount => l("settings.kiff_account"),
         Selection::TimeZone => l("settings.time_zone_title"),
         Selection::Language => l("settings.language_title"),

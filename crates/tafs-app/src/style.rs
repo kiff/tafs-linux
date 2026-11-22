@@ -455,6 +455,8 @@ button.tafs-label-chip.selected { background-color: @tafs_ink; color: @tafs_on_f
 .tafs-evidence { color: @tafs_coach; background-color: @tafs_coach_wash; border-radius: 999px; padding: 2px 6px; }
 /* A taf's labels on its line (`TafLabels`): 11 medium, soft, on the raised colour. */
 .tafs-taf-label { color: @tafs_soft; background-color: @tafs_raised; border-radius: 999px; padding: 2px 7px; }
+/* FileBadge: the type in small bold letters on the soft colour, a quarter-round square. */
+.tafs-file-badge { font-size: 10px; font-weight: 700; color: @tafs_background; background-color: @tafs_soft; border-radius: 10px; min-width: 40px; min-height: 40px; }
 .tafs-chip-dot { background-color: @tafs_amber; border-radius: 999px; min-width: 6px; min-height: 6px; }
 "#;
 

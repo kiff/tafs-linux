@@ -203,6 +203,8 @@ pub enum Screen {
     Language,
     /// How tafs works: the three cards again and the legal pages (`HowTafsWorksView`).
     HowItWorks,
+    /// Files: every file the account's tafs delivered (`FilesView`).
+    Files,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -325,6 +327,12 @@ pub fn lines(
                     title: l("connect.apps.title")?,
                     value: None,
                     screen: Screen::ConnectApps,
+                },
+                // Files (docs/files.md): every file the account's tafs delivered.
+                Row::Opens {
+                    title: l("files.title")?,
+                    value: None,
+                    screen: Screen::Files,
                 },
             ],
         });

@@ -111,11 +111,13 @@ pub enum ActivitySource {
     None,
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn page(
     w: Rc<WordBook>,
     t: &TafPage,
     entries: Rc<Vec<Entry>>,
     halt_row: Option<(gtk::Button, crate::halt::Shows)>,
+    files: Option<(crate::files::FilesSource, Rc<dyn Fn()>)>,
     open_usage: Rc<dyn Fn()>,
     open_coach: Rc<dyn Fn()>,
     open_connect: Rc<dyn Fn()>,
@@ -160,16 +162,32 @@ pub fn page(
         head.append(&chip);
     }
     outer.append(&head);
-    // Its versions, and its trial while one is open, for the person who manages a tafs cloud taf.
-    if let (false, true, Some(id)) = (t.sample, t.manages, &t.cloud_id) {
-        outer.append(&crate::versions::link(
-            w.clone(),
-            crate::versions::VersionsTaf {
-                id: id.clone(),
-                name: t.name.clone(),
-                chat: t.chat.clone(),
-            },
-        ));
+    // Its versions, and its trial while one is open, for the person who manages a tafs cloud taf;
+    // first on that line, its Files (`TafFilesEntry`), for anyone, with none yet too.
+    if let (false, Some(id)) = (t.sample, &t.cloud_id) {
+        let line = if t.manages {
+            crate::versions::link(
+                w.clone(),
+                crate::versions::VersionsTaf {
+                    id: id.clone(),
+                    name: t.name.clone(),
+                    chat: t.chat.clone(),
+                },
+            )
+        } else {
+            let b = gtk::Box::new(gtk::Orientation::Horizontal, 14);
+            b.set_widget_name("taf.versions");
+            b
+        };
+        if let Some((source, open)) = files {
+            line.prepend(&crate::files::taf_entry(
+                w.clone(),
+                source,
+                id.clone(),
+                open,
+            ));
+        }
+        outer.append(&line);
     }
 
     // Chat, Activity, Card, Setup, as the system's segmented control. Chat is a tafs cloud taf's,
