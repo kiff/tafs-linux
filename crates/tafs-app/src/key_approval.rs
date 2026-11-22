@@ -13,7 +13,7 @@ use std::sync::{Arc, Mutex};
 
 use std::rc::Rc;
 use tafs_core::passkey::{self, Assertion, SigningTime};
-use tafs_core::security_key::AssertionAsk;
+use tafs_core::security_key::{self, AssertionAsk};
 use tafs_core::session::{ApprovalMode, KeptSession};
 use tafs_core::signed::Act;
 use tafs_core::words::WordBook;
@@ -77,22 +77,23 @@ pub fn approve(
             // What KIFF would refuse is never sent.
             let header = passkey::header(&signed_at, &credential, &client_data, &assertion, None)
                 .map_err(|_| KeyError::Unreadable)?;
-            match crate::kiff::send_with_key(&token, &languages, method, &path, &body, &header) {
-                Ok(a) if (200..300).contains(&a.status) => Ok(()),
-                Ok(a) => {
-                    let e = tafs_core::signin::refusal(&a, Some(&w2));
-                    *refused.lock().unwrap_or_else(|e| e.into_inner()) =
-                        Some(e.words(&w2).unwrap_or_default());
-                    Err(KeyError::Unreadable)
-                }
-                Err(e) => {
-                    *refused.lock().unwrap_or_else(|e| e.into_inner()) =
-                        Some(e.words(&w2).unwrap_or_default());
-                    Err(KeyError::Unreadable)
-                }
-            }
+            // From here the act may have reached KIFF: whatever comes back, the sheet closes with
+            // KIFF's line (or the network's), and never offers a try that would send it again.
+            let line =
+                match crate::kiff::send_with_key(&token, &languages, method, &path, &body, &header)
+                {
+                    Ok(a) if (200..300).contains(&a.status) => return Ok(()),
+                    Ok(a) => tafs_core::signin::refusal(&a, Some(&w2)).words(&w2),
+                    Err(e) => e.words(&w2),
+                };
+            *refused.lock().unwrap_or_else(|e| e.into_inner()) = line.ok();
+            Err(KeyError::Sent)
         })
     };
+    // Its own handle: each `OpenKey` call opens the key, asks once and closes it, and libfido2
+    // gives each open its own channel. If the tries are still being read when the PIN is sent,
+    // the key answers one and refuses the other as busy: no tries line, or "failed" and the sheet
+    // stays open to try again, the act not sent. One shared `OpenKey` would track only one.
     let read_tries: crate::pin_sheet::ReadTries = {
         let open = Arc::new(OpenKey::default());
         Arc::new(move || open.tries_left())
@@ -101,20 +102,55 @@ pub fn approve(
         let open = open.clone();
         Arc::new(move || open.cancel())
     };
-    let sheet_done: crate::pin_sheet::Done = Rc::new(move |e| match e {
-        None => done(Some(Ok(()))),
-        Some(KeyError::Cancelled) => done(None),
-        Some(other) => {
+    let sheet_done: crate::pin_sheet::Done = {
+        let w = w.clone();
+        Rc::new(move |e| {
             let kiff = refused.lock().unwrap_or_else(|e| e.into_inner()).take();
-            done(Some(Err(kiff.unwrap_or_else(|| format!("{other:?}")))))
-        }
-    });
+            done(closed_with(&w, e, kiff))
+        })
+    };
     crate::pin_sheet::present(w, parent, attempt, read_tries, stop, sheet_done);
+}
+
+/// What the sheet closing comes to: approved; cancelled (nothing); or the line to show, KIFF's
+/// own when it answered, never a debug string.
+fn closed_with(
+    w: &WordBook,
+    e: Option<KeyError>,
+    kiff: Option<String>,
+) -> Option<Result<(), String>> {
+    match e {
+        None => Some(Ok(())),
+        Some(KeyError::Cancelled) => None,
+        Some(_) => Some(Err(kiff
+            .filter(|l| !l.is_empty())
+            .unwrap_or_else(|| security_key::words::failed(w).unwrap_or_default()))),
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_closed_sheet_says_kiffs_line_or_the_shared_one() {
+        let w = WordBook::load(&WordBook::default_root(), "en").expect("the words at the pin");
+        let failed = security_key::words::failed(&w).unwrap();
+        assert_eq!(closed_with(&w, None, None), Some(Ok(())));
+        assert_eq!(closed_with(&w, Some(KeyError::Cancelled), None), None);
+        assert_eq!(
+            closed_with(&w, Some(KeyError::Sent), Some("KIFF said no.".into())),
+            Some(Err("KIFF said no.".into()))
+        );
+        // No answer to show: the shared line, never `Sent` or `Unreadable` as written in code.
+        for e in [KeyError::Sent, KeyError::Unreadable] {
+            assert_eq!(closed_with(&w, Some(e), None), Some(Err(failed.clone())));
+        }
+        assert_eq!(
+            closed_with(&w, Some(KeyError::Sent), Some(String::new())),
+            Some(Err(failed))
+        );
+    }
 
     #[test]
     fn only_a_session_with_the_key_approves() {

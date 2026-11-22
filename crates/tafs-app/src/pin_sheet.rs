@@ -26,7 +26,7 @@ use crate::widgets::{eyebrow, outline, primary, text};
 pub type Attempt = Arc<dyn Fn(&mut Pin) -> Result<(), KeyError> + Send + Sync>;
 /// Reads the PIN tries left, before the PIN is asked.
 pub type ReadTries = Arc<dyn Fn() -> Result<i32, KeyError> + Send + Sync>;
-/// Hears once: none once approved, or why the sheet closed.
+/// Hears once: none once approved, or why the sheet closed (`Cancelled`, or `Sent`).
 pub type Done = Rc<dyn Fn(Option<KeyError>)>;
 /// Stops the request at the key (`OpenKey::cancel`, as macOS 12's sheet does), from the main
 /// loop while `Attempt` waits on its thread.
@@ -60,6 +60,8 @@ fn said(w: &WordBook, e: KeyError) -> Option<(String, bool)> {
         KeyError::Missing(_) | KeyError::Unreadable => {
             Some((words::failed(w).unwrap_or_default(), true))
         }
+        // Never shown here: the sheet closes, and its caller says KIFF's line.
+        KeyError::Sent => Some((words::failed(w).unwrap_or_default(), false)),
     }
 }
 
@@ -252,6 +254,11 @@ fn present_lines(
                 match answer {
                     Ok(()) => {
                         finish(None);
+                        dialog.close();
+                    }
+                    // Sent: no second try, which could send the act again.
+                    Err(KeyError::Sent) => {
+                        finish(Some(KeyError::Sent));
                         dialog.close();
                     }
                     Err(e) => {

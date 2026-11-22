@@ -186,6 +186,10 @@ pub enum KeyError {
     Unreadable,
     /// Cancelled while the key was asked.
     Cancelled,
+    /// The key approved and the request went to KIFF, or may have: KIFF refused it, or its answer
+    /// was lost. The sheet closes rather than try again, so an act is never sent twice; the
+    /// caller says why.
+    Sent,
 }
 
 impl From<Failure> for KeyError {

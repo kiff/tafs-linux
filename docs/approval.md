@@ -179,7 +179,8 @@ How it behaves:
   plural, locked, three in a row, another key, not touched in time, not allowed, unplugged.
 - **Anything else** (an answer KIFF would refuse, a libfido2 that's missing) says the key
   couldn't sign, never that the key declined.
-- **The sheet stays open to try again,** except for a locked key. Cancel or closing it approves
+- **The sheet stays open to try again,** except for a locked key, or once the request has gone
+  to KIFF (`KeyError::Sent`). Cancel or closing it approves
   nothing. If the key is waiting for its touch at that moment, the request is stopped at the key
   (`StopKey`, `OpenKey::cancel`, as macOS 12's sheet does), so a touch afterwards signs nothing.
   The attempt then answers `Cancelled`, and its caller sends nothing.
@@ -226,7 +227,10 @@ the time zone, sharing, resuming, discarding a setup, removing a taf, trials).
 - The PIN sheet asks the key once. Its answer is checked (`passkey::header`'s refusals), and the
   request goes with `KIFF-Passkey-Assertion`, to KIFF, or to tafs cloud for its own signed routes
   (`kiff::send_with_key`).
-- What KIFF answers when it refuses is said where the act's line is.
+- Once sent, the sheet closes, whatever comes back. A refusal shows KIFF's own line where the
+  act's line is. A lost answer shows the network's line, and the sheet offers no second PIN try:
+  the act may already have reached KIFF, and a new assertion would send it again (a group made
+  twice). With no line to show, it's the shared "couldn't sign" line, never a code name.
 
 Still refused here, whatever the key: planque's acts (their own signing), a held call's or a
 step's answer (its signature is in its body), Make live (the device checks it first), and Raise
