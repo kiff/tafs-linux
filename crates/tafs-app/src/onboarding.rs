@@ -36,7 +36,7 @@ impl Page {
         w.line(match self {
             Page::Tafs => "onboarding.tafs_lead",
             Page::Card => "onboarding.card_lead",
-            Page::Control => "onboarding.control_lead_linux",
+            Page::Control => "onboarding.control_lead_desktop",
         })
         .unwrap_or_else(|e| panic!("{e}"))
     }

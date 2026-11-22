@@ -101,7 +101,7 @@ Your tafs (the sample's three tafs that move no money, as Home lists them), A Ca
 permission (the sample's Support replies Card, 12 of 40 used today, issued by you, drawn by the
 Card tab's own face), You stay in control (Needs you's card over the sample's Deploys). Skip, Next
 and Get started; Escape is Skip. The last card names how this computer approves:
-`onboarding.control_lead_linux`. How tafs works lists the three cards and the four legal pages,
+`onboarding.control_lead_desktop`. How tafs works lists the three cards and the four legal pages,
 KIFF's and tafs's, each titled as its page is.
 
 ## The flow
