@@ -29,6 +29,8 @@ pub enum Selection {
     Alerts,
     /// Account › Language.
     Language,
+    /// Files: the account's (Account › Files), or one taf's by tafs cloud's id (its page's entry).
+    Files(Option<String>),
     /// Coach mode, from its button at the foot.
     Coach,
     /// A screen Account opens, by its title, until it's ported.
