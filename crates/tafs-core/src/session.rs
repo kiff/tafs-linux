@@ -59,6 +59,11 @@ pub struct KeptSession {
     /// approvals go to the phone. A session kept before this was known reads as not paired.
     #[serde(default)]
     pub paired: bool,
+    /// The security key registered with this computer when it was paired (`pairing_key`): its
+    /// credential id, base64url. Approvals are its assertions, one request at a time; the device
+    /// key grants nothing. None: view-only.
+    #[serde(default)]
+    pub security_key: Option<String>,
 }
 
 impl std::fmt::Debug for KeptSession {
@@ -92,6 +97,7 @@ impl KeptSession {
             expires_at: now + lasts,
             device_key: base64::engine::general_purpose::STANDARD.encode(key.to_pkcs8()),
             paired: false,
+            security_key: None,
         }
     }
 
