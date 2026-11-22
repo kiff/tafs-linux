@@ -1315,10 +1315,10 @@ impl Page {
                     if let Some(d) = delivered {
                         v.append(&run_line(d));
                     }
+                    // Only the part being written now is paced and healed; a part finished before
+                    // a tool call is drawn as written, so its own "[1]" stays (parity-steward's note).
                     let answer = if *streaming && pacing == Some(i) {
                         crate::chat::steady_answer_words(words, &self.live_shown)
-                    } else if *streaming {
-                        crate::chat::answer_words(&tafs_core::coach_lines::healed(words))
                     } else {
                         crate::chat::answer_words(words)
                     };
