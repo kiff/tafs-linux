@@ -150,3 +150,29 @@ pub async fn terms_version(languages: Vec<&'static str>) -> Option<String> {
     .ok()
     .flatten()
 }
+
+#[cfg(test)]
+mod tests {
+    use gtk::gio;
+    use gtk::prelude::FileExt;
+    use tafs_core::app_signin::{Attempt, Back};
+
+    /// The way back as GTK hands it to `open`: the browser runs `tafs <link>`, GApplication makes
+    /// the argument a `GFile` (`g_file_new_for_commandline_arg`), and `open` reads its URI. A
+    /// `scheme:/path` link with no `//` and a query must come through byte for byte.
+    #[test]
+    fn gio_hands_the_link_back_as_it_came() {
+        let link = "dev.kiff.tafs:/oauth?code=c1-_Z9&state=st8_x-Y";
+        let file = gio::File::for_commandline_arg(link);
+        assert_eq!(file.uri(), link);
+        let a = Attempt::with("v", "st8_x-Y");
+        assert_eq!(a.answer(&file.uri()), Some(Back::Code("c1-_Z9".into())));
+        // A refusal, with percent-escaped words, comes through too.
+        let refused = "dev.kiff.tafs:/oauth?error=access_denied&error_description=The%20person%20declined&state=st8_x-Y";
+        let file = gio::File::for_commandline_arg(refused);
+        assert_eq!(
+            a.answer(&file.uri()),
+            Some(Back::Refused("access_denied".into()))
+        );
+    }
+}

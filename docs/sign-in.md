@@ -70,11 +70,15 @@ kiff/cloud's `api/internal/appsignin/README.md`.
 3. **The way back:** KIFF sends the browser to `dev.kiff.tafs:/oauth?code=…&state=…`. The desktop
    hands it to tafs through the `.desktop` file's `x-scheme-handler/dev.kiff.tafs`. Run plainly,
    tafs is one app on the desktop (`HANDLES_OPEN`), so a second launch hands the link to the window
-   that waits for it. Only this attempt's link is taken: `dev.kiff.tafs:/oauth` exactly, its
+   that waits for it. **A window started with options** (`--lang fr`, a screenshot) is its own
+   (`NON_UNIQUE`) and never hears the link: to try Continue by hand, start tafs with no options.
+   GIO hands the link to `open` byte for byte (`app_sign_in` tests it through
+   `g_file_new_for_commandline_arg`). Only this attempt's link is taken: `dev.kiff.tafs:/oauth` exactly, its
    `state`, each field once. Any other link is dropped, not even read as a refusal.
    - **An AppImage** has no install step, so on its first run it writes its own entry to
      `~/.local/share/applications/dev.kiff.tafs.desktop` (its `Exec` is the AppImage where it
-     is) and asks `xdg-mime` to make it the scheme's handler (`scheme.rs`). An entry a package
+     is, escaped as the Desktop Entry spec asks; a path with a control character isn't written)
+     and asks `xdg-mime` to make it the scheme's handler (`scheme.rs`). An entry a package
      installed is left alone.
 4. **The token:** `POST /v1/auth/app/token` with the code, the verifier, the terms version and
    the device exactly as `/v1/auth/device/start` sends it (`start_body`). The session is kept as
