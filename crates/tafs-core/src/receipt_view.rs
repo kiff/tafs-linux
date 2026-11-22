@@ -19,7 +19,12 @@ pub fn path(trace_id: &str) -> String {
 /// One step KIFF signed (`Step`): its words, when, its hash shortened, and what it names.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Step {
+    /// What "What happened" shows: KIFF's `step_words` for this step in the reader's language when
+    /// it sent some, else `message`.
     pub words: String,
+    /// KIFF's signed message for it, in KIFF's English, else its kind in words: what the full
+    /// receipt shows, as KIFF signed it.
+    pub message: String,
     pub at: Option<DateTime<Utc>>,
     pub hash: String,
     pub kind: String,
@@ -40,6 +45,7 @@ pub fn steps(raw: &[u8]) -> Vec<Step> {
     let Ok(Value::Array(list)) = serde_json::from_slice::<Value>(chain) else {
         return vec![];
     };
+    let step_words = step_words(raw);
     list.iter()
         .filter_map(Value::as_object)
         .map(|s| {
@@ -57,10 +63,15 @@ pub fn steps(raw: &[u8]) -> Vec<Step> {
                         unit: a.get("unit").and_then(Value::as_str).map(str::to_string),
                     })
                 });
+            let message = message
+                .map(str::to_string)
+                .unwrap_or_else(|| kind.replace('_', " "));
+            let sequence = s.get("sequence").and_then(Value::as_i64);
             Step {
-                words: message
-                    .map(str::to_string)
-                    .unwrap_or_else(|| kind.replace('_', " ")),
+                words: sequence
+                    .and_then(|n| step_words.get(&n).cloned())
+                    .unwrap_or_else(|| message.clone()),
+                message,
                 at: text("occurred_at")
                     .and_then(|t| DateTime::parse_from_rfc3339(t).ok())
                     .map(|t| t.with_timezone(&Utc)),
@@ -78,6 +89,35 @@ pub fn steps(raw: &[u8]) -> Vec<Step> {
             }
         })
         .collect()
+}
+
+/// KIFF's own words for a receipt's steps (`ReceiptStepWords`, tafs#1709): sent beside the receipt
+/// and outside its signature (`step_words`: `[{sequence, code, words}]`, in the reader's language).
+/// Only an entry with a whole-number `sequence` and words that aren't blank counts.
+pub fn step_words(raw: &[u8]) -> std::collections::BTreeMap<i64, String> {
+    let mut out = std::collections::BTreeMap::new();
+    let Some(value) = receipt_check::raw_value("step_words", raw) else {
+        return out;
+    };
+    let Ok(Value::Array(list)) = serde_json::from_slice::<Value>(value) else {
+        return out;
+    };
+    for e in list.iter().filter_map(Value::as_object) {
+        // A number that's whole: never a string, a boolean or a fraction.
+        let Some(n) = e.get("sequence").and_then(|v| {
+            v.as_i64()
+                .or_else(|| v.as_f64().filter(|f| f.fract() == 0.0).map(|f| f as i64))
+        }) else {
+            continue;
+        };
+        let Some(words) = e.get("words").and_then(Value::as_str).map(str::trim) else {
+            continue;
+        };
+        if !words.is_empty() {
+            out.insert(n, words.to_string());
+        }
+    }
+    out
 }
 
 /// A hash shortened as the sheet shows it: its first and last four, longer than eight.
@@ -332,7 +372,8 @@ pub fn full_receipt(
         out.push(format!(
             "{}  {} · {at}\n   hash {}",
             i + 1,
-            step.words,
+            // KIFF's signed message, as it signed it: the full receipt is the receipt, not its words.
+            step.message,
             step.hash
         ));
     }
@@ -386,6 +427,23 @@ mod tests {
     }
 
     const RAW: &str = r#"{"trace_id":"01KTRACE","issued_at":"2026-10-21T00:41:03.12Z","causal_chain":[{"sequence":1,"kind":"decision","occurred_at":"2026-10-21T00:41:03.12Z","message":"held: over \u003c€100\u003e","data_hash":"0123456789abcdef","data":{"amount":{"value":"150.00","unit":"EUR"},"on_hash":"sha256:2c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e886266e7ae"}},{"sequence":2,"kind":"hold_settled","occurred_at":"2026-10-21T00:41:04.12Z","data_hash":"bb","data":{"answer":"approved_once"}}],"attestation":{"algorithm":"secp256k1+keccak256","signature":"79917d81aabbccdd"}}"#;
+
+    #[test]
+    fn step_words_are_read_by_sequence_and_the_full_receipt_keeps_kiffs_message() {
+        let with = format!(
+            "{},\"step_words\":[{{\"sequence\":1,\"code\":\"decision.held\",\"words\":\"Gehalten\"}},{{\"sequence\":2,\"words\":\"  \"}},{{\"sequence\":\"3\",\"words\":\"x\"}},{{\"sequence\":true,\"words\":\"y\"}},{{\"words\":\"z\"}}]}}",
+            &RAW[..RAW.len() - 1]
+        );
+        let w = step_words(with.as_bytes());
+        assert_eq!(w.len(), 1);
+        assert_eq!(w.get(&1).map(String::as_str), Some("Gehalten"));
+        assert!(step_words(RAW.as_bytes()).is_empty());
+        let s = steps(with.as_bytes());
+        assert_eq!(s[0].words, "Gehalten");
+        assert_eq!(s[0].message, "held: over <€100>");
+        // A step with no words of its own reads as its signed message.
+        assert_eq!(s[1].words, s[1].message);
+    }
 
     #[test]
     fn the_steps_are_read_from_the_checked_bytes() {
