@@ -80,6 +80,20 @@ pub fn refuse_with(
     cards: Vec<String>,
     slot: &gtk::Box,
 ) {
+    refuse_then(w, mode, act, what, cards, slot, None)
+}
+
+/// `refuse_with`, and `then` once the security key approved and the act went: what's shown is
+/// read again (a door reopened, a key revoked, a door removed).
+pub fn refuse_then(
+    w: &WordBook,
+    mode: Mode,
+    act: &tafs_core::signed::Act,
+    what: Option<String>,
+    cards: Vec<String>,
+    slot: &gtk::Box,
+    then: Option<std::rc::Rc<dyn Fn()>>,
+) {
     while let Some(c) = slot.first_child() {
         slot.remove(&c);
     }
@@ -104,7 +118,13 @@ pub fn refuse_with(
                             slot2.append(&text(&why, 13, 400, &["tafs-no"]));
                             slot2.set_visible(true);
                         }
-                        _ => slot2.set_visible(false),
+                        Some(Ok(())) => {
+                            slot2.set_visible(false);
+                            if let Some(then) = &then {
+                                then();
+                            }
+                        }
+                        None => slot2.set_visible(false),
                     }),
                 );
                 return;

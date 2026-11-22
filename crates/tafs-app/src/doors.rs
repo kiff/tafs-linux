@@ -1635,10 +1635,21 @@ impl Ctx {
         let w = self.model.w.clone();
         let manages = self.opens.manages;
         let busy = self.model.state.borrow().busy;
+        // Signed: with this computer's security key where it has one (then the doors are read
+        // again), else "Approve on your phone instead"; nothing goes unsigned.
         let refuse = {
-            let (w, slot) = (w.clone(), self.slot.clone());
+            let (w, slot, model) = (w.clone(), self.slot.clone(), self.model.clone());
             Rc::new(move |act: Act, what: Option<String>| {
-                crate::approval::refuse_as(&w, tafs_core::sidebar::Mode::Kiff, &act, what, &slot);
+                let model = model.clone();
+                crate::approval::refuse_then(
+                    &w,
+                    tafs_core::sidebar::Mode::Kiff,
+                    &act,
+                    what,
+                    vec![],
+                    &slot,
+                    Some(Rc::new(move || model.load())),
+                );
             })
         };
         let (taf_id, door_id) = (self.model.id.clone(), door.id.clone());
@@ -1870,14 +1881,19 @@ impl Ctx {
                 return;
             }
             if doors::api::is_api(&d) {
-                crate::approval::refuse(
+                // Signed: with the security key where this computer has one, then read again.
+                let model = c.model.clone();
+                crate::approval::refuse_then(
                     &c.model.w,
                     tafs_core::sidebar::Mode::Kiff,
                     &tafs_core::signed::Act::RemoveApiDoor {
                         taf: c.model.id.clone(),
                         door: d.id.clone(),
                     },
+                    None,
+                    vec![],
                     &c.slot,
+                    Some(Rc::new(move || model.load())),
                 );
                 return;
             }

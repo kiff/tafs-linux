@@ -339,6 +339,11 @@ impl Act {
                 }
                 serde_json::to_vec(&m).ok()?
             }
+            // An `api` door's, the iPad's exact bytes (`TafsCloud.reopenBody`; a DELETE's empty
+            // body). New key stays on the phone: its answer is the key, shown once, which this
+            // computer can't keep from a screen recording or a clipboard's history (the PM's 00:19).
+            Act::ReopenDoor { .. } => br#"{"open":true}"#.to_vec(),
+            Act::RevokeDoorKey { .. } | Act::RemoveApiDoor { .. } => Vec::new(),
             Act::DeleteGroup { .. }
             | Act::RemoveGroupMember { .. }
             | Act::SignOutDevice { .. }
@@ -473,6 +478,16 @@ impl Act {
     /// cloud takes another door's open, keys and removal unsigned at the same paths, so the path
     /// can't tell: the doors screen refuses these before any call (`doors::api::only_signed`).
     pub fn at_api_door(&self) -> bool {
+        self.api_door_matches()
+    }
+
+    /// Whether the call goes to tafs cloud, not KIFF: what the device signs there (`at_device`),
+    /// and an `api` door's signed changes.
+    pub fn at_cloud(&self) -> bool {
+        self.at_device() || self.at_api_door()
+    }
+
+    fn api_door_matches(&self) -> bool {
         matches!(
             self,
             Act::ReopenDoor { .. }
@@ -709,9 +724,18 @@ mod tests {
                 continue;
             }
             if act.at_api_door() {
-                // An `api` door's: refused before any call, whatever the path (`doors::api`).
+                // An `api` door's: never sent unsigned, whatever the path (`doors::api`); with the
+                // security key, the iPad's exact request, at tafs cloud. New key only on the phone.
                 assert!(path.starts_with("/v1/tafs/t1/doors/d1"), "{act:?}");
-                assert!(act.request().is_none(), "{act:?}");
+                assert!(act.at_cloud(), "{act:?}");
+                match act {
+                    Act::NewDoorKey { .. } => assert!(act.request().is_none()),
+                    Act::ReopenDoor { .. } => assert_eq!(
+                        act.request(),
+                        Some(("PATCH", path.clone(), br#"{"open":true}"#.to_vec()))
+                    ),
+                    _ => assert_eq!(act.request(), Some((method, path.clone(), vec![]))),
+                }
                 continue;
             }
             if act.sends_nothing() {

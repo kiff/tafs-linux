@@ -66,6 +66,7 @@ pub fn approve(
     // KIFF's answer when it refused what the key approved: said once the sheet closes.
     let refused: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
     let removing = matches!(act, Act::RemoveTaf { .. });
+    let act_sent = act.clone();
     let attempt: crate::pin_sheet::Attempt = {
         let (open, refused, w2) = (open.clone(), refused.clone(), (*w).clone());
         Arc::new(move |pin| {
@@ -93,19 +94,19 @@ pub fn approve(
             // From here the act may have reached KIFF: whatever comes back, the sheet closes with
             // KIFF's line (or the network's), and never offers a try that would send it again.
             // `Ok`: it went, with a removal's line when a part didn't; `Err`: why it didn't.
-            let sent: Result<Option<String>, String> =
-                match crate::kiff::send_with_key(&token, &languages, method, &path, &body, &header)
-                {
-                    Ok(a) if (200..300).contains(&a.status) => Ok(removing
-                        .then(|| tafs_core::removal::read(&a.body))
-                        .flatten()
-                        .and_then(|r| tafs_core::removal::after(&w2, cards_left, &r).ok())
-                        .flatten()),
-                    Ok(a) => Err(tafs_core::signin::refusal(&a, Some(&w2))
-                        .words(&w2)
-                        .unwrap_or_default()),
-                    Err(e) => Err(e.words(&w2).unwrap_or_default()),
-                };
+            let sent: Result<Option<String>, String> = match crate::kiff::send_with_key(
+                &token, &languages, &act_sent, method, &path, &body, &header,
+            ) {
+                Ok(a) if (200..300).contains(&a.status) => Ok(removing
+                    .then(|| tafs_core::removal::read(&a.body))
+                    .flatten()
+                    .and_then(|r| tafs_core::removal::after(&w2, cards_left, &r).ok())
+                    .flatten()),
+                Ok(a) => Err(tafs_core::signin::refusal(&a, Some(&w2))
+                    .words(&w2)
+                    .unwrap_or_default()),
+                Err(e) => Err(e.words(&w2).unwrap_or_default()),
+            };
             let line = match sent {
                 Ok(None) => return Ok(()),
                 Ok(Some(not_finished)) => Some(not_finished),
