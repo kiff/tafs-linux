@@ -54,6 +54,17 @@ pub fn short_date(language: &str, day: chrono::NaiveDate) -> String {
     f.format(&d).to_string()
 }
 
+/// `.dateTime.weekday(.abbreviated).day().month(.abbreviated)`: "Thu, Nov 19", "jeu. 19 nov.", "11月19日(木)".
+pub fn weekday_day_month(language: &str, day: chrono::NaiveDate) -> String {
+    let (Some(d), Ok(f)) = (
+        date(day),
+        DateTimeFormatter::try_new(locale(language).into(), fieldsets::MDE::medium()),
+    ) else {
+        return day.format("%Y-%m-%d").to_string();
+    };
+    f.format(&d).to_string()
+}
+
 /// `Date.shown(date: .long)`: "December 3, 2026", "3 décembre 2026", "2026年12月3日".
 pub fn long_date(language: &str, day: chrono::NaiveDate) -> String {
     let (Some(d), Ok(f)) = (
