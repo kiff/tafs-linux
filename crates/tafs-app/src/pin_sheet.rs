@@ -63,7 +63,7 @@ fn said(w: &WordBook, e: KeyError) -> Option<(String, bool)> {
     }
 }
 
-/// The sheet over `parent`.
+/// The sheet over `parent`, to approve.
 pub fn present(
     w: Rc<WordBook>,
     parent: &impl IsA<gtk::Widget>,
@@ -75,6 +75,33 @@ pub fn present(
     let Ok(l) = words::sheet(&w) else {
         return;
     };
+    present_lines(w, l, parent, attempt, read_tries, stop, done);
+}
+
+/// The sheet over `parent`, adding the key when the computer is paired (`words::add_sheet`).
+pub fn present_add(
+    w: Rc<WordBook>,
+    parent: &impl IsA<gtk::Widget>,
+    attempt: Attempt,
+    read_tries: ReadTries,
+    stop: StopKey,
+    done: Done,
+) {
+    let Ok(l) = words::add_sheet(&w) else {
+        return;
+    };
+    present_lines(w, l, parent, attempt, read_tries, stop, done);
+}
+
+fn present_lines(
+    w: Rc<WordBook>,
+    l: words::SheetLines,
+    parent: &impl IsA<gtk::Widget>,
+    attempt: Attempt,
+    read_tries: ReadTries,
+    stop: StopKey,
+    done: Done,
+) {
     let column = gtk::Box::new(gtk::Orientation::Vertical, 14);
     column.set_margin_start(20);
     column.set_margin_end(20);

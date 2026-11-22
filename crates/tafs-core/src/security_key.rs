@@ -371,6 +371,20 @@ pub mod words {
         pub approve: String,
     }
 
+    /// The same sheet when the computer is paired, adding the key: its own title and ask, Add,
+    /// and "Pair without a security key" in Cancel's place, which pairs it view-only, as closing
+    /// the sheet does.
+    pub fn add_sheet(w: &WordBook) -> Result<SheetLines, WordsError> {
+        Ok(SheetLines {
+            title: w.line("approval.security_key.add_title")?,
+            enter_pin: w.line("approval.security_key.add_enter_pin")?,
+            pin: w.line("approval.security_key.pin")?,
+            touch: w.line("approval.security_key.touch")?,
+            cancel: w.line("approval.security_key.pair_without")?,
+            approve: w.line("approval.security_key.add")?,
+        })
+    }
+
     pub fn sheet(w: &WordBook) -> Result<SheetLines, WordsError> {
         Ok(SheetLines {
             title: w.line("approval.security_key.title")?,

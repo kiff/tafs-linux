@@ -440,19 +440,43 @@ pub fn body(
                 let name = signin::device_name(&w).unwrap_or_else(|e| panic!("{e}"));
                 let key = Arc::new(DeviceKey::generate());
                 let nonce = pairing::nonce();
-                let payload = pairing::Payload::new(&key, &name, &nonce, chrono::Utc::now());
+                let mut payload = pairing::Payload::new(&key, &name, &nonce, chrono::Utc::now());
+                // A security key plugged in is added before the code shows, so the code names it;
+                // without one, or with "Pair without", the computer pairs view-only, as today.
+                let added = add_key(w.clone(), &ui.code_box, &nonce, &payload.pub_key, &name).await;
+                if cancelled.load(Ordering::SeqCst) {
+                    return;
+                }
+                let check = match &added {
+                    Some(a) => {
+                        payload = payload.with_credential(a.credential.clone());
+                        tafs_core::pairing_key::check_code(
+                            &key.public_spki_der(),
+                            &a.credential.public_key,
+                        )
+                    }
+                    None => pairing::check_code(&key.public_spki_der()),
+                };
                 let code = Code {
                     text: payload.text(),
-                    check: pairing::check_code(&key.public_spki_der()),
+                    check,
                 };
                 show(&ui, &w, &Step::Code(code));
                 let proof = pairing::claim_proof(&key, &nonce);
-                let body = match ticked_terms() {
-                    Some(terms) => {
+                let body = match (&added, ticked_terms()) {
+                    (Some(a), terms) => pairing::claim_body_with_key(
+                        &nonce,
+                        &payload.pub_key,
+                        &proof,
+                        a.proof.clone(),
+                        terms.as_deref(),
+                    ),
+                    (None, Some(terms)) => {
                         pairing::claim_body_with_terms(&nonce, &payload.pub_key, &proof, &terms)
                     }
-                    None => pairing::claim_body(&nonce, &payload.pub_key, &proof),
+                    (None, None) => pairing::claim_body(&nonce, &payload.pub_key, &proof),
                 };
+                let credential = added.map(|a| a.credential);
                 let clock = Waiting {
                     started: Instant::now(),
                     cancelled: cancelled.clone(),
@@ -469,8 +493,12 @@ pub fn body(
                     }
                     let now = chrono::Utc::now().timestamp();
                     // The new session and its key are kept first, view-only: a software key
-                    // approves nothing (`pairing::kept`).
-                    let kept = pairing::kept(&token, &key, now);
+                    // approves nothing (`pairing::kept`); with a security key, its credential,
+                    // only when KIFF granted passkey (`kept_with_key`).
+                    let kept = match &credential {
+                        Some(c) => pairing::kept_with_key(&token, &key, c, now),
+                        None => pairing::kept(&token, &key, now),
+                    };
                     if let Err(refused) = crate::store::save(&kept, now) {
                         eprintln!("the keyring refused the session: {}", refused.0);
                         let _ = Kiff::new(vec![]).sign_out(&token.access_token);
@@ -558,6 +586,68 @@ pub fn body(
 
 /// The terms version the welcome's tick agreed to, and what to do when KIFF says they changed.
 type Ticked = (String, Rc<dyn Fn()>);
+
+/// A security key added at pairing: its credential, and the claim's proof that it made it.
+struct Added {
+    credential: tafs_core::pairing_key::Credential,
+    proof: serde_json::Value,
+}
+
+/// With the key on (`passkey::ENABLED`) and one key plugged in: the PIN sheet in its "add" mode,
+/// a credential made on the key over this pairing's nonce and `pub`, read and checked as KIFF
+/// checks it. None when the key is off, no key or several are plugged in, or the person paired
+/// without one.
+async fn add_key(
+    w: Rc<WordBook>,
+    parent: &gtk::Box,
+    nonce: &str,
+    pub_key: &str,
+    name: &str,
+) -> Option<Added> {
+    use tafs_core::{pairing_key, passkey, security_key::CredentialAsk};
+    if !passkey::ENABLED || !matches!(crate::fido_key::plugged(), Ok(1)) {
+        return None;
+    }
+    let message = pairing_key::credential_message(nonce, pub_key);
+    let client_data = pairing_key::create_client_data_json(&message);
+    let ask = CredentialAsk::new(
+        &passkey::client_data_hash(&client_data),
+        &passkey::client_data_hash(pub_key.as_bytes()),
+        name,
+    )
+    .ok()?;
+    let made: Arc<std::sync::Mutex<Option<Added>>> = Arc::new(std::sync::Mutex::new(None));
+    let open = Arc::new(crate::fido_key::OpenKey::default());
+    let attempt: crate::pin_sheet::Attempt = {
+        let (open, made) = (open.clone(), made.clone());
+        Arc::new(move |pin| {
+            let k = open.make_credential(&ask, Some(pin))?;
+            let credential = pairing_key::read_created(&k.authenticator_data)
+                .map_err(|_| crate::fido_key::KeyError::Unreadable)?;
+            *made.lock().unwrap_or_else(|e| e.into_inner()) = Some(Added {
+                credential,
+                proof: pairing_key::credential_proof(&client_data, &k.authenticator_data),
+            });
+            Ok(())
+        })
+    };
+    let read_tries: crate::pin_sheet::ReadTries = {
+        let open = Arc::new(crate::fido_key::OpenKey::default());
+        Arc::new(move || open.tries_left())
+    };
+    let stop: crate::pin_sheet::StopKey = {
+        let open = open.clone();
+        Arc::new(move || open.cancel())
+    };
+    let (tx, rx) = async_channel::bounded::<()>(1);
+    let done: crate::pin_sheet::Done = Rc::new(move |_| {
+        let _ = tx.try_send(());
+    });
+    crate::pin_sheet::present_add(w, parent, attempt, read_tries, stop, done);
+    let _ = rx.recv().await;
+    let added = made.lock().unwrap_or_else(|e| e.into_inner()).take();
+    added
+}
 
 thread_local! {
     /// From the welcome, after its tick: the terms version the claim carries, and what to do when
