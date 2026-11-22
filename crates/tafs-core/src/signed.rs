@@ -259,6 +259,12 @@ pub enum Act {
         /// The hold's `accounting_version`, which the signed answer names (`kiff.answer.v1`).
         accounting_version: Option<i64>,
     },
+    /// `changeCard`: Extra room on a call over a total the Card keeps across calls, for this call
+    /// until that total resets, signed as an answer (`change-card`).
+    ExtraRoom {
+        call: String,
+        accounting_version: Option<i64>,
+    },
     /// `dismissCardUnit`: a Card unit request dismissed, signed like a refusal (`reject`).
     DismissCardUnit { exception: String },
     /// `approveKnobEvent`: an app event's subscription at planque, signed by the device.
@@ -425,6 +431,10 @@ impl Act {
                 "POST",
                 format!("/v1/home/setting-up/{}/discard", escaped(agent)),
             ),
+            Act::ExtraRoom { call, .. } => (
+                "POST",
+                format!("/v1/me/card-exceptions/{}/change-card", escaped(call)),
+            ),
             Act::ApproveOnce { call, .. } => (
                 "POST",
                 format!("/v1/me/card-exceptions/{}/approve-once", escaped(call)),
@@ -487,13 +497,18 @@ impl Act {
 
     /// A held call's answer that a security key signs in its body (`kiff.answer.v1`, KIFF's
     /// `checkPasskeyAnswer`): the hold, the answer and the accounting version it names. Approve
-    /// once only, and only when the hold's accounting version was read.
+    /// once and Extra room (`change-card`) only, and only when the hold's accounting version was
+    /// read.
     pub fn answer(&self) -> Option<(&str, &'static str, i64)> {
         match self {
             Act::ApproveOnce {
                 call,
                 accounting_version: Some(v),
             } => Some((call.as_str(), "approve-once", *v)),
+            Act::ExtraRoom {
+                call,
+                accounting_version: Some(v),
+            } => Some((call.as_str(), "change-card", *v)),
             _ => None,
         }
     }
@@ -654,6 +669,10 @@ mod tests {
             Act::ApproveOnce {
                 call: "ce1".into(),
                 accounting_version: Some(3),
+            },
+            Act::ExtraRoom {
+                call: "ce3".into(),
+                accounting_version: Some(2),
             },
             Act::DismissCardUnit {
                 exception: "ce2".into(),
@@ -999,8 +1018,17 @@ mod tests {
             accounting_version: None,
         };
         assert_eq!(unread.answer(), None);
+        let room = Act::ExtraRoom {
+            call: "ce_2".into(),
+            accounting_version: Some(5),
+        };
+        assert_eq!(room.answer(), Some(("ce_2", "change-card", 5)));
+        assert_eq!(
+            room.route(),
+            ("POST", "/v1/me/card-exceptions/ce_2/change-card".into())
+        );
         for act in acts() {
-            if !matches!(act, Act::ApproveOnce { .. }) {
+            if !matches!(act, Act::ApproveOnce { .. } | Act::ExtraRoom { .. }) {
                 assert_eq!(act.answer(), None, "{act:?}");
             }
         }

@@ -553,8 +553,47 @@ pub fn held_card(w: &Rc<WordBook>, c: &CardLines) -> gtk::Box {
             let kept = crate::store::load(chrono::Utc::now().timestamp());
             let shown = crate::key_approval::can_approve(kept.as_ref(), &once)
                 || (KEY_SHOWN.with(|k| k.get()) && once.answer().is_some());
-            let key_answers = c.approvable_once && shown;
-            if key_answers {
+            // Over a total the Card keeps across calls: Extra room, for someone who manages Cards
+            // (`change-card`), signed the same way. The iPad's over-total line says why.
+            let extra = tafs_core::signed::Act::ExtraRoom {
+                call: c.kiff_id.clone().unwrap_or_else(|| c.id.clone()),
+                accounting_version: c.accounting_version,
+            };
+            let extra_shown = c.extra_room
+                && (crate::key_approval::can_approve(kept.as_ref(), &extra)
+                    || (KEY_SHOWN.with(|k| k.get()) && extra.answer().is_some()));
+            if extra_shown {
+                p.append(&text(
+                    &w.line("needs_you.over_total_manager").unwrap_or_default(),
+                    13,
+                    400,
+                    &["tafs-soft"],
+                ));
+                let b = primary(&w.line("needs_you.extra_room").unwrap_or_default());
+                b.set_widget_name("held.extra-room");
+                let slot = crate::approval::refusal_slot();
+                let (w2, card, slot2) = (w.clone(), p.downgrade(), slot.clone());
+                b.connect_clicked(move |_| {
+                    let card = card.clone();
+                    crate::approval::refuse_then(
+                        &w2,
+                        tafs_core::sidebar::Mode::Kiff,
+                        &extra,
+                        None,
+                        vec![],
+                        &slot2,
+                        Some(Rc::new(move || {
+                            if let Some(card) = card.upgrade() {
+                                card.set_visible(false);
+                            }
+                        })),
+                    );
+                });
+                p.append(&b);
+                p.append(&slot);
+            }
+            let key_answers = (c.approvable_once && shown) || extra_shown;
+            if c.approvable_once && shown {
                 let b = primary(&w.line("needs_you.approve_once").unwrap_or_default());
                 b.set_widget_name("held.approve-once");
                 let slot = crate::approval::refusal_slot();

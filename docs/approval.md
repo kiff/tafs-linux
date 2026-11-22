@@ -240,6 +240,10 @@ from a screen recording or a clipboard manager's history.
   (KIFF's `checkPasskeyAnswer`). It's offered on the taf's dial and on Needs you's card, where
   "Answer in KIFF" stays as the other way. A hold whose accounting version wasn't read can't be
   signed here: the phone.
+- **Extra room** (`change-card`, the iPad's over-total branch): on a call over a total the Card
+  keeps across calls, where Approve once can't pass, someone who manages Cards gives this call
+  extra room until that total resets, signed the same way (`kiff.answer.v1` with `change-card`,
+  `POST …/card-exceptions/{id}/change-card`), with the iPad's over-total line for managers.
 - **Removing a taf for good** goes in the iPad's order (`AppModel.removeTaf`): the key approves,
   then its Cards are revoked at KIFF with the session, one plain call each, then tafs cloud's
   `DELETE` goes with the approval. What didn't go is said in the app's words: Cards KIFF didn't
