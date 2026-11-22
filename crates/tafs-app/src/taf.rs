@@ -304,6 +304,7 @@ pub fn page(
                 taf: t.key.clone(),
                 name: t.name.clone(),
                 shows_halt: shows_halt.clone(),
+                reread: RefCell::new(None),
                 manages: t.manages,
                 may_use_coach: t.may_use_coach,
                 coach: open_coach.clone(),
@@ -1478,6 +1479,8 @@ fn cloud_activity(
             });
         })
     };
+    // A reported payment reads the list again, as the iPad's refresh after a report.
+    *rows.reread.borrow_mut() = Some(Rc::downgrade(&load));
     *draw.borrow_mut() = Some(Rc::new({
         let (w, root, state, redraw, load) = (
             w.clone(),
@@ -1614,6 +1617,9 @@ pub fn open_receipt_on_draw(id: &str) {
     OPEN_RECEIPT.with(|o| *o.borrow_mut() = Some(id.to_string()));
 }
 
+/// Activity's loader, held weakly by its rows: `false` reads from the first page.
+pub type Reread = std::rc::Weak<dyn Fn(bool)>;
+
 /// What a row on a tafs cloud taf's Activity opens: its receipt, and its next step's button.
 pub struct RowOpens {
     /// The taf's key, the Record line's taf.
@@ -1622,6 +1628,9 @@ pub struct RowOpens {
     pub name: String,
     /// Its halt row, which a reported payment's answer redraws.
     pub shows_halt: Option<crate::halt::Shows>,
+    /// Reads its Activity again from the first page (`AppModel.refresh` after a report), once
+    /// the list is drawn. Weak: the list owns its rows.
+    pub reread: RefCell<Option<Reread>>,
     pub manages: bool,
     pub may_use_coach: bool,
     /// Coach on the taf (its words in the box), and Connect apps.
@@ -1629,6 +1638,21 @@ pub struct RowOpens {
     pub connect: Rc<dyn Fn()>,
     /// Where its receipt is read, signed in with KIFF; none for a screenshot's.
     pub receipt: Option<Rc<crate::receipt_sheet::ReceiptSource>>,
+}
+
+/// What a reported payment does on the taf's page (`AppModel.reportPayment`): the halt row shows
+/// the answer's halt, and Activity is read again, so the line shows it reported.
+fn reported(opens: &Rc<RowOpens>) -> crate::halt::Shows {
+    let opens = opens.clone();
+    Rc::new(move |h| {
+        if let Some(show) = &opens.shows_halt {
+            show(h);
+        }
+        let reread = opens.reread.borrow().as_ref().and_then(|r| r.upgrade());
+        if let Some(load) = reread {
+            load(false);
+        }
+    })
 }
 
 /// `SourceActivityRow` on a taf's Activity: the row opens its receipt (`ReceiptView`), and its next
@@ -1662,7 +1686,7 @@ fn activity_row(
                     entry,
                     Some(opens.name.clone()),
                     Rc::new(|_| {}),
-                    opens.shows_halt.clone(),
+                    Some(reported(&opens)),
                     b,
                 );
             }
