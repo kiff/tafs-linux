@@ -1,3 +1,35 @@
-# Every change is reviewed by kiff-qa or agentgabo, each standing in for the other on the
-# other's own PRs.
-* @kiff-qa @agentgabo
+# Every change is reviewed by a code owner: kiff-qa or agentgabo, each standing in for the other
+# on the other's own PRs, or kiffagents (the parity lanes) on what isn't below. kiffagents never
+# approves kiffagents' own PRs.
+* @kiff-qa @agentgabo @kiffagents
+
+# Keys, signing, pairing, sign-in and approvals stay kiff-qa's or agentgabo's: the last matching
+# line wins, so a change that touches them still needs one of the two (the owner, 22 Nov).
+/crates/tafs-core/src/keys.rs @kiff-qa @agentgabo
+/crates/tafs-core/src/signed.rs @kiff-qa @agentgabo
+/crates/tafs-core/src/passkey.rs @kiff-qa @agentgabo
+/crates/tafs-core/src/security_key.rs @kiff-qa @agentgabo
+/crates/tafs-core/src/planque.rs @kiff-qa @agentgabo
+/crates/tafs-core/src/pairing.rs @kiff-qa @agentgabo
+/crates/tafs-core/src/pairing_key.rs @kiff-qa @agentgabo
+/crates/tafs-core/src/session.rs @kiff-qa @agentgabo
+/crates/tafs-core/src/signin.rs @kiff-qa @agentgabo
+/crates/tafs-core/src/app_signin.rs @kiff-qa @agentgabo
+/crates/tafs-core/src/code_sign_in.rs @kiff-qa @agentgabo
+/crates/tafs-core/src/approval.rs @kiff-qa @agentgabo
+/crates/tafs-app/src/key_approval.rs @kiff-qa @agentgabo
+/crates/tafs-app/src/fido_key.rs @kiff-qa @agentgabo
+/crates/tafs-app/src/pin_sheet.rs @kiff-qa @agentgabo
+/crates/tafs-app/src/kiff.rs @kiff-qa @agentgabo
+/crates/tafs-app/src/store.rs @kiff-qa @agentgabo
+/crates/tafs-app/src/pairing.rs @kiff-qa @agentgabo
+/crates/tafs-app/src/sign_in.rs @kiff-qa @agentgabo
+/crates/tafs-app/src/app_sign_in.rs @kiff-qa @agentgabo
+/crates/tafs-app/src/code_sign_in.rs @kiff-qa @agentgabo
+/crates/tafs-app/src/scheme.rs @kiff-qa @agentgabo
+/crates/tafs-app/src/approval.rs @kiff-qa @agentgabo
+/docs/keys.md @kiff-qa @agentgabo
+/docs/approval.md @kiff-qa @agentgabo
+/docs/pairing.md @kiff-qa @agentgabo
+/docs/sign-in.md @kiff-qa @agentgabo
+/.github/ @kiff-qa @agentgabo
