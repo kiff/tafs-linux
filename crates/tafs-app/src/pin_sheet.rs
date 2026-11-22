@@ -65,6 +65,19 @@ fn said(w: &WordBook, e: KeyError) -> Option<(String, bool)> {
     }
 }
 
+/// The tries line after `f`: the count a wrong PIN gave (`Some(Some)`), none where the PIN's count
+/// is no longer known (`Some(None)`: a wrong PIN with no count, three in a row, locked), or
+/// unchanged for a failure that isn't the PIN's (`None`).
+fn tries_after(w: &WordBook, f: Failure) -> Option<Option<String>> {
+    match f {
+        Failure::WrongPin {
+            tries_left: Some(n),
+        } if n > 0 => Some(words::tries_left(w, n).ok()),
+        Failure::WrongPin { .. } | Failure::PinPaused | Failure::PinBlocked => Some(None),
+        _ => None,
+    }
+}
+
 /// The sheet over `parent`, to approve.
 pub fn present(
     w: Rc<WordBook>,
@@ -161,14 +174,23 @@ fn present_lines(
     let locked = Rc::new(Cell::new(false));
     let touching = Rc::new(Cell::new(false));
     let show = {
-        let (w, message, locked, field, approve) = (
+        let (w, message, locked, field, approve, tries) = (
             w.clone(),
             message.clone(),
             locked.clone(),
             field.clone(),
             approve.clone(),
+            tries.clone(),
         );
         Rc::new(move |e: KeyError| {
+            // The tries line never disagrees with the failure's: a wrong PIN with its count says
+            // it there too; any other failure of the PIN leaves the count unknown, so it goes.
+            if let KeyError::Key(f) = e {
+                if let Some(line) = tries_after(&w, f) {
+                    tries.set_visible(line.is_some());
+                    tries.set_label(&line.unwrap_or_default());
+                }
+            }
             let Some((line, again)) = said(&w, e) else {
                 return;
             };
@@ -338,6 +360,29 @@ mod tests {
     }
 
     /// Closed before any PIN went to the key: there's nothing to stop.
+    #[test]
+    fn the_tries_line_follows_a_wrong_pin() {
+        let w = WordBook::load(&WordBook::default_root(), "en").unwrap();
+        assert_eq!(
+            tries_after(
+                &w,
+                Failure::WrongPin {
+                    tries_left: Some(4)
+                }
+            ),
+            Some(Some("4 tries left before the key locks.".into()))
+        );
+        assert_eq!(
+            tries_after(&w, Failure::WrongPin { tries_left: None }),
+            Some(None)
+        );
+        assert_eq!(tries_after(&w, Failure::PinBlocked), Some(None));
+        assert_eq!(tries_after(&w, Failure::PinPaused), Some(None));
+        // Not the PIN's failure: the line stays as read.
+        assert_eq!(tries_after(&w, Failure::TimedOut), None);
+        assert_eq!(tries_after(&w, Failure::NoKey), None);
+    }
+
     #[test]
     fn closing_before_the_key_is_asked_stops_nothing() {
         let calls = Arc::new(Mutex::new(0));
