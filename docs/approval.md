@@ -192,5 +192,43 @@ How it behaves:
 It's switched off: only `--page pin-sheet` shows it, with canned answers (five tries left, no key
 plugged in). No key is asked, and nothing is signed.
 
-Next come registering the key through pairing, with S1's `credential_proof`, and the approval
-route.
+## Registering the key at pairing, and approving with it (switched off)
+
+The contract is the PM's decision (i) (kiff/work#17, 22 Nov): a computer whose device key is in
+software pairs with `kind: "passkey"` and a **security key's credential**, and KIFF makes its
+session `approval_mode: "passkey"`. The device key still grants nothing: only a fresh assertion
+from that key approves, one request at a time, with presence and the PIN. Everything below waits
+on KIFF's side of it, behind `passkey::ENABLED`.
+
+**At pairing** (`pairing.rs` › `add_key`, `tafs-core/src/pairing_key.rs`):
+1. With one key plugged in, the PIN sheet opens in its "add" mode before the code shows: "Add a
+   security key", its ask, Add, and "Pair without a security key" in Cancel's place, which pairs
+   view-only as today (`words::add_sheet`). No key, or several, pairs view-only too.
+2. The key makes a credential for kiff.dev over `kiff.passkey.pair.v1\n<nonce>\n<pub>` (KIFF's
+   `PairingCredentialMessage`), so it's made for this pairing and no other: a `webauthn.create`
+   client data with that message's hash as its challenge.
+3. The credential is read as KIFF reads it (`read_created`): kiff.dev's hash, presence and the PIN,
+   an attested credential, not backup-eligible, and exactly an ES256 P-256 key, which becomes SPKI
+   DER. Anything KIFF would refuse is never sent.
+4. The code names it: `credential: {id, public_key}`, base64url. The check code is over the
+   device key and the credential's key (`pairing_key::check_code`, KIFF's `PairingCode`), so the
+   six characters the phone shows vouch for both.
+5. The claim carries `credential_proof`: the client data and an attestation object of format
+   `none` over the key's authenticator data. The key's own attestation is never sent.
+6. The session keeps the credential only when KIFF answered `passkey` (`kept_with_key`). Any
+   other answer keeps it view-only: the app never claims more than KIFF granted.
+
+**Approving** (`key_approval.rs`, from `approval::refuse`): signed in with such a session, a tap
+that would sign asks the key instead, for the acts whose whole request this app writes
+(`Act::request`, the iPad's `KIFFClient` bodies: groups and their members, signing a device out,
+the time zone, sharing, resuming, discarding a setup, removing a taf, trials).
+- The request is the message a device key would sign (`kiff.request.v1`: tenant, method, path
+  with its query, the body's hash, `signed_at`), its hash the challenge.
+- The PIN sheet asks the key once. Its answer is checked (`passkey::header`'s refusals), and the
+  request goes with `KIFF-Passkey-Assertion`, to KIFF, or to tafs cloud for its own signed routes
+  (`kiff::send_with_key`).
+- What KIFF answers when it refuses is said where the act's line is.
+
+Still refused here, whatever the key: planque's acts (their own signing), a held call's or a
+step's answer (its signature is in its body), Make live (the device checks it first), and Raise
+the limit and Decline, whose bodies need what their acts don't carry yet.
