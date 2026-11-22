@@ -22,6 +22,7 @@ mod doors;
 mod fido_key;
 mod halt;
 mod illustrations;
+mod key_approval;
 mod kiff;
 mod kiff_account;
 mod knocks;
@@ -964,9 +965,15 @@ fn activate(app: &adw::Application, o: &Options) {
     window.present();
     // `--page pin-sheet`: the security key's PIN sheet, for its screenshot. Its answers are
     // canned (five tries left; no key plugged in): no key is asked, nothing is signed.
-    if o.page.as_deref() == Some("pin-sheet") {
+    if matches!(o.page.as_deref(), Some("pin-sheet") | Some("pin-sheet-add")) {
         use tafs_core::security_key::Failure;
-        pin_sheet::present(
+        // `pin-sheet-add`: the same sheet adding the key when the computer is paired.
+        let present = if o.page.as_deref() == Some("pin-sheet-add") {
+            pin_sheet::present_add
+        } else {
+            pin_sheet::present
+        };
+        present(
             app_state.words.clone(),
             &window,
             std::sync::Arc::new(|_| Err(fido_key::KeyError::Key(Failure::NoKey))),
@@ -2262,6 +2269,13 @@ impl App {
         let overview =
             tafs_core::overview::lines(words, &tafs, &model.held, count, &needs_you_words)
                 .and_then(|o| o.with_list(words, list))
+                .and_then(|o| {
+                    if mode == Mode::Kiff {
+                        o.with_first_home(words, model.may_use_coach, model.home_words.as_deref())
+                    } else {
+                        Ok(o)
+                    }
+                })
                 .unwrap_or_else(|e| fail(e));
         // Home's labels, as chips over the grid and on each taf's line (docs/labels.md); none
         // sent, none drawn. The sample's are the iPad's screenshots' only.

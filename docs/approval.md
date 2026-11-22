@@ -82,14 +82,12 @@ Not on Linux: `ReadinessReader` reads again when the app comes back, but this co
 never changes. `openTafsSettings` opens tafs' iOS settings, which don't exist here, and
 `Unsupported` offers neither button anyway.
 
-## Approving with a passkey (switched off)
+## Approving with a passkey
 
-**The first release approves nothing on Linux.** A Linux computer is view-only: it's added with
-the phone, and every approval goes to the phone. Approving here with a USB security key (a FIDO2
-key with a PIN), as kiff/tafs `docs/computer-passkeys.md` describes for a computer with no key
-store of its own, waits on a contract decision. The parts that don't depend on it are in
-`tafs-core/src/passkey.rs`, switched off (`ENABLED` is false), so nothing asks a key for
-anything:
+**A Linux computer paired without a security key approves nothing**: it's view-only, and every
+approval goes to the phone. Paired with one, it approves with that key (below): a USB security
+key (a FIDO2 key with a PIN), as kiff/tafs `docs/computer-passkeys.md` describes for a computer
+with no key store of its own. What a passkey approval carries is in `tafs-core/src/passkey.rs`:
 
 - **The message** a device key would sign. One request is `kiff.request.v1`: the tenant, the
   method, the path with its query, the body's SHA-256 in hex, and `signed_at`. Two requests
@@ -163,9 +161,9 @@ It asks the one key plugged in through libfido2, with exactly those asks:
   attestation object built from libfido2's three parts. `passkey::refusal` checks it whatever
   libfido2 says.
 
-Nothing calls it while it's switched off. Its tests ask with no key plugged in: where libfido2
-is installed it finds none, and where it isn't, it says it's missing. Either way, no PIN is left
-held.
+It's asked only when the person adds the key at pairing or approves with it. Its tests ask with
+no key plugged in: where libfido2 is installed it finds none, and where it isn't, it says it's
+missing. Either way, no PIN is left held.
 
 **The PIN sheet** (`crates/tafs-app/src/pin_sheet.rs`) is ported from macOS 12's `PINSheet.swift`,
 with its words from `SecurityKeyWords.swift` (`security_key::words`). It shows:
@@ -181,7 +179,8 @@ How it behaves:
   plural, locked, three in a row, another key, not touched in time, not allowed, unplugged.
 - **Anything else** (an answer KIFF would refuse, a libfido2 that's missing) says the key
   couldn't sign, never that the key declined.
-- **The sheet stays open to try again,** except for a locked key. Cancel or closing it approves
+- **The sheet stays open to try again,** except for a locked key, or once the request has gone
+  to KIFF (`KeyError::Sent`). Cancel or closing it approves
   nothing. If the key is waiting for its touch at that moment, the request is stopped at the key
   (`StopKey`, `OpenKey::cancel`, as macOS 12's sheet does), so a touch afterwards signs nothing.
   The attempt then answers `Cancelled`, and its caller sends nothing.
@@ -189,8 +188,50 @@ How it behaves:
   the key once off the main loop, then cleared. As on macOS 12, GTK's own entry held the
   characters while they were typed, and this app can't zero that memory.
 
-It's switched off: only `--page pin-sheet` shows it, with canned answers (five tries left, no key
-plugged in). No key is asked, and nothing is signed.
+It opens when the person adds the key at pairing ("add" mode) and for each approval. For a
+screenshot, `--page pin-sheet` shows it with canned answers (five tries left, no key plugged in):
+no key is asked there, and nothing is signed.
 
-Next come registering the key through pairing, with S1's `credential_proof`, and the approval
-route.
+## Registering the key at pairing, and approving with it
+
+The contract is the PM's decision (i) (kiff/work#17, 22 Nov): a computer whose device key is in
+software pairs with `kind: "passkey"` and a **security key's credential**, and KIFF makes its
+session `approval_mode: "passkey"`. The device key still grants nothing: only a fresh assertion
+from that key approves, one request at a time, with presence and the PIN. Everything below waits
+on KIFF's side of it (kiff/cloud#96), and is on (`passkey::ENABLED`).
+
+**At pairing** (`pairing.rs` › `add_key`, `tafs-core/src/pairing_key.rs`):
+1. With one key plugged in, the PIN sheet opens in its "add" mode before the code shows: "Add a
+   security key", its ask, Add, and "Pair without a security key" in Cancel's place, which pairs
+   view-only as today (`words::add_sheet`). No key, or several, pairs view-only too.
+2. The key makes a credential for kiff.dev over `kiff.passkey.pair.v1\n<nonce>\n<pub>` (KIFF's
+   `PairingCredentialMessage`), so it's made for this pairing and no other: a `webauthn.create`
+   client data with that message's hash as its challenge.
+3. The credential is read as KIFF reads it (`read_created`): kiff.dev's hash, presence and the PIN,
+   an attested credential, not backup-eligible, and exactly an ES256 P-256 key, which becomes SPKI
+   DER. Anything KIFF would refuse is never sent.
+4. The code names it: `credential: {id, public_key}`, base64url. The check code is over the
+   device key and the credential's key (`pairing_key::check_code`, KIFF's `PairingCode`), so the
+   six characters the phone shows vouch for both.
+5. The claim carries `credential_proof`: the client data and an attestation object of format
+   `none` over the key's authenticator data. The key's own attestation is never sent.
+6. The session keeps the credential only when KIFF answered `passkey` (`kept_with_key`). Any
+   other answer keeps it view-only: the app never claims more than KIFF granted.
+
+**Approving** (`key_approval.rs`, from `approval::refuse`): signed in with such a session, a tap
+that would sign asks the key instead, for the acts whose whole request this app writes
+(`Act::request`, the iPad's `KIFFClient` bodies: groups and their members, signing a device out,
+the time zone, sharing, resuming, discarding a setup, removing a taf, trials).
+- The request is the message a device key would sign (`kiff.request.v1`: tenant, method, path
+  with its query, the body's hash, `signed_at`), its hash the challenge.
+- The PIN sheet asks the key once. Its answer is checked (`passkey::header`'s refusals), and the
+  request goes with `KIFF-Passkey-Assertion`, to KIFF, or to tafs cloud for its own signed routes
+  (`kiff::send_with_key`).
+- Once sent, the sheet closes, whatever comes back. A refusal shows KIFF's own line where the
+  act's line is. A lost answer shows the network's line, and the sheet offers no second PIN try:
+  the act may already have reached KIFF, and a new assertion would send it again (a group made
+  twice). With no line to show, it's the shared "couldn't sign" line, never a code name.
+
+Still refused here, whatever the key: planque's acts (their own signing), a held call's or a
+step's answer (its signature is in its body), Make live (the device checks it first), and Raise
+the limit and Decline, whose bodies need what their acts don't carry yet.

@@ -40,6 +40,7 @@ pub mod needs_you;
 pub mod onboarding;
 pub mod overview;
 pub mod pairing;
+pub mod pairing_key;
 pub mod passkey;
 pub mod people;
 pub mod pin;

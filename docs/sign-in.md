@@ -97,6 +97,14 @@ kiff/cloud's `api/internal/appsignin/README.md`.
    `/v1/pair/claim`, `pairing::claim_body_with_terms`). Terms that changed close the pairing and
    untick the box, as Continue does.
 
+## The first Home
+
+Signed in with no taf, for someone who may use Coach, the Overview shows the first Home under
+board 2 (the iPad's `HomeView` 137–152, on every desktop at the PM's (b), kiff/work#20, 22 Nov):
+tafs cloud's own empty line when it sends one, else "No tafs yet" and what Coach does; **Ask
+Coach**, a new conversation (`startNewTaf`); and **How tafs works**, the cards and the legal pages
+(`overview::with_first_home`, `overview.rs` › `first_home`).
+
 ## The three cards
 
 After the celebration, once on this computer (kept in the user's config), and again from
@@ -105,8 +113,7 @@ Your tafs (the sample's three tafs that move no money, as Home lists them), A Ca
 permission (the sample's Support replies Card, 12 of 40 used today, issued by you, drawn by the
 Card tab's own face), You stay in control (Needs you's card over the sample's Deploys). Skip, Next
 and Get started; Escape is Skip. The last card names how this computer approves:
-`onboarding.control_lead_desktop` (until tafs#1710 is on main and pinned, that card shows its
-title and picture alone). How tafs works lists the three cards and the four legal pages,
+`onboarding.control_lead_desktop` (from tafs#1710, in all 40 shipped languages). How tafs works lists the three cards and the four legal pages,
 KIFF's and tafs's, each titled as its page is.
 
 ## The flow

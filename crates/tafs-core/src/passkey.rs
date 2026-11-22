@@ -1,15 +1,16 @@
 //! Approving with a passkey (kiff/tafs `docs/computer-passkeys.md`, "What a passkey approval
 //! carries"): the message a device key would sign, the WebAuthn challenge and client data built
 //! here, the checks that refuse before sending what KIFF would refuse, and the
-//! `KIFF-Passkey-Assertion` header. Linux approves with a USB security key (CTAP2), which comes
-//! next; until it does, this is switched off (`ENABLED`) and nothing asks a key for anything.
+//! `KIFF-Passkey-Assertion` header. Linux approves with a USB security key (CTAP2), registered with
+//! this computer when it's paired (`pairing_key`, kiff/cloud#96).
 
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine;
 use sha2::{Digest, Sha256};
 
-/// Off until the security key and its pairing are built: nothing signs with a passkey.
-pub const ENABLED: bool = false;
+/// On: KIFF takes a software-key computer's security key (kiff/cloud#96, the PM's decision (i)).
+/// A session approves with it only when KIFF made it `passkey` and its pairing registered the key.
+pub const ENABLED: bool = true;
 
 pub const RP_ID: &str = "kiff.dev";
 pub const ORIGIN: &str = "https://kiff.dev";
@@ -56,6 +57,16 @@ pub fn client_data_json(message: &[u8]) -> Vec<u8> {
         challenge(message)
     )
     .into_bytes()
+}
+
+/// A credential id as a session keeps it (base64url, no padding), as bytes.
+pub fn credential_id(kept: &str) -> Option<Vec<u8>> {
+    URL_SAFE_NO_PAD.decode(kept).ok().filter(|c| !c.is_empty())
+}
+
+/// The client data's hash, which the key signs over (`sha256(clientData)`).
+pub fn client_data_hash(client_data: &[u8]) -> [u8; 32] {
+    Sha256::digest(client_data).into()
 }
 
 /// authenticatorData's fixed head: the relying party's hash, the flags, the sign count.
@@ -172,6 +183,11 @@ pub struct SigningTime {
 }
 
 impl SigningTime {
+    /// None given yet, for a `static`.
+    pub const fn new() -> SigningTime {
+        SigningTime { last: None }
+    }
+
     pub fn next(&mut self, now: chrono::DateTime<chrono::Utc>) -> String {
         use chrono::{SubsecRound, TimeDelta};
         let mut t = now.trunc_subsecs(3);
@@ -361,7 +377,7 @@ mod tests {
     }
 
     #[test]
-    fn it_is_switched_off() {
-        const { assert!(!ENABLED) };
+    fn it_is_switched_on() {
+        const { assert!(ENABLED) };
     }
 }

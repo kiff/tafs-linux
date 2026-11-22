@@ -286,6 +286,50 @@ fn escaped_query(v: &str) -> String {
 }
 
 impl Act {
+    /// The whole request a security key would approve (method, path with its query, body), for
+    /// the acts KIFF or tafs cloud take signed and whose body their fields hold, as the iPad's
+    /// `KIFFClient` writes it. None for the rest: planque's (their own signing), a held call's or
+    /// a step's answer (its signature is in the body), Make live (the device checks it first),
+    /// and those whose body needs what the act doesn't carry yet (Raise the limit, Decline).
+    pub fn request(&self) -> Option<(&'static str, String, Vec<u8>)> {
+        let empty = || b"{}".to_vec();
+        let body = match self {
+            Act::CreateGroup { name } | Act::RenameGroup { name, .. } => {
+                serde_json::to_vec(&serde_json::json!({ "name": name })).ok()?
+            }
+            Act::SetGroupMember { role, .. } => {
+                serde_json::to_vec(&serde_json::json!({ "role": role })).ok()?
+            }
+            Act::SetTimeZone { zone } => {
+                serde_json::to_vec(&serde_json::json!({ "time_zone": zone })).ok()?
+            }
+            // `Share`'s encoding: a nil group or subject is left out.
+            Act::Share { group, subject, .. } => {
+                let mut m = serde_json::Map::new();
+                if let Some(g) = group {
+                    m.insert("group".into(), g.clone().into());
+                }
+                if let Some(s) = subject {
+                    m.insert("subject".into(), s.clone().into());
+                }
+                serde_json::to_vec(&m).ok()?
+            }
+            Act::DeleteGroup { .. }
+            | Act::RemoveGroupMember { .. }
+            | Act::SignOutDevice { .. }
+            | Act::Unshare { .. }
+            | Act::Resume { .. }
+            | Act::DiscardSettingUp { .. }
+            | Act::RemoveTaf { .. }
+            | Act::StartTrial { .. }
+            | Act::InstallTrial { .. }
+            | Act::EndTrial { .. } => empty(),
+            _ => return None,
+        };
+        let (method, path) = self.route();
+        Some((method, path, body))
+    }
+
     /// The call the iPad makes once it has signed (`KIFFClient`): this computer never makes it.
     pub fn route(&self) -> (&'static str, String) {
         match self {
@@ -761,5 +805,61 @@ mod tests {
         .route();
         assert_eq!(path, "/v1/groups/g%2F1/members/auth0%7Crae");
         assert!(signed("DELETE", &path));
+    }
+
+    #[test]
+    fn a_keys_request_is_the_ipads_call_whole() {
+        let (m, p, b) = Act::CreateGroup { name: "Ops".into() }.request().unwrap();
+        assert_eq!(
+            (m, p.as_str(), b.as_slice()),
+            ("POST", "/v1/groups", &br#"{"name":"Ops"}"#[..])
+        );
+        let (_, p, b) = Act::SetTimeZone {
+            zone: "Europe/Paris".into(),
+        }
+        .request()
+        .unwrap();
+        assert_eq!(
+            (p.as_str(), b.as_slice()),
+            ("/v1/me/time-zone", &br#"{"time_zone":"Europe/Paris"}"#[..])
+        );
+        let (m, p, b) = Act::Share {
+            agent: "a1".into(),
+            group: None,
+            subject: Some("s1".into()),
+        }
+        .request()
+        .unwrap();
+        assert_eq!(
+            (m, p.as_str(), b.as_slice()),
+            ("POST", "/v1/agents/a1/grants", &br#"{"subject":"s1"}"#[..])
+        );
+        let (m, p, b) = Act::RemoveTaf { taf: "t 1".into() }.request().unwrap();
+        assert_eq!(
+            (m, p.as_str(), b.as_slice()),
+            ("DELETE", "/v1/tafs/t%201", &b"{}"[..])
+        );
+        // Not this way: planque's, an answer signed in its body, Make live, Raise the limit.
+        assert!(Act::Disconnect { grant: "g".into() }.request().is_none());
+        assert!(Act::ApproveOnce { call: "c".into() }.request().is_none());
+        assert!(Act::MakeLive {
+            taf: "t".into(),
+            version: 2
+        }
+        .request()
+        .is_none());
+        assert!(Act::RaiseLimit.request().is_none());
+        // Every request this way is one KIFF takes only signed, or tafs cloud checks the signature of.
+        for act in [
+            Act::CreateGroup { name: "x".into() },
+            Act::SignOutDevice { device: "d".into() },
+            Act::SetTimeZone { zone: "UTC".into() },
+            Act::Resume { agent: None },
+            Act::RemoveTaf { taf: "t".into() },
+            Act::DiscardSettingUp { agent: "a".into() },
+        ] {
+            let (m, p, _) = act.request().unwrap();
+            assert!(signed(m, &p) || signed_at_cloud(m, &p), "{m} {p}");
+        }
     }
 }

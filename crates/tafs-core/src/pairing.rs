@@ -115,6 +115,9 @@ pub struct Payload {
     pub nonce: String,
     /// When the code stops working, `LIFETIME` ahead.
     pub exp: String,
+    /// A security key's credential, made for this pairing (`pairing_key`): the QR names it, and
+    /// the check code vouches for it. None: view-only, as today.
+    pub credential: Option<crate::pairing_key::Credential>,
 }
 
 impl Payload {
@@ -127,7 +130,14 @@ impl Payload {
             name: name.to_string(),
             nonce: nonce.to_string(),
             exp: time(now + lifetime),
+            credential: None,
         }
+    }
+
+    /// With a security key's credential: the QR names it (`credential: {id, public_key}`).
+    pub fn with_credential(mut self, credential: crate::pairing_key::Credential) -> Payload {
+        self.credential = Some(credential);
+        self
     }
 
     /// The QR code's text (`PairingPayload.text`): JSON, keys sorted, slashes as they are.
@@ -142,8 +152,15 @@ impl Payload {
             ("pub", self.pub_key.as_str()),
             ("v", VERSION),
         ]);
-        // serde_json never escapes a slash, and a BTreeMap writes its keys sorted.
-        serde_json::to_string(&fields).expect("strings encode")
+        // serde_json never escapes a slash, and its map (a BTreeMap) writes its keys sorted.
+        let mut out: serde_json::Map<String, Value> = fields
+            .into_iter()
+            .map(|(k, v)| (k.to_string(), Value::String(v.to_string())))
+            .collect();
+        if let Some(c) = &self.credential {
+            out.insert("credential".into(), c.qr_field());
+        }
+        serde_json::to_string(&out).expect("strings encode")
     }
 }
 
@@ -227,6 +244,48 @@ pub fn claim(
         },
         other => Err(other),
     }
+}
+
+/// The claim's body after a security key made its credential for this pairing: today's body, the
+/// creation's `credential_proof` (`pairing_key::credential_proof`), and the terms version when the
+/// welcome's tick gave one.
+pub fn claim_body_with_key(
+    nonce: &str,
+    pub_key: &str,
+    proof: &str,
+    credential_proof: Value,
+    terms: Option<&str>,
+) -> Value {
+    let mut body = match terms {
+        Some(t) => claim_body_with_terms(nonce, pub_key, proof, t),
+        None => claim_body(nonce, pub_key, proof),
+    };
+    body["credential_proof"] = credential_proof;
+    body
+}
+
+/// The session a pairing with a security key keeps: KIFF's `approval_mode` (`passkey` once it
+/// takes the key; anything else, view, as KIFF says it), and the key's credential, so each
+/// approval asks that key and no other.
+pub fn kept_with_key(
+    token: &DeviceToken,
+    key: &DeviceKey,
+    credential: &crate::pairing_key::Credential,
+    now: i64,
+) -> KeptSession {
+    use base64::Engine;
+    let mut kept = KeptSession {
+        paired: true,
+        ..KeptSession::from_token(token, key, now)
+    };
+    // Never more than KIFF granted: a key it didn't take leaves the session view-only.
+    if kept.approval_mode == ApprovalMode::Passkey {
+        kept.security_key =
+            Some(base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(&credential.id));
+    } else {
+        kept.approval_mode = ApprovalMode::View;
+    }
+    kept
 }
 
 /// The session a pairing keeps, bound to the key the phone approved. It is kept **view-only**
@@ -396,6 +455,26 @@ mod tests {
             ..payload
         };
         assert!(slashed.text().contains(r#""name":"a/b""#));
+    }
+
+    #[test]
+    fn a_security_keys_credential_is_named_in_the_code() {
+        let key = DeviceKey::generate();
+        let at = Utc.with_ymd_and_hms(2026, 11, 15, 17, 40, 5).unwrap();
+        let payload = Payload::new(&key, "tafs", "bm9uY2U", at).with_credential(
+            crate::pairing_key::Credential {
+                id: b"cred-1".to_vec(),
+                public_key: b"spki".to_vec(),
+            },
+        );
+        let v: Value = serde_json::from_str(&payload.text()).unwrap();
+        assert_eq!(v["credential"]["id"], "Y3JlZC0x");
+        assert_eq!(v["credential"]["public_key"], "c3BraQ");
+        assert_eq!(v["kind"], "passkey");
+        assert_eq!(v["key_store"], "software");
+        assert!(v.get("approval_pub").is_none());
+        // Keys sorted: "credential" before "exp".
+        assert!(payload.text().starts_with(r#"{"credential":"#));
     }
 
     #[test]
@@ -606,5 +685,34 @@ mod tests {
             message: "terms_outdated".into()
         }));
         assert!(!is_terms_outdated(&KiffError::Expired));
+    }
+
+    #[test]
+    fn a_pairing_with_a_key_keeps_only_what_kiff_granted() {
+        let key = DeviceKey::generate();
+        let cred = crate::pairing_key::Credential {
+            id: b"cred-1".to_vec(),
+            public_key: vec![],
+        };
+        let token = |mode: &str| -> DeviceToken {
+            serde_json::from_value(json!({"access_token":"t","token_type":"Bearer","expires_in":0,"tenant":"x","subject":"s","approval_mode":mode})).unwrap()
+        };
+        let granted = kept_with_key(&token("passkey"), &key, &cred, 0);
+        assert_eq!(granted.approval_mode, ApprovalMode::Passkey);
+        assert_eq!(granted.security_key.as_deref(), Some("Y3JlZC0x"));
+        assert!(granted.paired);
+        // KIFF said view (it didn't take the key): nothing is claimed.
+        let view = kept_with_key(&token("view"), &key, &cred, 0);
+        assert_eq!(view.approval_mode, ApprovalMode::View);
+        assert_eq!(view.security_key, None);
+        let body = claim_body_with_key(
+            "n",
+            "p",
+            "pr",
+            json!({"client_data_json":"a"}),
+            Some("2026-11-14"),
+        );
+        assert_eq!(body["credential_proof"]["client_data_json"], "a");
+        assert_eq!(body["terms_version"], "2026-11-14");
     }
 }
