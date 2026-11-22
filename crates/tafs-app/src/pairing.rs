@@ -556,10 +556,13 @@ pub fn body(
     }
 }
 
+/// The terms version the welcome's tick agreed to, and what to do when KIFF says they changed.
+type Ticked = (String, Rc<dyn Fn()>);
+
 thread_local! {
     /// From the welcome, after its tick: the terms version the claim carries, and what to do when
     /// KIFF says they changed (close, untick, say why). None from anywhere else.
-    static AFTER_TICK: std::cell::RefCell<Option<(String, Rc<dyn Fn()>)>> =
+    static AFTER_TICK: std::cell::RefCell<Option<Ticked>> =
         const { std::cell::RefCell::new(None) };
 }
 
