@@ -82,14 +82,12 @@ Not on Linux: `ReadinessReader` reads again when the app comes back, but this co
 never changes. `openTafsSettings` opens tafs' iOS settings, which don't exist here, and
 `Unsupported` offers neither button anyway.
 
-## Approving with a passkey (switched off)
+## Approving with a passkey
 
-**The first release approves nothing on Linux.** A Linux computer is view-only: it's added with
-the phone, and every approval goes to the phone. Approving here with a USB security key (a FIDO2
-key with a PIN), as kiff/tafs `docs/computer-passkeys.md` describes for a computer with no key
-store of its own, waits on a contract decision. The parts that don't depend on it are in
-`tafs-core/src/passkey.rs`, switched off (`ENABLED` is false), so nothing asks a key for
-anything:
+**A Linux computer paired without a security key approves nothing**: it's view-only, and every
+approval goes to the phone. Paired with one, it approves with that key (below): a USB security
+key (a FIDO2 key with a PIN), as kiff/tafs `docs/computer-passkeys.md` describes for a computer
+with no key store of its own. What a passkey approval carries is in `tafs-core/src/passkey.rs`:
 
 - **The message** a device key would sign. One request is `kiff.request.v1`: the tenant, the
   method, the path with its query, the body's SHA-256 in hex, and `signed_at`. Two requests
@@ -163,9 +161,9 @@ It asks the one key plugged in through libfido2, with exactly those asks:
   attestation object built from libfido2's three parts. `passkey::refusal` checks it whatever
   libfido2 says.
 
-Nothing calls it while it's switched off. Its tests ask with no key plugged in: where libfido2
-is installed it finds none, and where it isn't, it says it's missing. Either way, no PIN is left
-held.
+It's asked only when the person adds the key at pairing or approves with it. Its tests ask with
+no key plugged in: where libfido2 is installed it finds none, and where it isn't, it says it's
+missing. Either way, no PIN is left held.
 
 **The PIN sheet** (`crates/tafs-app/src/pin_sheet.rs`) is ported from macOS 12's `PINSheet.swift`,
 with its words from `SecurityKeyWords.swift` (`security_key::words`). It shows:
@@ -189,16 +187,17 @@ How it behaves:
   the key once off the main loop, then cleared. As on macOS 12, GTK's own entry held the
   characters while they were typed, and this app can't zero that memory.
 
-It's switched off: only `--page pin-sheet` shows it, with canned answers (five tries left, no key
-plugged in). No key is asked, and nothing is signed.
+It opens when the person adds the key at pairing ("add" mode) and for each approval. For a
+screenshot, `--page pin-sheet` shows it with canned answers (five tries left, no key plugged in):
+no key is asked there, and nothing is signed.
 
-## Registering the key at pairing, and approving with it (switched off)
+## Registering the key at pairing, and approving with it
 
 The contract is the PM's decision (i) (kiff/work#17, 22 Nov): a computer whose device key is in
 software pairs with `kind: "passkey"` and a **security key's credential**, and KIFF makes its
 session `approval_mode: "passkey"`. The device key still grants nothing: only a fresh assertion
 from that key approves, one request at a time, with presence and the PIN. Everything below waits
-on KIFF's side of it, behind `passkey::ENABLED`.
+on KIFF's side of it (kiff/cloud#96), and is on (`passkey::ENABLED`).
 
 **At pairing** (`pairing.rs` › `add_key`, `tafs-core/src/pairing_key.rs`):
 1. With one key plugged in, the PIN sheet opens in its "add" mode before the code shows: "Add a

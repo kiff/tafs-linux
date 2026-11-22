@@ -6,8 +6,8 @@
 //! `KIFF-Passkey-Assertion` header, those bytes and no others. One request, one approval: nothing
 //! is kept to approve another.
 //!
-//! Switched off with `passkey::ENABLED`: until KIFF takes a software-key computer's key, every
-//! signed act still shows that this computer can't approve.
+//! Only a session KIFF made `passkey`, whose pairing registered the key, approves this way; any
+//! other still shows that this computer can't approve.
 
 use std::sync::{Arc, Mutex};
 
@@ -117,9 +117,34 @@ mod tests {
     use super::*;
 
     #[test]
-    fn nothing_is_approved_while_the_key_is_off() {
+    fn only_a_session_with_the_key_approves() {
+        use tafs_core::keys::DeviceKey;
         let act = Act::CreateGroup { name: "x".into() };
-        // `passkey::ENABLED` is false: whatever the session, the tap says this computer can't.
         assert!(!can_approve(None, &act));
+        let token: tafs_core::signin::DeviceToken = serde_json::from_value(serde_json::json!({
+            "access_token": "t", "token_type": "Bearer", "expires_in": 0,
+            "tenant": "x", "subject": "s", "approval_mode": "passkey"
+        }))
+        .unwrap();
+        let key = DeviceKey::generate();
+        let cred = tafs_core::pairing_key::Credential {
+            id: b"c".to_vec(),
+            public_key: vec![],
+        };
+        let keyed = tafs_core::pairing::kept_with_key(&token, &key, &cred, 0);
+        assert!(can_approve(Some(&keyed), &act));
+        // Not one whose whole request this app doesn't write.
+        assert!(!can_approve(
+            Some(&keyed),
+            &Act::ApproveOnce { call: "c".into() }
+        ));
+        // A view-only session, or a passkey one with no key registered here, can't.
+        let view = tafs_core::pairing::kept(&token, &key, 0);
+        assert!(!can_approve(Some(&view), &act));
+        let unkeyed = KeptSession {
+            security_key: None,
+            ..keyed
+        };
+        assert!(!can_approve(Some(&unkeyed), &act));
     }
 }
