@@ -57,6 +57,9 @@ pub struct Answer {
     pub signed: Option<bool>,
     #[serde(default)]
     pub device: Option<String>,
+    /// When it was answered (`at`): where its outcome goes in its taf's chat.
+    #[serde(default, deserialize_with = "optional_time")]
+    pub at: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
@@ -217,6 +220,8 @@ pub struct Entry {
     pub title: String,
     pub detail: String,
     pub at: DateTime<Utc>,
+    /// When the call was made (`madeAt`), when KIFF says.
+    pub made_at: Option<DateTime<Utc>>,
     pub owner_approved: bool,
     pub amount: Option<Amount>,
     pub read_only: bool,
@@ -241,6 +246,21 @@ pub struct Entry {
     pub refused_by: Option<String>,
     /// "Report this payment": where tafs cloud offers it, and whether it's reported.
     pub report: crate::payment_report::Reportable,
+}
+
+/// `heldKey`: a held call's key in its taf's chat, the id its Record line has
+/// (`recordID(proposalID ?? kiffID)`), so its card and what became of it are one row; a call with
+/// neither keeps its own id.
+pub fn held_key(proposal_id: Option<&str>, kiff_id: Option<&str>, id: &str) -> String {
+    match proposal_id.or(kiff_id) {
+        Some(p) => record_id(p),
+        None => id.to_string(),
+    }
+}
+
+/// `recordEntry(forCall:)`: the Record's line for one of a taf's calls, by KIFF's key for it.
+pub fn entry_for_call<'a>(entries: &'a [Entry], key: &str) -> Option<&'a Entry> {
+    entries.iter().find(|e| e.entity_id.as_deref() == Some(key))
 }
 
 /// `recordID`: KIFF's call id as a stable key.
@@ -400,6 +420,7 @@ pub fn record(
             title: crate::held::name(&c.action_name, c.title.as_deref()),
             detail,
             at: c.created_at,
+            made_at: c.made_at,
             owner_approved: c.outcome == "allowed" && c.held,
             amount: c.amount.clone(),
             read_only: c.read_only == Some(true),

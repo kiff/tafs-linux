@@ -93,7 +93,8 @@ sent with `error.sent_with_other_text`. The rules are `tafs-core/src/coach_send.
   message the run took, or a run that said
   something, is read from the thread. At its end the thread is read, then the live answer goes.
   Stopped at its own cap, the chat says why. A run that ended with `ERROR` says what went through
-  before it stopped (`failedWords`, in tafs cloud's words when it gave some), with Retry, which
+  before it stopped (`failedWords`, in tafs cloud's words when it gave some), each call with what
+  it moved where the Record has it (", €150.00", by KIFF's key for the call), with Retry, which
   sends its message again. Stop stops the streamed message's own chat first.
 - **A run picked back up** (`resumeChat`): when the chat opens, and at each read after, a run
   tafs cloud says is at work while nothing here follows it (the owner left the chat or the app and
@@ -233,14 +234,35 @@ As the iPad's `streamingItems`, `anchorHeld` and `placed` (kiff/tafs#206):
   `redraw_sidebar`, `main.rs` › `reread_home`).
 - **Once the answer is recorded,** each held call stays after the recorded words it came after, or
   after the owner's message when it came first (`anchors`, kept while the app runs).
+- **Answered,** its card becomes what became of it, in the same row (both are keyed by its Record
+  line's id, `heldKey`: `recordID(proposalID ?? kiffID)`): in the answer where it was made while
+  that answer streams, else by when it was answered.
+
+## What became of its calls
+
+As the iPad's `OutcomeLine` in a taf's chat (`chatItems`' outcomes, `outcomeText`, `outcomeTone`,
+`outcomeMark`), from the Record (KIFF's activity, `GET /v1/me/activity?limit=100`, this taf's
+lines): since the chat's first message, each call approved or refused, and each call the owner
+approved that wasn't done, is on its way, or whose outcome is unknown, as one line with its mark.
+
+- "Refund order 4410: approved by you, done" (green tick) when KIFF says the reader answered it
+  (`answer.you`), else "…: approved, done"; "…: refused, not sent" (grey cross); "…: sent, waiting
+  for the app" (amber clock); "…: outcome unknown" (amber question mark); "…: {why}" for one not
+  done (red cross). This computer answers no held call, so there's no line of its own.
+- It goes where it was answered (`answer.at`), between the taf asking and what it did next; with
+  no answer's time, where its card was (`made_at`, else when KIFF recorded it), after the words
+  that ask for it.
+- The page opens with the Record as Home read it; KIFF's activity is read again here, with its held
+  calls, when a call is held and when a stream ends. A read that fails changes nothing; a 401
+  signs this computer out.
+- The rules are `tafs-core/src/taf_chat.rs` › `outcomes`, `outcome_line`, `call_amounts`,
+  `items_of`, with tests. The screenshot is `taf-chat-outcomes` (`--activity
+  crates/tafs-app/fixtures/taf-chat-activity.json`, synthetic).
 - The rules are `tafs-core/src/taf_chat.rs` › `items_of`, `placed`, `anchor_held`, with tests.
 
 ## Not yet
 
 - `SteadyMarkdown`.
-- What went through before a failure has no amount from the Record.
-- What became of a held call the owner answered (`OutcomeLine` from the Record: KIFF's answer time
-  isn't read here).
 - A door's knocks among the messages (they're on the Activity tab), and keeping across launches
   which unread rows were dealt with.
 - The sample's chat (`sampleReply`).

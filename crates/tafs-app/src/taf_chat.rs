@@ -63,6 +63,9 @@ pub struct ChatTaf {
     pub trial: bool,
     /// How its held calls are read again, from KIFF, for a tafs cloud taf.
     pub reread: Option<HeldReread>,
+    /// Its Record lines as the page had them (`entries(for:)`): what became of its calls, until
+    /// KIFF's activity is read again here.
+    pub record: Vec<tafs_core::record::Entry>,
 }
 
 /// What reading a taf's held calls again takes (`refresh`'s, for this taf): its KIFF agent, and
@@ -187,6 +190,11 @@ pub fn pane(w: Rc<WordBook>, taf: ChatTaf, source: ChatSource) -> gtk::Widget {
             .or_insert_with(|| Rc::new(RefCell::new(TafChat::new(&taf.id))))
             .clone()
     });
+    // What became of its calls, as the page had them; a chat kept from before keeps its own,
+    // read later (a trial's chat has none).
+    if chat.borrow().record.is_empty() && !taf.trial {
+        chat.borrow_mut().record = taf.record.clone();
+    }
     let page = Rc::new(Page {
         live_shown: crate::chat::Shown::default(),
         w,
@@ -228,8 +236,9 @@ pub fn pane(w: Rc<WordBook>, taf: ChatTaf, source: ChatSource) -> gtk::Widget {
                 .and_then(|b| TafThread::read(&b));
             match read {
                 Some(t) => {
-                    // A screenshot's chat starts from its file alone.
-                    let fresh = TafChat::new(&page.taf.id);
+                    // A screenshot's chat starts from its file alone, with the page's Record.
+                    let mut fresh = TafChat::new(&page.taf.id);
+                    fresh.record = page.taf.record.clone();
                     *page.chat.borrow_mut() = fresh;
                     page.chat.borrow_mut().took(&page.w, t, chrono::Utc::now());
                     match stream {
@@ -722,8 +731,54 @@ impl Page {
     }
 
     /// `refresh`, for this taf: KIFF's held calls read again, and its cards as Needs you draws
-    /// them. A read that fails changes nothing.
+    /// them; then KIFF's activity, for what became of its calls. A read that fails changes
+    /// nothing.
     async fn reread_held(self: &Rc<Self>) {
+        self.reread_calls().await;
+        self.reread_record().await;
+    }
+
+    /// `refresh`'s activity, for this taf (`activityCalls`, `KIFFMapping.record`): its Record
+    /// lines, for the outcomes in its chat and what each call moved. A read that fails changes
+    /// nothing.
+    async fn reread_record(self: &Rc<Self>) {
+        let (
+            Some(r),
+            ChatSource::Cloud {
+                token,
+                languages,
+                signed_out,
+            },
+        ) = (self.taf.reread.clone(), &self.source)
+        else {
+            return;
+        };
+        let (token, languages, signed_out) = (token.clone(), languages.clone(), signed_out.clone());
+        let read = gtk::gio::spawn_blocking(move || crate::kiff::activity(&token, &languages).ok())
+            .await
+            .ok()
+            .flatten();
+        let Some(answer) = read else { return };
+        if answer.status == 401 {
+            signed_out();
+            return;
+        }
+        let Some(calls) = (answer.status == 200)
+            .then(|| tafs_core::record::read_activity(&answer.body))
+            .flatten()
+        else {
+            return;
+        };
+        let taf_of = |actor: &str| (actor == r.agent).then(|| r.key.clone());
+        // `toolVendors`: none, as this computer doesn't read planque's connections (the Record's).
+        let vendors = tafs_core::connections::tool_vendors(&[]);
+        if let Ok(entries) = tafs_core::record::record(&self.w, &calls, &taf_of, &vendors) {
+            self.chat.borrow_mut().record = entries;
+        }
+    }
+
+    /// KIFF's held calls read again, for this taf, and its cards as Needs you draws them.
+    async fn reread_calls(self: &Rc<Self>) {
         let (
             Some(r),
             ChatSource::Cloud {
@@ -1143,7 +1198,7 @@ impl Page {
             .held
             .borrow()
             .iter()
-            .filter_map(|h| Some((h.kiff_id.clone()?, h.id.clone())))
+            .filter_map(|h| Some((h.kiff_id.clone()?, h.record.clone())))
             .collect();
         self.chat.borrow_mut().know_held(known);
         let c = self.chat.borrow();
@@ -1161,7 +1216,7 @@ impl Page {
             .held
             .borrow()
             .iter()
-            .map(|h| (h.id.clone(), h.held_at.with_timezone(&chrono::Utc)))
+            .map(|h| (h.record.clone(), h.held_at.with_timezone(&chrono::Utc)))
             .collect();
         let whose = Whose {
             name: Some(&self.taf.name),
@@ -1197,13 +1252,14 @@ impl Page {
                 let at = lines
                     .lines
                     .iter()
-                    .position(|l| matches!(l, Line::Held(k) if k == &h.id))?;
+                    .position(|l| matches!(l, Line::Held(k) if k == &h.record))?;
                 Some((h, at))
             })
             .max_by_key(|(h, _)| h.held_at);
         let near_end = waiting.is_none_or(|(_, at)| lines.lines.len() - at <= 3);
         let pill = waiting.and_then(|(h, _)| {
-            let card = crate::coach::named(self.column.upcast_ref(), &format!("held.{}", h.id))?;
+            let card =
+                crate::coach::named(self.column.upcast_ref(), &format!("held.{}", h.record))?;
             let words = self.w.get("chat.needs_you", &[]).ok()? + &h.summary;
             Some((words, card))
         });
@@ -1337,7 +1393,7 @@ impl Page {
                     }
                     v.upcast()
                 }
-                Line::Held(key) => match self.held.borrow().iter().find(|h| &h.id == key) {
+                Line::Held(key) => match self.held.borrow().iter().find(|h| &h.record == key) {
                     Some(card) => {
                         let c = crate::needs_you::held_card(&self.w, card);
                         c.set_widget_name(&format!("held.{key}"));
@@ -1345,6 +1401,8 @@ impl Page {
                     }
                     None => continue,
                 },
+                // What became of a call, from the Record, where its card was or when answered.
+                Line::Outcome(o) => crate::coach::outcome(o).upcast(),
                 Line::AskCoach { text: words, ask } => {
                     let p = panel(false);
                     let l = text(words, 15, 400, &["tafs-ink"]);

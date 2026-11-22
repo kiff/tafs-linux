@@ -557,6 +557,7 @@ impl Opener {
                 held: vec![],
                 trial: true,
                 reread: None,
+                record: vec![],
             },
             self.taf.chat.clone(),
         );

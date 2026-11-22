@@ -1128,11 +1128,18 @@ fn a_run_stopped_at_its_cap_says_why_and_words_already_recorded_show_once() {
     assert!(c.ended.is_none() && c.awaiting.is_none());
     // Failed with tafs cloud's words and nothing done: its words alone; none at all: the taf's.
     assert_eq!(
-        failed_words(&w, "Rae", &[], Some("It lost the connection.")).unwrap(),
+        failed_words(
+            &w,
+            "Rae",
+            &[],
+            &HashMap::new(),
+            Some("It lost the connection.")
+        )
+        .unwrap(),
         "It lost the connection."
     );
     assert_eq!(
-        failed_words(&w, "Rae", &[], None).unwrap(),
+        failed_words(&w, "Rae", &[], &HashMap::new(), None).unwrap(),
         w.get("work.stopped_part_way_before_finished", &[("taf", "Rae")])
             .unwrap()
     );
@@ -1472,4 +1479,351 @@ fn retry_keeps_the_id_only_where_tafs_cloud_may_have_taken_the_message() {
         panic!("a steer");
     };
     assert_ne!(again, client_id);
+}
+
+/// The Record's lines for `agent-rae`'s calls, from KIFF's activity as it sends it, under the taf
+/// `taf-1`.
+fn record_of(calls: &[String]) -> Vec<crate::record::Entry> {
+    let body = format!(r#"{{"calls":[{}]}}"#, calls.join(","));
+    let calls = crate::record::read_activity(body.as_bytes()).unwrap();
+    let taf_of = |a: &str| (a == "agent-rae").then(|| "taf-1".to_string());
+    crate::record::record(&en(), &calls, &taf_of, &Default::default()).unwrap()
+}
+
+/// One call in KIFF's activity: its proposal, outcome, what the tool did, when it was made and
+/// recorded, and the owner's answer with its time, when given.
+fn call(
+    proposal: &str,
+    outcome: &str,
+    tool: Option<&str>,
+    made: &str,
+    answered: Option<&str>,
+) -> String {
+    let tool = tool.map_or(String::new(), |s| {
+        format!(r#","tool_outcome":{{"status":"{s}"}}"#)
+    });
+    let answer = answered.map_or(String::new(), |a| {
+        format!(r#","answer":{{"decision":"approved","you":true,"at":"{a}"}}"#)
+    });
+    format!(
+        r#"{{"proposal_id":"{proposal}","action_name":"stripe.refund","title":"Refund","actor_id":"agent-rae","outcome":"{outcome}","held":true,"created_at":"2026-11-16T09:30:00Z","made_at":"{made}","entity_id":"inv-{proposal}","amount":{{"value":"5.00","unit":"USD"}}{tool}{answer}}}"#
+    )
+}
+
+#[test]
+fn the_record_reads_when_a_call_was_made_and_answered() {
+    let r = record_of(&[call(
+        "p1",
+        "allowed",
+        Some("done"),
+        "2026-11-16T09:00:10Z",
+        Some("2026-11-16T09:02:00Z"),
+    )]);
+    assert_eq!(r[0].made_at, Some(at("2026-11-16T09:00:10Z")));
+    assert_eq!(
+        r[0].answer.as_ref().and_then(|a| a.at),
+        Some(at("2026-11-16T09:02:00Z"))
+    );
+    // A held call's key in its chat is its Record line's.
+    assert_eq!(
+        crate::record::held_key(Some("p1"), Some("exc-1"), "card"),
+        r[0].id
+    );
+    assert_eq!(
+        crate::record::held_key(None, Some("exc-1"), "card"),
+        crate::record::record_id("exc-1")
+    );
+    assert_eq!(crate::record::held_key(None, None, "card"), "card");
+}
+
+#[test]
+fn a_held_call_answered_becomes_its_outcome_where_its_card_was() {
+    let w = en();
+    let json = format!(
+        r#"{{"messages":[{}]}}"#,
+        owner("Refund 4410 and 4411", "2026-11-16T09:00:00Z", "s1")
+    );
+    let mut c = chat_of(&json);
+    two_held_calls(&mut c, &w);
+    let (a, b) = (
+        crate::record::record_id("prop-a"),
+        crate::record::record_id("prop-b"),
+    );
+    c.know_held([
+        ("exc-a".to_string(), a.clone()),
+        ("exc-b".to_string(), b.clone()),
+    ]);
+    let held = vec![
+        (a.clone(), at("2026-11-16T09:00:10Z")),
+        (b.clone(), at("2026-11-16T09:01:00Z")),
+    ];
+    let now = at("2026-11-16T09:02:00Z");
+    let before: Vec<String> = items_of(&c, &held, now).iter().map(Item::id).collect();
+    // The first is answered and done: KIFF holds only the second, and the Record has the first.
+    c.record = record_of(&[call(
+        "prop-a",
+        "allowed",
+        Some("done"),
+        "2026-11-16T09:00:10Z",
+        Some("2026-11-16T09:01:30Z"),
+    )]);
+    let one = vec![held[1].clone()];
+    let it = items_of(&c, &one, now);
+    let after: Vec<String> = it.iter().map(Item::id).collect();
+    // The same row, where it was made in the answer, now its outcome. Answered, it no longer
+    // moves past the words that ask for it (`isCard`), as on the iPad.
+    let sorted = |v: &[String]| {
+        let mut v = v.to_vec();
+        v.sort();
+        v
+    };
+    assert_eq!(sorted(&before), sorted(&after));
+    let pos = after.iter().position(|i| *i == format!("k|{a}")).unwrap();
+    let at_ = |id: &str| after.iter().position(|i| i == id).unwrap();
+    assert!(
+        pos > at_("s|live|0") && pos < at_(&format!("k|{b}")),
+        "{after:?}"
+    );
+    assert!(matches!(it[pos], Item::Outcome(e) if e.id == a));
+    let l = lines(
+        &w,
+        &c,
+        &Whose {
+            name: Some("Rae"),
+            ask_coach: false,
+        },
+        &one,
+        now,
+    )
+    .unwrap();
+    assert!(l
+        .lines
+        .iter()
+        .any(|l| matches!(l, Line::Outcome(o) if o.text == "Refund: approved by you, done")));
+}
+
+#[test]
+fn an_outcome_goes_where_it_was_answered_and_without_that_time_where_it_was_made() {
+    let w = en();
+    let json = format!(
+        r#"{{"messages":[{},{},{}]}}"#,
+        owner("Refund 4410", "2026-11-16T09:00:00Z", "s1"),
+        taf(
+            "4410 waits for your approval.",
+            "2026-11-16T09:00:20Z",
+            "s1"
+        ),
+        taf("Refunded.", "2026-11-16T09:05:00Z", "s2")
+    );
+    let mut c = chat_of(&json);
+    let now = at("2026-11-16T10:00:00Z");
+    let texts = |c: &TafChat| -> Vec<String> {
+        items_of(c, &[], now)
+            .iter()
+            .map(|i| match i {
+                Item::Message(m) => m.text.clone(),
+                Item::Outcome(_) => "outcome".into(),
+                other => other.id(),
+            })
+            .collect()
+    };
+    // Answered at 9:03: between the taf asking and what it did next.
+    c.record = record_of(&[call(
+        "p1",
+        "allowed",
+        Some("done"),
+        "2026-11-16T09:00:10Z",
+        Some("2026-11-16T09:03:00Z"),
+    )]);
+    assert_eq!(
+        texts(&c),
+        [
+            "Refund 4410",
+            "4410 waits for your approval.",
+            "outcome",
+            "Refunded."
+        ]
+    );
+    // No answer's time: where its card was, when it was made, and after the words that ask for it.
+    c.record = record_of(&[call("p1", "denied", None, "2026-11-16T09:00:10Z", None)]);
+    assert_eq!(
+        texts(&c),
+        [
+            "Refund 4410",
+            "4410 waits for your approval.",
+            "outcome",
+            "Refunded."
+        ]
+    );
+    // An unanswered outcome keeps the place its card was anchored to.
+    let k = crate::record::record_id("p1");
+    c.anchors
+        .insert(k.clone(), format!("m|{}", c.thread.messages[2].id()));
+    assert_eq!(
+        texts(&c),
+        [
+            "Refund 4410",
+            "4410 waits for your approval.",
+            "Refunded.",
+            "outcome"
+        ]
+    );
+    let _ = w;
+}
+
+#[test]
+fn only_what_the_owner_should_know_shows_and_only_since_the_chat_began() {
+    let json = format!(
+        r#"{{"messages":[{}]}}"#,
+        owner("Hi", "2026-11-16T09:00:00Z", "s1")
+    );
+    let mut c = chat_of(&json);
+    let mut done_alone = call(
+        "p-done",
+        "allowed",
+        Some("done"),
+        "2026-11-16T09:10:00Z",
+        None,
+    );
+    done_alone = done_alone.replace(r#""held":true"#, r#""held":false"#);
+    let mut not_done_alone = call(
+        "p-nd",
+        "allowed",
+        Some("refused_by_tool"),
+        "2026-11-16T09:10:00Z",
+        None,
+    );
+    not_done_alone = not_done_alone.replace(r#""held":true"#, r#""held":false"#);
+    let early = call("p-early", "denied", None, "2026-11-16T08:00:00Z", None)
+        .replace("2026-11-16T09:30:00Z", "2026-11-16T08:00:00Z");
+    c.record = record_of(&[
+        done_alone,
+        not_done_alone,
+        early,
+        call(
+            "p-held",
+            "owner_required",
+            None,
+            "2026-11-16T09:10:00Z",
+            None,
+        ),
+        call(
+            "p-sent",
+            "allowed",
+            Some("sending"),
+            "2026-11-16T09:10:00Z",
+            None,
+        ),
+        call("p-refused", "denied", None, "2026-11-16T09:10:00Z", None),
+    ]);
+    let shown: Vec<String> = outcomes(&c.record, c.thread.messages.first().map(|m| m.at))
+        .filter_map(|e| e.proposal.clone())
+        .collect();
+    assert_eq!(shown, ["p-sent", "p-refused"]);
+    // No message yet: none.
+    assert_eq!(outcomes(&c.record, None).count(), 0);
+}
+
+#[test]
+fn an_outcome_says_what_became_of_the_call_in_its_tone_and_mark() {
+    use crate::coach_lines::{Mark, Tone};
+    use crate::record::Kind;
+    let w = en();
+    let mut e = record_of(&[call(
+        "p1",
+        "allowed",
+        Some("done"),
+        "2026-11-16T09:00:10Z",
+        None,
+    )])
+    .remove(0);
+    let line = |e: &crate::record::Entry| {
+        let o = outcome_line(&w, e).unwrap();
+        (o.text, o.tone, o.mark)
+    };
+    assert_eq!(e.kind, Kind::Approved);
+    assert_eq!(
+        line(&e),
+        ("Refund: approved, done".into(), Tone::Ok, Mark::Check)
+    );
+    e.answer = Some(crate::record::Answer {
+        decision: "approved".into(),
+        by: None,
+        you: Some(true),
+        signed: None,
+        device: None,
+        at: None,
+    });
+    assert_eq!(line(&e).0, "Refund: approved by you, done");
+    e.kind = Kind::Refused;
+    assert_eq!(
+        line(&e),
+        ("Refund: refused, not sent".into(), Tone::Dim, Mark::Cross)
+    );
+    e.kind = Kind::Sending;
+    assert_eq!(
+        line(&e),
+        (
+            "Refund: sent, waiting for the app".into(),
+            Tone::Amber,
+            Mark::Clock
+        )
+    );
+    e.kind = Kind::Unknown;
+    assert_eq!(
+        line(&e),
+        (
+            "Refund: outcome unknown".into(),
+            Tone::Amber,
+            Mark::Question
+        )
+    );
+    e.kind = Kind::NotDone;
+    e.detail = "Stripe refused it".into();
+    assert_eq!(
+        line(&e),
+        ("Refund: Stripe refused it".into(), Tone::No, Mark::Cross)
+    );
+}
+
+#[test]
+fn what_went_through_says_what_each_call_moved() {
+    let w = en();
+    let record = record_of(&[call(
+        "p1",
+        "allowed",
+        Some("done"),
+        "2026-11-16T09:00:10Z",
+        None,
+    )]);
+    let amounts = call_amounts(&w, &record).unwrap();
+    let five = record[0].amount_text(&w).unwrap().unwrap();
+    assert_eq!(amounts.get("inv-p1"), Some(&five));
+    let done = |tool: &str, on: Option<&str>, key: Option<&str>| DoneCall {
+        tool: tool.into(),
+        resource: on.map(Into::into),
+        invocation: key.map(Into::into),
+    };
+    let refund = done("kiff__stripe_refund", Some("ch_1"), Some("inv-p1"));
+    let words = crate::held::tool_words("kiff__stripe_refund");
+    assert_eq!(
+        failed_words(&w, "Refunds", std::slice::from_ref(&refund), &amounts, None).unwrap(),
+        format!("Refunds stopped part-way, after this went through: {words} on ch_1, {five}.")
+    );
+    // One the Record doesn't have says no amount; several are listed with theirs.
+    let mail = done("kiff__send_email", None, Some("inv-other"));
+    let mail_words = crate::held::tool_words("kiff__send_email");
+    assert_eq!(
+        failed_words(
+            &w,
+            "Refunds",
+            &[refund, mail],
+            &amounts,
+            Some("It lost the connection. ")
+        )
+        .unwrap(),
+        format!(
+            "It lost the connection. This went through: {words} on ch_1, {five}; {mail_words}."
+        )
+    );
 }

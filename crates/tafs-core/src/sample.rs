@@ -213,6 +213,7 @@ pub fn record(w: &WordBook, now: DateTime<Local>) -> Result<Vec<crate::record::E
         title,
         detail,
         at,
+        made_at: None,
         owner_approved: false,
         amount: None,
         read_only: false,
