@@ -1778,6 +1778,71 @@ fn message(w: &WordBook, thread: &SetupThread, m: &ChatMessage) -> Result<Line, 
     })
 }
 
+/// An answer still being written, with what it's in the middle of closed, so no Markdown symbol
+/// shows while it streams (`MarkdownBlock.healed`, kiff/tafs#285): bold or inline code left open,
+/// a link whose address isn't in yet (its text shows). Inside an open code block, nothing changes.
+pub fn healed(text: &str) -> String {
+    let mut lines: Vec<&str> = text.split('\n').collect();
+    let fences = lines.iter().filter(|l| l.trim().starts_with("```")).count();
+    if fences % 2 != 0 {
+        return text.to_string();
+    }
+    let Some(last) = lines.pop() else {
+        return text.to_string();
+    };
+    let mut last = last.to_string();
+    // "[words](address…" with the address still coming: its words. Then "[words…": its words.
+    let opens: Vec<usize> = last.match_indices('[').map(|(i, _)| i).collect();
+    for &i in &opens {
+        let rest = &last[i + 1..];
+        if let Some(j) = rest.find("](") {
+            if !rest[..j].contains(']') && !rest[j + 2..].contains(')') {
+                last = format!("{}{}", &last[..i], &rest[..j]);
+                break;
+            }
+        }
+    }
+    if let Some(i) = last
+        .match_indices('[')
+        .map(|(i, _)| i)
+        .find(|&i| !last[i + 1..].contains(']'))
+    {
+        last = format!("{}{}", &last[..i], &last[i + 1..]);
+    }
+    // "[words]" at the very end, its address not begun: its words too. (Paced, an answer can stop
+    // there for a frame; the iPad paces what it drew, so never does.)
+    if last.ends_with(']') {
+        if let Some(i) = last.rfind('[') {
+            let inside = &last[i + 1..last.len() - 1];
+            if !inside.contains(']') {
+                last = format!("{}{}", &last[..i], inside);
+            }
+        }
+    }
+    // A mark just opened, with nothing after it yet ("Refunded **"), goes until its words come.
+    // One right after a word closes what it opened, and stays.
+    while let Some(end) = last.chars().last().filter(|c| matches!(c, '*' | '_' | '`')) {
+        let before = last.trim_end_matches(end);
+        if before.chars().last().is_some_and(|c| !c.is_whitespace()) {
+            break;
+        }
+        last = before.to_string();
+    }
+    if last.split("**").count() % 2 == 0 {
+        last.push_str("**");
+    }
+    if last.matches('`').count() % 2 == 1 {
+        last.push('`');
+    }
+    lines.push(&last);
+    lines.join("\n")
+}
+
+/// The first `count` characters of an answer being written, healed (`SteadyMarkdown`'s `visible`).
+pub fn healed_prefix(text: &str, count: usize) -> String {
+    healed(&text.chars().take(count).collect::<String>())
+}
+
 /// Coach's Markdown as Pango markup (`MarkdownText`), the parts Coach writes: headings, lists,
 /// bold, italic, code and links (their words). Everything else is its text, escaped.
 pub fn markup(text: &str) -> String {
@@ -2405,5 +2470,44 @@ mod tests {
         );
         assert_eq!(markup("a * b * c"), "a * b * c");
         assert_eq!(markup("*one*"), "<i>one</i>");
+    }
+
+    #[test]
+    fn text_being_written_is_healed() {
+        assert_eq!(healed("Refunded **$20"), "Refunded **$20**");
+        assert_eq!(healed("Run `refund"), "Run `refund`");
+        assert_eq!(healed("See [the order](https://shop.te"), "See the order");
+        assert_eq!(healed("See [the ord"), "See the ord");
+        assert_eq!(healed("Refunded **"), "Refunded ");
+        // Finished formatting, earlier lines and an open code block stay as they are.
+        assert_eq!(healed("**Done**"), "**Done**");
+        assert_eq!(healed("**a**\nnext"), "**a**\nnext");
+        assert_eq!(healed("```\nlet x = `"), "```\nlet x = `");
+        assert_eq!(healed("[a](b) and [c](d"), "[a](b) and c");
+        assert_eq!(healed("See [the order]"), "See the order");
+        assert_eq!(
+            healed("See [the order](https://x) done"),
+            "See [the order](https://x) done"
+        );
+        for t in [
+            "Refunded **$20",
+            "See [the order](https://shop.te",
+            "Run `refund",
+        ] {
+            let drawn = markup(&healed(t));
+            assert!(
+                !drawn.contains('*') && !drawn.contains('`') && !drawn.contains('['),
+                "{t} drew {drawn}"
+            );
+        }
+        // Every prefix of a formatted answer draws without a stray mark.
+        let full = "Refunded **$20** to `order 42`, see [the order](https://shop.test/42).";
+        for n in 0..=full.chars().count() {
+            let drawn = markup(&healed_prefix(full, n));
+            assert!(
+                !drawn.contains("**") && !drawn.contains('`') && !drawn.contains("]("),
+                "{n}: {drawn}"
+            );
+        }
     }
 }

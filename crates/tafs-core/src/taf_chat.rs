@@ -1143,6 +1143,9 @@ pub enum Line {
         stamp: Option<(String, bool)>,
         /// tafs cloud's id for it and its chat, when it can be reported (`reportable`).
         report: Option<crate::report::Reported>,
+        /// Still being written: shown at an even pace, what it's in the middle of closed
+        /// (`SteadyMarkdown`).
+        streaming: bool,
     },
     /// A call KIFF holds for the owner: its card, by its key.
     Held(String),
@@ -1372,6 +1375,7 @@ pub fn lines(
                 refused: None,
                 stamp: None,
                 report: None,
+                streaming: true,
             },
             Item::Message(m) => message(w, m)?,
             Item::Held { key, .. } => Line::Held(key.to_string()),
@@ -1506,6 +1510,7 @@ fn message(w: &WordBook, m: &ChatMessage) -> Result<Line, WordsError> {
             refused: m.refused_lines().cloned(),
             stamp: door.map(|d| door_stamp(w, d, false)).transpose()?,
             report: crate::report::reportable(m),
+            streaming: false,
         },
     })
 }

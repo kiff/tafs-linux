@@ -105,6 +105,8 @@ pub fn forget() {
 
 /// The pane and what it holds while it's open.
 struct Page {
+    /// How much of the answer streaming now shows (`SteadyMarkdown`).
+    live_shown: crate::chat::Shown,
     w: Rc<WordBook>,
     taf: ChatTaf,
     /// Its held calls' cards: as the page opened, then as KIFF was read again here.
@@ -186,6 +188,7 @@ pub fn pane(w: Rc<WordBook>, taf: ChatTaf, source: ChatSource) -> gtk::Widget {
             .clone()
     });
     let page = Rc::new(Page {
+        live_shown: crate::chat::Shown::default(),
         w,
         held: RefCell::new(taf.held.clone()),
         taf,
@@ -1246,6 +1249,19 @@ impl Page {
         }
         // The answer streaming now: its work block, before its first words.
         let live_at = lines.live.as_ref().and_then(|(_, at)| *at);
+        // Only the words being written now are paced; those before a tool call are whole.
+        let pacing = lines.lines.iter().rposition(|l| {
+            matches!(
+                l,
+                Line::Taf {
+                    streaming: true,
+                    ..
+                }
+            )
+        });
+        if pacing.is_none() {
+            self.live_shown.set(None);
+        }
         for (i, line) in lines.lines.iter().enumerate() {
             if let (Some((work, _)), true) = (&lines.live, live_at == Some(i)) {
                 column.append(&crate::chat::live_work(work));
@@ -1285,6 +1301,7 @@ impl Page {
                     refused,
                     stamp,
                     report,
+                    streaming,
                 } => {
                     let v = gtk::Box::new(gtk::Orientation::Vertical, 6);
                     // Its menu: Report this answer, where it can be reported.
@@ -1298,7 +1315,13 @@ impl Page {
                     if let Some(d) = delivered {
                         v.append(&run_line(d));
                     }
-                    let answer = crate::chat::answer_words(words);
+                    let answer = if *streaming && pacing == Some(i) {
+                        crate::chat::steady_answer_words(words, &self.live_shown)
+                    } else if *streaming {
+                        crate::chat::answer_words(&tafs_core::coach_lines::healed(words))
+                    } else {
+                        crate::chat::answer_words(words)
+                    };
                     answer.set_widget_name("taf-message");
                     v.append(&answer);
                     if let Some((s, failed)) = stamp {

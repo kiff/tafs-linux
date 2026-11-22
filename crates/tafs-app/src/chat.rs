@@ -486,6 +486,55 @@ pub fn answer_words(words: &str) -> gtk::Label {
     l
 }
 
+/// How much of an answer being written shows: none until it streams, then the characters shown so
+/// far, kept across redraws so each new piece goes on from where the last stopped.
+pub type Shown = std::rc::Rc<std::cell::Cell<Option<usize>>>;
+
+/// `SteadyMarkdown`: an answer streaming in, shown at an even pace rather than in the bursts it
+/// arrives in, catching up within a few frames, with what it's in the middle of closed so no
+/// Markdown symbol shows on the way. With animations off, all of it at once.
+pub fn steady_answer_words(words: &str, shown: &Shown) -> gtk::Label {
+    let l = answer_words("");
+    let healed = tafs_core::coach_lines::healed(words);
+    // Paced over what was written, each step healed: the last step is the whole answer, healed.
+    let target = words.chars().count();
+    let animates = gtk::Settings::default().is_some_and(|s| s.is_gtk_enable_animations());
+    let draw = |l: &gtk::Label, n: usize| {
+        l.set_markup(&tafs_core::coach_lines::markup(
+            &tafs_core::coach_lines::healed_prefix(words, n),
+        ));
+    };
+    if !animates {
+        shown.set(Some(target));
+        l.set_markup(&tafs_core::coach_lines::markup(&healed));
+        return l;
+    }
+    // The first words show at once; what comes after, paced.
+    let mut at = shown.get().unwrap_or(target).min(target);
+    shown.set(Some(at));
+    draw(&l, at);
+    if at < target {
+        let (weak, shown, words) = (l.downgrade(), shown.clone(), words.to_string());
+        glib::timeout_add_local(std::time::Duration::from_millis(16), move || {
+            let Some(l) = weak.upgrade() else {
+                return glib::ControlFlow::Break;
+            };
+            // The iPad's step: at least two, else a sixth of what's left, rounded up.
+            at = target.min(at + 2.max((target - at).div_ceil(6)));
+            shown.set(Some(at));
+            l.set_markup(&tafs_core::coach_lines::markup(
+                &tafs_core::coach_lines::healed_prefix(&words, at),
+            ));
+            if at >= target {
+                glib::ControlFlow::Break
+            } else {
+                glib::ControlFlow::Continue
+            }
+        });
+    }
+    l
+}
+
 /// The dots where the agent's words will be (`TypingBubble`, full width).
 pub fn dots(answering: &str) -> gtk::Box {
     let dots = gtk::Box::new(gtk::Orientation::Horizontal, 5);
