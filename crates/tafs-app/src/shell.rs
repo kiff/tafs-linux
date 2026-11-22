@@ -22,6 +22,9 @@ pub const SIDEBAR_WIDTH: i32 = 320;
 thread_local! {
     /// Home read again for the sidebar, in place (`refresh`): set while signed in with KIFF.
     static HOME_REREAD: RefCell<Option<Rc<dyn Fn()>>> = RefCell::new(None);
+    /// The sidebar pulled (`.refreshable { await model.refresh() }`): set while signed in with
+    /// KIFF.
+    static HOME_PULL: RefCell<Option<Rc<dyn Fn()>>> = RefCell::new(None);
 }
 
 /// What reads Home again for the sidebar, or none.
@@ -35,6 +38,11 @@ pub fn reread_home() {
     if let Some(f) = HOME_REREAD.with(|h| h.borrow().clone()) {
         f();
     }
+}
+
+/// What a pull of the sidebar does, or none.
+pub fn set_home_pull(pull: Option<Rc<dyn Fn()>>) {
+    HOME_PULL.with(|h| *h.borrow_mut() = pull);
 }
 
 pub struct Shell {
@@ -1093,6 +1101,17 @@ fn sidebar(
     scroller.set_vexpand(true);
     scroller.set_child(Some(&list));
     pane.append(&scroller);
+    // Pull to refresh: Home read again, signed in with KIFF; the sample's sidebar has nothing to
+    // read.
+    crate::widgets::refreshable(
+        &scroller,
+        &pane,
+        Rc::new(|| {
+            if let Some(f) = HOME_PULL.with(|h| h.borrow().clone()) {
+                f();
+            }
+        }),
+    );
 
     // Coach, then the account just under it: always in sight.
     let foot = gtk::Box::new(gtk::Orientation::Vertical, 8);

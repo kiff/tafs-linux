@@ -2264,6 +2264,26 @@ impl App {
     /// `refresh`: Home and what goes with it read again as the session, and the sidebar drawn
     /// from it in place; the screen beside it stays as it is. A read that fails changes nothing.
     fn reread_home(self: &Rc<Self>) {
+        self.reread_home_as(false);
+    }
+
+    /// The sidebar pulled (`refresh()`, not the app's own `retry`): Home read again in place,
+    /// and the tries started over. While Home can't be read, the account's reads again from the
+    /// first try (an older try waiting is dropped, as their generation moves on); else, read in
+    /// place, and a failure says so at the sidebar's foot and tries again, as `refreshFailed`.
+    fn pull_home(self: &Rc<Self>) {
+        let Some(kept) = self.kept.borrow().clone() else {
+            return;
+        };
+        if let Some((why, _)) = self.unreachable.get() {
+            self.unreachable.set(Some((why, 0)));
+            let view_only = kept.approval_mode.is_view_only();
+            return self.read_account(kept, view_only);
+        }
+        self.reread_home_as(true);
+    }
+
+    fn reread_home_as(self: &Rc<Self>, pulled: bool) {
         let Some(kept) = self.kept.borrow().clone() else {
             return;
         };
@@ -2294,6 +2314,11 @@ impl App {
                     }
                 }
                 Read::SignedOut => me.signed_out_by_kiff(),
+                Read::Unreachable(why) if pulled => {
+                    let view_only = kept.approval_mode.is_view_only();
+                    let generation = me.account_reads.get();
+                    me.unreachable_now(why, kept, view_only, generation);
+                }
                 Read::Unreachable(_) => {}
             }
         });
@@ -2308,6 +2333,18 @@ impl App {
                 Some(Rc::new(move || {
                     if let Some(me) = me.upgrade() {
                         me.reread_home();
+                    }
+                }))
+            }
+            _ => None,
+        });
+        // And a pull of the sidebar reads it again, the tries started over.
+        crate::shell::set_home_pull(match (mode, self.kept.borrow().is_some()) {
+            (Mode::Kiff, true) => {
+                let me = Rc::downgrade(self);
+                Some(Rc::new(move || {
+                    if let Some(me) = me.upgrade() {
+                        me.pull_home();
                     }
                 }))
             }

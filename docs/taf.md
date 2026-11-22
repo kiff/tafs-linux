@@ -367,7 +367,10 @@ with its own navigation, over the dial as tafs cloud sends it (`GET /v1/tafs/{id
 version waits, `?version=` that one; a 404 then reads it again as it is now). Read as strictly as
 the iPad's `Knob`: a field in the wrong shape and the dial isn't read ("The dial couldn't be read:
 …"); one missing takes the iPad's default. Until it's read, "Reading what starts it…" or "Reading
-where its results go…".
+where its results go…". Pulled past its top (`.refreshable`: a touchpad's or a touch screen's
+pull, as GTK reports it), or on Ctrl+R or F5, a screen reads its dial again (`loadKnob`), and
+Results go to its work too (`loadWork`); what was read stays in sight meanwhile, and a pull while
+one is on its way asks nothing more.
 
 - **The waiting version** (`KnobPendingPanel`, for whoever manages it): DRAFT · V8 · NOT LIVE in
   amber, tafs cloud's lines for it, and Make 2 changes live with your passcode (what the iPad names
@@ -463,8 +466,7 @@ nothing shows until they're read, or when they can't be. A 401 signs this comput
 ## Not yet
 
 - **The sample's Chat**, there, dimmed. A tafs cloud taf's page opens on its chat ([chat.md](chat.md)).
-- **On the Setup tab:** the sample's Setup (there, dimmed); pulling Starts when or Results go to
-  to read them again.
+- **On the Setup tab:** the sample's Setup (there, dimmed).
 - **In the trial's sheet:** its guide stays above the chat once messages are in (the iPad shows it
   before the first only), and the chat's box is under it, a scroll down.
 - Remove, and folding the head while scrolling.

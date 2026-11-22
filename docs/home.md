@@ -194,6 +194,17 @@ As the iPad's sidebar (`HomeSplitView`, `tafSections`, `otherAgents`):
   opens Coach). `--unreachable network` draws the Unreachable line as after a failed read,
   CI's `sidebar-unreachable`; nothing is read again.
 
+## Reading Home again
+
+Home is read after signing in or at launch, again after a failure, and when a chat's answer ends.
+Signed in with KIFF, the sidebar pulled past its top (`.refreshable { await model.refresh() }`: a
+touchpad's or a touch screen's pull, as GTK reports it), or Ctrl+R or F5 in it, reads it again as
+the iPad's pull does: in place, the screen beside it as it is, and the tries started over
+(`retries = 0`). A pull that fails says so at the sidebar's foot and tries again, as after any
+failed read (`refreshFailed`); while Home can't be read, a pull is the account's reads again
+from the first try. A 401 signs this computer out ([sign-in](sign-in.md)). The sample's sidebar
+has nothing to read.
+
 ## The plan's line
 
 At the sidebar's foot, above Account (`PlanLine`): the plan, only when it needs the owner. That's
@@ -206,9 +217,6 @@ crates/tafs-app/fixtures/balance-home-line.json`, synthetic) is CI's `sidebar-pl
 
 ## Not yet
 
-- **Reading Home again** other than after a failure: it's read after signing in or at launch, and
-  again only while it couldn't be read. A 401 there signs this computer out
-  ([sign-in](sign-in.md)). No pull to refresh.
 - **Its order, in part:** a connection its vendor signed out doesn't count as waiting yet (planque's
   grants aren't read), and a taf's chat doesn't count as being at work (chats aren't on Linux).
 - **Held calls, steps and knocks** from KIFF: until they're read, Your tafs is what ran or changed.
