@@ -84,6 +84,10 @@ struct Dial {
     slot: gtk::Box,
     /// A door's stop on When picks that door for the panels below.
     picks_door: Rc<dyn Fn(&str)>,
+    /// Each door's count today when last read, once read (`doorCounts`).
+    door_counts: RefCell<Option<std::collections::HashMap<String, i64>>>,
+    /// The doors something just arrived at: their lights pulse for 3 s (`arrivals`).
+    arrivals: RefCell<std::collections::HashSet<String>>,
 }
 
 impl Dial {
@@ -476,6 +480,47 @@ impl Dial {
         put(face.upcast_ref(), cx, cy);
     }
 
+    /// The doors read again: any whose count today went up since the last read pulses for 3 s,
+    /// moving while the desktop animates, a still glow when it doesn't (`arrivalLight`).
+    fn note_arrivals(self: &Rc<Self>) {
+        if !self.doors.loaded() {
+            return;
+        }
+        let doors = self.doors.doors();
+        let now = tafs_core::doors::counts(&doors);
+        let came = self
+            .door_counts
+            .replace(Some(now))
+            .map(|before| tafs_core::doors::arrivals(&before, &doors))
+            .unwrap_or_default();
+        if came.is_empty() {
+            return;
+        }
+        let was_still = self.arrivals.borrow().is_empty();
+        self.arrivals.borrow_mut().extend(came.iter().cloned());
+        self.area.queue_draw();
+        {
+            let weak = Rc::downgrade(self);
+            glib::timeout_add_local_once(std::time::Duration::from_secs(3), move || {
+                if let Some(d) = weak.upgrade() {
+                    d.arrivals.borrow_mut().retain(|id| !came.contains(id));
+                    d.area.queue_draw();
+                }
+            });
+        }
+        if was_still && animates() {
+            let weak = Rc::downgrade(self);
+            self.area
+                .add_tick_callback(move |area, _| match weak.upgrade() {
+                    Some(d) if !d.arrivals.borrow().is_empty() => {
+                        area.queue_draw();
+                        glib::ControlFlow::Continue
+                    }
+                    _ => glib::ControlFlow::Break,
+                });
+        }
+    }
+
     /// The rim, the bands, the doors' arcs and lights, the pointer and the face's circle.
     fn paint(&self, cr: &cairo::Context) {
         let Some(knob) = self.knob() else { return };
@@ -542,6 +587,31 @@ impl Dial {
                 // Its light, under its label.
                 let a = self.angle(ring, i, items.len()) * PI / 180.0;
                 let r = ((inner + outer) / 2.0 - 10.0) * k;
+                // Something just arrived: a ring of light swells out of it and fades, every
+                // 0.9 s; a still glow with the desktop's animations off.
+                if item
+                    .door
+                    .as_ref()
+                    .is_some_and(|id| self.arrivals.borrow().contains(id))
+                {
+                    let (scale, alpha) = if animates() {
+                        let t = glib::monotonic_time() as f64 / 1_000_000.0;
+                        let phase = t.rem_euclid(0.9) / 0.9;
+                        (0.6 + phase, 0.4 * (1.0 - phase))
+                    } else {
+                        (1.0, 0.25)
+                    };
+                    cr.new_sub_path();
+                    cr.arc(
+                        cx + a.sin() * r,
+                        cy - a.cos() * r,
+                        10.0 * k * scale,
+                        0.0,
+                        2.0 * PI,
+                    );
+                    crate::illustrations::rgb(cr, hex, alpha * dim);
+                    let _ = cr.fill();
+                }
                 cr.new_sub_path();
                 cr.arc(cx + a.sin() * r, cy - a.cos() * r, 2.5 * k, 0.0, 2.0 * PI);
                 let light = if look == "closed" { 0.2 } else { 0.9 };
@@ -1054,6 +1124,8 @@ pub fn panel(
         remote,
         slot: crate::approval::refusal_slot(),
         picks_door,
+        door_counts: RefCell::new(None),
+        arrivals: RefCell::new(std::collections::HashSet::new()),
     });
     {
         let weak = Rc::downgrade(&d);
@@ -1094,11 +1166,24 @@ pub fn panel(
             }
         }))
     };
+    // A door's count today going up between reads: its light pulses.
+    let door_listening = {
+        let weak = Rc::downgrade(&d);
+        d.doors.listen(Rc::new(move || {
+            if let Some(d) = weak.upgrade() {
+                d.note_arrivals();
+            }
+        }))
+    };
+    d.note_arrivals();
     // SAFETY: only ever read back as the type it's stored as, and only here.
     unsafe { root.set_data("dial", d.clone()) };
     {
-        let knobs = knobs.clone();
-        root.connect_destroy(move |_| knobs.unlisten(listening));
+        let (knobs, doors) = (knobs.clone(), d.doors.clone());
+        root.connect_destroy(move |_| {
+            knobs.unlisten(listening);
+            doors.unlisten(door_listening);
+        });
     }
     d.draw_all();
     knobs.reload();
@@ -1117,4 +1202,9 @@ pub fn held_faces(held: &[tafs_core::needs_you::CardLines]) -> Vec<HeldFace> {
             accounting_version: c.accounting_version,
         })
         .collect()
+}
+
+/// Whether the desktop animates (`reduceMotion` off).
+fn animates() -> bool {
+    gtk::Settings::default().is_some_and(|s| s.is_gtk_enable_animations())
 }

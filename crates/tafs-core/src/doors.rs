@@ -104,6 +104,25 @@ pub struct LastRequest {
 
 /// The `api` door's lines that aren't words (`APIDoorText`): dates, a key's name, the endpoint and
 /// the example.
+/// Each door's requests today, by its id (`TafKnobView.doorCounts`).
+pub fn counts(doors: &[Door]) -> std::collections::HashMap<String, i64> {
+    doors
+        .iter()
+        .map(|d| (d.id.clone(), api::today(d)))
+        .collect()
+}
+
+/// The doors something arrived at since `before` was seen (`TafKnobView`'s `arrivals`): a door
+/// seen then whose count today went up. A door new since, or a count that went down (a new day),
+/// is no arrival.
+pub fn arrivals(before: &std::collections::HashMap<String, i64>, doors: &[Door]) -> Vec<String> {
+    doors
+        .iter()
+        .filter(|d| before.get(&d.id).is_some_and(|b| api::today(d) > *b))
+        .map(|d| d.id.clone())
+        .collect()
+}
+
 pub mod api {
     use super::{Door, Key};
     use crate::words::{WordBook, WordsError};
@@ -914,6 +933,25 @@ mod tests {
         {"id":"k5","door":"d1","app":"email","from":"cy@example.com","at":"2026-11-16T08:00:00Z","state":"done"}
       ]
     }"#;
+
+    #[test]
+    fn a_count_that_went_up_is_an_arrival() {
+        let d = read(DOORS.as_bytes()).unwrap().doors;
+        let before = counts(&d);
+        assert_eq!(before.get("d1"), Some(&2));
+        assert!(arrivals(&before, &d).is_empty());
+        let mut more = d.clone();
+        more[0].today = 3;
+        assert_eq!(arrivals(&before, &more), ["d1"]);
+        // A new day's count going down, or a door not seen before, is no arrival.
+        let mut fewer = d.clone();
+        fewer[0].today = 0;
+        assert!(arrivals(&before, &fewer).is_empty());
+        let mut new_door = d.clone();
+        new_door[0].id = "d2".into();
+        new_door[0].today = 9;
+        assert!(arrivals(&before, &new_door).is_empty());
+    }
 
     #[test]
     fn doors_read_as_the_ipad_decodes_them() {
