@@ -9,6 +9,7 @@ ports a file updates its line here.
 
 | iPad file | Lines | What | Models | Linux |
 | :- | -: | :- | :- | :- |
+| WatchDaysViews.swift | 93 | "From your watch" in Coach's Previous conversations | `WatchDaysModel`, `TafsCloud.watchDays`, `watchDay`, `WatchTurn` | `WatchDaysSection` under Previous conversations' chats: each day the person asked from their watch, newest first, Today by tafs cloud's `today` (else this computer's in the account's zone) or the weekday, day and month, with how many; none drawn when tafs cloud has none or its switch is off; `WatchDayView` pushed over it, oldest first: "⌚ Sent from your watch" with the time in the account's zone, what was said, the taf and what came of it (tafs cloud's line, else its words), a reply set in; a message to a taf left out; read only, nothing kept (`coach.rs` › `watch_days`, `watch_day`; `tafs-core/watch_days.rs`) |
 | OnboardingView.swift | 187 | The welcome: what tafs is, the one tick for the terms with the privacy links and the age line, Continue (KIFF's sign-in inside the app, K5), Try it with sample data, Sign in with your phone | AppModel.startSample, signInInApp, appTermsVersion; `ConsentTick`, `Onboarding.ageLine` | `welcome.rs`, with board 1 (first run) drawn in shapes (`illustrations.rs`); the tick, the links, the age line (`tafs-core/onboarding.rs`); Continue in the browser with PKCE and the way back at `dev.kiff.tafs:/oauth` (`app_sign_in.rs`, `tafs-core/app_signin.rs`, `scheme.rs`); the phone's claim with the terms version ([sign-in](sign-in.md#signing-in-inside-the-app-continue)) |
 | AIConsentView.swift | 74 | The AI-data consent screen and Account's row | `AIConsent`, `allowAI`, `notNowAI`, `withdrawAI`, `loadAIConsent` | `ai_consent.rs`, `tafs-core/ai_consent.rs`: the screen after sign-in and from Account, Allow with the words' version (a 409 shows the newer words), Not now for the session, Withdraw; and a turn refused for want of it, in Coach's and a taf's chat |
 | ApprovalSetupView.swift | 102 | Why this device can't approve, in an approval's place: `ApprovalGate`, `ApprovalNotice`, `ApprovalNotReady` | `ApprovalReadiness` (Biometry.swift): every state's words, `approvalBlocked` | `approval.rs`, `tafs-core/approval.rs`: this computer is `Unsupported` (no Face ID or Touch ID), so its line alone; `ReadinessReader` reads a value that never changes here, and `openTafsSettings` opens iOS settings. **Paired with a security key** (kiff/cloud#96), the acts whose whole request this app writes are approved with it instead: the PIN sheet, the key's assertion, `KIFF-Passkey-Assertion` (`key_approval.rs`, [approval](approval.md#registering-the-key-at-pairing-and-approving-with-it)) |
@@ -72,7 +73,6 @@ kiff/work#17.
 | :- | -: | :- | :- |
 | APIDoorViews.swift | 406 | A door "From another application": its count, last request, keys, New key, Revoke | (d) |
 | ChromeViews.swift | 178 | Account › Chrome: the Chromes paired, Pair a Chrome, Unpair | (d) |
-| WatchDaysViews.swift | 93 | "From your watch" in Coach's Previous conversations | (d) |
 
 **Changed since the old pin (`b3c80a8`), checked in the pin's PR:**
 - **`chevron.right` → `chevron.forward`** (UsageView, TafDialPanel, HomeRecipes, HaltScreen,
@@ -150,4 +150,4 @@ kiff/work#17.
 
 ## Coverage
 
-Ported 27, partial 21, not started 3, not for Linux 6: the 57 view files at the pin.
+Ported 28, partial 21, not started 2, not for Linux 6: the 57 view files at the pin.

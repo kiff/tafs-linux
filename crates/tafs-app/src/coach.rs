@@ -3296,12 +3296,18 @@ impl Page {
         };
         *fill.borrow_mut() = Some(fill_now.clone());
         fill_now();
+        // W11, "From your watch": under the chats, once tafs cloud lists the days.
+        let both = gtk::Box::new(gtk::Orientation::Vertical, 8);
+        both.append(&list);
+        let watch = gtk::Box::new(gtk::Orientation::Vertical, 8);
+        both.append(&watch);
         nav.add(&sheet_page(
             &l("coach.chats.previous"),
-            &list,
+            &both,
             &dialog,
             &l("record.filter.done"),
         ));
+        self.watch_days(&dialog, &nav, &watch);
         // The list's filler lives as long as the sheet.
         let keep = fill.clone();
         dialog.connect_closed(move |_| {
@@ -3324,6 +3330,151 @@ impl Page {
             p.conv.borrow_mut().chats = chats;
             refill(&fill);
         });
+    }
+
+    /// W11, "From your watch" (`WatchDaysSection`): the days the person asked from their watch, newest first, each with
+    /// how many; none drawn when tafs cloud has none or its switch is off (404). Each opens that day (`WatchDayView`).
+    fn watch_days(
+        self: &Rc<Self>,
+        dialog: &adw::Dialog,
+        nav: &adw::NavigationView,
+        into: &gtk::Box,
+    ) {
+        use tafs_core::watch_days;
+        let (p, dialog, nav, into) = (
+            Rc::downgrade(self),
+            dialog.downgrade(),
+            nav.downgrade(),
+            into.clone(),
+        );
+        glib::spawn_future_local(async move {
+            let Some(page) = p.upgrade() else {
+                return;
+            };
+            let body = match WATCH_FILE.with(|f| f.borrow().clone()) {
+                Some(path) => read_watch_file(&path, None),
+                None => page.get(watch_days::DAYS_PATH.to_string()).await,
+            };
+            let days = body.map(|b| watch_days::read_days(&b)).unwrap_or_default();
+            if days.days.is_empty() {
+                return;
+            }
+            let w = page.w.clone();
+            into.append(&crate::widgets::eyebrow(
+                &w.line("coach.chats.from_your_watch").unwrap_or_default(),
+                false,
+            ));
+            let now = chrono::Utc::now();
+            for d in &days.days {
+                let title =
+                    watch_days::title(&w, &d.date, days.today.as_deref(), now).unwrap_or_default();
+                let b = gtk::Button::new();
+                b.add_css_class("tafs-chat-row");
+                let r = gtk::Box::new(gtk::Orientation::Horizontal, 10);
+                r.append(&text("⌚", 15, 400, &["tafs-ink"]));
+                let t = text(&title, 15, 400, &["tafs-ink"]);
+                t.set_hexpand(true);
+                r.append(&t);
+                r.append(&text(
+                    &tafs_core::locale::number(d.count, 0, w.language()),
+                    13,
+                    400,
+                    &["tafs-dim"],
+                ));
+                b.set_child(Some(&r));
+                let (p, dialog, nav, date) =
+                    (p.clone(), dialog.clone(), nav.clone(), d.date.clone());
+                b.connect_clicked(move |_| {
+                    let (Some(p), Some(dialog), Some(nav)) =
+                        (p.upgrade(), dialog.upgrade(), nav.upgrade())
+                    else {
+                        return;
+                    };
+                    nav.push(&p.watch_day(&dialog, &date, &title));
+                });
+                let line = gtk::Box::new(gtk::Orientation::Horizontal, 0);
+                line.add_css_class("tafs-chat-line");
+                b.set_hexpand(true);
+                line.append(&b);
+                into.append(&line);
+                // `--page coach-watch-day`: the first day opens, for its screenshot.
+                if OPEN_WATCH_DAY.with(|o| o.replace(false)) {
+                    b.emit_clicked();
+                }
+            }
+        });
+    }
+
+    /// One day from the watch (`WatchDayView`), oldest first: each thing said, labelled as sent from the watch with its
+    /// time in the account's zone, then the taf that took it and what came of it. Read only; nothing of it is kept.
+    fn watch_day(
+        self: &Rc<Self>,
+        dialog: &adw::Dialog,
+        date: &str,
+        title: &str,
+    ) -> adw::NavigationPage {
+        use tafs_core::watch_days;
+        let w = self.w.clone();
+        let list = gtk::Box::new(gtk::Orientation::Vertical, 10);
+        let spin = gtk::Spinner::new();
+        spin.start();
+        list.append(&spin);
+        let page = sheet_page(
+            title,
+            &list,
+            dialog,
+            &w.line("record.filter.done").unwrap_or_default(),
+        );
+        let (p, list2, date) = (Rc::downgrade(self), list.clone(), date.to_string());
+        glib::spawn_future_local(async move {
+            let Some(p) = p.upgrade() else {
+                return;
+            };
+            let body = match WATCH_FILE.with(|f| f.borrow().clone()) {
+                Some(path) => read_watch_file(&path, Some(&date)),
+                None => p.get(watch_days::day_path(&date)).await,
+            };
+            while let Some(c) = list2.first_child() {
+                list2.remove(&c);
+            }
+            let w = p.w.clone();
+            let Some(body) = body else {
+                list2.append(&text(
+                    &w.get(
+                        "coach.conversation_not_loaded",
+                        &[("why", &w.line("error.offline").unwrap_or_default())],
+                    )
+                    .unwrap_or_default(),
+                    14,
+                    400,
+                    &["tafs-no"],
+                ));
+                return;
+            };
+            for turn in watch_days::read_turns(&body) {
+                let v = crate::widgets::panel(false);
+                if turn.reply_to.is_some() {
+                    v.set_margin_start(16);
+                }
+                let mut head = w
+                    .line("coach.chats.sent_from_your_watch")
+                    .unwrap_or_default();
+                if let Some(at) = &turn.said_at {
+                    head = format!("{head} · {}", tafs_core::account_time::short_time(at));
+                }
+                v.append(&text(&head, 12, 400, &["tafs-dim"]));
+                let said = text(&turn.said, 15, 400, &["tafs-ink"]);
+                said.set_selectable(true);
+                v.append(&said);
+                let out = match &turn.taf {
+                    Some(t) => format!("{} · {}", t.name, turn.outcome()),
+                    None => turn.outcome().to_string(),
+                };
+                v.append(&text(&out, 13, 400, &["tafs-dim"]));
+                list2.append(&v);
+            }
+        });
+        page
     }
 
     /// Archive's question, then the archive (`archiveSetupChat`): the one shown gives way to a new
@@ -3625,4 +3776,24 @@ fn sheet_page(
     toolbar.set_content(Some(&scroller));
     crate::widgets::ground(&toolbar);
     adw::NavigationPage::new(&toolbar, title)
+}
+
+thread_local! {
+    /// `--watch-days <file>` (the screenshots): tafs cloud's two answers, `days` and each day's `turns` by date, read in
+    /// place of tafs cloud. Nothing is sent.
+    pub static WATCH_FILE: RefCell<Option<std::path::PathBuf>> = const { RefCell::new(None) };
+    /// `--page coach-watch-day`: the first watch day opens once drawn.
+    pub static OPEN_WATCH_DAY: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// The screenshots' answer: `days` for the list, else `turns`'s for `date`.
+fn read_watch_file(path: &std::path::Path, date: Option<&str>) -> Option<Vec<u8>> {
+    let v: serde_json::Value = serde_json::from_slice(&std::fs::read(path).ok()?).ok()?;
+    let a = match date {
+        None => v["days"].clone(),
+        Some(d) => v["turns"][d].clone(),
+    };
+    (!a.is_null())
+        .then(|| serde_json::to_vec(&a).ok())
+        .flatten()
 }

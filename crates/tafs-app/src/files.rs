@@ -104,27 +104,45 @@ fn read_preview(source: &FilesSource, id: &str) -> Result<Option<PreviewText>, (
     }
 }
 
-/// The file's bytes (`contents(of:)`): the address tafs cloud gives for a minute, read with no session.
-fn read_bytes(source: &FilesSource, id: &str) -> Option<Vec<u8>> {
-    let FilesSource::Cloud { token, languages } = source else {
-        return None;
-    };
-    let a = crate::kiff::cloud(token, languages, &files::download_path(id)).ok()?;
-    if a.status != 200 {
-        return None;
-    }
-    let url = files::read_download(&a.body)?;
-    let got = crate::kiff::download(url.as_str()).ok()?;
-    (got.status == 200).then_some(got.body)
+/// Why tafs cloud refused, in its words when it gave them, else the app's for its status.
+fn refused(w: &WordBook, a: &tafs_core::signin::Answer) -> String {
+    tafs_core::signin::refusal(a, Some(w))
+        .words(w)
+        .unwrap_or_default()
 }
 
-/// Delete now, for everyone (`deleteFile`): true once tafs cloud deleted it.
-fn delete(source: &FilesSource, id: &str) -> bool {
+/// The file's bytes (`contents(of:)`): the address tafs cloud gives for a minute, read with no session. Or why not:
+/// the offline line only when nothing answered, else what tafs cloud or storage said (dev-android's note on #86).
+fn read_bytes(w: &WordBook, source: &FilesSource, id: &str) -> Result<Vec<u8>, String> {
     let FilesSource::Cloud { token, languages } = source else {
-        return false;
+        return Err(w.line("error.offline").unwrap_or_default());
     };
-    crate::kiff::cloud_send(token, languages, "DELETE", &files::file_path(id), None)
-        .is_ok_and(|a| (200..300).contains(&a.status))
+    let a = crate::kiff::cloud(token, languages, &files::download_path(id))
+        .map_err(|e| e.words(w).unwrap_or_default())?;
+    if a.status != 200 {
+        return Err(refused(w, &a));
+    }
+    let url = files::read_download(&a.body)
+        .ok_or_else(|| tafs_core::signin::plain_words(w, 200).unwrap_or_default())?;
+    let got = crate::kiff::download(url.as_str()).map_err(|e| e.words(w).unwrap_or_default())?;
+    if got.status != 200 {
+        return Err(tafs_core::signin::plain_words(w, got.status).unwrap_or_default());
+    }
+    Ok(got.body)
+}
+
+/// Delete now, for everyone (`deleteFile`): once tafs cloud deleted it, or why not, as `read_bytes` says it.
+fn delete(w: &WordBook, source: &FilesSource, id: &str) -> Result<(), String> {
+    let FilesSource::Cloud { token, languages } = source else {
+        return Err(w.line("error.offline").unwrap_or_default());
+    };
+    let a = crate::kiff::cloud_send(token, languages, "DELETE", &files::file_path(id), None)
+        .map_err(|e| e.words(w).unwrap_or_default())?;
+    if (200..300).contains(&a.status) {
+        Ok(())
+    } else {
+        Err(refused(w, &a))
+    }
 }
 
 type Redraw = Rc<dyn Fn()>;
@@ -497,12 +515,13 @@ fn detail(
     // Download: the bytes read only now, written where the person picks, readable by them alone.
     let note = text("", 13, 400, &["tafs-ok"]);
     note.set_visible(false);
-    // A download or a deletion that didn't go: the offline line (tafs#1728).
+    // A download or a deletion that didn't go, and why: what tafs cloud said, or the offline line when nothing answered.
     let failed = text(&l("error.offline"), 13, 400, &["tafs-no"]);
     failed.set_visible(false);
     let download = outline(&l("files.download"));
     {
-        let (source, id, file_name, note, title, failed) = (
+        let (w, source, id, file_name, note, title, failed) = (
+            w.clone(),
             source.clone(),
             f.id.clone(),
             f.name.clone(),
@@ -516,7 +535,8 @@ fn detail(
             let dialog = gtk::FileDialog::new();
             dialog.set_title(&title);
             dialog.set_initial_name(Some(&file_name));
-            let (source, id, note, saved, failed) = (
+            let (w, source, id, note, saved, failed) = (
+                w.clone(),
                 source.clone(),
                 id.clone(),
                 note.clone(),
@@ -530,15 +550,21 @@ fn detail(
                 let Some(path) = file.path() else {
                     return;
                 };
-                let bytes = gio::spawn_blocking(move || read_bytes(&source, &id))
+                let words = (*w).clone();
+                let offline = w.line("error.offline").unwrap_or_default();
+                let written = gio::spawn_blocking(move || read_bytes(&words, &source, &id))
                     .await
-                    .ok()
-                    .flatten();
-                let written =
-                    bytes.is_some_and(|b| crate::widgets::write_private(&path, &b).is_ok());
+                    .unwrap_or(Err(offline))
+                    // Saved on this computer, or the system's words for why not.
+                    .and_then(|b| {
+                        crate::widgets::write_private(&path, &b).map_err(|e| e.to_string())
+                    });
                 note.set_label(&saved);
-                note.set_visible(written);
-                failed.set_visible(!written);
+                note.set_visible(written.is_ok());
+                if let Err(why) = &written {
+                    failed.set_label(why);
+                }
+                failed.set_visible(written.is_err());
             });
         });
     }
@@ -600,7 +626,8 @@ fn detail(
             ask.set_response_appearance("delete", adw::ResponseAppearance::Destructive);
             ask.set_default_response(Some("cancel"));
             ask.set_close_response("cancel");
-            let (source, id, dialog, deleted, failed) = (
+            let (w, source, id, dialog, deleted, failed) = (
+                w.clone(),
                 source.clone(),
                 f.id.clone(),
                 dialog.clone(),
@@ -611,7 +638,8 @@ fn detail(
                 if r != "delete" {
                     return;
                 }
-                let (source, id, dialog, deleted, failed) = (
+                let (w, source, id, dialog, deleted, failed) = (
+                    w.clone(),
                     source.clone(),
                     id.clone(),
                     dialog.clone(),
@@ -619,15 +647,21 @@ fn detail(
                     failed.clone(),
                 );
                 glib::spawn_future_local(async move {
-                    let gone = gio::spawn_blocking(move || delete(&source, &id))
+                    let words = (*w).clone();
+                    let offline = w.line("error.offline").unwrap_or_default();
+                    let gone = gio::spawn_blocking(move || delete(&words, &source, &id))
                         .await
-                        .unwrap_or(false);
+                        .unwrap_or(Err(offline));
                     // Gone from the list only once tafs cloud deleted it.
-                    if gone {
-                        dialog.close();
-                        deleted();
-                    } else {
-                        failed.set_visible(true);
+                    match gone {
+                        Ok(()) => {
+                            dialog.close();
+                            deleted();
+                        }
+                        Err(why) => {
+                            failed.set_label(&why);
+                            failed.set_visible(true);
+                        }
                     }
                 });
             });
