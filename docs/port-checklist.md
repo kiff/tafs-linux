@@ -62,7 +62,29 @@ ports a file updates its line here.
 
 ## Not started
 
-None.
+New at the pin moved to kiff/tafs `85c8a17` (22 Nov). Each is a batch of its own, named on
+kiff/work#17.
+
+| iPad file | Lines | What | Batch |
+| :- | -: | :- | :- |
+| OnboardingCards.swift | 234 | The three cards on how tafs works, after signing in and from How tafs works (K5) | (a) in-app sign-in and onboarding, with OnboardingView's and SignInView's changes |
+| ReportPaymentSheet.swift | 64 | "Report this payment" from a payment's receipt: its taf halted | (b), with the Record's changes |
+| FilesViews.swift | 453 | Files: the account's or a taf's, newest first, and one open beside the list | (c) |
+| APIDoorViews.swift | 406 | A door "From another application": its count, last request, keys, New key, Revoke | (d) |
+| ChromeViews.swift | 178 | Account › Chrome: the Chromes paired, Pair a Chrome, Unpair | (d) |
+| WatchDaysViews.swift | 93 | "From your watch" in Coach's Previous conversations | (d) |
+
+**Changed since the old pin (`b3c80a8`), checked in the pin's PR:**
+- **`chevron.right` → `chevron.forward`** (UsageView, TafDialPanel, HomeRecipes, HaltScreen,
+  CreditsViews, CoachToolsStep, ShareViews, RecipeGallery, WorkLog) and **`chevron.left` →
+  `chevron.backward`** (CoachMode): right to left, the arrow turns. Linux takes Adwaita's `-rtl`
+  icons in a right-to-left window, so nothing changes here.
+- **TafKnobView:** the kicker's tracking, none in Hangul, kana, Han or Arabic: ported (`dial.rs`),
+  with the tracking itself, which Linux didn't have.
+- **For the batches:** OnboardingView, SignInView and PairSignInView (a); RecordView,
+  TafPresentationViews' report offer and ShareViews' `heroLine` (b); NeedsYouView, TafDetailView,
+  SetupChatView, DoorsView, CalendarView, BriefView, TafChatView's day headers, HomeView (not for
+  Linux) (e).
 
 ## Not for Linux
 
@@ -126,4 +148,4 @@ None.
 
 ## Coverage
 
-Ported 25, partial 20, not started 0, not for Linux 6: the 51 view files at the pin.
+Ported 25, partial 20, not started 6, not for Linux 6: the 57 view files at the pin.

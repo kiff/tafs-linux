@@ -373,9 +373,11 @@ pub fn count_reason(w: &WordBook, e: &CardException) -> Result<Option<String>, W
     )?))
 }
 
-/// `Words.ordinal`: the language's ordinal for a whole number (its locale's `.ordinal` style).
+/// `Words.ordinal`: the language's ordinal for a whole number (its locale's `.ordinal` style,
+/// ICU's digits-ordinal rules), its digits grouped as the language groups them.
 pub fn ordinal(language: &str, n: i64) -> String {
-    match language {
+    let d = crate::locale::number(n, 0, language);
+    match crate::locale::base(language) {
         "en" => {
             let suffix = match (n % 10, n % 100) {
                 (_, 11..=13) => "th",
@@ -384,19 +386,35 @@ pub fn ordinal(language: &str, n: i64) -> String {
                 (3, _) => "rd",
                 _ => "th",
             };
-            format!("{n}{suffix}")
+            format!("{d}{suffix}")
         }
-        "fr" => {
-            if n == 1 {
-                "1er".into()
+        "fr" if n == 1 => "1er".into(),
+        "fr" | "nl" => format!("{d}e"),
+        "es" => format!("{d}.º"),
+        "it" | "pt" => format!("{d}º"),
+        "ja" | "zh" => format!("第{d}"),
+        "ko" => format!("{d}번째"),
+        "id" => format!("ke-{d}"),
+        "vi" => format!("thứ {d}"),
+        "th" => format!("ที่\u{a0}{d}"),
+        "ro" => format!("{d}a"),
+        "bg" => {
+            let suffix = if n % 100 == 0 && n % 1000 != 0 {
+                "тен"
+            } else if (11..=19).contains(&(n % 100)) {
+                "и"
             } else {
-                format!("{n}e")
-            }
+                match n % 10 {
+                    1 => "ви",
+                    2 => "ри",
+                    3 | 4 => "ти",
+                    _ => "и",
+                }
+            };
+            format!("{d}-{suffix}")
         }
-        "es" => format!("{n}.º"),
-        "it" | "pt" => format!("{n}º"),
-        "nl" => format!("{n}e"),
-        _ => format!("{n}."),
+        "ar" => d,
+        _ => format!("{d}."),
     }
 }
 
@@ -576,5 +594,28 @@ mod tests {
         assert_eq!(argument_text(&Value::from(42)), "42");
         assert_eq!(argument_text(&Value::from(true)), "true");
         assert_eq!(argument_text(&serde_json::json!({"a": 1})), "…");
+    }
+
+    #[test]
+    fn ordinals_as_icu_writes_them() {
+        let all = |l: &str| {
+            [1, 2, 3, 7, 11, 21, 100, 1001]
+                .iter()
+                .map(|n| ordinal(l, *n))
+                .collect::<Vec<_>>()
+                .join(" ")
+        };
+        assert_eq!(all("en"), "1st 2nd 3rd 7th 11th 21st 100th 1,001st");
+        assert_eq!(all("bg"), "1-ви 2-ри 3-ти 7-и 11-и 21-ви 100-тен 1001-ви");
+        assert_eq!(
+            all("ko"),
+            "1번째 2번째 3번째 7번째 11번째 21번째 100번째 1,001번째"
+        );
+        assert_eq!(ordinal("zh-Hant", 3), "第3");
+        assert_eq!(ordinal("pt-BR", 3), "3º");
+        assert_eq!(ordinal("th", 3), "ที่\u{a0}3");
+        assert_eq!(ordinal("ro", 3), "3a");
+        assert_eq!(ordinal("ar", 3), "3");
+        assert_eq!(ordinal("cs", 3), "3.");
     }
 }

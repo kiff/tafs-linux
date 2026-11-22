@@ -33,6 +33,7 @@ pub mod home;
 pub mod keys;
 pub mod knob;
 pub mod language;
+pub mod locale;
 pub mod money;
 pub mod needs_you;
 pub mod overview;

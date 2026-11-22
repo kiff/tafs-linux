@@ -456,11 +456,13 @@ fn activate(app: &adw::Application, o: &Options) {
             .flatten()
             .unwrap_or_else(|| language::app_language(&preferred)),
     };
-    let mut languages = vec![lang];
+    // KIFF knows a language by its code ("pt-BR" is "pt"), the words' one first.
+    let first = language::kiff_code(lang);
+    let mut languages = vec![first];
     languages.extend(
         language::screen_languages(&preferred)
             .into_iter()
-            .filter(|l| *l != lang),
+            .filter(|l| *l != first),
     );
     let words = match WordBook::load(&WordBook::default_root(), lang) {
         Ok(w) => Rc::new(w),
@@ -471,6 +473,14 @@ fn activate(app: &adw::Application, o: &Options) {
             return;
         }
     };
+    // Right to left for Arabic: GTK mirrors every box, list and arrow, as SwiftUI does on the iPad.
+    // The dials and the drawn boards keep their screen angles (kiff/tafs `docs/languages.md`,
+    // "Direction"): they're objects, not a leading or trailing edge.
+    gtk::Widget::set_default_direction(if tafs_core::locale::right_to_left(lang) {
+        gtk::TextDirection::Rtl
+    } else {
+        gtk::TextDirection::Ltr
+    });
     let screenshot = o.screenshot.is_some();
     // The appearance: `--theme`, else Account's choice (a screenshot never reads it), else the desktop's.
     let theme = o.theme.clone().unwrap_or_else(|| {
@@ -2161,13 +2171,17 @@ impl App {
             }
             None => needs_you,
         };
+        let (terms, privacy) = (
+            tafs_core::account::terms_url(words.language()),
+            tafs_core::account::privacy_url(words.language()),
+        );
         let account_lines = tafs_core::account::lines(
             words,
             mode,
             account.as_ref(),
             self.sign_out_error.borrow().as_deref(),
-            tafs_core::account::terms_url(words.language()),
-            tafs_core::account::privacy_url(words.language()),
+            &terms,
+            &privacy,
             env!("CARGO_PKG_VERSION"),
         )
         .and_then(|l| {

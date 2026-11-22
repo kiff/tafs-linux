@@ -62,49 +62,51 @@ pub fn signed_in_as(account: &Account) -> Option<String> {
 }
 
 /// The languages kiff.dev has tafs's Terms and Privacy policy in, besides English, at
-/// `kiff.dev/<lang>/tafs/terms` and `/<lang>/tafs/privacy`. The English pages govern.
-pub const LEGAL_LANGUAGES: [&str; 7] = ["de", "es", "fr", "it", "nl", "pl", "pt"];
+/// `kiff.dev/<lang>/tafs/terms` and `/<lang>/tafs/privacy`, by KIFF's code: Traditional Chinese
+/// is served under "zh", as pt-BR is under "pt" (`Legal.translated`). The English pages govern.
+pub const LEGAL_LANGUAGES: [&str; 24] = [
+    "de", "es", "fr", "it", "nl", "pl", "pt", "ko", "ja", "et", "lt", "lv", "cs", "sk", "sl", "hu",
+    "ro", "bg", "hr", "tr", "id", "vi", "th", "zh",
+];
 
-/// tafs's own Terms, in the app's language where kiff.dev has it, else in English.
-pub fn terms_url(language: &str) -> &'static str {
-    match language {
-        "de" => "https://kiff.dev/de/tafs/terms",
-        "es" => "https://kiff.dev/es/tafs/terms",
-        "fr" => "https://kiff.dev/fr/tafs/terms",
-        "it" => "https://kiff.dev/it/tafs/terms",
-        "nl" => "https://kiff.dev/nl/tafs/terms",
-        "pl" => "https://kiff.dev/pl/tafs/terms",
-        "pt" => "https://kiff.dev/pt/tafs/terms",
-        _ => "https://kiff.dev/tafs/terms",
+/// The code a legal page is served under, if kiff.dev has it in the app's language.
+fn legal_code(language: &str) -> Option<&str> {
+    let code = crate::language::kiff_code(language);
+    LEGAL_LANGUAGES.contains(&code).then_some(code)
+}
+
+/// A page of tafs's on kiff.dev in the app's language where it's served, else in English at the
+/// unprefixed path, never `/en/` (`Legal.page`).
+fn legal_page(language: &str, name: &str) -> String {
+    match legal_code(language) {
+        Some(code) => format!("https://kiff.dev/{code}/tafs/{name}"),
+        None => format!("https://kiff.dev/tafs/{name}"),
     }
 }
 
+/// tafs's own Terms, in the app's language where kiff.dev has it, else in English.
+pub fn terms_url(language: &str) -> String {
+    legal_page(language, "terms")
+}
+
 /// tafs's own Privacy policy, in the app's language where kiff.dev has it, else in English.
-pub fn privacy_url(language: &str) -> &'static str {
-    match language {
-        "de" => "https://kiff.dev/de/tafs/privacy",
-        "es" => "https://kiff.dev/es/tafs/privacy",
-        "fr" => "https://kiff.dev/fr/tafs/privacy",
-        "it" => "https://kiff.dev/it/tafs/privacy",
-        "nl" => "https://kiff.dev/nl/tafs/privacy",
-        "pl" => "https://kiff.dev/pl/tafs/privacy",
-        "pt" => "https://kiff.dev/pt/tafs/privacy",
-        _ => "https://kiff.dev/tafs/privacy",
-    }
+pub fn privacy_url(language: &str) -> String {
+    legal_page(language, "privacy")
 }
 
 /// A legal link's label: as it is where kiff.dev has the page in the app's language (or in
 /// English), and saying the page is in English in any other language (`Legal.label`).
 pub fn legal_label(w: &WordBook, key: &str) -> Result<String, WordsError> {
     let words = w.line(key)?;
-    if w.language() == "en" || LEGAL_LANGUAGES.contains(&w.language()) {
+    if w.language() == "en" || legal_code(w.language()).is_some() {
         Ok(words)
     } else {
         w.get("settings.legal_in_english", &[("label", &words)])
     }
 }
 
-/// The language's own name, capitalised in it (`AppLanguage.name`).
+/// The language's own name, capitalised in it (`AppLanguage.name`, CLDR's): a regional variant
+/// the app speaks beside its language is named with its region, "Português (Brasil)".
 pub fn language_name(language: &str) -> &'static str {
     match language {
         "de" => "Deutsch",
@@ -114,6 +116,25 @@ pub fn language_name(language: &str) -> &'static str {
         "pt" => "Português",
         "nl" => "Nederlands",
         "pl" => "Polski",
+        "ko" => "한국어",
+        "ja" => "日本語",
+        "et" => "Eesti",
+        "lt" => "Lietuvių",
+        "lv" => "Latviešu",
+        "cs" => "Čeština",
+        "sk" => "Slovenčina",
+        "sl" => "Slovenščina",
+        "hu" => "Magyar",
+        "ro" => "Română",
+        "bg" => "Български",
+        "hr" => "Hrvatski",
+        "tr" => "Türkçe",
+        "id" => "Indonesia",
+        "vi" => "Tiếng Việt",
+        "th" => "ไทย",
+        "zh-Hant" => "中文（繁體）",
+        "pt-BR" => "Português (Brasil)",
+        "ar" => "العربية",
         _ => "English",
     }
 }
@@ -138,7 +159,7 @@ pub enum Row {
     /// Words in the soft colour.
     Text(String),
     /// A link to a page, in the link colour.
-    Link(String, &'static str),
+    Link(String, String),
     /// A button in the amber (`Change language`, Sign in with KIFF).
     Action(String, Action),
     /// A destructive button, in red (Sign out, Clear the sample).
@@ -239,8 +260,8 @@ pub fn lines(
     mode: Mode,
     account: Option<&Account>,
     sign_out_error: Option<&str>,
-    terms: &'static str,
-    privacy: &'static str,
+    terms: &str,
+    privacy: &str,
     version: &str,
 ) -> Result<AccountLines, WordsError> {
     let l = |k: &str| w.line(k);
@@ -380,8 +401,8 @@ pub fn lines(
         slot: None,
         header: Some(l("settings.legal")?),
         rows: vec![
-            Row::Link(legal("settings.terms")?, terms),
-            Row::Link(legal("settings.privacy_policy")?, privacy),
+            Row::Link(legal("settings.terms")?, terms.to_string()),
+            Row::Link(legal("settings.privacy_policy")?, privacy.to_string()),
         ],
     });
     sections.push(Section {
@@ -601,7 +622,7 @@ mod tests {
     fn the_language_picker_lists_this_computer_s_then_the_app_s() {
         let w = WordBook::load(&WordBook::default_root(), "en").unwrap();
         let rows = language_rows(&w, None).unwrap();
-        assert_eq!(rows.len(), 9);
+        assert_eq!(rows.len(), crate::words::SHIPPED.len() + 1);
         assert_eq!(rows[0].code, None);
         assert_eq!(rows[0].name, "This computer's language");
         assert!(rows[0].picked);

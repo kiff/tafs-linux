@@ -38,6 +38,8 @@ window, .tafs-ground { background-color: @tafs_background; color: @tafs_ink; }
 
 /* Eyebrow: capitals, monospaced 12, tracked 0.7. */
 .tafs-eyebrow { font-family: monospace; font-size: 12px; letter-spacing: 0.7px; color: @tafs_dim; }
+/* Hangul, kana, Han and Arabic: the plain face, no spacing (`Eyebrow.ideographic`). */
+.tafs-eyebrow.ideographic, .tafs-day.ideographic, .tafs-env-pill.ideographic { font-family: inherit; letter-spacing: 0; }
 .tafs-eyebrow.amber { color: @tafs_amber; }
 .tafs-eyebrow.tafs-no { color: @tafs_no; }
 

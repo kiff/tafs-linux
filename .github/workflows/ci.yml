@@ -1,6 +1,6 @@
 name: CI
 
-# The core's tests at the pin, then the GTK app built and every screen saved in en, fr and pt,
+# The core's tests at the pin, then the GTK app built and every screen saved in en, fr, ar and ja,
 # light and dark, as the run's `screenshots` artifact. The job fails if any screenshot is missing.
 on:
   pull_request:

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Each screen built so far in en, fr and pt, light and dark, at 1280×800 (saved at 2×), into
+# Each screen built so far in en, fr, ar (right to left) and ja, light and dark (TAFS_LANGS to change them), at 1280×800 (saved at 2×), into
 # screenshots/. Fails if any is missing: a crash at launch, or a word missing at the pin, stops
 # the app before it saves. Needs a display: run it under xvfb-run on a headless machine.
 set -uo pipefail
@@ -197,7 +197,7 @@ for screen in welcome sign-in sign-in-code sign-in-narrow pair connected overvie
     share-step2) opts=(--home shared/contracts/home.json --access crates/tafs-app/fixtures/access-manage.json --people crates/tafs-app/fixtures/people-kiff.json --page share-step2:taf-aaaa0000000000000000) ;;
     recipe-sheet) opts=(--home crates/tafs-app/fixtures/home-empty.json --recipes crates/tafs-app/fixtures/recipes.json --page recipe:refunds) ;;
   esac
-  for lang in en fr pt; do
+  for lang in ${TAFS_LANGS:-en fr ar ja}; do
     for theme in light dark; do
       out="screenshots/$screen-$lang-$theme.png"
       rm -f "$out"

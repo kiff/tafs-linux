@@ -8,7 +8,6 @@
 use crate::words::{WordBook, WordsError};
 
 const NBSP: &str = "\u{a0}";
-const NNBSP: &str = "\u{202f}";
 
 /// An amount in minor units of `unit`, at `scale` (`Money`).
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -81,9 +80,11 @@ impl Money {
             return format!("{n} {unit}");
         }
         let symbol = symbol(&upper, language);
-        match language {
-            "en" => {
-                // A letter symbol stands apart: "CHF 30", "$30".
+        // Where CLDR puts the symbol: before the number, tight ("$30", "€5,000") or with a space
+        // ("€ 5.000"), or after it with a space ("5.000 €"). A letter symbol before a number
+        // always stands apart: "CHF 30".
+        match crate::locale::base(language) {
+            "en" | "ja" | "ko" | "tr" | "id" | "th" | "zh" => {
                 if symbol.chars().last().is_some_and(char::is_alphabetic) {
                     format!("{symbol}{NBSP}{n}")
                 } else {
@@ -91,6 +92,8 @@ impl Money {
                 }
             }
             "pt" | "nl" => format!("{symbol}{NBSP}{n}"),
+            // Arabic opens with a right-to-left mark, as CLDR writes it.
+            "ar" => format!("\u{200f}{n}{NBSP}{symbol}"),
             _ => format!("{n}{NBSP}{symbol}"),
         }
     }
@@ -113,42 +116,7 @@ pub fn euros(whole: i64, language: &str) -> String {
 
 /// A number in minor units at `decimals` places, as the language writes it.
 fn number(minor: i64, decimals: u32, language: &str) -> String {
-    let sign = if minor < 0 { "-" } else { "" };
-    let n = minor.unsigned_abs();
-    let Some(power) = 10u64.checked_pow(decimals) else {
-        return "–".into();
-    };
-    let (whole, fraction) = (n / power, n % power);
-    let (group_sep, min, decimal) = match language {
-        "en" => (",", 1, "."),
-        "fr" => (NNBSP, 1, ","),
-        "es" => (".", 2, ","),
-        "pl" => (NBSP, 2, ","),
-        _ => (".", 1, ","),
-    };
-    let mut out = format!("{sign}{}", group(whole, group_sep, min));
-    if decimals > 0 {
-        out.push_str(decimal);
-        out.push_str(&format!("{fraction:0width$}", width = decimals as usize));
-    }
-    out
-}
-
-/// Thousands, grouped once the number has `min` more digits than a group (CLDR's
-/// minimumGroupingDigits: Spanish and Polish write 5000, but 25.000).
-fn group(n: u64, sep: &str, min: usize) -> String {
-    let digits = n.to_string();
-    if digits.len() < 3 + min {
-        return digits;
-    }
-    let mut out = String::new();
-    for (i, c) in digits.chars().enumerate() {
-        if i > 0 && (digits.len() - i).is_multiple_of(3) {
-            out.push_str(sep);
-        }
-        out.push(c);
-    }
-    out
+    crate::locale::number(minor, decimals, language)
 }
 
 /// The currencies tafs's amounts come in so far, by their ISO code; any other three-letter code
@@ -157,16 +125,19 @@ fn is_iso_currency(code: &str) -> bool {
     code.len() == 3 && code.chars().all(|c| c.is_ascii_uppercase())
 }
 
-/// A currency's symbol in a language (CLDR's standard symbol).
+/// A currency's symbol in a language (CLDR's standard symbol, as ICU writes it).
 fn symbol(code: &str, language: &str) -> String {
-    let s = match (code, language) {
+    let s = match (code, crate::locale::base(language)) {
+        ("EUR", "hu" | "ro") => "EUR",
         ("EUR", _) => "€",
-        ("USD", "en") | ("USD", "de") => "$",
+        ("USD", "en" | "de" | "ja" | "et" | "lv" | "sl" | "tr") => "$",
         ("USD", "fr") => "$US",
-        ("USD", "es") | ("USD", "pt") | ("USD", "nl") => "US$",
+        ("USD", "bg") => "щ.д.",
+        ("USD", "es" | "pt" | "nl" | "ko" | "cs" | "id" | "vi" | "th" | "zh" | "ar") => "US$",
         ("USD", _) => "USD",
         ("GBP", "fr") => "£GB",
-        ("GBP", "es") | ("GBP", "pl") => "GBP",
+        ("GBP", "ar") => "UK£",
+        ("GBP", "es" | "pl" | "lt" | "sk" | "sl" | "hu" | "ro" | "bg" | "hr") => "GBP",
         ("GBP", _) => "£",
         _ => code,
     };
@@ -190,6 +161,15 @@ mod tests {
         assert_eq!(euros(25_000, "pl"), "25\u{a0}000\u{a0}€");
         assert_eq!(euros(5_000, "pt"), "€\u{a0}5.000");
         assert_eq!(euros(1_000_000, "en"), "€1,000,000");
+        // The new languages, as ICU writes them.
+        assert_eq!(euros(5_000, "ja"), "€5,000");
+        assert_eq!(euros(5_000, "cs"), "5\u{a0}000\u{a0}€");
+        // Hungarian groups from five digits (CLDR minimumGroupingDigits), as Spanish does.
+        assert_eq!(euros(5_000, "hu"), "5000\u{a0}EUR");
+        assert_eq!(euros(25_000, "hu"), "25\u{a0}000\u{a0}EUR");
+        assert_eq!(euros(5_000, "pt-BR"), "€\u{a0}5.000");
+        assert_eq!(euros(5_000, "ar"), "\u{200f}5,000\u{a0}€");
+        assert_eq!(euros(5_000, "tr"), "€5.000");
     }
 
     #[test]

@@ -5,7 +5,7 @@
 use chrono::{DateTime, Duration, FixedOffset, Utc};
 use serde_json::Value;
 
-use crate::words::{plural_form, WordBook, WordsError};
+use crate::words::{WordBook, WordsError};
 
 /// A device signed in as this person (`KIFFClient.Device`).
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -110,119 +110,20 @@ pub fn last_used(
 /// iOS's `RelativeDateTimeFormatter` (full, numeric) in each shipped language: the largest unit
 /// that fits, "3 hours ago" for a time past and "in 0 seconds" for now and later.
 pub fn relative(language: &str, delta: Duration) -> String {
+    use crate::locale::Unit;
     let secs = delta.num_seconds().unsigned_abs() as i64;
     // Under a second either way is 0, which iOS says in the future form ("in 0 seconds").
     let past = delta < Duration::zero() && secs > 0;
     let (n, unit) = match secs {
-        s if s < 60 => (s, 0),
-        s if s < 3600 => (s / 60, 1),
-        s if s < 86_400 => (s / 3600, 2),
-        s if s < 7 * 86_400 => (s / 86_400, 3),
-        s if s < 30 * 86_400 => (s / (7 * 86_400), 4),
-        s if s < 365 * 86_400 => (s / (30 * 86_400), 5),
-        s => (s / (365 * 86_400), 6),
+        s if s < 60 => (s, Unit::Second),
+        s if s < 3600 => (s / 60, Unit::Minute),
+        s if s < 86_400 => (s / 3600, Unit::Hour),
+        s if s < 7 * 86_400 => (s / 86_400, Unit::Day),
+        s if s < 30 * 86_400 => (s / (7 * 86_400), Unit::Week),
+        s if s < 365 * 86_400 => (s / (30 * 86_400), Unit::Month),
+        s => (s / (365 * 86_400), Unit::Year),
     };
-    let form = plural_form(language, n);
-    // Each unit's forms: one, then other (few and many for Polish).
-    let units: [[&str; 3]; 7] = match language {
-        "fr" => [
-            ["seconde", "secondes", ""],
-            ["minute", "minutes", ""],
-            ["heure", "heures", ""],
-            ["jour", "jours", ""],
-            ["semaine", "semaines", ""],
-            ["mois", "mois", ""],
-            ["an", "ans", ""],
-        ],
-        "de" => [
-            ["Sekunde", "Sekunden", ""],
-            ["Minute", "Minuten", ""],
-            ["Stunde", "Stunden", ""],
-            ["Tag", "Tagen", ""],
-            ["Woche", "Wochen", ""],
-            ["Monat", "Monaten", ""],
-            ["Jahr", "Jahren", ""],
-        ],
-        "es" => [
-            ["segundo", "segundos", ""],
-            ["minuto", "minutos", ""],
-            ["hora", "horas", ""],
-            ["día", "días", ""],
-            ["semana", "semanas", ""],
-            ["mes", "meses", ""],
-            ["año", "años", ""],
-        ],
-        "it" => [
-            ["secondo", "secondi", ""],
-            ["minuto", "minuti", ""],
-            ["ora", "ore", ""],
-            ["giorno", "giorni", ""],
-            ["settimana", "settimane", ""],
-            ["mese", "mesi", ""],
-            ["anno", "anni", ""],
-        ],
-        "pt" => [
-            ["segundo", "segundos", ""],
-            ["minuto", "minutos", ""],
-            ["hora", "horas", ""],
-            ["dia", "dias", ""],
-            ["semana", "semanas", ""],
-            ["mês", "meses", ""],
-            ["ano", "anos", ""],
-        ],
-        "nl" => [
-            ["seconde", "seconden", ""],
-            ["minuut", "minuten", ""],
-            ["uur", "uur", ""],
-            ["dag", "dagen", ""],
-            ["week", "weken", ""],
-            ["maand", "maanden", ""],
-            ["jaar", "jaar", ""],
-        ],
-        "pl" => [
-            ["sekundę", "sekundy", "sekund"],
-            ["minutę", "minuty", "minut"],
-            ["godzinę", "godziny", "godzin"],
-            ["dzień", "dni", "dni"],
-            ["tydzień", "tygodnie", "tygodni"],
-            ["miesiąc", "miesiące", "miesięcy"],
-            ["rok", "lata", "lat"],
-        ],
-        _ => [
-            ["second", "seconds", ""],
-            ["minute", "minutes", ""],
-            ["hour", "hours", ""],
-            ["day", "days", ""],
-            ["week", "weeks", ""],
-            ["month", "months", ""],
-            ["year", "years", ""],
-        ],
-    };
-    let word = match form {
-        "one" => units[unit][0],
-        "few" => units[unit][1],
-        "many" => units[unit][2],
-        _ => units[unit][1],
-    };
-    let amount = format!("{n} {word}");
-    match (language, past) {
-        ("fr", true) => format!("il y a {amount}"),
-        ("fr", false) => format!("dans {amount}"),
-        ("de", true) => format!("vor {amount}"),
-        ("de", false) => format!("in {amount}"),
-        ("es", true) => format!("hace {amount}"),
-        ("es", false) => format!("dentro de {amount}"),
-        ("it", true) => format!("{amount} fa"),
-        ("it", false) => format!("tra {amount}"),
-        ("pt", true) => format!("há {amount}"),
-        ("pt", false) => format!("dentro de {amount}"),
-        ("nl", true) => format!("{amount} geleden"),
-        ("nl", false) => format!("over {amount}"),
-        ("pl", true) => format!("{amount} temu"),
-        ("pl", false) => format!("za {amount}"),
-        (_, true) => format!("{amount} ago"),
-        (_, false) => format!("in {amount}"),
-    }
+    crate::locale::relative(language, n, unit, past)
 }
 
 /// The reference set's Devices over the sample (`SampleScreens.devices`): this computer, used

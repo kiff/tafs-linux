@@ -163,6 +163,7 @@ pub fn page(w: Rc<WordBook>, data: Rc<RecordData>, open_taf: Rc<dyn Fn(String)>)
                 let h = gtk::Label::new(Some(&upper(&heading)));
                 h.set_xalign(0.0);
                 h.add_css_class("tafs-day");
+                crate::widgets::plain_if_ideographic(&h, &heading);
                 h.set_margin_top(6);
                 list.append(&h);
                 for e in &day.lines {

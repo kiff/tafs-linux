@@ -383,6 +383,15 @@ impl Dial {
         v.set_width_request((FACE * 2.0 * k - 20.0 * k) as i32);
         v.set_valign(gtk::Align::Center);
         let kicker = sized(&lines.kicker, 10.0, gtk::pango::Weight::Bold);
+        // Tracked 1.2, but not in Hangul, kana, Han or Arabic (`Eyebrow.ideographic`).
+        if !tafs_core::words::ideographic(&lines.kicker) {
+            if let Some(attrs) = kicker.attributes() {
+                attrs.insert(gtk::pango::AttrInt::new_letter_spacing(
+                    (1.2 * gtk::pango::SCALE as f64) as i32,
+                ));
+                kicker.set_attributes(Some(&attrs));
+            }
+        }
         kicker.add_css_class("tafs-dim");
         kicker.set_ellipsize(gtk::pango::EllipsizeMode::End);
         kicker.set_max_width_chars(1);

@@ -11,8 +11,13 @@ use std::path::{Path, PathBuf};
 
 use serde_json::Value;
 
-/// The languages tafs ships (`languages.json`'s `shipped`), English first.
-pub const SHIPPED: [&str; 8] = ["en", "de", "fr", "es", "it", "pt", "nl", "pl"];
+/// The languages this app speaks, by their words' folder: every language tafs ships
+/// (`languages.json`'s `shipped`, in its order), then Arabic, right to left, which tafs has in
+/// `all` and this app speaks ahead of the phones. English first.
+pub const SHIPPED: [&str; 27] = [
+    "en", "de", "fr", "es", "it", "pt", "nl", "pl", "ko", "ja", "et", "lt", "lv", "cs", "sk", "sl",
+    "hu", "ro", "bg", "hr", "tr", "id", "vi", "th", "zh-Hant", "pt-BR", "ar",
+];
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum WordsError {
@@ -41,6 +46,44 @@ impl fmt::Display for WordsError {
 }
 
 impl std::error::Error for WordsError {}
+
+/// The base a variant's lines go over (`languages.json`'s `variants`), if `language` is one.
+fn variant_base(root: &Path, language: &str) -> Option<String> {
+    let text = std::fs::read_to_string(root.join("languages.json")).ok()?;
+    let v: Value = serde_json::from_str(&text).ok()?;
+    v.get("variants")?
+        .get(language)?
+        .as_str()
+        .map(str::to_string)
+}
+
+/// Every `*.json` in a language's folder, in name order, into `lines`.
+fn read_folder(folder: &Path, lines: &mut BTreeMap<String, Value>) -> Result<(), WordsError> {
+    let entries = std::fs::read_dir(folder)
+        .map_err(|e| WordsError::Unreadable(format!("{}: {e}", folder.display())))?;
+    let mut names: Vec<PathBuf> = entries
+        .filter_map(|e| e.ok().map(|e| e.path()))
+        .filter(|p| p.extension().is_some_and(|x| x == "json"))
+        .collect();
+    names.sort();
+    let before = lines.len();
+    let mut read = 0;
+    for path in names {
+        let text = std::fs::read_to_string(&path)
+            .map_err(|e| WordsError::Unreadable(format!("{}: {e}", path.display())))?;
+        let map: BTreeMap<String, Value> = serde_json::from_str(&text)
+            .map_err(|e| WordsError::Unreadable(format!("{}: {e}", path.display())))?;
+        read += map.len();
+        lines.extend(map);
+    }
+    if read == 0 && before == 0 {
+        return Err(WordsError::Unreadable(format!(
+            "{} has no words",
+            folder.display()
+        )));
+    }
+    Ok(())
+}
 
 /// One language's lines.
 #[derive(Debug, Clone)]
@@ -72,29 +115,14 @@ impl WordBook {
     }
 
     /// Reads `<root>/<language>/*.json`.
+    /// A regional variant (`languages.json`'s `variants`: pt-BR over pt) is its base language's
+    /// lines with its own on top, as `generate.py` builds the iPad's catalog for it.
     pub fn load(root: &Path, language: &str) -> Result<WordBook, WordsError> {
-        let folder = root.join(language);
-        let entries = std::fs::read_dir(&folder)
-            .map_err(|e| WordsError::Unreadable(format!("{}: {e}", folder.display())))?;
         let mut lines = BTreeMap::new();
-        let mut names: Vec<PathBuf> = entries
-            .filter_map(|e| e.ok().map(|e| e.path()))
-            .filter(|p| p.extension().is_some_and(|x| x == "json"))
-            .collect();
-        names.sort();
-        for path in names {
-            let text = std::fs::read_to_string(&path)
-                .map_err(|e| WordsError::Unreadable(format!("{}: {e}", path.display())))?;
-            let map: BTreeMap<String, Value> = serde_json::from_str(&text)
-                .map_err(|e| WordsError::Unreadable(format!("{}: {e}", path.display())))?;
-            lines.extend(map);
+        if let Some(base) = variant_base(root, language) {
+            lines = WordBook::load(root, &base)?.lines;
         }
-        if lines.is_empty() {
-            return Err(WordsError::Unreadable(format!(
-                "{} has no words",
-                folder.display()
-            )));
-        }
+        read_folder(&root.join(language), &mut lines)?;
         Ok(WordBook {
             language: language.to_string(),
             lines,
@@ -153,35 +181,7 @@ impl WordBook {
 
 /// The CLDR plural form of a whole number in a shipped language: the forms the files have.
 pub fn plural_form(language: &str, n: i64) -> &'static str {
-    let n = n.unsigned_abs();
-    // The forms the files carry (test_strings.py's NEEDS): French and Portuguese put 0 and 1 in
-    // "one"; Polish has one, few and many for whole numbers; the rest one and other.
-    match language {
-        "fr" | "pt" => {
-            if n <= 1 {
-                "one"
-            } else {
-                "other"
-            }
-        }
-        "pl" => {
-            let (m10, m100) = (n % 10, n % 100);
-            if n == 1 {
-                "one"
-            } else if (2..=4).contains(&m10) && !(12..=14).contains(&m100) {
-                "few"
-            } else {
-                "many"
-            }
-        }
-        _ => {
-            if n == 1 {
-                "one"
-            } else {
-                "other"
-            }
-        }
-    }
+    crate::locale::plural_form(language, n)
 }
 
 /// A name's possessive by the language's rule (`POSSESSIVE` in `generate.py`); the name as it
@@ -284,16 +284,50 @@ fn fill(
                 key: key.to_string(),
                 value: name.to_string(),
             })?;
-        match form {
-            Form::Plain => out.push_str(value),
-            Form::Possessive => out.push_str(&possessive(language, value)),
-            Form::This => out.push_str(&demonstrative(language, value, false)),
-            Form::ThisCapital => out.push_str(&demonstrative(language, value, true)),
-        }
+        let shown = match form {
+            Form::Plain => value.to_string(),
+            Form::Possessive => possessive(language, value),
+            Form::This => demonstrative(language, value, false),
+            Form::ThisCapital => demonstrative(language, value, true),
+        };
+        out.push_str(&isolated(&shown, language));
         rest = &after[close + 1..];
     }
     out.push_str(rest);
     Ok(out)
+}
+
+/// Whether a line is written in Hangul, kana, Han or Arabic script, which a monospaced face and
+/// letter-spacing only pull apart (Arabic's letters join, so spacing them breaks the word):
+/// `Eyebrow.ideographic`.
+pub fn ideographic(text: &str) -> bool {
+    text.chars().any(|c| {
+        matches!(c as u32,
+            0x1100..=0x11FF | 0x3040..=0x30FF | 0x3130..=0x318F | 0x3400..=0x4DBF
+            | 0x4E00..=0x9FFF | 0xAC00..=0xD7AF | 0x0600..=0x06FF | 0x0750..=0x077F
+            | 0x08A0..=0x08FF | 0xFB50..=0xFDFF | 0xFE70..=0xFEFF)
+    })
+}
+
+/// A value as a right-to-left line holds it (`Words.isolated`): in a first-strong isolate
+/// (U+2068 … U+2069), so a taf's or person's name in Latin letters takes its own direction without
+/// turning the sentence around it, with no direction character of its own left inside, so none can
+/// close it early. Left to right, a value is as it is.
+pub fn isolated(value: &str, language: &str) -> String {
+    if !crate::locale::right_to_left(language) {
+        return value.to_string();
+    }
+    format!("\u{2068}{}\u{2069}", without_direction(value))
+}
+
+/// The text with U+202A–U+202E, U+2066–U+2069, U+200E, U+200F and U+061C taken out, and nothing
+/// else changed (`Words.withoutDirection`).
+pub fn without_direction(text: &str) -> String {
+    text.chars()
+        .filter(
+            |c| !matches!(*c as u32, 0x202A..=0x202E | 0x2066..=0x2069 | 0x200E | 0x200F | 0x061C),
+        )
+        .collect()
 }
 
 /// The placeholders a line names, `{name}`, `{name|possessive}` or `{name|this}`, in order.
@@ -315,25 +349,7 @@ pub fn placeholders(line: &str) -> Vec<String> {
 /// `Words.list`: names joined as the language lists them (`ListFormatter`, CLDR's "and" list):
 /// "Refunds", "Refunds and Chargebacks", "A, B, and C" in English; "A, B et C" in French.
 pub fn list(language: &str, names: &[String]) -> String {
-    let and = match language {
-        "fr" => "et",
-        "de" => "und",
-        "es" => "y",
-        "it" | "pt" => "e",
-        "nl" => "en",
-        "pl" => "i",
-        _ => "and",
-    };
-    match names {
-        [] => String::new(),
-        [one] => one.clone(),
-        [a, b] => format!("{a} {and} {b}"),
-        [rest @ .., last] => {
-            // English alone puts a comma before its "and".
-            let comma = if language == "en" { "," } else { "" };
-            format!("{}{comma} {and} {last}", rest.join(", "))
-        }
-    }
+    crate::locale::list(language, names)
 }
 
 /// Text in capitals by the language's own rules, as the iPad's `Eyebrow` (`uppercased()`).
@@ -441,5 +457,26 @@ mod tests {
             fill("k", "{taf|possessive} Card", &[("taf", "Refunds")], "en").unwrap(),
             "Refunds' Card"
         );
+    }
+
+    #[test]
+    fn a_right_to_left_line_isolates_its_values() {
+        let line = fill("k", "قبل {name}", &[("name", "Refunds\u{202e}x")], "ar").unwrap();
+        assert_eq!(line, "قبل \u{2068}Refundsx\u{2069}");
+        assert_eq!(
+            fill("k", "Hi {name}", &[("name", "Rae")], "en").unwrap(),
+            "Hi Rae"
+        );
+        assert_eq!(without_direction("\u{200f}a\u{2066}b\u{2069}"), "ab");
+    }
+
+    #[test]
+    fn ideographic_scripts_drop_the_monospaced_face() {
+        assert!(ideographic("بانتظارك"));
+        assert!(ideographic("기억하는 것"));
+        assert!(ideographic("あなた待ち"));
+        assert!(ideographic("等待你"));
+        assert!(!ideographic("NEEDS YOU"));
+        assert!(!ideographic("ЧАКА ВИ"));
     }
 }

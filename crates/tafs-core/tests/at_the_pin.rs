@@ -436,7 +436,21 @@ fn the_briefs_needs_you_count_reads_in_every_language() {
         let w = book(lang);
         for n in [1, 2, 5, 22] {
             let line = w.count("needs_you.count", n, &[]).unwrap();
-            assert!(line.contains(&n.to_string()), "{lang} {n}: {line}");
+            // A form may write its number as a word (Arabic's one and two): the file says so.
+            let form = tafs_core::words::plural_form(lang, n);
+            let says_count = w
+                .raw("needs_you.count")
+                .and_then(|v| v.get(form))
+                .and_then(|v| v.as_str())
+                .is_some_and(|t| t.contains("{count}"));
+            assert!(
+                !says_count || line.contains(&n.to_string()),
+                "{lang} {n}: {line}"
+            );
+            assert!(
+                !line.is_empty() && !line.contains('{'),
+                "{lang} {n}: {line}"
+            );
         }
     }
 }
@@ -988,11 +1002,20 @@ fn the_legal_pages_open_in_the_apps_language() {
             w.line("settings.terms").unwrap()
         );
     }
-    // English, and any language kiff.dev lacks, open the English pages.
-    for lang in ["en", "ja", ""] {
+    // A variant's pages are its language's: pt-BR's are pt's, Traditional Chinese's are zh's.
+    assert_eq!(terms_url("pt-BR"), "https://kiff.dev/pt/tafs/terms");
+    assert_eq!(privacy_url("zh-Hant"), "https://kiff.dev/zh/tafs/privacy");
+    assert_eq!(terms_url("ja"), "https://kiff.dev/ja/tafs/terms");
+    // English, and any language kiff.dev lacks, open the English pages, saying so.
+    for lang in ["en", "ar", ""] {
         assert_eq!(terms_url(lang), "https://kiff.dev/tafs/terms");
         assert_eq!(privacy_url(lang), "https://kiff.dev/tafs/privacy");
     }
+    let ar = book("ar");
+    assert_ne!(
+        legal_label(&ar, "settings.terms").unwrap(),
+        ar.line("settings.terms").unwrap()
+    );
 }
 
 #[test]
@@ -1329,7 +1352,12 @@ fn kiffs_usage_lines_at_the_pin() {
         .unwrap();
         let r = &u.requests.as_ref().unwrap()[0];
         assert!(billing_line(&w, &u).unwrap().is_some());
-        assert!(solo_still_renews(&w, &u).unwrap().unwrap().contains("2026"));
+        // Thai dates count years in the Buddhist era, as CLDR's Thai does: 2026 is 2569.
+        let year = if lang == "th" { "2569" } else { "2026" };
+        assert!(
+            solo_still_renews(&w, &u).unwrap().unwrap().contains(year),
+            "{lang}"
+        );
         assert!(last_answer(&w, &u, false)
             .unwrap()
             .unwrap()
@@ -1690,7 +1718,8 @@ fn coachs_thread_reads_in_every_language() {
             assert!(l.starts.is_some() || !l.lines.is_empty(), "{lang}");
             // A hole is a brace before a name; the lines' own braces have a space after them.
             for line in &l.lines {
-                let shown = format!("{line:?}");
+                // Debug writes some marks as `\u{e47}`: those braces aren't the line's.
+                let shown = format!("{line:?}").replace("\\u{", "");
                 let hole = shown
                     .match_indices('{')
                     .any(|(i, _)| shown[i + 1..].starts_with(|c: char| c.is_ascii_alphabetic()));
