@@ -194,7 +194,10 @@ mod tests {
             "https://kiff.dev/zh/privacy"
         );
         assert_eq!(kiff_page("en", "terms"), "https://kiff.dev/terms");
-        assert_eq!(kiff_page("ar", "terms"), "https://kiff.dev/terms");
+        assert_eq!(kiff_page("ar", "terms"), "https://kiff.dev/ar/terms");
+        assert_eq!(kiff_page("sr-Latn", "terms"), "https://kiff.dev/sr/terms");
+        // A language kiff.dev doesn't serve: the English page.
+        assert_eq!(kiff_page("el", "terms"), "https://kiff.dev/terms");
     }
 
     #[test]

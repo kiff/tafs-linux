@@ -18,6 +18,8 @@ pub fn preferred_from_env() -> Vec<String> {
 /// A tag's words' folder, if the app speaks it: "pt_BR" is "pt-BR", "zh_TW" and "zh-Hant" are
 /// "zh-Hant", "de_AT" is "de". Simplified Chinese isn't spoken.
 pub fn words_language(tag: &str) -> Option<&'static str> {
+    // glibc writes Latin Serbian as a modifier, `sr_RS@latin`.
+    let latin_modifier = tag.contains("@latin");
     let tag = tag.split(['.', '@']).next().unwrap_or("");
     let parts: Vec<&str> = tag.split(['-', '_']).filter(|p| !p.is_empty()).collect();
     let code = parts.first()?.to_lowercase();
@@ -25,6 +27,11 @@ pub fn words_language(tag: &str) -> Option<&'static str> {
     match code.as_str() {
         "zh" => is_traditional_chinese(&parts)
             .then(|| find("zh-Hant"))
+            .flatten(),
+        // Serbian ships in Latin script: a Cyrillic tag isn't the language the app ships
+        // (`isLatinScript`).
+        "sr" => (latin_modifier || parts.iter().skip(1).any(|p| p.eq_ignore_ascii_case("latn")))
+            .then(|| find("sr-Latn"))
             .flatten(),
         "pt" if parts.iter().skip(1).any(|p| p.eq_ignore_ascii_case("BR")) => {
             find("pt-BR").or_else(|| find("pt"))
@@ -116,6 +123,10 @@ mod tests {
         assert_eq!(app_language(&v(&["zh-Hant-HK"])), "zh-Hant");
         assert_eq!(app_language(&v(&["zh_CN", "ar_EG"])), "ar");
         assert_eq!(app_language(&v(&["sr_RS", "fr"])), "fr");
+        assert_eq!(app_language(&v(&["sr_RS@latin"])), "sr-Latn");
+        assert_eq!(app_language(&v(&["sr-Latn-RS"])), "sr-Latn");
+        assert_eq!(app_language(&v(&["he_IL.UTF-8"])), "he");
+        assert_eq!(screen_languages(&v(&["sr_RS@latin"])), vec!["sr"]);
         assert_eq!(app_language(&v(&["C.UTF-8"])), "en");
         assert_eq!(app_language(&v(&[])), "en");
         assert_eq!(

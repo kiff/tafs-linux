@@ -155,6 +155,22 @@ pub fn plural_form(language: &str, n: i64) -> &'static str {
     }
 }
 
+/// The CLDR ordinal plural class of a whole number ("one", "two", "few", "many", "other").
+pub fn ordinal_class(language: &str, n: i64) -> &'static str {
+    let Ok(rules) = PluralRules::try_new(locale(language).into(), PluralRuleType::Ordinal.into())
+    else {
+        return "other";
+    };
+    match rules.category_for(n.unsigned_abs()) {
+        PluralCategory::Zero => "zero",
+        PluralCategory::One => "one",
+        PluralCategory::Two => "two",
+        PluralCategory::Few => "few",
+        PluralCategory::Many => "many",
+        PluralCategory::Other => "other",
+    }
+}
+
 /// A number given in minor units, at `decimals` places, as the language writes it
 /// (`numberStyle = .decimal`): its grouping (and CLDR's minimum grouping digits: Spanish and
 /// Polish write 5000 but 25.000), its separators, its minus.

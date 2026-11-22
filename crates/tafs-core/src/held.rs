@@ -429,8 +429,19 @@ pub fn ordinal(language: &str, n: i64) -> String {
         // ICU's own data for these two: Mongolian takes the English "th" and Lao Thai's "ที่".
         "mn" => format!("{d}th"),
         "km" => format!("ទី{d}"),
+        "az" => format!("{d}'inci"),
+        // ICU's Bengali: English's suffixes by CLDR's Bengali ordinal classes.
+        "bn" => {
+            let suffix = match crate::locale::ordinal_class(language, n) {
+                "one" => "st",
+                "two" => "nd",
+                "few" => "rd",
+                _ => "th",
+            };
+            format!("{d}{suffix}")
+        }
         "lo" => format!("ที่\u{200b}{d}"),
-        "ar" => d,
+        "ar" | "he" => d,
         _ => format!("{d}."),
     }
 }
@@ -639,5 +650,9 @@ mod tests {
         assert_eq!(ordinal("ca", 112), "112è");
         assert_eq!(ordinal("km", 3), "ទី3");
         assert_eq!(ordinal("mk", 3), "3.");
+        assert_eq!(ordinal("az", 21), "21'inci");
+        assert_eq!(ordinal("sr-Latn", 3), "3.");
+        assert_eq!(ordinal("he", 3), "3");
+        assert_eq!(all("bn"), "১st ২nd ৩nd ৭st ১১th ২১th ১০০th ১,০০১th");
     }
 }

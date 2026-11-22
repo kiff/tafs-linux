@@ -94,8 +94,18 @@ impl Money {
             "pt" | "nl" | "mn" | "ne" => format!("{symbol}{NBSP}{n}"),
             // Khmer writes the symbol right after the number.
             "km" => format!("{n}{symbol}"),
-            // Arabic opens with a right-to-left mark, as CLDR writes it.
+            // Arabic opens with a right-to-left mark, as CLDR writes it; Hebrew marks the number
+            // and the symbol each.
             "ar" => format!("\u{200f}{n}{NBSP}{symbol}"),
+            "he" => format!("\u{200f}{n}{NBSP}\u{200f}{symbol}"),
+            // Bengali: a symbol of letters stands apart, a sign doesn't.
+            "bn" => {
+                if symbol.chars().next().is_some_and(char::is_alphabetic) {
+                    format!("{n}{NBSP}{symbol}")
+                } else {
+                    format!("{n}{symbol}")
+                }
+            }
             _ => format!("{n}{NBSP}{symbol}"),
         }
     }
@@ -132,13 +142,13 @@ fn symbol(code: &str, language: &str) -> String {
     let s = match (code, crate::locale::base(language)) {
         ("EUR", "hu" | "ro") => "EUR",
         ("EUR", _) => "€",
-        ("USD", "en" | "de" | "ja" | "et" | "lv" | "sl" | "tr" | "mn" | "km") => "$",
+        ("USD", "en" | "de" | "ja" | "et" | "lv" | "sl" | "tr" | "mn" | "km" | "hy" | "he") => "$",
         ("USD", "fr") => "$US",
         ("USD", "bg") => "щ.д.",
         (
             "USD",
             "es" | "pt" | "nl" | "ko" | "cs" | "id" | "vi" | "th" | "zh" | "ar" | "mk" | "ne"
-            | "lo",
+            | "lo" | "sr" | "sq" | "ka" | "az" | "bn",
         ) => "US$",
         ("USD", _) => "USD",
         ("GBP", "fr") => "£GB",
@@ -180,6 +190,9 @@ mod tests {
         assert_eq!(euros(5_000, "mn"), "€\u{a0}5,000");
         assert_eq!(euros(5_000, "lo"), "€5.000");
         assert_eq!(euros(5_000, "ca"), "5.000\u{a0}€");
+        assert_eq!(euros(5_000, "sr-Latn"), "5.000\u{a0}€");
+        assert_eq!(euros(5_000, "he"), "\u{200f}5,000\u{a0}\u{200f}€");
+        assert_eq!(euros(5_000, "bn"), "৫,০০০€");
     }
 
     #[test]

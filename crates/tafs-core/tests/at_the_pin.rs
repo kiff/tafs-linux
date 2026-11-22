@@ -1007,15 +1007,17 @@ fn the_legal_pages_open_in_the_apps_language() {
     assert_eq!(privacy_url("zh-Hant"), "https://kiff.dev/zh/tafs/privacy");
     assert_eq!(terms_url("ja"), "https://kiff.dev/ja/tafs/terms");
     // English, and any language kiff.dev lacks, open the English pages, saying so.
-    for lang in ["en", "ar", ""] {
+    for lang in ["en", "el", ""] {
         assert_eq!(terms_url(lang), "https://kiff.dev/tafs/terms");
         assert_eq!(privacy_url(lang), "https://kiff.dev/tafs/privacy");
     }
-    let ar = book("ar");
+    // Greek, which tafs has but kiff.dev doesn't serve, says its pages are in English.
+    let el = book("el");
     assert_ne!(
-        legal_label(&ar, "settings.terms").unwrap(),
-        ar.line("settings.terms").unwrap()
+        legal_label(&el, "settings.terms").unwrap(),
+        el.line("settings.terms").unwrap()
     );
+    assert_eq!(terms_url("ar"), "https://kiff.dev/ar/tafs/terms");
 }
 
 #[test]
@@ -1353,11 +1355,12 @@ fn kiffs_usage_lines_at_the_pin() {
         let r = &u.requests.as_ref().unwrap()[0];
         assert!(billing_line(&w, &u).unwrap().is_some());
         // Thai dates count years in the Buddhist era, as CLDR's Thai does: 2026 is 2569.
-        // Nepali writes its own digits, as CLDR's Nepali does (the iPad's `IOS_LOCALE` keeps
+        // Nepali and Bengali write their own digits, as CLDR does (the iPad's `IOS_LOCALE` keeps
         // Latin digits for Arabic only).
         let year = match lang {
             "th" => "2569",
             "ne" => "२०२६",
+            "bn" => "২০২৬",
             _ => "2026",
         };
         assert!(

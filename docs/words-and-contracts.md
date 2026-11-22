@@ -16,30 +16,31 @@ samples: `ios/Tafs/Samples/connect-apps.json`, the reference set's Connect apps.
 - A missing key, or a value a line asks for and isn't given, is an error: no English fallback, no
   `{hole}` on screen.
 
-`tests/at_the_pin.rs` checks every line the ported screens read, in all 33 languages, with the
+`tests/at_the_pin.rs` checks every line the ported screens read, in all 40 languages, with the
 values English has. It also fills every line at the pin, in every language, and fails if a `{`
 is left, so a form this app doesn't read yet fails CI before the pin moves. A new key goes into kiff/tafs first, then the pin moves, in its own PR.
 
 ## Languages
 
-The app speaks every language tafs ships (`languages.json`'s `shipped`: 26, with pt-BR and
-zh-Hant), plus Arabic, which tafs has in `all` and this app speaks ahead of the phones
-(`words::SHIPPED`). Greek waits until tafs ships it.
+The app speaks every language tafs ships (`languages.json`'s `shipped`: 40, with pt-BR,
+zh-Hant and sr-Latn; Arabic and Hebrew right to left), `words::SHIPPED`. Greek waits until tafs
+ships it.
 
 - **A variant** (`variants`: pt-BR over pt) reads as its base's lines with its own on top, as
   `generate.py` builds it (`WordBook::load`).
 - **Which one:** the first of the person's languages (`LANGUAGE`, `LC_ALL`, `LC_MESSAGES`, `LANG`)
   the app speaks, by its words' folder: `pt_BR` is pt-BR, `zh_TW` or `zh-Hant` is zh-Hant,
-  Simplified Chinese isn't spoken (`language::words_language`). KIFF and kiff.dev know it by its
+  Serbian only in Latin script (`sr_RS@latin`, `sr-Latn`), Simplified Chinese not at all
+  (`language::words_language`). KIFF and kiff.dev know it by its
   code, pt and zh (`language::kiff_code`, as the iPad's `screenLanguages`).
 - **Dates, weekdays, relative times, "and" lists, plural forms and numbers** come from CLDR,
   through ICU4X compiled into the app (`tafs-core/src/locale.rs`): the data the iPad's formatters
   read. Arabic writes Latin digits and the Gregorian calendar (`IOS_LOCALE`'s `nu-latn`); Thai
-  counts years in the Buddhist era, as CLDR's Thai does. A plural form is kept to those
+  counts years in the Buddhist era, and Nepali and Bengali write their own digits, as CLDR does. A plural form is kept to those
   `generate.py`'s `PLURALS` gives the language (Vietnamese has only `other`).
 - **Ordinals and currency symbols** (`held::ordinal`, `money::symbol`) are ICU's
   digits-ordinal rules and standard symbols, written out: ICU4X has neither.
-- **Terms and Privacy** open in the 30 languages kiff.dev serves them in, Traditional Chinese
+- **Terms and Privacy** open in the 38 languages kiff.dev serves them in, Traditional Chinese
   under `/zh/` and pt-BR under `/pt/` (`Legal.translated`); any other opens the English page
   and says so.
 
