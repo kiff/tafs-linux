@@ -286,6 +286,19 @@ fn escaped_query(v: &str) -> String {
 }
 
 impl Act {
+    /// The act as the iPad names it to Face ID, where the act alone says it: a new group's name,
+    /// the zone, resuming every taf, the spend limit. Others are named where their names are
+    /// known (`approval::refuse_as`).
+    pub fn own_prompt(&self, w: &crate::words::WordBook) -> Option<String> {
+        match self {
+            Act::CreateGroup { name } => w.get("people.create_group", &[("name", name)]).ok(),
+            Act::SetTimeZone { zone } => w.get("settings.time_zone.prompt", &[("zone", zone)]).ok(),
+            Act::Resume { agent: None } => w.line("taf.halt.resume_all_prompt").ok(),
+            Act::RaiseLimit => w.line("usage.raise_limit.prompt").ok(),
+            _ => None,
+        }
+    }
+
     /// The whole request a security key would approve (method, path with its query, body), for
     /// the acts KIFF or tafs cloud take signed and whose body their fields hold, as the iPad's
     /// `KIFFClient` writes it. None for the rest: planque's (their own signing), a held call's or

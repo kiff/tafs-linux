@@ -365,13 +365,15 @@ fn ask_remove(
     ask.set_response_appearance("remove", adw::ResponseAppearance::Destructive);
     ask.set_default_response(Some("cancel"));
     ask.set_close_response("cancel");
+    let what = w.get("taf.remove.prompt", &[("taf", &taf.name)]).ok();
     let (w, id, slot) = (w.clone(), taf.id.clone(), slot.clone());
     ask.connect_response(None, move |_, r| {
         if r == "remove" {
-            crate::approval::refuse(
+            crate::approval::refuse_as(
                 &w,
                 tafs_core::sidebar::Mode::Kiff,
                 &tafs_core::signed::Act::RemoveTaf { taf: id.clone() },
+                what.clone(),
                 &slot,
             );
         }

@@ -1221,10 +1221,18 @@ fn ask_discard(
     ask.set_response_appearance("yes", adw::ResponseAppearance::Destructive);
     ask.set_default_response(Some("no"));
     ask.set_close_response("no");
+    // Named as the iPad names it to Face ID: tafs cloud's own title, else its button.
+    let what = Some(title.clone()).filter(|t| !t.is_empty());
     let (w, act, slot) = (w.clone(), discard.act(), slot.clone());
     ask.connect_response(None, move |_, answer| {
         if let (true, Some(act)) = (answer == "yes", &act) {
-            crate::approval::refuse(&w, tafs_core::sidebar::Mode::Kiff, act, &slot);
+            crate::approval::refuse_as(
+                &w,
+                tafs_core::sidebar::Mode::Kiff,
+                act,
+                what.clone(),
+                &slot,
+            );
         }
     });
     ask.present(Some(over));
@@ -1340,6 +1348,15 @@ fn view_only_notice(w: &WordBook, why: ViewOnly) -> gtk::Box {
     // A width it never wraps below: the window's least size is measured at its least width.
     lead.set_width_chars(40);
     v.append(&lead);
+    // No security key with this computer yet: what one is, so the person knows what to plug in
+    // (a small USB key, not a USB stick), with the key on.
+    if tafs_core::passkey::ENABLED {
+        if let Ok(line) = tafs_core::security_key::words::none_paired(w) {
+            let key = text(&line, 13, 400, &["tafs-soft"]);
+            key.set_width_chars(40);
+            v.append(&key);
+        }
+    }
     b.append(&v);
     let ViewOnly::CanPair(add_this) = why else {
         return b;

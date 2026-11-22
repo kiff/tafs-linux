@@ -54,6 +54,18 @@ pub fn refusal_slot() -> gtk::Box {
 /// With this computer's security key on (`key_approval`), signed in with a session that approves
 /// with it, the tap asks the key instead, and `slot` says why when KIFF or the key refused.
 pub fn refuse(w: &WordBook, mode: Mode, act: &tafs_core::signed::Act, slot: &gtk::Box) {
+    refuse_as(w, mode, act, None, slot)
+}
+
+/// `refuse`, with the act named as the iPad names it to Face ID (`what`: "Sign the iPad out of
+/// your account"): the security key's sheet says it in its lead.
+pub fn refuse_as(
+    w: &WordBook,
+    mode: Mode,
+    act: &tafs_core::signed::Act,
+    what: Option<String>,
+    slot: &gtk::Box,
+) {
     while let Some(c) = slot.first_child() {
         slot.remove(&c);
     }
@@ -71,6 +83,7 @@ pub fn refuse(w: &WordBook, mode: Mode, act: &tafs_core::signed::Act, slot: &gtk
                     kept,
                     languages,
                     act,
+                    what.or_else(|| act.own_prompt(w)).as_deref(),
                     std::rc::Rc::new(move |outcome| match outcome {
                         Some(Err(why)) => {
                             slot2.append(&text(&why, 13, 400, &["tafs-no"]));

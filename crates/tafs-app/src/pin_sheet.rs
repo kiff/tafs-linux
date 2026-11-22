@@ -78,16 +78,19 @@ fn tries_after(w: &WordBook, f: Failure) -> Option<Option<String>> {
     }
 }
 
-/// The sheet over `parent`, to approve.
+/// The sheet over `parent`, to approve the act `act` names (its prompt, as the iPad's Face ID
+/// reason): its lead says what's needed and for what.
+#[allow(clippy::too_many_arguments)]
 pub fn present(
     w: Rc<WordBook>,
     parent: &impl IsA<gtk::Widget>,
+    act: Option<&str>,
     attempt: Attempt,
     read_tries: ReadTries,
     stop: StopKey,
     done: Done,
 ) {
-    let Ok(l) = words::sheet(&w) else {
+    let Ok(l) = words::sheet(&w, act) else {
         return;
     };
     present_lines(w, l, parent, attempt, read_tries, stop, done);
@@ -125,6 +128,9 @@ fn present_lines(
     let title = text(&l.title, 15, 600, &["tafs-ink"]);
     title.set_xalign(0.5);
     column.append(&title);
+    if let Some(lead) = &l.lead {
+        column.append(&text(lead, 15, 600, &["tafs-ink"]));
+    }
     column.append(&text(&l.enter_pin, 14, 400, &["tafs-soft"]));
     let tries = text("", 13, 400, &["tafs-dim"]);
     tries.set_visible(false);

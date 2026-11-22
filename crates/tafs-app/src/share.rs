@@ -181,6 +181,8 @@ pub fn sheet(
         return;
     };
     let words = Rc::new(words);
+    // The whole change, as the iPad names it to Face ID: "Share Support replies".
+    let what = w.get("people.share.title", &[("taf", &taf.name)]).ok();
     let header = adw::HeaderBar::new();
     header.set_show_end_title_buttons(false);
     header.set_show_start_title_buttons(false);
@@ -415,6 +417,7 @@ pub fn sheet(
             refused.clone(),
             taf.agent.clone(),
         );
+        let what = what.clone();
         trailing.connect_clicked(move |_| {
             let step = state.borrow().step;
             if step == 1 {
@@ -426,7 +429,7 @@ pub fn sheet(
             // computer can't approve, and none is sent.
             let s = state.borrow();
             if let Some(act) = tafs_core::share::acts(&agent, &s.had, &s.chosen).first() {
-                crate::approval::refuse(&w, mode, act, &refused);
+                crate::approval::refuse_as(&w, mode, act, what.clone(), &refused);
             }
         });
     }
@@ -464,7 +467,7 @@ pub fn sheet(
             redraw2();
             // And Share tapped: the can't-approve line, nothing sent.
             if let Some(act) = act {
-                crate::approval::refuse(&w, mode, &act, &refused);
+                crate::approval::refuse_as(&w, mode, &act, what.clone(), &refused);
             }
         }
     });

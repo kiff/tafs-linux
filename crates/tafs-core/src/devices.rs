@@ -163,6 +163,8 @@ pub struct SignOutQuestion {
     pub cancel: String,
     /// What the iPad signs once Sign out is tapped (`removeDevice`).
     pub act: crate::signed::Act,
+    /// The act as the iPad names it to Face ID: "Sign Rae's iPhone out of your account".
+    pub prompt: String,
 }
 
 pub fn sign_out_question(
@@ -182,6 +184,16 @@ pub fn sign_out_question(
         act: crate::signed::Act::SignOutDevice {
             device: device.id.clone(),
         },
+        prompt: w.get(
+            "settings.devices.sign_out_prompt",
+            &[(
+                "device",
+                &match &device.name {
+                    Some(n) => n.clone(),
+                    None => w.line("settings.devices.this_device")?,
+                },
+            )],
+        )?,
     }))
 }
 

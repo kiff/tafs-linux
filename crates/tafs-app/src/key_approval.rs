@@ -43,6 +43,7 @@ pub fn approve(
     kept: KeptSession,
     languages: Vec<&'static str>,
     act: &Act,
+    what: Option<&str>,
     done: Approved,
 ) {
     let (Some((method, path, body)), Some(credential)) = (
@@ -109,7 +110,7 @@ pub fn approve(
             done(closed_with(&w, e, kiff))
         })
     };
-    crate::pin_sheet::present(w, parent, attempt, read_tries, stop, sheet_done);
+    crate::pin_sheet::present(w, parent, what, attempt, read_tries, stop, sheet_done);
 }
 
 /// What the sheet closing comes to: approved; cancelled (nothing); or the line to show, KIFF's
