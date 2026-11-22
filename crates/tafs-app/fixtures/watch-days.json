@@ -1,0 +1,69 @@
+{
+ "about": "Synthetic answers for W11, From your watch (tafs cloud's GET /v1/watch/days and GET /v1/watch/days/{date}, as TafsCloud+WatchDays.swift reads them). Nothing is sent.",
+ "days": {
+  "days": [
+   {
+    "date": "2026-11-22",
+    "count": 3
+   },
+   {
+    "date": "2026-11-20",
+    "count": 1
+   }
+  ],
+  "today": "2026-11-22"
+ },
+ "turns": {
+  "2026-11-22": {
+   "turns": [
+    {
+     "id": "t1",
+     "said": "Refund order 1042",
+     "said_at": "2026-11-22T09:12:00Z",
+     "taf": {
+      "id": "taf-aaaa",
+      "name": "Refunds"
+     },
+     "state": "done",
+     "line": "Refunded €150 to Ana",
+     "words": "Done"
+    },
+    {
+     "id": "t2",
+     "said": "And send her a note",
+     "said_at": "2026-11-22T09:14:00Z",
+     "taf": {
+      "id": "taf-aaaa",
+      "name": "Refunds"
+     },
+     "state": "working",
+     "words": "Working on it",
+     "reply_to": "t1"
+    },
+    {
+     "id": "t3",
+     "said": "How many parcels are late?",
+     "said_at": "2026-11-22T11:40:00Z",
+     "state": "no_taf",
+     "words": "No taf does this yet. Ask Coach to make one."
+    }
+   ]
+  },
+  "2026-11-20": {
+   "turns": [
+    {
+     "id": "t4",
+     "said": "Pause the leads taf",
+     "said_at": "2026-11-20T17:02:00Z",
+     "taf": {
+      "id": "taf-bbbb",
+      "name": "Lead follow-up"
+     },
+     "state": "done",
+     "line": "Paused",
+     "words": "Done"
+    }
+   ]
+  }
+ }
+}
