@@ -124,11 +124,30 @@ pub mod api {
     }
 
     /// A door's address on tafs cloud, whole.
+    /// Only ever on tafs cloud's own host, over HTTPS (agentgabo's note on #88): a whole address
+    /// elsewhere becomes its path on tafs cloud, so the example never sends a developer's key to
+    /// another host.
     pub fn endpoint(door: &Door) -> String {
-        if door.address.starts_with("https://") {
-            door.address.clone()
-        } else {
-            format!("{}{}", crate::home::TAFS_CLOUD, door.address)
+        match url::Url::parse(&door.address) {
+            Ok(u)
+                if u.scheme() == "https"
+                    && u.host_str() == Some(crate::session::TAFS_CLOUD_HOST)
+                    && u.port().is_none()
+                    && u.username().is_empty()
+                    && u.password().is_none() =>
+            {
+                u.to_string()
+            }
+            Ok(u) => format!("{}{}", crate::home::TAFS_CLOUD, u.path()),
+            Err(_) => {
+                let path = door.address.trim();
+                let path = if path.starts_with('/') {
+                    path.to_string()
+                } else {
+                    format!("/{path}")
+                };
+                format!("{}{}", crate::home::TAFS_CLOUD, path)
+            }
         }
     }
 
@@ -1258,6 +1277,34 @@ mod tests {
             api::endpoint(door),
             "https://cloud.tafs.kiff.dev/v1/doors/api/door_ord7/requests"
         );
+        // A whole address is kept only on tafs cloud's own host; elsewhere, its path there.
+        let mut d = door.clone();
+        for (address, shown) in [
+            (
+                "https://cloud.tafs.kiff.dev/v1/doors/api/x/requests",
+                "https://cloud.tafs.kiff.dev/v1/doors/api/x/requests",
+            ),
+            (
+                "https://evil.example/v1/doors/api/x/requests",
+                "https://cloud.tafs.kiff.dev/v1/doors/api/x/requests",
+            ),
+            (
+                "http://cloud.tafs.kiff.dev/v1/x",
+                "https://cloud.tafs.kiff.dev/v1/x",
+            ),
+            (
+                "https://user@cloud.tafs.kiff.dev/v1/x",
+                "https://cloud.tafs.kiff.dev/v1/x",
+            ),
+            (
+                "https://cloud.tafs.kiff.dev:8443/v1/x",
+                "https://cloud.tafs.kiff.dev/v1/x",
+            ),
+            ("v1/x", "https://cloud.tafs.kiff.dev/v1/x"),
+        ] {
+            d.address = address.into();
+            assert_eq!(api::endpoint(&d), shown, "{address}");
+        }
         let w = words();
         let last = api::last_request(&w, door).unwrap().unwrap();
         assert!(
