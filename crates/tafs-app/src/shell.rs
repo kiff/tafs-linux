@@ -698,6 +698,12 @@ pub fn build(
             };
             // What the Unreachable line said stays, until the window says otherwise.
             let line = unreachable.borrow().first_child();
+            // Whether the focus was in the sidebar: it goes back there once it's drawn again, so
+            // a second Ctrl+R or F5 still reaches it.
+            let old_side = side.borrow().clone();
+            let focused = old_side.root().and_then(|r| r.focus()).is_some_and(|f| {
+                f.is_ancestor(&old_side) || &f == old_side.upcast_ref::<gtk::Widget>()
+            });
             rows.borrow_mut().clear();
             finishes.borrow_mut().clear();
             let foot = self::sidebar(
@@ -726,6 +732,13 @@ pub fn build(
             *unreachable.borrow_mut() = foot.unreachable;
             if let Some(s) = selection.borrow().as_ref() {
                 mark_chosen(&rows, &list_now.borrow(), &icon_now.borrow(), s);
+            }
+            if focused {
+                let list = list_now.borrow().clone();
+                match list.selected_row() {
+                    Some(row) => row.grab_focus(),
+                    None => list.grab_focus(),
+                };
             }
         })
     };
