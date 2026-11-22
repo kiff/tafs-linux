@@ -32,8 +32,9 @@ impl Page {
     }
 
     /// The last card names this computer's way to approve: on the phone
-    /// (`onboarding.control_lead_desktop`). Until tafs has that line (tafs#1710), the card shows
-    /// its title and picture alone: never another device's words, and never English.
+    /// (`onboarding.control_lead_desktop`, in every shipped language since tafs#1710). A line
+    /// missing at the pin leaves the card its title and picture alone: never another device's
+    /// words, and never English.
     fn lead(self, w: &WordBook) -> Option<String> {
         match self {
             Page::Tafs => w.line("onboarding.tafs_lead").ok(),
