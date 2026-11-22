@@ -166,10 +166,21 @@ pub fn page(w: Rc<WordBook>, source: ChromeSource) -> gtk::Widget {
                                 &["tafs-dim"],
                             ));
                         }
+                        let mut first: Option<gtk::Button> = None;
                         for c in chromes {
-                            p.append(&chrome_row(w.clone(), source.clone(), c, &list));
+                            let row = chrome_row(w.clone(), source.clone(), c, &list);
+                            if first.is_none() {
+                                first = row.last_child().and_downcast::<gtk::Button>();
+                            }
+                            p.append(&row);
                         }
                         list.append(&p);
+                        // `--page chrome-unpair`: the first Chrome's Unpair question, for its screenshot.
+                        if OPEN_UNPAIR.with(|o| o.replace(false)) {
+                            if let Some(b) = first {
+                                glib::idle_add_local_once(move || b.emit_clicked());
+                            }
+                        }
                     }
                 }
             });
@@ -183,6 +194,8 @@ pub fn page(w: Rc<WordBook>, source: ChromeSource) -> gtk::Widget {
 }
 
 thread_local! {
+    /// `--page chrome-unpair`: the first Chrome's Unpair question opens once the list is drawn.
+    pub static OPEN_UNPAIR: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
     /// The open page's loader, read again once a Chrome is unpaired.
     static RELOAD: std::cell::RefCell<Option<std::rc::Weak<dyn Fn()>>> =
         const { std::cell::RefCell::new(None) };
@@ -206,6 +219,10 @@ fn chrome_row(w: Rc<WordBook>, source: ChromeSource, c: Chrome, over: &gtk::Box)
     if let Ok(Some(on)) = chrome::browser_on(&w, &c) {
         v.append(&one_line(&on, 13, 400, &["tafs-dim"]));
     }
+    // What it's used for ("Your Chrome" 4): the sites of the connections planque lists on it.
+    if let Ok(Some(used)) = chrome::used_for(&w, &c) {
+        v.append(&crate::widgets::text(&used, 13, 400, &["tafs-soft"]));
+    }
     r.append(&v);
     let remove = gtk::Button::with_label(&w.line("chrome.remove").unwrap_or_default());
     remove.add_css_class("tafs-link");
@@ -216,9 +233,11 @@ fn chrome_row(w: Rc<WordBook>, source: ChromeSource, c: Chrome, over: &gtk::Box)
         let over = over.clone();
         remove.connect_clicked(move |_| {
             let l = |k: &str| w.line(k).unwrap_or_default();
+            // What unpairing ends ("Your Chrome" 3): the connections that use it.
+            let ends = chrome::unpair_ends(&w, &c).ok().flatten();
             let ask = adw::AlertDialog::new(
                 Some(&chrome::remove_question(&w, &c).unwrap_or_default()),
-                None,
+                ends.as_deref(),
             );
             ask.add_response("cancel", &l("common.cancel"));
             ask.add_response("remove", &l("chrome.remove"));
