@@ -50,6 +50,8 @@ pub struct SetupTaf {
     pub may_use_coach: bool,
     /// Starts when's and Results go to's dial, signed in with KIFF.
     pub knobs: Option<crate::starts_when::Knobs>,
+    /// Its Cards at KIFF, revoked first when it's removed for good (none once revoked).
+    pub card_ids: Vec<String>,
     /// Coach (Improve in Coach, Choose actions), Connect apps (the ring's +), and the taf's
     /// Activity (an app's calls).
     pub open_coach: Rc<dyn Fn()>,
@@ -365,13 +367,21 @@ fn ask_remove(
     ask.set_response_appearance("remove", adw::ResponseAppearance::Destructive);
     ask.set_default_response(Some("cancel"));
     ask.set_close_response("cancel");
-    let (w, id, slot) = (w.clone(), taf.id.clone(), slot.clone());
+    let what = w.get("taf.remove.prompt", &[("taf", &taf.name)]).ok();
+    let (w, id, cards, slot) = (
+        w.clone(),
+        taf.id.clone(),
+        taf.card_ids.clone(),
+        slot.clone(),
+    );
     ask.connect_response(None, move |_, r| {
         if r == "remove" {
-            crate::approval::refuse(
+            crate::approval::refuse_with(
                 &w,
                 tafs_core::sidebar::Mode::Kiff,
                 &tafs_core::signed::Act::RemoveTaf { taf: id.clone() },
+                what.clone(),
+                cards.clone(),
                 &slot,
             );
         }

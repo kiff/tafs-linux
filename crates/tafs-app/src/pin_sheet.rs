@@ -65,16 +65,32 @@ fn said(w: &WordBook, e: KeyError) -> Option<(String, bool)> {
     }
 }
 
-/// The sheet over `parent`, to approve.
+/// The tries line after `f`: the count a wrong PIN gave (`Some(Some)`), none where the PIN's count
+/// is no longer known (`Some(None)`: a wrong PIN with no count, three in a row, locked), or
+/// unchanged for a failure that isn't the PIN's (`None`).
+fn tries_after(w: &WordBook, f: Failure) -> Option<Option<String>> {
+    match f {
+        Failure::WrongPin {
+            tries_left: Some(n),
+        } if n > 0 => Some(words::tries_left(w, n).ok()),
+        Failure::WrongPin { .. } | Failure::PinPaused | Failure::PinBlocked => Some(None),
+        _ => None,
+    }
+}
+
+/// The sheet over `parent`, to approve the act `act` names (its prompt, as the iPad's Face ID
+/// reason): its lead says what's needed and for what.
+#[allow(clippy::too_many_arguments)]
 pub fn present(
     w: Rc<WordBook>,
     parent: &impl IsA<gtk::Widget>,
+    act: Option<&str>,
     attempt: Attempt,
     read_tries: ReadTries,
     stop: StopKey,
     done: Done,
 ) {
-    let Ok(l) = words::sheet(&w) else {
+    let Ok(l) = words::sheet(&w, act) else {
         return;
     };
     present_lines(w, l, parent, attempt, read_tries, stop, done);
@@ -112,6 +128,9 @@ fn present_lines(
     let title = text(&l.title, 15, 600, &["tafs-ink"]);
     title.set_xalign(0.5);
     column.append(&title);
+    if let Some(lead) = &l.lead {
+        column.append(&text(lead, 15, 600, &["tafs-ink"]));
+    }
     column.append(&text(&l.enter_pin, 14, 400, &["tafs-soft"]));
     let tries = text("", 13, 400, &["tafs-dim"]);
     tries.set_visible(false);
@@ -161,23 +180,38 @@ fn present_lines(
     let locked = Rc::new(Cell::new(false));
     let touching = Rc::new(Cell::new(false));
     let show = {
-        let (w, message, locked, field, approve) = (
+        let (w, message, locked, field, approve, tries, cancel) = (
             w.clone(),
             message.clone(),
             locked.clone(),
             field.clone(),
             approve.clone(),
+            tries.clone(),
+            cancel.clone(),
         );
         Rc::new(move |e: KeyError| {
+            // The tries line never disagrees with the failure's: a wrong PIN with its count says
+            // it there too; any other failure of the PIN leaves the count unknown, so it goes.
+            if let KeyError::Key(f) = e {
+                if let Some(line) = tries_after(&w, f) {
+                    tries.set_visible(line.is_some());
+                    tries.set_label(&line.unwrap_or_default());
+                }
+            }
             let Some((line, again)) = said(&w, e) else {
                 return;
             };
             message.set_label(&line);
             message.set_visible(true);
             if !again {
+                // A locked key can't approve: Cancel becomes "Approve on your phone instead"
+                // (the PM's 20:12); it closes the sheet, nothing approved here.
                 locked.set(true);
                 field.set_sensitive(false);
                 approve.set_sensitive(false);
+                if let Ok(label) = words::on_phone(&w) {
+                    cancel.set_label(&label);
+                }
             }
         })
     };
@@ -338,6 +372,29 @@ mod tests {
     }
 
     /// Closed before any PIN went to the key: there's nothing to stop.
+    #[test]
+    fn the_tries_line_follows_a_wrong_pin() {
+        let w = WordBook::load(&WordBook::default_root(), "en").unwrap();
+        assert_eq!(
+            tries_after(
+                &w,
+                Failure::WrongPin {
+                    tries_left: Some(4)
+                }
+            ),
+            Some(Some("4 tries left before the key locks.".into()))
+        );
+        assert_eq!(
+            tries_after(&w, Failure::WrongPin { tries_left: None }),
+            Some(None)
+        );
+        assert_eq!(tries_after(&w, Failure::PinBlocked), Some(None));
+        assert_eq!(tries_after(&w, Failure::PinPaused), Some(None));
+        // Not the PIN's failure: the line stays as read.
+        assert_eq!(tries_after(&w, Failure::TimedOut), None);
+        assert_eq!(tries_after(&w, Failure::NoKey), None);
+    }
+
     #[test]
     fn closing_before_the_key_is_asked_stops_nothing() {
         let calls = Arc::new(Mutex::new(0));

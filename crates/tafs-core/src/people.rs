@@ -403,6 +403,63 @@ pub fn add_act(group: &Group, person: &Person, as_manager: bool, can_manage_peop
     }
 }
 
+/// A group or member change as the iPad names it to Face ID (`changePeople`'s first words), from
+/// the groups and people read: "Rename Support to Help", "Add rae@acme.test to Support", "Make
+/// rae@acme.test a manager of Support". Someone not read is named by their subject.
+pub fn prompt(w: &WordBook, act: &Act, groups: &[Group], people: &[Person]) -> Option<String> {
+    let group = |id: &str| -> Option<String> {
+        groups
+            .iter()
+            .find(|g| g.id == id)
+            .and_then(|g| g.shown_name(w).ok())
+    };
+    let who = |subject: &str| -> String {
+        people
+            .iter()
+            .find(|p| p.subject == subject)
+            .map(|p| p.label().to_string())
+            .unwrap_or_else(|| subject.to_string())
+    };
+    match act {
+        Act::CreateGroup { name } => w.get("people.create_group", &[("name", name)]).ok(),
+        Act::RenameGroup { group: id, name } => w
+            .get(
+                "people.rename_group",
+                &[("group", &group(id)?), ("name", name)],
+            )
+            .ok(),
+        Act::DeleteGroup { group: id } => {
+            w.get("people.delete_group", &[("group", &group(id)?)]).ok()
+        }
+        Act::RemoveGroupMember { group: id, subject } => w
+            .get(
+                "people.remove_from_group",
+                &[("who", &who(subject)), ("group", &group(id)?)],
+            )
+            .ok(),
+        Act::SetGroupMember {
+            group: id,
+            subject,
+            role,
+        } => {
+            let g = groups.iter().find(|g| g.id == *id)?;
+            let key = if !g.members.iter().any(|m| m.subject == *subject) {
+                "people.add_to_group"
+            } else if role == "manager" {
+                "people.make_role_manager"
+            } else {
+                "people.make_role_member"
+            };
+            w.get(
+                key,
+                &[("who", &who(subject)), ("group", &g.shown_name(w).ok()?)],
+            )
+            .ok()
+        }
+        _ => None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -430,6 +487,77 @@ mod tests {
         let (groups, people) = arrange(g, p);
         assert!(groups[0].everyone);
         assert_eq!(people.len(), 1);
+    }
+
+    #[test]
+    fn each_change_is_named_as_the_ipad_names_it() {
+        let w = WordBook::load(&WordBook::default_root(), "en").unwrap();
+        let groups = vec![Group {
+            id: "g1".into(),
+            name: "Support".into(),
+            everyone: false,
+            members: vec![Member {
+                subject: "s1".into(),
+                role: "member".into(),
+            }],
+            agents: vec![],
+        }];
+        let people = vec![Person {
+            subject: "s1".into(),
+            role: "member".into(),
+            status: "active".into(),
+            email: Some("rae@acme.test".into()),
+            you: false,
+        }];
+        let p = |act: Act| prompt(&w, &act, &groups, &people);
+        assert_eq!(
+            p(Act::CreateGroup {
+                name: "Help".into()
+            })
+            .as_deref(),
+            Some("Create the group Help")
+        );
+        assert_eq!(
+            p(Act::RenameGroup {
+                group: "g1".into(),
+                name: "Help".into()
+            })
+            .as_deref(),
+            Some("Rename Support to Help")
+        );
+        assert_eq!(
+            p(Act::DeleteGroup { group: "g1".into() }).as_deref(),
+            Some("Delete the group Support")
+        );
+        assert_eq!(
+            p(Act::RemoveGroupMember {
+                group: "g1".into(),
+                subject: "s1".into()
+            })
+            .as_deref(),
+            Some("Remove rae@acme.test from Support")
+        );
+        assert_eq!(
+            p(Act::SetGroupMember {
+                group: "g1".into(),
+                subject: "s1".into(),
+                role: "manager".into()
+            })
+            .as_deref(),
+            Some("Make rae@acme.test a manager of Support")
+        );
+        // Someone not yet in the group is added; someone not read is named by their subject.
+        assert_eq!(
+            p(Act::SetGroupMember {
+                group: "g1".into(),
+                subject: "s9".into(),
+                role: "member".into()
+            })
+            .as_deref(),
+            Some("Add s9 to Support")
+        );
+        // A group not read: no name, so no prompt rather than a wrong one.
+        assert_eq!(p(Act::DeleteGroup { group: "gx".into() }), None);
     }
 
     #[test]

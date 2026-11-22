@@ -987,19 +987,28 @@ fn activate(app: &adw::Application, o: &Options) {
     if matches!(o.page.as_deref(), Some("pin-sheet") | Some("pin-sheet-add")) {
         use tafs_core::security_key::Failure;
         // `pin-sheet-add`: the same sheet adding the key when the computer is paired.
-        let present = if o.page.as_deref() == Some("pin-sheet-add") {
-            pin_sheet::present_add
+        let w = app_state.words.clone();
+        let attempt: pin_sheet::Attempt =
+            std::sync::Arc::new(|_| Err(fido_key::KeyError::Key(Failure::NoKey)));
+        let tries: pin_sheet::ReadTries = std::sync::Arc::new(|| Ok(5));
+        let stop: pin_sheet::StopKey = std::sync::Arc::new(|| {});
+        if o.page.as_deref() == Some("pin-sheet-add") {
+            pin_sheet::present_add(w, &window, attempt, tries, stop, Rc::new(|_| {}));
         } else {
-            pin_sheet::present
-        };
-        present(
-            app_state.words.clone(),
-            &window,
-            std::sync::Arc::new(|_| Err(fido_key::KeyError::Key(Failure::NoKey))),
-            std::sync::Arc::new(|| Ok(5)),
-            std::sync::Arc::new(|| {}),
-            Rc::new(|_| {}),
-        );
+            // The sample's act, named as its prompt: signing out the sample's other device.
+            let act = w
+                .get("settings.devices.sign_out_prompt", &[("device", "iPad")])
+                .ok();
+            pin_sheet::present(
+                w,
+                &window,
+                act.as_deref(),
+                attempt,
+                tries,
+                stop,
+                Rc::new(|_| {}),
+            );
+        }
     }
     // `--app-event`: an app event's filters before signing (`AppEventApprovalSheet`), signed in,
     // for its screenshot: its Approve is the gate's line, so nothing is ever signed.

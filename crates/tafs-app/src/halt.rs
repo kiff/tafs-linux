@@ -286,9 +286,20 @@ pub fn page(w: Rc<WordBook>, source: Rc<HaltSource>, whose: Whose) -> gtk::Widge
                     let act = tafs_core::signed::Act::Resume {
                         agent: whose.agent.clone(),
                     };
+                    // "Resume Support replies", or with no taf "Resume all your tafs" (the act's own).
+                    let what = whose
+                        .name
+                        .as_ref()
+                        .and_then(|n| w.get("taf.halt.resume_prompt", &[("taf", n)]).ok());
                     let (w, slot2) = (w.clone(), slot.clone());
                     b.connect_clicked(move |_| {
-                        crate::approval::refuse(&w, tafs_core::sidebar::Mode::Kiff, &act, &slot2)
+                        crate::approval::refuse_as(
+                            &w,
+                            tafs_core::sidebar::Mode::Kiff,
+                            &act,
+                            what.clone(),
+                            &slot2,
+                        )
                     });
                     body.append(&b);
                     body.append(&slot);

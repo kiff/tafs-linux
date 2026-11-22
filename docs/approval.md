@@ -227,6 +227,14 @@ the time zone, sharing, resuming, discarding a setup, removing a taf, trials).
 - The PIN sheet asks the key once. Its answer is checked (`passkey::header`'s refusals), and the
   request goes with `KIFF-Passkey-Assertion`, to KIFF, or to tafs cloud for its own signed routes
   (`kiff::send_with_key`).
+- **Removing a taf for good** goes in the iPad's order (`AppModel.removeTaf`): the key approves,
+  then its Cards are revoked at KIFF with the session, one plain call each, then tafs cloud's
+  `DELETE` goes with the approval. What didn't go is said in the app's words: Cards KIFF didn't
+  revoke, the parts tafs cloud couldn't remove (`removal::after`), or that tafs cloud didn't
+  answer (`removal::cloud_did_not_answer`).
+- **The sheet names the act** in its lead ("This needs your security key: {act}. Plug it in,
+  then touch it and enter its PIN."), `{act}` being the iPad's own Face ID reason for it
+  (`approval::refuse_as`, `people::prompt`, `Act::own_prompt`).
 - Once sent, the sheet closes, whatever comes back. A refusal shows KIFF's own line where the
   act's line is. A lost answer shows the network's line, and the sheet offers no second PIN try:
   the act may already have reached KIFF, and a new assertion would send it again (a group made

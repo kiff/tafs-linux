@@ -37,12 +37,19 @@ pub fn can_approve(kept: Option<&KeptSession>, act: &Act) -> bool {
 
 /// Asks the key to approve `act` over `parent`, and sends it. `done` hears once: `Ok` once KIFF
 /// took it, or the line to show; nothing when the person cancelled.
+///
+/// `revoke_first`: Cards revoked at KIFF once the key approved and before the act goes (a taf
+/// removed for good, `AppModel.removeTaf`): KIFF's, so revoked with the session, one plain call
+/// each; how many KIFF didn't revoke is said with tafs cloud's answer.
+#[allow(clippy::too_many_arguments)]
 pub fn approve(
     w: Rc<WordBook>,
     parent: &impl gtk::prelude::IsA<gtk::Widget>,
     kept: KeptSession,
     languages: Vec<&'static str>,
     act: &Act,
+    what: Option<&str>,
+    revoke_first: Vec<String>,
     done: Approved,
 ) {
     let (Some((method, path, body)), Some(credential)) = (
@@ -58,6 +65,7 @@ pub fn approve(
     let open = Arc::new(OpenKey::default());
     // KIFF's answer when it refused what the key approved: said once the sheet closes.
     let refused: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
+    let removing = matches!(act, Act::RemoveTaf { .. });
     let attempt: crate::pin_sheet::Attempt = {
         let (open, refused, w2) = (open.clone(), refused.clone(), (*w).clone());
         Arc::new(move |pin| {
@@ -77,16 +85,37 @@ pub fn approve(
             // What KIFF would refuse is never sent.
             let header = passkey::header(&signed_at, &credential, &client_data, &assertion, None)
                 .map_err(|_| KeyError::Unreadable)?;
+            // Its Cards first, as the iPad's removal: approved, then revoked, then sent.
+            let cards_left = revoke_first
+                .iter()
+                .filter(|card| !revoke(&token, &languages, card))
+                .count();
             // From here the act may have reached KIFF: whatever comes back, the sheet closes with
             // KIFF's line (or the network's), and never offers a try that would send it again.
-            let line =
+            // `Ok`: it went, with a removal's line when a part didn't; `Err`: why it didn't.
+            let sent: Result<Option<String>, String> =
                 match crate::kiff::send_with_key(&token, &languages, method, &path, &body, &header)
                 {
-                    Ok(a) if (200..300).contains(&a.status) => return Ok(()),
-                    Ok(a) => tafs_core::signin::refusal(&a, Some(&w2)).words(&w2),
-                    Err(e) => e.words(&w2),
+                    Ok(a) if (200..300).contains(&a.status) => Ok(removing
+                        .then(|| tafs_core::removal::read(&a.body))
+                        .flatten()
+                        .and_then(|r| tafs_core::removal::after(&w2, cards_left, &r).ok())
+                        .flatten()),
+                    Ok(a) => Err(tafs_core::signin::refusal(&a, Some(&w2))
+                        .words(&w2)
+                        .unwrap_or_default()),
+                    Err(e) => Err(e.words(&w2).unwrap_or_default()),
                 };
-            *refused.lock().unwrap_or_else(|e| e.into_inner()) = line.ok();
+            let line = match sent {
+                Ok(None) => return Ok(()),
+                Ok(Some(not_finished)) => Some(not_finished),
+                // A removal that didn't answer says what became of its Cards first.
+                Err(why) if removing => {
+                    tafs_core::removal::cloud_did_not_answer(&w2, cards_left, &why).ok()
+                }
+                Err(why) => Some(why),
+            };
+            *refused.lock().unwrap_or_else(|e| e.into_inner()) = line;
             Err(KeyError::Sent)
         })
     };
@@ -109,7 +138,14 @@ pub fn approve(
             done(closed_with(&w, e, kiff))
         })
     };
-    crate::pin_sheet::present(w, parent, attempt, read_tries, stop, sheet_done);
+    crate::pin_sheet::present(w, parent, what, attempt, read_tries, stop, sheet_done);
+}
+
+/// Revokes one Card at KIFF as the session (`kiff.revoke(cardID:)`): true once KIFF took it.
+fn revoke(token: &str, languages: &[&str], card: &str) -> bool {
+    tafs_core::signed::Unsigned::new("POST", tafs_core::signed::revoke_path(card), b"{}".to_vec())
+        .and_then(|call| crate::kiff::kiff_send(token, languages, &call).ok())
+        .is_some_and(|a| (200..300).contains(&a.status))
 }
 
 /// What the sheet closing comes to: approved; cancelled (nothing); or the line to show, KIFF's

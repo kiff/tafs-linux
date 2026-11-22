@@ -5,6 +5,7 @@
 
 use gtk::prelude::*;
 use tafs_core::approval::{self, Gate, NotReady};
+use tafs_core::security_key::words;
 use tafs_core::sidebar::Mode;
 use tafs_core::words::WordBook;
 
@@ -54,6 +55,31 @@ pub fn refusal_slot() -> gtk::Box {
 /// With this computer's security key on (`key_approval`), signed in with a session that approves
 /// with it, the tap asks the key instead, and `slot` says why when KIFF or the key refused.
 pub fn refuse(w: &WordBook, mode: Mode, act: &tafs_core::signed::Act, slot: &gtk::Box) {
+    refuse_as(w, mode, act, None, slot)
+}
+
+/// `refuse`, with the act named as the iPad names it to Face ID (`what`: "Sign the iPad out of
+/// your account"): the security key's sheet says it in its lead.
+pub fn refuse_as(
+    w: &WordBook,
+    mode: Mode,
+    act: &tafs_core::signed::Act,
+    what: Option<String>,
+    slot: &gtk::Box,
+) {
+    refuse_with(w, mode, act, what, vec![], slot)
+}
+
+/// `refuse_as`, revoking `cards` at KIFF once the key approved and before the act goes: a taf
+/// removed for good (`AppModel.removeTaf`).
+pub fn refuse_with(
+    w: &WordBook,
+    mode: Mode,
+    act: &tafs_core::signed::Act,
+    what: Option<String>,
+    cards: Vec<String>,
+    slot: &gtk::Box,
+) {
     while let Some(c) = slot.first_child() {
         slot.remove(&c);
     }
@@ -71,6 +97,8 @@ pub fn refuse(w: &WordBook, mode: Mode, act: &tafs_core::signed::Act, slot: &gtk
                     kept,
                     languages,
                     act,
+                    what.or_else(|| act.own_prompt(w)).as_deref(),
+                    cards,
                     std::rc::Rc::new(move |outcome| match outcome {
                         Some(Err(why)) => {
                             slot2.append(&text(&why, 13, 400, &["tafs-no"]));
@@ -86,6 +114,27 @@ pub fn refuse(w: &WordBook, mode: Mode, act: &tafs_core::signed::Act, slot: &gtk
     match tafs_core::signed::tap(w, mode, act) {
         Ok(Some(n)) => {
             slot.append(&not_ready(&n));
+            // With the key on, signed in with KIFF: no key with this computer says what one is,
+            // and wherever this computer can't approve (no key, or an act only the phone does),
+            // "Approve on your phone instead" (the PM's 20:12). Nothing is handed over: the act
+            // is done again on the phone, and the button puts this away.
+            if tafs_core::passkey::ENABLED && mode == Mode::Kiff {
+                let kept = crate::store::load(chrono::Utc::now().timestamp());
+                let has_key = kept.as_ref().is_some_and(|k| k.security_key.is_some());
+                if let (false, Ok(line)) = (has_key, words::none_paired(w)) {
+                    slot.append(&text(&line, 12, 400, &["tafs-dim"]));
+                }
+                if let Ok(label) = words::on_phone(w) {
+                    let row = gtk::Box::new(gtk::Orientation::Horizontal, 10);
+                    let on_phone = outline(&label);
+                    on_phone.set_hexpand(false);
+                    on_phone.set_widget_name("approval.on-phone");
+                    let s = slot.clone();
+                    on_phone.connect_clicked(move |_| s.set_visible(false));
+                    row.append(&on_phone);
+                    slot.append(&row);
+                }
+            }
             slot.set_visible(true);
             // Measured as it was added, the wrapped line can keep a one-line height: it's
             // measured again once drawn, so the sheet or screen around it makes room.

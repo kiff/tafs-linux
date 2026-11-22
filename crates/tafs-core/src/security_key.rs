@@ -350,6 +350,22 @@ pub mod words {
         w.line("approval.security_key.failed")
     }
 
+    /// "This needs your security key: {act}. Plug it in, then touch it and enter its PIN."
+    pub fn before(w: &WordBook, act: &str) -> Result<String, WordsError> {
+        w.get("approval.security_key.before", &[("act", act)])
+    }
+
+    /// No key with this computer yet, and what a security key is (a small USB key you touch;
+    /// not a USB stick).
+    pub fn none_paired(w: &WordBook) -> Result<String, WordsError> {
+        w.line("approval.security_key.none_paired")
+    }
+
+    /// "Approve on your phone instead".
+    pub fn on_phone(w: &WordBook) -> Result<String, WordsError> {
+        w.line("approval.security_key.on_phone")
+    }
+
     /// The tries left before the key locks, read before the PIN is asked, when the key says.
     pub fn tries_left(w: &WordBook, count: i32) -> Result<String, WordsError> {
         w.count("approval.security_key.tries_left", count as i64, &[])
@@ -364,6 +380,10 @@ pub mod words {
     #[derive(Debug, Clone, PartialEq, Eq)]
     pub struct SheetLines {
         pub title: String,
+        /// Above the PIN's ask: what's needed and for what ("This needs your security key: Sign
+        /// the iPad out of your account. Plug it in, then touch it and enter its PIN."); adding
+        /// the key, what a security key is.
+        pub lead: Option<String>,
         pub enter_pin: String,
         pub pin: String,
         pub touch: String,
@@ -377,6 +397,7 @@ pub mod words {
     pub fn add_sheet(w: &WordBook) -> Result<SheetLines, WordsError> {
         Ok(SheetLines {
             title: w.line("approval.security_key.add_title")?,
+            lead: Some(none_paired(w)?),
             enter_pin: w.line("approval.security_key.add_enter_pin")?,
             pin: w.line("approval.security_key.pin")?,
             touch: w.line("approval.security_key.touch")?,
@@ -385,9 +406,11 @@ pub mod words {
         })
     }
 
-    pub fn sheet(w: &WordBook) -> Result<SheetLines, WordsError> {
+    /// The sheet approving one act, named by `act` (its prompt, as the iPad's Face ID reason).
+    pub fn sheet(w: &WordBook, act: Option<&str>) -> Result<SheetLines, WordsError> {
         Ok(SheetLines {
             title: w.line("approval.security_key.title")?,
+            lead: act.map(|a| before(w, a)).transpose()?,
             enter_pin: w.line("approval.security_key.enter_pin")?,
             pin: w.line("approval.security_key.pin")?,
             touch: w.line("approval.security_key.touch")?,
@@ -631,7 +654,10 @@ mod tests {
         );
         for lang in crate::words::SHIPPED {
             let w = book(lang);
-            words::sheet(&w).unwrap();
+            let lead = words::sheet(&w, Some("x")).unwrap().lead.unwrap();
+            assert!(lead.contains('x') && !lead.contains('{'), "{lang}: {lead}");
+            assert!(words::add_sheet(&w).unwrap().lead.is_some(), "{lang}");
+            words::on_phone(&w).unwrap();
             for n in [1, 2, 5, 8] {
                 words::tries_left(&w, n).unwrap();
                 words::line(
@@ -643,6 +669,27 @@ mod tests {
                 .unwrap();
             }
         }
+    }
+
+    #[test]
+    fn the_sheet_names_the_act_and_adding_says_what_a_key_is() {
+        let w = book("en");
+        let l = words::sheet(&w, Some("Sign the iPad out of your account")).unwrap();
+        assert_eq!(
+            l.lead.as_deref(),
+            Some("This needs your security key: Sign the iPad out of your account. Plug it in, then touch it and enter its PIN.")
+        );
+        // No act named: no lead, never a hole.
+        assert_eq!(words::sheet(&w, None).unwrap().lead, None);
+        let add = words::add_sheet(&w).unwrap();
+        assert!(add
+            .lead
+            .unwrap()
+            .contains("an ordinary USB stick won't work"));
+        assert_eq!(
+            words::on_phone(&w).unwrap(),
+            "Approve on your phone instead"
+        );
     }
 
     #[test]

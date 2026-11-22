@@ -146,9 +146,19 @@ pub fn page(
     }));
     // The tap that would sign: the words where the iPad's error goes, and nothing sent.
     let refuse: Rc<dyn Fn(Act)> = {
-        let (w, refused, refused_panel) = (w.clone(), refused.clone(), refused_panel.clone());
+        let (w, refused, refused_panel, state) = (
+            w.clone(),
+            refused.clone(),
+            refused_panel.clone(),
+            state.clone(),
+        );
         Rc::new(move |act: Act| {
-            crate::approval::refuse(&w, mode, &act, &refused);
+            // Named as the iPad names it, from the groups and people read.
+            let what = {
+                let s = state.borrow();
+                tafs_core::people::prompt(&w, &act, &s.groups, &s.people)
+            };
+            crate::approval::refuse_as(&w, mode, &act, what, &refused);
             refused_panel.set_visible(refused.get_visible());
         })
     };
@@ -559,7 +569,8 @@ fn name_group(
         let (w, field, refused, group) = (w.clone(), field.clone(), refused.clone(), group.clone());
         Rc::new(move || {
             if let Some(act) = name_act(group.as_ref(), &field.text()) {
-                crate::approval::refuse(&w, mode, &act, &refused);
+                let what = tafs_core::people::prompt(&w, &act, group.as_slice(), &[]);
+                crate::approval::refuse_as(&w, mode, &act, what, &refused);
             }
         })
     };
@@ -663,8 +674,19 @@ fn add_to_group(
                 (group.clone(), (*person).clone(), as_manager.clone());
             move || add_act(&group, &person, as_manager.is_active(), can_manage)
         };
-        let (w, refused) = (w.clone(), refused.clone());
-        b.connect_clicked(move |_| crate::approval::refuse(&w, mode, &act_for(), &refused));
+        let (w, refused, named) = (
+            w.clone(),
+            refused.clone(),
+            (
+                std::slice::from_ref(group).to_vec(),
+                vec![(*person).clone()],
+            ),
+        );
+        b.connect_clicked(move |_| {
+            let act = act_for();
+            let what = tafs_core::people::prompt(&w, &act, &named.0, &named.1);
+            crate::approval::refuse_as(&w, mode, &act, what, &refused)
+        });
         g.append(&b);
     }
     if them.is_empty() {

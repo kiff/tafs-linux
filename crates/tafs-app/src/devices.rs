@@ -313,15 +313,16 @@ fn sign_out(
     ask.set_response_appearance("sign-out", adw::ResponseAppearance::Destructive);
     ask.set_default_response(Some("cancel"));
     ask.set_close_response("cancel");
-    let (w, act, refused, refused_panel) = (
+    let (w, act, prompt, refused, refused_panel) = (
         w.clone(),
         q.act.clone(),
+        q.prompt.clone(),
         refused.clone(),
         refused_panel.clone(),
     );
     ask.connect_response(None, move |_, response| {
         if response == "sign-out" {
-            crate::approval::refuse(&w, mode, &act, &refused);
+            crate::approval::refuse_as(&w, mode, &act, Some(prompt.clone()), &refused);
             refused_panel.set_visible(refused.get_visible());
         }
     });
