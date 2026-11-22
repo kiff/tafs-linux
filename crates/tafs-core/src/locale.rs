@@ -121,12 +121,13 @@ pub fn list(language: &str, names: &[String]) -> String {
 /// lists them (`PLURALS`): the forms its files carry. A variant takes its base's.
 fn forms(language: &str) -> &'static [&'static str] {
     match base(language) {
-        "pl" => &["one", "few", "many"],
-        "lt" | "cs" | "sk" | "ro" | "hr" => &["one", "few"],
+        "pl" | "ru" => &["one", "few", "many"],
+        "lt" | "cs" | "sk" | "ro" | "hr" | "sr" => &["one", "few"],
         "lv" => &["zero", "one"],
         "sl" => &["one", "two", "few"],
+        "he" => &["one", "two"],
         "ar" => &["zero", "one", "two", "few", "many"],
-        "ja" | "ko" | "id" | "vi" | "th" | "zh" => &[],
+        "ja" | "ko" | "id" | "vi" | "th" | "zh" | "km" | "lo" | "ms" => &[],
         _ => &["one"],
     }
 }

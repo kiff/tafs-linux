@@ -413,6 +413,23 @@ pub fn ordinal(language: &str, n: i64) -> String {
             };
             format!("{d}-{suffix}")
         }
+        "ca" => {
+            let suffix = match n {
+                1 | 3 => "r",
+                2 => "n",
+                4 => "t",
+                _ if n % 100 == 1 && n > 100 => "r",
+                _ if n % 100 == 2 && n > 100 => "n",
+                _ if n % 10 == 1 && n % 100 != 11 && n > 20 => "r",
+                _ if n % 10 == 2 && n % 100 != 12 && n > 20 => "n",
+                _ => "è",
+            };
+            format!("{d}{suffix}")
+        }
+        // ICU's own data for these two: Mongolian takes the English "th" and Lao Thai's "ที่".
+        "mn" => format!("{d}th"),
+        "km" => format!("ទី{d}"),
+        "lo" => format!("ที่\u{200b}{d}"),
         "ar" => d,
         _ => format!("{d}."),
     }
@@ -617,5 +634,10 @@ mod tests {
         assert_eq!(ordinal("ro", 3), "3a");
         assert_eq!(ordinal("ar", 3), "3");
         assert_eq!(ordinal("cs", 3), "3.");
+        assert_eq!(all("ca"), "1r 2n 3r 7è 11è 21r 100è 1.001r");
+        assert_eq!(ordinal("ca", 4), "4t");
+        assert_eq!(ordinal("ca", 112), "112è");
+        assert_eq!(ordinal("km", 3), "ទី3");
+        assert_eq!(ordinal("mk", 3), "3.");
     }
 }

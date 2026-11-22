@@ -1353,7 +1353,13 @@ fn kiffs_usage_lines_at_the_pin() {
         let r = &u.requests.as_ref().unwrap()[0];
         assert!(billing_line(&w, &u).unwrap().is_some());
         // Thai dates count years in the Buddhist era, as CLDR's Thai does: 2026 is 2569.
-        let year = if lang == "th" { "2569" } else { "2026" };
+        // Nepali writes its own digits, as CLDR's Nepali does (the iPad's `IOS_LOCALE` keeps
+        // Latin digits for Arabic only).
+        let year = match lang {
+            "th" => "2569",
+            "ne" => "२०२६",
+            _ => "2026",
+        };
         assert!(
             solo_still_renews(&w, &u).unwrap().unwrap().contains(year),
             "{lang}"

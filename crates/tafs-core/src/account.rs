@@ -64,9 +64,9 @@ pub fn signed_in_as(account: &Account) -> Option<String> {
 /// The languages kiff.dev has tafs's Terms and Privacy policy in, besides English, at
 /// `kiff.dev/<lang>/tafs/terms` and `/<lang>/tafs/privacy`, by KIFF's code: Traditional Chinese
 /// is served under "zh", as pt-BR is under "pt" (`Legal.translated`). The English pages govern.
-pub const LEGAL_LANGUAGES: [&str; 24] = [
+pub const LEGAL_LANGUAGES: [&str; 30] = [
     "de", "es", "fr", "it", "nl", "pl", "pt", "ko", "ja", "et", "lt", "lv", "cs", "sk", "sl", "hu",
-    "ro", "bg", "hr", "tr", "id", "vi", "th", "zh",
+    "ro", "bg", "hr", "tr", "id", "vi", "th", "zh", "ca", "mk", "mn", "ne", "km", "lo",
 ];
 
 /// The code a legal page is served under, if kiff.dev has it in the app's language.
@@ -133,6 +133,12 @@ pub fn language_name(language: &str) -> &'static str {
         "vi" => "Tiếng Việt",
         "th" => "ไทย",
         "zh-Hant" => "中文（繁體）",
+        "ca" => "Català",
+        "mk" => "Македонски",
+        "mn" => "Монгол",
+        "ne" => "नेपाली",
+        "km" => "ខ្មែរ",
+        "lo" => "ລາວ",
         "pt-BR" => "Português (Brasil)",
         "ar" => "العربية",
         _ => "English",

@@ -84,14 +84,16 @@ impl Money {
         // ("€ 5.000"), or after it with a space ("5.000 €"). A letter symbol before a number
         // always stands apart: "CHF 30".
         match crate::locale::base(language) {
-            "en" | "ja" | "ko" | "tr" | "id" | "th" | "zh" => {
+            "en" | "ja" | "ko" | "tr" | "id" | "th" | "zh" | "lo" => {
                 if symbol.chars().last().is_some_and(char::is_alphabetic) {
                     format!("{symbol}{NBSP}{n}")
                 } else {
                     format!("{symbol}{n}")
                 }
             }
-            "pt" | "nl" => format!("{symbol}{NBSP}{n}"),
+            "pt" | "nl" | "mn" | "ne" => format!("{symbol}{NBSP}{n}"),
+            // Khmer writes the symbol right after the number.
+            "km" => format!("{n}{symbol}"),
             // Arabic opens with a right-to-left mark, as CLDR writes it.
             "ar" => format!("\u{200f}{n}{NBSP}{symbol}"),
             _ => format!("{n}{NBSP}{symbol}"),
@@ -130,14 +132,18 @@ fn symbol(code: &str, language: &str) -> String {
     let s = match (code, crate::locale::base(language)) {
         ("EUR", "hu" | "ro") => "EUR",
         ("EUR", _) => "€",
-        ("USD", "en" | "de" | "ja" | "et" | "lv" | "sl" | "tr") => "$",
+        ("USD", "en" | "de" | "ja" | "et" | "lv" | "sl" | "tr" | "mn" | "km") => "$",
         ("USD", "fr") => "$US",
         ("USD", "bg") => "щ.д.",
-        ("USD", "es" | "pt" | "nl" | "ko" | "cs" | "id" | "vi" | "th" | "zh" | "ar") => "US$",
+        (
+            "USD",
+            "es" | "pt" | "nl" | "ko" | "cs" | "id" | "vi" | "th" | "zh" | "ar" | "mk" | "ne"
+            | "lo",
+        ) => "US$",
         ("USD", _) => "USD",
         ("GBP", "fr") => "£GB",
         ("GBP", "ar") => "UK£",
-        ("GBP", "es" | "pl" | "lt" | "sk" | "sl" | "hu" | "ro" | "bg" | "hr") => "GBP",
+        ("GBP", "es" | "pl" | "lt" | "sk" | "sl" | "hu" | "ro" | "bg" | "hr" | "mk") => "GBP",
         ("GBP", _) => "£",
         _ => code,
     };
@@ -170,6 +176,10 @@ mod tests {
         assert_eq!(euros(5_000, "pt-BR"), "€\u{a0}5.000");
         assert_eq!(euros(5_000, "ar"), "\u{200f}5,000\u{a0}€");
         assert_eq!(euros(5_000, "tr"), "€5.000");
+        assert_eq!(euros(5_000, "km"), "5,000€");
+        assert_eq!(euros(5_000, "mn"), "€\u{a0}5,000");
+        assert_eq!(euros(5_000, "lo"), "€5.000");
+        assert_eq!(euros(5_000, "ca"), "5.000\u{a0}€");
     }
 
     #[test]
