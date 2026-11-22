@@ -284,7 +284,7 @@ pub fn build(
             let page = match s {
                 Selection::Overview => match &recipes {
                     Some(pane) => crate::recipes::page(pane.clone()),
-                    None => crate::overview::page(&overview, open.clone()),
+                    None => crate::overview::page(&overview, open.clone(), w.clone()),
                 },
                 // "Your brief" in its place once there is one; Needs you, as today, otherwise.
                 Selection::NeedsYou => {

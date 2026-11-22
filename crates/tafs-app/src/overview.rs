@@ -18,7 +18,11 @@ thread_local! {
 /// The column's widest, from the leading edge of a centred column (`frame(maxWidth: 980)`).
 const MAX_WIDTH: i32 = 980;
 
-pub fn page(o: &OverviewLines, open: Rc<dyn Fn(Selection)>) -> gtk::Widget {
+pub fn page(
+    o: &OverviewLines,
+    open: Rc<dyn Fn(Selection)>,
+    w: Rc<tafs_core::words::WordBook>,
+) -> gtk::Widget {
     let column = gtk::Box::new(gtk::Orientation::Vertical, 20);
     column.set_margin_start(24);
     column.set_margin_end(24);
@@ -38,7 +42,13 @@ pub fn page(o: &OverviewLines, open: Rc<dyn Fn(Selection)>) -> gtk::Widget {
         tafs_core::overview::Board::Overview => {
             column.append(&crate::illustrations::overview());
         }
-        tafs_core::overview::Board::NoTafs => column.append(&crate::illustrations::no_tafs()),
+        tafs_core::overview::Board::NoTafs => {
+            column.append(&crate::illustrations::no_tafs());
+            // The first Home: tafs cloud's line, else the app's; Ask Coach; the cards again.
+            if let Some((title, lead)) = &o.first_home {
+                column.append(&first_home(&w, title, lead.as_deref()));
+            }
+        }
         tafs_core::overview::Board::Mascot => {
             let m = crate::widgets::mascot(72);
             m.set_halign(gtk::Align::Center);
@@ -244,8 +254,38 @@ fn table(o: &OverviewLines, open: &Rc<dyn Fn(Selection)>, label: Option<&str>) -
         }
         y += 1;
     }
-    if let Some(empty) = &o.empty {
+    // The first Home says it in its own panel instead.
+    if let (Some(empty), None) = (&o.empty, &o.first_home) {
         grid.attach(&text(empty, 14, 400, &["tafs-dim"]), 0, y, 4, 1);
     }
     grid
+}
+
+/// The first Home (`HomeView`'s, on the Overview with no taf): its panel, Ask Coach (a new
+/// conversation, `startNewTaf`) and How tafs works (the three cards and the legal pages).
+fn first_home(w: &Rc<tafs_core::words::WordBook>, title: &str, lead: Option<&str>) -> gtk::Box {
+    let v = gtk::Box::new(gtk::Orientation::Vertical, 10);
+    v.set_widget_name("home.first");
+    let p = crate::widgets::panel(false);
+    p.append(&text(title, 15, 600, &["tafs-ink"]));
+    if let Some(lead) = lead {
+        p.append(&text(lead, 14, 400, &["tafs-soft"]));
+    }
+    v.append(&p);
+    let ask = crate::widgets::primary(&w.line("coach.ask").unwrap_or_default());
+    ask.set_widget_name("home.askCoach");
+    ask.connect_clicked(|_| crate::coach_start::new_taf());
+    v.append(&ask);
+    let how = crate::widgets::outline(&w.line("onboarding.how_it_works").unwrap_or_default());
+    how.set_widget_name("home.howItWorks");
+    {
+        let w = w.clone();
+        how.connect_clicked(move |b| {
+            if let Some(root) = b.root() {
+                crate::onboarding::how_it_works(&root, w.clone());
+            }
+        });
+    }
+    v.append(&how);
+    v
 }

@@ -91,7 +91,7 @@ kiff/work#17.
 
 | iPad file | Lines | Why |
 | :- | -: | :- |
-| HomeView.swift | 403 | The phone's Home. A wide screen uses HomeSplitView. |
+| HomeView.swift | 403 | The phone's Home. A wide screen uses HomeSplitView. Its first Home (Ask Coach and How tafs works with no taf, lines 137–152) is on Linux's Overview, as on every desktop (the PM's (b), kiff/work#20, 22 Nov): `overview.rs` › `first_home`. |
 | TafsBar.swift | 121 | The phone's bar along the foot. A wide screen has the sidebar. |
 | PairComputerView.swift | 222 | The phone's side of pairing: the camera reads a computer's code. The computer's side is tafs-macos's, ported in [pairing](pairing.md) (`pairing.rs`, `tafs-core/pairing.rs`). |
 | TafKnobRemote.swift | 64 | Keeps the remote above the phone's tab bar. |

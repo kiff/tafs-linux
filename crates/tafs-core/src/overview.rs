@@ -55,6 +55,10 @@ pub struct OverviewLines {
     /// labelled taf; and the first chip's word (`labelsAllWords`).
     pub labels: Vec<crate::brief::Label>,
     pub labels_all: String,
+    /// The first Home (the PM's (b), kiff/work#20, 22 Nov, as the iPad's `HomeView` draws it):
+    /// with no taf, for someone who may use Coach, tafs cloud's own empty line (else "No tafs
+    /// yet" and what Coach does), then Ask Coach and How tafs works. None otherwise.
+    pub first_home: Option<(String, Option<String>)>,
 }
 
 /// Where the account's list stands: being read, read, or not read (`loadingList`, `listUnread`).
@@ -76,6 +80,21 @@ pub enum Board {
 }
 
 impl OverviewLines {
+    /// The first Home, when the list is read and holds no taf and the person may use Coach
+    /// (`Onboarding.showsFirstHome`): its lines (`onboarding::first_home_lines`), drawn in the
+    /// empty line's place.
+    pub fn with_first_home(
+        mut self,
+        w: &WordBook,
+        may_use_coach: bool,
+        cloud_words: Option<&str>,
+    ) -> Result<OverviewLines, WordsError> {
+        if may_use_coach && self.list == ListState::Read && self.rows.is_empty() {
+            self.first_home = Some(crate::onboarding::first_home_lines(w, cloud_words)?);
+        }
+        Ok(self)
+    }
+
     /// The lines as the list stands: with no taf, "Loading your tafs…" while it's read and
     /// "Couldn't load your tafs." when it couldn't be, in place of "No tafs yet.".
     pub fn with_list(mut self, w: &WordBook, list: ListState) -> Result<OverviewLines, WordsError> {
@@ -242,6 +261,7 @@ pub fn lines(
         each_line_opens: w.line("home.overview.each_line_opens")?,
         labels: vec![],
         labels_all: w.line("home.labels_all")?,
+        first_home: None,
     })
 }
 
@@ -288,5 +308,42 @@ mod list_tests {
         assert_eq!(unread.board(), Board::Mascot);
         let read = o.with_list(&w, ListState::Read).unwrap();
         assert_eq!(read.empty.as_deref(), Some("No tafs yet."));
+    }
+
+    #[test]
+    fn the_first_home_is_for_someone_who_may_use_coach_with_no_taf() {
+        let w = WordBook::load(&WordBook::default_root(), "en").unwrap();
+        let read = |may| {
+            lines(&w, &[], &[], 0, "")
+                .unwrap()
+                .with_list(&w, ListState::Read)
+                .unwrap()
+                .with_first_home(&w, may, None)
+                .unwrap()
+                .first_home
+        };
+        let (title, lead) = read(true).unwrap();
+        assert_eq!(title, w.line("home.no_tafs").unwrap());
+        assert!(lead.unwrap().starts_with("Tell Coach"));
+        assert_eq!(read(false), None);
+        // tafs cloud's own line comes first, with no lead of the app's.
+        let o = lines(&w, &[], &[], 0, "")
+            .unwrap()
+            .with_list(&w, ListState::Read)
+            .unwrap()
+            .with_first_home(&w, true, Some("Your first taf starts here."))
+            .unwrap();
+        assert_eq!(
+            o.first_home,
+            Some(("Your first taf starts here.".into(), None))
+        );
+        // Not while the list is read.
+        let loading = lines(&w, &[], &[], 0, "")
+            .unwrap()
+            .with_list(&w, ListState::Loading)
+            .unwrap()
+            .with_first_home(&w, true, None)
+            .unwrap();
+        assert_eq!(loading.first_home, None);
     }
 }

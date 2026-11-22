@@ -2269,6 +2269,13 @@ impl App {
         let overview =
             tafs_core::overview::lines(words, &tafs, &model.held, count, &needs_you_words)
                 .and_then(|o| o.with_list(words, list))
+                .and_then(|o| {
+                    if mode == Mode::Kiff {
+                        o.with_first_home(words, model.may_use_coach, model.home_words.as_deref())
+                    } else {
+                        Ok(o)
+                    }
+                })
                 .unwrap_or_else(|e| fail(e));
         // Home's labels, as chips over the grid and on each taf's line (docs/labels.md); none
         // sent, none drawn. The sample's are the iPad's screenshots' only.
