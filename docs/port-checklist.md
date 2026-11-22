@@ -73,6 +73,18 @@ kiff/work#17.
 
 None: ChromeViews, the last, is ported (batch (d), to the "Your Chrome" contract).
 
+**Changed from `9843655` to `aa8f202a`** (the pin moved to tafs main, 22 Nov, 23 commits; checked here):
+- **New: `ChromeShotView.swift`** (tafs#1725): the picture kept before a Chrome step, opened from a receipt. Its own
+  batch, after this move.
+- **RecordView** (tafs#1725): "See the page before this step" on a receipt; with `ChromeShotView`.
+- **AccountPreferencesView, SignInView** (tafs#1711): Account › Sign-in's email-code setting (`CodeSignInRow`). Not on
+  Linux yet: its own item.
+- **ChromeViews** (tafs#1711): Copy for the pairing code, on the phone that shows it; Linux pairs on the phone, so
+  nothing here.
+- **FilesViews** (tafs#1728): a failed read, delete or download says so; Linux says why since tafs-linux#87.
+- **HomeView, ShareViews** (tafs#1735): the first Home in one block, for the phone's Home and the iPad's wide
+  Overview; Linux's Overview with no taf already draws it (`first-home`).
+
 **Changed since the old pin (`b3c80a8`), checked in the pin's PR:**
 - **`chevron.right` → `chevron.forward`** (UsageView, TafDialPanel, HomeRecipes, HaltScreen,
   CreditsViews, CoachToolsStep, ShareViews, RecipeGallery, WorkLog) and **`chevron.left` →
