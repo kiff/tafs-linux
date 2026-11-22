@@ -965,9 +965,15 @@ fn activate(app: &adw::Application, o: &Options) {
     window.present();
     // `--page pin-sheet`: the security key's PIN sheet, for its screenshot. Its answers are
     // canned (five tries left; no key plugged in): no key is asked, nothing is signed.
-    if o.page.as_deref() == Some("pin-sheet") {
+    if matches!(o.page.as_deref(), Some("pin-sheet") | Some("pin-sheet-add")) {
         use tafs_core::security_key::Failure;
-        pin_sheet::present(
+        // `pin-sheet-add`: the same sheet adding the key when the computer is paired.
+        let present = if o.page.as_deref() == Some("pin-sheet-add") {
+            pin_sheet::present_add
+        } else {
+            pin_sheet::present
+        };
+        present(
             app_state.words.clone(),
             &window,
             std::sync::Arc::new(|_| Err(fido_key::KeyError::Key(Failure::NoKey))),
