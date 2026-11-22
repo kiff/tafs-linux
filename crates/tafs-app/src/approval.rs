@@ -66,6 +66,19 @@ pub fn refuse_as(
     what: Option<String>,
     slot: &gtk::Box,
 ) {
+    refuse_with(w, mode, act, what, vec![], slot)
+}
+
+/// `refuse_as`, revoking `cards` at KIFF once the key approved and before the act goes: a taf
+/// removed for good (`AppModel.removeTaf`).
+pub fn refuse_with(
+    w: &WordBook,
+    mode: Mode,
+    act: &tafs_core::signed::Act,
+    what: Option<String>,
+    cards: Vec<String>,
+    slot: &gtk::Box,
+) {
     while let Some(c) = slot.first_child() {
         slot.remove(&c);
     }
@@ -84,6 +97,7 @@ pub fn refuse_as(
                     languages,
                     act,
                     what.or_else(|| act.own_prompt(w)).as_deref(),
+                    cards,
                     std::rc::Rc::new(move |outcome| match outcome {
                         Some(Err(why)) => {
                             slot2.append(&text(&why, 13, 400, &["tafs-no"]));

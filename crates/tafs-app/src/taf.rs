@@ -495,6 +495,12 @@ pub fn page(
                 discuss: t.may_use_coach && t.manages,
                 may_use_coach: t.may_use_coach,
                 knobs,
+                // Revoked first when it's removed for good, unless its Card already was.
+                card_ids: if t.revoked {
+                    vec![]
+                } else {
+                    t.card_ids.clone()
+                },
                 open_coach: open_coach.clone(),
                 open_connect: open_connect.clone(),
                 open_activity,
