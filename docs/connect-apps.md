@@ -83,9 +83,12 @@ for a key where it goes ("The key goes from this phone…"), and in the approve 
 
 `AppConnectionsView`, over the list with Back: "Your {app} connections", then:
 
-- "Start from Connected apps on this computer first.": this computer doesn't read the account's
-  connections (`readsConnections`: set up with planque, which is signed, and this computer never
-  is). Signed in with KIFF that's all there is.
+- The account's connections, read from planque with this computer's device key on planque's
+  safe route (`GET …/grants`, as Account › Chrome and a taf's steps read it), which signs and
+  grants nothing (`readsConnections`, `refreshConnections`). Each is put under the taf whose holder
+  in KIFF it names (`holderIDs`, from Home). They're read when Connect apps opens and again once
+  the security key approved an act on one. A read that fails leaves them as they were. Until one
+  is read: "Start from Connected apps on this computer first."
 - A section per taf the connections were made for, those needing attention first (a sign-in that
   waits, one its vendor signed out), then by name (`connectionGroups`). A connection planque draws
   (`rowFromPlanque`: its health and actions) is its name, "Used by …", its health (dim, amber

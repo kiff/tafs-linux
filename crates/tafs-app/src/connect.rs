@@ -40,6 +40,8 @@ pub enum ConnectSource {
         languages: Vec<&'static str>,
         connectable: Vec<Connectable>,
         manages: bool,
+        /// Each KIFF agent's taf by name (`holderIDs`), revoked ones left out.
+        holders: Vec<(String, String)>,
     },
     /// A screenshot's answers (`--connect`): `answer` as tafs cloud's first page. A fixture's
     /// read never sends.
@@ -97,11 +99,15 @@ impl ConnectSource {
 pub(crate) struct Ctx {
     pub w: Rc<WordBook>,
     pub source: ConnectSource,
-    /// The account's connections: the sample's in a screenshot, else none. This computer reads
-    /// none from planque (`readsConnections`).
-    pub grants: Vec<Grant>,
+    /// The account's connections: the sample's in a screenshot; signed in with KIFF, planque's
+    /// as this computer reads them (`refreshConnections`), none until read.
+    pub grants: RefCell<Vec<Grant>>,
+    /// Whether they were read (`readsConnections`): the sample's are; planque's once a read went.
+    pub read: std::cell::Cell<bool>,
     /// Each KIFF agent's taf by name (`holderIDs`), revoked ones left out.
     pub holders: Vec<(String, String)>,
+    /// Reads the connections again (`refreshConnections`), after an act the key approved.
+    pub reread: RefCell<Option<Rc<dyn Fn()>>>,
 }
 
 impl Ctx {
@@ -124,7 +130,8 @@ impl Ctx {
     /// The tafs whose connections to an app this computer names (`connectionGroups(of:).tafs`),
     /// for "Used by" while tafs cloud sends no `used_by`.
     fn used_here(&self, app: &App, removed: &std::collections::BTreeSet<String>) -> Vec<String> {
-        let conns = connections_of(app, &self.grants);
+        let grants = self.grants.borrow();
+        let conns = connections_of(app, &grants);
         tafs_core::connections::groups(
             &conns,
             &|g| self.taf_of(g),
@@ -193,6 +200,55 @@ fn proof(
         }
     };
     crate::coach::proof(kept, &id)
+}
+
+/// `refreshConnections`: the account's connections from planque, read with this computer's
+/// device key on planque's safe route (`GET …/grants`, as Account › Chrome and a taf's steps read
+/// it), then the screen drawn again with them. Reading signs and grants nothing. Signed in with
+/// KIFF only; a read that fails leaves the connections as they were, as the iPad's.
+pub(crate) fn read_connections(
+    ctx: &Rc<Ctx>,
+    device: &Arc<Mutex<Option<String>>>,
+    redraw: Rc<dyn Fn()>,
+) {
+    let ConnectSource::Cloud {
+        kept, languages, ..
+    } = &ctx.source
+    else {
+        return;
+    };
+    let (kept, languages, device, ctx) =
+        (kept.clone(), languages.clone(), device.clone(), ctx.clone());
+    gtk::glib::spawn_future_local(async move {
+        let read = gtk::gio::spawn_blocking(move || {
+            let known = device.lock().ok()?.clone();
+            let id = match known {
+                Some(id) => id,
+                None => {
+                    let id = crate::coach::this_device(&kept, &languages)?;
+                    if let Ok(mut d) = device.lock() {
+                        *d = Some(id.clone());
+                    }
+                    id
+                }
+            };
+            let a =
+                crate::kiff::planque_safe(&kept, &id, &languages, tafs_core::planque::Safe::Grants)
+                    .ok()?;
+            (200..300)
+                .contains(&a.status)
+                .then(|| Grant::read_all(&a.body))
+                .flatten()
+        })
+        .await
+        .ok()
+        .flatten();
+        if let Some(grants) = read {
+            *ctx.grants.borrow_mut() = grants;
+            ctx.read.set(true);
+            redraw();
+        }
+    });
 }
 
 /// Reads a page from tafs cloud: why not, in the iPad's words, when it can't.
@@ -267,13 +323,16 @@ pub fn page(w: Rc<WordBook>, source: ConnectSource, open_coach: Rc<dyn Fn()>) ->
                 })
                 .collect(),
         ),
+        ConnectSource::Cloud { holders, .. } => (vec![], holders.clone()),
         _ => (vec![], vec![]),
     };
     let ctx = Rc::new(Ctx {
         w: w.clone(),
         source: source.clone(),
-        grants,
+        read: std::cell::Cell::new(matches!(source, ConnectSource::Sample { .. })),
+        grants: RefCell::new(grants),
         holders,
+        reread: RefCell::new(None),
     });
     let device: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
     let screens = Rc::new(Screens {
@@ -610,6 +669,15 @@ pub fn page(w: Rc<WordBook>, source: ConnectSource, open_coach: Rc<dyn Fn()>) ->
     }));
     redraw();
     load(false);
+    read_connections(&ctx, &device, redraw.clone());
+    *ctx.reread.borrow_mut() = {
+        let (weak, device, redraw) = (Rc::downgrade(&ctx), device.clone(), redraw.clone());
+        Some(Rc::new(move || {
+            if let Some(ctx) = weak.upgrade() {
+                read_connections(&ctx, &device, redraw.clone());
+            }
+        }))
+    };
     // A screenshot's page, once the list is read.
     if let Some(open) = OPEN.with(|o| o.take()) {
         let apps = state.borrow().apps.clone();
@@ -619,8 +687,9 @@ pub fn page(w: Rc<WordBook>, source: ConnectSource, open_coach: Rc<dyn Fn()>) ->
                 "connect-app" | "connect-connection" | "connect-remove" => {
                     let mut best: Option<&App> = None;
                     for a in &apps.apps {
-                        let n = connections_of(a, &ctx.grants).len();
-                        if best.is_none_or(|b| n > connections_of(b, &ctx.grants).len()) {
+                        let grants = ctx.grants.borrow();
+                        let n = connections_of(a, &grants).len();
+                        if best.is_none_or(|b| n > connections_of(b, &grants).len()) {
                             best = Some(a);
                         }
                     }
@@ -842,7 +911,7 @@ fn row(
         line: None,
         setup: None,
     });
-    let opens = opens_connections(app, &ctx.grants);
+    let opens = opens_connections(app, &ctx.grants.borrow());
     // The logo, from tafs cloud only, beside the name (`name`). The name on one line, cut at its
     // end only as a last resort; what it is under it, in two.
     let named = gtk::Box::new(gtk::Orientation::Horizontal, 10);

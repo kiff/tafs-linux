@@ -2964,6 +2964,18 @@ impl App {
                         languages: self.languages.clone(),
                         connectable,
                         manages,
+                        // `holderIDs`: each taf by its holder in KIFF, which its connections name.
+                        holders: cloud
+                            .as_deref()
+                            .map(|c| {
+                                c.home
+                                    .tafs
+                                    .iter()
+                                    .filter(|t| t.card.active)
+                                    .map(|t| (t.kiff_agent.clone(), t.name.clone()))
+                                    .collect()
+                            })
+                            .unwrap_or_default(),
                     },
                     _ => connect::ConnectSource::None,
                 }
