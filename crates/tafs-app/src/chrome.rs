@@ -73,19 +73,55 @@ fn unpair(source: &ChromeSource, id: &str) -> bool {
         .is_ok_and(|a| (200..300).contains(&a.status))
 }
 
+/// planque's grants, read with this computer's device key, as the Chromes are. None when they
+/// can't be read.
+pub fn grants(source: &ChromeSource) -> Vec<tafs_core::connections::Grant> {
+    grants_body(source)
+        .and_then(|b| tafs_core::connections::Grant::read_all(&b))
+        .unwrap_or_default()
+}
+
+/// A Slack bot connection's channels (`GET …/grants/{grant}/channels`), read with this
+/// computer's device key, or why they couldn't be.
+pub fn channels(
+    w: &WordBook,
+    source: &ChromeSource,
+    grant: &str,
+) -> Result<Vec<tafs_core::planque::Channel>, String> {
+    let ChromeSource::Cloud { kept, languages } = source else {
+        return Err(String::new());
+    };
+    let device = crate::coach::this_device(kept, languages)
+        .ok_or_else(|| w.line("error.offline").unwrap_or_default())?;
+    let a = crate::kiff::planque_safe(kept, &device, languages, Safe::Channels(grant))
+        .map_err(|e| e.words(w).unwrap_or_default())?;
+    if !(200..300).contains(&a.status) {
+        return Err(tafs_core::signin::refusal(&a, Some(w))
+            .words(w)
+            .unwrap_or_default());
+    }
+    tafs_core::planque::channels(&a.body)
+        .ok_or_else(|| tafs_core::signin::plain_words(w, a.status).unwrap_or_default())
+}
+
+/// planque's `GET …/grants` answer, signed by this computer's device key; none when it fails.
+fn grants_body(source: &ChromeSource) -> Option<Vec<u8>> {
+    let ChromeSource::Cloud { kept, languages } = source else {
+        return None;
+    };
+    let device = crate::coach::this_device(kept, languages)?;
+    match crate::kiff::planque_safe(kept, &device, languages, Safe::Grants) {
+        Ok(a) if (200..300).contains(&a.status) => Some(a.body),
+        _ => None,
+    }
+}
+
 /// Each connected tool's title, by its name in KIFF, from planque's grants (`toolTitle`), read
 /// with this computer's device key, as the Chromes are. None when it can't be read.
 pub fn tool_titles(source: &ChromeSource) -> std::collections::HashMap<String, String> {
-    let ChromeSource::Cloud { kept, languages } = source else {
-        return Default::default();
-    };
-    let Some(device) = crate::coach::this_device(kept, languages) else {
-        return Default::default();
-    };
-    match crate::kiff::planque_safe(kept, &device, languages, Safe::Grants) {
-        Ok(a) if (200..300).contains(&a.status) => tafs_core::planque::tool_titles(&a.body),
-        _ => Default::default(),
-    }
+    grants_body(source)
+        .map(|b| tafs_core::planque::tool_titles(&b))
+        .unwrap_or_default()
 }
 
 /// Whether planque offers Chrome to this person: its list read (How tafs works' Chrome section,

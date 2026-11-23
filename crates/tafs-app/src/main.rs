@@ -1738,6 +1738,7 @@ impl App {
                         sample_record.iter().filter(|e| e.taf == t.key).collect();
                     lines.sort_by_key(|e| std::cmp::Reverse(e.at));
                     taf::TafPage {
+                        kiff_agent: String::new(),
                         key: t.key.clone(),
                         name: t.name.clone(),
                         initial: t.initial.clone(),
@@ -1855,6 +1856,7 @@ impl App {
                 })
                 .map(
                     |(manages, t, cards, (health, runs_line, zones))| taf::TafPage {
+                        kiff_agent: t.agent.clone(),
                         time_zone_words: zones.0,
                         schedule_time_zone_words: zones.1,
                         job: zones.2,
