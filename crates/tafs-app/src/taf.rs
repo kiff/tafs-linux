@@ -564,6 +564,7 @@ pub fn page(
             trial: false,
             reread: t.held_reread.clone(),
             record: chat_record,
+            doors: t.doors.clone(),
         }));
         let panes = panes.clone();
         chat_tab.connect_toggled(move |b| {
@@ -663,7 +664,7 @@ pub fn page(
     // for it at the pin, so a screenshot opens it over the page.
     if let (Some(focus), Some(id)) = (&t.opens_doors, &t.cloud_id) {
         if !matches!(t.doors, crate::knocks::DoorsSource::None) {
-            let model = crate::doors::DoorsModel::new(w.clone(), id.clone(), t.doors.clone());
+            let model = crate::doors::shared(w.clone(), id.clone(), t.doors.clone());
             let taf = crate::doors::DoorsTaf {
                 name: t.name.clone(),
                 initial: t.initial.clone(),

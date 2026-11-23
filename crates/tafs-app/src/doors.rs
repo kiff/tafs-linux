@@ -54,6 +54,28 @@ pub struct DoorsModel {
     next: Rc<Cell<u64>>,
 }
 
+thread_local! {
+    /// Each taf's doors (`doorModels`), by its id at tafs cloud: one model shared by its doors
+    /// sheet, its Activity's knocks and its chat, so an answer in one shows in all.
+    static MODELS: RefCell<std::collections::HashMap<String, DoorsModel>> =
+        RefCell::new(std::collections::HashMap::new());
+}
+
+/// `doors(for:)`: the taf's one doors model, made the first time it's asked for.
+pub fn shared(w: Rc<WordBook>, id: String, source: DoorsSource) -> DoorsModel {
+    MODELS.with(|m| {
+        m.borrow_mut()
+            .entry(id.clone())
+            .or_insert_with(|| DoorsModel::new(w, id, source))
+            .clone()
+    })
+}
+
+/// Signed out: no taf's doors stay.
+pub fn forget() {
+    MODELS.with(|m| m.borrow_mut().clear());
+}
+
 /// What a change answered: the door it's now, nothing to show (a screenshot's), or why not.
 enum Changed {
     Door(Box<Door>),

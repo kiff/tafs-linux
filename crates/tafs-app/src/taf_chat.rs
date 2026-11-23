@@ -66,6 +66,9 @@ pub struct ChatTaf {
     /// Its Record lines as the page had them (`entries(for:)`): what became of its calls, until
     /// KIFF's activity is read again here.
     pub record: Vec<tafs_core::record::Entry>,
+    /// Where its doors are read, where tafs cloud offers doors (`doorsOffered`): their knocks sit
+    /// among the messages. None for a trial's chat.
+    pub doors: crate::doors::DoorsSource,
 }
 
 /// What reading a taf's held calls again takes (`refresh`'s, for this taf): its KIFF agent, and
@@ -130,6 +133,9 @@ struct Page {
     composer: Composer,
     /// The files picked for the next message (`chatFiles[taf]`).
     attach: Rc<crate::attach::Attach>,
+    /// Its doors (`doors(for:)`), shared with its Activity and its doors sheet, and how many
+    /// messages the thread had when they were last read: they're read again when that changes.
+    doors: Option<(crate::doors::DoorsModel, Cell<Option<usize>>)>,
 }
 
 /// The Chat tab's pane: the thread, the line above the box, and the box.
@@ -195,9 +201,17 @@ pub fn pane(w: Rc<WordBook>, taf: ChatTaf, source: ChatSource) -> gtk::Widget {
     if !taf.trial {
         chat.borrow_mut().record = taf.record.clone();
     }
+    let doors = match (&taf.doors, taf.trial) {
+        (crate::doors::DoorsSource::None, _) | (_, true) => None,
+        (source, false) => Some((
+            crate::doors::shared(w.clone(), taf.id.clone(), source.clone()),
+            Cell::new(None),
+        )),
+    };
     let page = Rc::new(Page {
         live_shown: crate::chat::Shown::default(),
         w,
+        doors,
         held: RefCell::new(taf.held.clone()),
         taf,
         source,
@@ -215,6 +229,25 @@ pub fn pane(w: Rc<WordBook>, taf: ChatTaf, source: ChatSource) -> gtk::Widget {
         attach,
     });
     wire_composer(&page);
+    // Its doors' open knocks, as they're read or answered: drawn again among the messages.
+    if let Some((model, _)) = &page.doors {
+        let p = Rc::downgrade(&page);
+        let listening = model.listen(Rc::new(move || {
+            if let Some(p) = p.upgrade() {
+                let knocks = p.doors.as_ref().map(|(m, _)| m.open_knocks());
+                p.chat.borrow_mut().knocks = knocks.unwrap_or_default();
+                // Busy or not, the cards' buttons change with it.
+                p.drawn.take();
+                if p.open() {
+                    p.draw();
+                }
+            }
+        }));
+        page.chat.borrow_mut().knocks = model.open_knocks();
+        let model = model.clone();
+        page.root
+            .connect_destroy(move |_| model.unlisten(listening));
+    }
     {
         let p = Rc::downgrade(&page);
         page.attach.on_change(Rc::new(move || {
@@ -241,6 +274,15 @@ pub fn pane(w: Rc<WordBook>, taf: ChatTaf, source: ChatSource) -> gtk::Widget {
                     fresh.record = page.taf.record.clone();
                     *page.chat.borrow_mut() = fresh;
                     page.chat.borrow_mut().took(&page.w, t, chrono::Utc::now());
+                    // Kept while it's open, as a read's loop keeps a signed-in chat: what's read
+                    // after it's drawn (its doors) still reaches it.
+                    let p = page.clone();
+                    glib::spawn_future_local(async move {
+                        glib::timeout_future(std::time::Duration::from_secs(1)).await;
+                        while p.open() {
+                            glib::timeout_future(std::time::Duration::from_secs(1)).await;
+                        }
+                    });
                     match stream {
                         Some(stream) if crate::chat::PIN_CHECK.with(|c| c.get()) => {
                             page.pin_check(&stream)
@@ -1209,6 +1251,17 @@ impl Page {
     /// Draws what the chat holds now, unless it's what's drawn already.
     fn draw(self: &Rc<Self>) {
         self.composer_state();
+        // The doors read again each time the thread's messages change, and once it's read: their
+        // knocks sit among them (`.task(id: chats[tafID]?.count)`).
+        if let Some((model, seen)) = &self.doors {
+            let c = self.chat.borrow();
+            let count = c.loaded.then_some(c.thread.messages.len());
+            drop(c);
+            if count.is_some() && seen.get() != count {
+                seen.set(count);
+                model.load();
+            }
+        }
         // Which call each held card is, by KIFF's id: a streamed answer names its held calls so.
         let known: Vec<(String, String)> = self
             .held
@@ -1419,6 +1472,23 @@ impl Page {
                 },
                 // What became of a call, from the Record, where its card was or when answered.
                 Line::Outcome(o) => crate::coach::outcome(o).upcast(),
+                // Someone wrote through a door: its card, answered here, eight lines of it.
+                Line::Knock(k) => match &self.doors {
+                    Some((model, _)) => {
+                        let busy = model.state.borrow().busy;
+                        let card = crate::knocks::knock_card(
+                            model,
+                            Some(&self.taf.name),
+                            k,
+                            busy,
+                            false,
+                            &self.column,
+                        );
+                        card.set_widget_name(&format!("knock.{}", k.id));
+                        card.upcast()
+                    }
+                    None => continue,
+                },
                 Line::AskCoach { text: words, ask } => {
                     let p = panel(false);
                     let l = text(words, 15, 400, &["tafs-ink"]);

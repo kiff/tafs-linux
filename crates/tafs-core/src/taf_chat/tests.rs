@@ -1827,3 +1827,83 @@ fn what_went_through_says_what_each_call_moved() {
         )
     );
 }
+
+/// A door's knocks as tafs cloud reads them (`GET /v1/tafs/{id}/doors`): one at `at_`, and its
+/// day's line when `line`.
+fn knocks_at(items: &[(&str, &str, bool)]) -> Vec<crate::doors::Knock> {
+    let knocks: Vec<String> = items
+        .iter()
+        .map(|(id, at_, line)| {
+            let rest = if *line { r#","rest":"others","dropped":4"# } else { "" };
+            format!(
+                r#"{{"id":"{id}","door":"door_1","app":"email","from":"sam@example.org","text":"Hi","at":"{at_}"{rest}}}"#
+            )
+        })
+        .collect();
+    let body = format!(
+        r#"{{"doors":[],"apps":[],"knocks":[{}]}}"#,
+        knocks.join(",")
+    );
+    crate::doors::read(body.as_bytes()).unwrap().open_knocks()
+}
+
+#[test]
+fn a_door_s_knocks_sit_at_their_times_among_the_messages() {
+    let w = en();
+    let json = format!(
+        r#"{{"messages":[{},{},{}]}}"#,
+        owner("Hi", "2026-11-16T09:00:00Z", "s1"),
+        taf("Hello.", "2026-11-16T09:00:20Z", "s1"),
+        taf("Later words.", "2026-11-16T09:30:00Z", "s2")
+    );
+    let mut c = chat_of(&json);
+    c.knocks = knocks_at(&[
+        ("k1", "2026-11-16T09:10:00Z", false),
+        ("k2", "2026-11-16T09:40:00Z", true),
+    ]);
+    let now = at("2026-11-16T10:00:00Z");
+    let ids: Vec<String> = items_of(&c, &[], now).iter().map(Item::id).collect();
+    let pos = |id: &str| ids.iter().position(|i| i == id).unwrap();
+    // Between the words before it and the reply newer than it; a day's line at its time too.
+    assert!(pos("d|k1") > pos(&format!("m|{}", c.thread.messages[1].id())));
+    assert!(pos("d|k1") < pos(&format!("m|{}", c.thread.messages[2].id())));
+    assert_eq!(ids.last().map(String::as_str), Some("d|k2"));
+    let l = lines(
+        &w,
+        &c,
+        &Whose {
+            name: Some("Rae"),
+            ask_coach: false,
+        },
+        &[],
+        now,
+    )
+    .unwrap();
+    let drawn: Vec<&str> = l
+        .lines
+        .iter()
+        .filter_map(|l| match l {
+            Line::Knock(k) => Some(k.id.as_str()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(drawn, ["k1", "k2"]);
+}
+
+#[test]
+fn a_knock_doesn_t_count_as_the_taf_s_words_for_a_held_card() {
+    let json = format!(
+        r#"{{"messages":[{}]}}"#,
+        owner("Refund 4410", "2026-11-16T09:00:00Z", "s1")
+    );
+    let mut c = chat_of(&json);
+    c.knocks = knocks_at(&[("k1", "2026-11-16T09:00:30Z", false)]);
+    let held = vec![("card".to_string(), at("2026-11-16T09:00:10Z"))];
+    // Held 20 s ago, with no words from the taf since: still waiting for them, knock or not.
+    let ids: Vec<String> = items_of(&c, &held, at("2026-11-16T09:00:30Z"))
+        .iter()
+        .map(Item::id)
+        .collect();
+    assert!(!ids.contains(&"k|card".to_string()), "{ids:?}");
+    assert!(ids.contains(&"d|k1".to_string()));
+}

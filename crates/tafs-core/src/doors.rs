@@ -235,7 +235,7 @@ pub struct DoorApp {
 }
 
 /// Someone without a key wrote (`TafsCloud.Knock`): the owner decides.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Knock {
     pub id: String,
     pub door: String,

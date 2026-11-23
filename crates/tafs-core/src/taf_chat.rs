@@ -189,6 +189,9 @@ pub struct TafChat {
     /// This taf's Record lines as KIFF's activity was last read (`entries(for:)`): what became
     /// of its calls, and what each moved.
     pub record: Vec<crate::record::Entry>,
+    /// Its doors' open knocks as last read (`chatKnocks`): someone wrote through a door, and the
+    /// owner answers it here. None where tafs cloud offers no doors.
+    pub knocks: Vec<crate::doors::Knock>,
 }
 
 /// A taf's stream followed (`followChatStream`'s own): how the run ended, once it says, what
@@ -868,6 +871,9 @@ pub enum Item<'a> {
     /// What became of a held call, or a call the owner approved, from the Record (`outcome`): the
     /// same row as its card, by its key.
     Outcome(&'a crate::record::Entry),
+    /// Someone wrote through a door (`knock`), at its time among the messages: the owner answers
+    /// it there.
+    Knock(&'a crate::doors::Knock),
     /// The taf's words in the answer streaming now, up to a tool call or being written.
     Streaming {
         id: String,
@@ -884,6 +890,7 @@ impl Item<'_> {
             Item::Held { key, .. } => format!("k|{key}"),
             Item::AskCoach(c) => format!("a|{}", c.id),
             Item::Outcome(e) => format!("k|{}", e.id),
+            Item::Knock(k) => format!("d|{}", k.id),
             Item::Streaming { id, .. } => id.clone(),
         }
     }
@@ -901,6 +908,7 @@ impl Item<'_> {
                 .and_then(|a| a.at)
                 .or(e.made_at)
                 .unwrap_or(e.at),
+            Item::Knock(k) => k.at,
             Item::Streaming { at, .. } => *at,
         }
     }
@@ -998,6 +1006,8 @@ pub fn items_of<'a>(
             .filter(|(key, _)| !streaming.contains(key.as_str()))
             .map(|(key, at)| Item::Held { key, at: *at }),
     );
+    // A door's knocks sit at their own times, so a reply newer than a knock comes after it.
+    all.extend(c.knocks.iter().map(Item::Knock));
     all.extend(c.thread.ask_coach.iter().map(Item::AskCoach));
     // What became of its calls, done or not (kiff/tafs#115); those of the answer streaming now
     // are placed in it.
@@ -1207,6 +1217,8 @@ pub enum Line {
     /// What became of a call, from the Record (`OutcomeLine`), where its card was or when it was
     /// answered.
     Outcome(crate::coach_lines::Outcome),
+    /// Someone wrote through a door (`KnockCard`): its card, answered here.
+    Knock(crate::doors::Knock),
     /// A setting the taf hands to Coach, with Ask Coach where it's offered.
     AskCoach { text: String, ask: Option<String> },
 }
@@ -1508,6 +1520,7 @@ pub fn lines(
             Item::Message(m) => message(w, m)?,
             Item::Held { key, .. } => Line::Held(key.to_string()),
             Item::Outcome(e) => Line::Outcome(outcome_line(w, e)?),
+            Item::Knock(k) => Line::Knock((*k).clone()),
             Item::AskCoach(card) => Line::AskCoach {
                 text: card.text.clone(),
                 ask: if whose.ask_coach {

@@ -221,7 +221,7 @@ pub fn panel_for(
     if matches!(source, DoorsSource::None) {
         return root;
     }
-    let model = DoorsModel::new(w, id, source);
+    let model = crate::doors::shared(w, id, source);
     let draw: Rc<dyn Fn()> = {
         let (m, root) = (model.clone(), root.downgrade());
         Rc::new(move || {

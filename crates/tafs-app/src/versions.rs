@@ -558,6 +558,7 @@ impl Opener {
                 trial: true,
                 reread: None,
                 record: vec![],
+                doors: crate::doors::DoorsSource::None,
             },
             self.taf.chat.clone(),
         );

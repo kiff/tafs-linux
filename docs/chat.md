@@ -239,6 +239,24 @@ As the iPad's `streamingItems`, `anchorHeld` and `placed` (kiff/tafs#206):
   that answer streams, else by when it was answered.
 - The rules are `tafs-core/src/taf_chat.rs` › `items_of`, `placed`, `anchor_held`, with tests.
 
+## A door's knocks
+
+As the iPad's `.knock` items and `KnockCard` in TafChatView: where Home says tafs cloud offers doors
+(`doors_offered`), someone who wrote through one of the taf's doors shows in its chat at the
+knock's own time, so a reply newer than it comes after it (`Item::Knock`, `Line::Knock`); a door's
+line about its day's messages shows there too, with OK. The card is the Activity's
+([taf.md](taf.md#its-knocks)), eight lines of the message, with Do it, Pair and Ignore, unsigned,
+as the session (`POST /v1/tafs/{id}/doors/knocks/{knock}`).
+
+- One doors model for each taf (`doors(for:)`, `crates/tafs-app/src/doors.rs` › `shared`), shared
+  by its chat, its Activity's knocks and its doors' screen: an answer in one shows in all.
+- The doors are read when the chat is first read, and again each time its thread's messages change
+  (`.task(id: chats[tafID]?.count)`); this computer has no push, so a new knock arrives with the
+  thread's next read. A knock doesn't count as the taf's words for a held card waiting for them.
+- A trial's chat has none. The rules are `tafs-core/src/taf_chat.rs` › `items_of`, with tests; the
+  screenshot is `taf-chat-knocks` (`--doors crates/tafs-app/fixtures/taf-doors.json` with the
+  chat's fixture).
+
 ## What became of its calls
 
 As the iPad's `OutcomeLine` in a taf's chat (`chatItems`' outcomes, `outcomeText`, `outcomeTone`,
@@ -264,7 +282,7 @@ approved that wasn't done, is on its way, or whose outcome is unknown, as one li
 ## Not yet
 
 - `SteadyMarkdown`.
-- A door's knocks among the messages (they're on the Activity tab), and keeping across launches
+- Keeping across launches
   which unread rows were dealt with.
 - The sample's chat (`sampleReply`).
 

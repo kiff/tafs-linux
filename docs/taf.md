@@ -106,6 +106,9 @@ or time, none; the rest of a knock when it can be.
   still waiting; **Ignore**. A knock answered goes away. Why one wasn't sent shows under the
   panel, or in Do it while it's open; a 429 without tafs cloud's words is the app's own line.
 
+The same knocks show in its chat at their times ([chat.md](chat.md#a-doors-knocks)), from one doors
+model for the taf, shared by its chat, this panel and its doors' screen.
+
 `--doors <file>` with `--home` draws a taf's doors from a file, as if tafs cloud offered them, and
 its answers send nothing: `crates/tafs-app/fixtures/taf-doors.json` (synthetic), with
 `access-manage.json` so the taf is managed, CI's `taf-knocks`.
