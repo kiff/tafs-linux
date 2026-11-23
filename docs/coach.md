@@ -227,9 +227,13 @@ Back and ⤢ (Full screen, or Back to its width) before the title, as the iPad's
 on the shade (not when full screen), Escape and Back close it. Closing never ends a conversation:
 its page goes, its reads stop, and opening it again reads it anew, the words not sent kept.
 
-Not on Linux: the swipe of the conversation to the right that closes it on a touch screen (a drag
-there selects text here), and the phone's `PhoneCoachPanel` (a compact width, which this computer's
-sidebar layout doesn't have). The iPad slides it in and out; here it appears and goes.
+On a touch screen, a swipe of the conversation to the right closes it, as the iPad's (over 140 px
+across and under 60 up or down, `coach_mode::swipe_closes`). It's taken from the conversation's
+scroll only once it's clearly across, and a mouse's drag still selects text. It slides in from the
+right and out again, as the iPad's.
+
+Not on Linux: the phone's `PhoneCoachPanel` (a compact width, which this computer's sidebar layout
+doesn't have).
 
 ## Coach's tools
 

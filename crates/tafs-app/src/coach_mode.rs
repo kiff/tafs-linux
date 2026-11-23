@@ -174,6 +174,27 @@ impl CoachMode {
             handle.add_controller(drag);
         }
         {
+            // A swipe of the conversation to the right, by touch, closes it (`CoachPanel`). Taken
+            // from the conversation's scroll only once it's clearly across.
+            let swipe = gtk::GestureDrag::new();
+            swipe.set_touch_only(true);
+            swipe.set_propagation_phase(gtk::PropagationPhase::Capture);
+            swipe.connect_drag_update(|g, dx, dy| {
+                if tafs_core::coach_mode::swiping(dx, dy) {
+                    g.set_state(gtk::EventSequenceState::Claimed);
+                }
+            });
+            let m = Rc::downgrade(&mode);
+            swipe.connect_drag_end(move |_, dx, dy| {
+                if tafs_core::coach_mode::swipe_closes(dx, dy) {
+                    if let Some(m) = m.upgrade() {
+                        m.close();
+                    }
+                }
+            });
+            mode.slot.add_controller(swipe);
+        }
+        {
             let keys = gtk::EventControllerKey::new();
             let m = Rc::downgrade(&mode);
             keys.connect_key_pressed(move |_, key, _, _| {
