@@ -42,6 +42,8 @@ pub enum ConnectSource {
         manages: bool,
         /// Each KIFF agent's taf by name (`holderIDs`), revoked ones left out.
         holders: Vec<(String, String)>,
+        /// What each taf's live Card draws on (`tafsUsing`).
+        using: Vec<tafs_core::connections::Using>,
     },
     /// A screenshot's answers (`--connect`): `answer` as tafs cloud's first page. A fixture's
     /// read never sends.
@@ -106,6 +108,8 @@ pub(crate) struct Ctx {
     pub read: std::cell::Cell<bool>,
     /// Each KIFF agent's taf by name (`holderIDs`), revoked ones left out.
     pub holders: Vec<(String, String)>,
+    /// What each taf's live Card draws on (`tafsUsing`), for what removing a connection stops.
+    pub using: Vec<tafs_core::connections::Using>,
     /// Reads the connections again (`refreshConnections`), after an act the key approved.
     pub reread: RefCell<Option<Rc<dyn Fn()>>>,
 }
@@ -332,6 +336,10 @@ pub fn page(w: Rc<WordBook>, source: ConnectSource, open_coach: Rc<dyn Fn()>) ->
         read: std::cell::Cell::new(matches!(source, ConnectSource::Sample { .. })),
         grants: RefCell::new(grants),
         holders,
+        using: match &source {
+            ConnectSource::Cloud { using, .. } => using.clone(),
+            _ => vec![],
+        },
         reread: RefCell::new(None),
     });
     let device: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));

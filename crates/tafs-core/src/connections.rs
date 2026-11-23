@@ -466,6 +466,60 @@ pub fn tool_vendors(grants: &[Grant]) -> BTreeMap<String, String> {
     out
 }
 
+/// A taf as `tafsUsing` reads it: its holder in KIFF, its name, and the actions its live Card
+/// draws on (its rules' and its tools').
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Using {
+    pub agent: String,
+    pub name: String,
+    pub actions: BTreeSet<String>,
+}
+
+impl Using {
+    /// A taf on Home: none for one whose Card is revoked, which draws on nothing.
+    pub fn of(t: &crate::home::HomeTaf) -> Option<Using> {
+        if !t.card.active {
+            return None;
+        }
+        let actions = t
+            .card
+            .rules
+            .iter()
+            .map(|r| r.action.clone())
+            .chain(t.card.tools.iter().cloned())
+            .collect();
+        Some(Using {
+            agent: t.kiff_agent.clone(),
+            name: t.name.clone(),
+            actions,
+        })
+    }
+}
+
+/// `alsoStops`: the other tafs whose Card draws on a connection's tools (a rule or a tool on one
+/// of the actions it connects), by name, as Home lists them. KIFF's tools are the account's, so a
+/// taf can draw on a connection another taf asked for; removing it stops them too.
+pub fn also_stops(g: &Grant, tafs: &[Using]) -> Vec<String> {
+    let actions: BTreeSet<&str> = match &g.tools {
+        Some(tools) => tools.iter().map(String::as_str).collect(),
+        None => g
+            .request
+            .tools
+            .iter()
+            .filter(|t| t.tafs())
+            .map(Tool::action)
+            .collect(),
+    };
+    if actions.is_empty() {
+        return vec![];
+    }
+    tafs.iter()
+        .filter(|t| t.agent != g.request.agent)
+        .filter(|t| t.actions.iter().any(|a| actions.contains(a.as_str())))
+        .map(|t| t.name.clone())
+        .collect()
+}
+
 /// `ConnectApprovalSheet.host(of:)`: the host a key is used with, without its scheme or path;
 /// the server as written when it has none.
 pub fn host(server: &str) -> String {
@@ -995,5 +1049,28 @@ mod tests {
         assert_eq!(v.get("create_refund").map(String::as_str), Some("Stripe"));
         assert_eq!(v.get("list").map(String::as_str), Some("Other"));
         assert_eq!(v.get("send"), None);
+    }
+
+    #[test]
+    fn removing_a_connection_also_stops_the_other_tafs_drawing_on_its_tools() {
+        let using = |agent: &str, name: &str, actions: &[&str]| Using {
+            agent: agent.into(),
+            name: name.into(),
+            actions: actions.iter().map(|a| a.to_string()).collect(),
+        };
+        let tafs = [
+            using("a1", "Mail sorter", &["fetch"]),
+            using("a2", "Invoices", &["fetch", "pay"]),
+            using("a3", "Leads", &["other"]),
+        ];
+        // Its own taf is left out; another drawing on its tool is named.
+        let g = grant(serde_json::json!({}));
+        assert_eq!(also_stops(&g, &tafs), vec!["Invoices".to_string()]);
+        // planque's connected tools, where it lists them, before the request's.
+        let g = grant(serde_json::json!({"tools": ["other"]}));
+        assert_eq!(also_stops(&g, &tafs), vec!["Leads".to_string()]);
+        // A connection with no tool stops nothing.
+        let g = grant(serde_json::json!({"tools": []}));
+        assert!(also_stops(&g, &tafs).is_empty());
     }
 }

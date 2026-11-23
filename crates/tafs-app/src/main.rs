@@ -2976,6 +2976,16 @@ impl App {
                                     .collect()
                             })
                             .unwrap_or_default(),
+                        using: cloud
+                            .as_deref()
+                            .map(|c| {
+                                c.home
+                                    .tafs
+                                    .iter()
+                                    .filter_map(tafs_core::connections::Using::of)
+                                    .collect()
+                            })
+                            .unwrap_or_default(),
                     },
                     _ => connect::ConnectSource::None,
                 }

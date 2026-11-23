@@ -383,6 +383,8 @@ fn row(ctx: &Rc<Ctx>, app: &App, g: &Grant, refuse: &Refuse) -> gtk::Widget {
         let end = destructive(&end_word(&w, g).unwrap_or_default());
         let (w, grant, refuse) = (w.clone(), g.clone(), refuse.clone());
         let (taf, key) = (ctx.taf_of(g), g.takes_key());
+        // The other tafs whose Card draws on its tools stop too (`alsoStops`).
+        let also = tafs_core::connections::also_stops(g, &ctx.using);
         end.connect_clicked(move |b| {
             let act = Act::Disconnect {
                 grant: grant.id.clone(),
@@ -406,12 +408,12 @@ fn row(ctx: &Rc<Ctx>, app: &App, g: &Grant, refuse: &Refuse) -> gtk::Widget {
                 // Asked first, naming the one taf it ends; only then the security key, in the same
                 // words.
                 let title =
-                    disconnect_title(&w, grant.vendor(), taf.as_deref(), &[]).unwrap_or_default();
+                    disconnect_title(&w, grant.vendor(), taf.as_deref(), &also).unwrap_or_default();
                 ask(
                     b.upcast_ref(),
                     &title.clone(),
                     Some(
-                        &disconnect_message(&w, grant.vendor(), taf.as_deref(), &[], key)
+                        &disconnect_message(&w, grant.vendor(), taf.as_deref(), &also, key)
                             .unwrap_or_default(),
                     ),
                     &w.line("connect.disconnect_button").unwrap_or_default(),
