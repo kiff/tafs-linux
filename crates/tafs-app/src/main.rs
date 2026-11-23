@@ -2768,6 +2768,7 @@ impl App {
                         .as_deref()
                         .and_then(|c| c.account.as_ref())
                         .is_none_or(|a| a.allows("billing.manage")),
+                    may_use_coach: model.may_use_coach,
                 },
                 _ => match &self.usage_file {
                     Some(f) => usage::UsageSource::File(f.clone()),

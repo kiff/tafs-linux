@@ -84,6 +84,8 @@ struct Dial {
     slot: gtk::Box,
     /// A door's stop on When picks that door for the panels below.
     picks_door: Rc<dyn Fn(&str)>,
+    /// Where the error line and the remote are pinned (a sheet's foot); none, under the dial.
+    foot: Option<gtk::Box>,
     /// Each door's count today when last read, once read (`doorCounts`).
     door_counts: RefCell<Option<std::collections::HashMap<String, i64>>>,
     /// The doors something just arrived at: their lights pulse for 3 s (`arrivals`).
@@ -741,14 +743,18 @@ impl Dial {
                 self.column.append(&s);
             }
         }
-        // The remote, in sight under the dial: the iPad keeps it above the tab bar, and a sheet
-        // that scrolls has no foot to keep it on.
+        // The remote with its error line: pinned at the sheet's foot where it has one (the
+        // iPad's `safeAreaInset`), so a sheet scrolled down to a door's panels keeps both in
+        // sight; else in sight under the dial.
         if let Some(parent) = self.remote.parent() {
             if let Ok(b) = parent.downcast::<gtk::Box>() {
                 b.remove(&self.remote);
             }
         }
-        self.column.append(&self.remote);
+        match &self.foot {
+            Some(foot) => foot.append(&self.remote),
+            None => self.column.append(&self.remote),
+        }
         if let Some(call) = self.held.iter().find(|h| h.approvable_once) {
             let b = gtk::Button::with_label(&self.l("needs_you.title"));
             b.add_css_class("tafs-link");
@@ -1092,6 +1098,7 @@ pub fn panel(
     held: Vec<HeldFace>,
     details: gtk::Box,
     picks_door: Rc<dyn Fn(&str)>,
+    foot: Option<gtk::Box>,
 ) -> gtk::Box {
     let root = gtk::Box::new(gtk::Orientation::Vertical, 8);
     let column = gtk::Box::new(gtk::Orientation::Vertical, 14);
@@ -1124,6 +1131,7 @@ pub fn panel(
         remote,
         slot: crate::approval::refusal_slot(),
         picks_door,
+        foot,
         door_counts: RefCell::new(None),
         arrivals: RefCell::new(std::collections::HashSet::new()),
     });

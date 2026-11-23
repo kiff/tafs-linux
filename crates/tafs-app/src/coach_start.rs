@@ -47,6 +47,13 @@ fn open(start: Start, draft: Option<&str>) {
     open();
 }
 
+/// `openCoach`: Coach as it was, on its newest chat; nothing without a way to Coach.
+pub fn as_it_was() {
+    if let Some(open) = OPEN.with(|o| o.borrow().clone()) {
+        open();
+    }
+}
+
 /// `startNewTaf`: Coach in a new conversation, on no taf; what's in its box stays.
 pub fn new_taf() {
     open(Start::New, None);

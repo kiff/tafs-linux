@@ -34,6 +34,9 @@ pub enum UsageSource {
         languages: Vec<&'static str>,
         /// `managesBilling`: KIFF's `billing.manage`, none said counting as allowed.
         manages_billing: bool,
+        /// `mayUseCoach`: a run's page offers Ask Coach only to someone who may, and who manages
+        /// its taf (`KnobRequestDetail.offersAskCoach`).
+        may_use_coach: bool,
     },
     /// A file of synthetic answers (`--usage`, the screenshots signed in with KIFF): its
     /// `balance`, `credits` and `usage`, and whether the person manages billing.
@@ -763,18 +766,27 @@ fn runs_page(
     // A run's own page (`KnobRequestDetail`), read where its credits were: as the session.
     let opening = match &source {
         UsageSource::Cloud {
-            token, languages, ..
-        } => Some(crate::runs_panel::Opening {
-            w: w.clone(),
-            id: taf.clone(),
-            source: crate::runs_panel::RunsSource::Cloud {
-                token: token.clone(),
-                languages: languages.clone(),
-            },
-            manages: names.iter().any(|(id, _, m)| *id == taf && *m),
-            // From Plan & usage, a run's page has no Coach here yet.
-            coach: None,
-        }),
+            token,
+            languages,
+            may_use_coach,
+            ..
+        } => {
+            let manages = names.iter().any(|(id, _, m)| *id == taf && *m);
+            Some(crate::runs_panel::Opening {
+                w: w.clone(),
+                id: taf.clone(),
+                source: crate::runs_panel::RunsSource::Cloud {
+                    token: token.clone(),
+                    languages: languages.clone(),
+                },
+                manages,
+                // Ask Coach on a run's page opened from here, as on a taf's page and its dial:
+                // for someone who may use Coach and manages the taf (`offersAskCoach`); it opens
+                // Coach as it was (`openCoach`).
+                coach: tafs_core::runs::offers_ask_coach(false, *may_use_coach, manages)
+                    .then(|| Rc::new(crate::coach_start::as_it_was) as Rc<dyn Fn()>),
+            })
+        }
         _ => None,
     };
     head.set_center_widget(Some(&one_line(&name, 17, 600, &["tafs-ink"])));
