@@ -559,6 +559,11 @@ pub fn held_card(w: &Rc<WordBook>, c: &CardLines) -> gtk::Box {
                 call: c.kiff_id.clone().unwrap_or_else(|| c.id.clone()),
                 accounting_version: c.accounting_version,
             };
+            // The key's sheet names the call it answers, as the iPad's Face ID reason does
+            // (`AppModel.answer`: "Answer {summary}").
+            let answering = w
+                .get("needs_you.prompt.answer", &[("summary", &c.summary)])
+                .ok();
             let extra_shown = c.extra_room
                 && (crate::key_approval::can_approve(kept.as_ref(), &extra)
                     || (KEY_SHOWN.with(|k| k.get()) && extra.answer().is_some()));
@@ -572,14 +577,15 @@ pub fn held_card(w: &Rc<WordBook>, c: &CardLines) -> gtk::Box {
                 let b = primary(&w.line("needs_you.extra_room").unwrap_or_default());
                 b.set_widget_name("held.extra-room");
                 let slot = crate::approval::refusal_slot();
-                let (w2, card, slot2) = (w.clone(), p.downgrade(), slot.clone());
+                let (w2, card, slot2, what) =
+                    (w.clone(), p.downgrade(), slot.clone(), answering.clone());
                 b.connect_clicked(move |_| {
                     let card = card.clone();
                     crate::approval::refuse_then(
                         &w2,
                         tafs_core::sidebar::Mode::Kiff,
                         &extra,
-                        None,
+                        what.clone(),
                         vec![],
                         &slot2,
                         Some(Rc::new(move || {
@@ -597,14 +603,15 @@ pub fn held_card(w: &Rc<WordBook>, c: &CardLines) -> gtk::Box {
                 let b = primary(&w.line("needs_you.approve_once").unwrap_or_default());
                 b.set_widget_name("held.approve-once");
                 let slot = crate::approval::refusal_slot();
-                let (w2, card, slot2) = (w.clone(), p.downgrade(), slot.clone());
+                let (w2, card, slot2, what) =
+                    (w.clone(), p.downgrade(), slot.clone(), answering.clone());
                 b.connect_clicked(move |_| {
                     let card = card.clone();
                     crate::approval::refuse_then(
                         &w2,
                         tafs_core::sidebar::Mode::Kiff,
                         &once,
-                        None,
+                        what.clone(),
                         vec![],
                         &slot2,
                         Some(Rc::new(move || {

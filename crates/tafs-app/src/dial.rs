@@ -188,6 +188,12 @@ impl Dial {
                     // With this computer's security key, signed here, then the taf read again;
                     // else "Approve on your phone instead".
                     let knobs = self.knobs.clone();
+                    // The key's sheet names the call ("Answer {summary}", `AppModel.answer`).
+                    let what = self
+                        .knobs
+                        .words()
+                        .get("needs_you.prompt.answer", &[("summary", &call.summary)])
+                        .ok();
                     crate::approval::refuse_then(
                         self.knobs.words(),
                         tafs_core::sidebar::Mode::Kiff,
@@ -195,7 +201,7 @@ impl Dial {
                             call: id.clone(),
                             accounting_version: call.accounting_version,
                         },
-                        None,
+                        what,
                         vec![],
                         &self.slot,
                         Some(Rc::new(move || knobs.reload())),

@@ -251,7 +251,9 @@ from a screen recording or a clipboard manager's history.
   answer (`removal::cloud_did_not_answer`).
 - **The sheet names the act** in its lead ("This needs your security key: {act}. Plug it in,
   then touch it and enter its PIN."), `{act}` being the iPad's own Face ID reason for it
-  (`approval::refuse_as`, `people::prompt`, `Act::own_prompt`).
+  (`approval::refuse_as`, `people::prompt`, `Act::own_prompt`). A held call's Approve once and
+  Extra room name the call, as the iPad's `AppModel.answer` does ("Answer {summary}",
+  `needs_you.prompt.answer`), on Needs you's card and on the dial's face.
 - Once sent, the sheet closes, whatever comes back. A refusal shows KIFF's own line where the
   act's line is. A lost answer shows the network's line, and the sheet offers no second PIN try:
   the act may already have reached KIFF, and a new assertion would send it again (a group made

@@ -262,6 +262,22 @@ mod tests {
                 accounting_version: None,
             }
         ));
+        // A held call's answer with its accounting version is signed here: Approve once and
+        // Extra room alike.
+        assert!(can_approve(
+            Some(&keyed),
+            &Act::ApproveOnce {
+                call: "c".into(),
+                accounting_version: Some(7),
+            }
+        ));
+        assert!(can_approve(
+            Some(&keyed),
+            &Act::ExtraRoom {
+                call: "c".into(),
+                accounting_version: Some(7),
+            }
+        ));
         // A view-only session, or a passkey one with no key registered here, can't.
         let view = tafs_core::pairing::kept(&token, &key, 0);
         assert!(!can_approve(Some(&view), &act));
