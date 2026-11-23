@@ -170,6 +170,42 @@ pub fn set_alert_sound(on: bool) {
     set_flag("alert-sound", on);
 }
 
+/// A taf chat's unread messages taken by Retry, Edit or Delete (the iPad's `tafs.chat.settled`):
+/// their hashes, never their text, one a line, the newest last and `SETTLED_KEPT` at most, in the
+/// user's config folder.
+pub fn settled_chat() -> Vec<String> {
+    std::fs::read_to_string(settled_path())
+        .map(|s| {
+            s.lines()
+                .map(str::trim)
+                .filter(|l| l.len() == 64 && l.bytes().all(|b| b.is_ascii_hexdigit()))
+                .map(str::to_string)
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// Keeps `keys` with those already kept.
+pub fn keep_settled_chat(keys: &[String]) {
+    if keys.is_empty() {
+        return;
+    }
+    let kept = keys.iter().fold(settled_chat(), |kept, k| {
+        tafs_core::taf_chat::keep_settled(kept, k)
+    });
+    let path = settled_path();
+    if let Some(dir) = path.parent() {
+        let _ = std::fs::create_dir_all(dir);
+    }
+    let _ = std::fs::write(path, kept.join("\n"));
+}
+
+fn settled_path() -> std::path::PathBuf {
+    gtk::glib::user_config_dir()
+        .join("tafs")
+        .join("chat-settled")
+}
+
 /// Coach mode's width (`coach.width`, `coach.full`), as last chosen; a third of the window at first.
 pub fn coach_width() -> tafs_core::coach_mode::Width {
     std::fs::read_to_string(

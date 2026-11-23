@@ -294,7 +294,12 @@ pub fn pane(w: Rc<WordBook>, taf: ChatTaf, source: ChatSource) -> gtk::Widget {
     let chat = CHATS.with(|c| {
         c.borrow_mut()
             .entry(taf.key())
-            .or_insert_with(|| Rc::new(RefCell::new(TafChat::new(&taf.id))))
+            .or_insert_with(|| {
+                // What was taken here before this launch stays taken (`wasSettled`).
+                let mut c = TafChat::new(&taf.id);
+                c.remember(crate::store::settled_chat());
+                Rc::new(RefCell::new(c))
+            })
             .clone()
     });
     // What became of its calls, as the page had them: from the same read as its held cards, so a
@@ -1582,6 +1587,7 @@ impl Page {
             } else {
                 p.chat.borrow_mut().retry_back(at, message);
             }
+            p.keep_taken();
             p.draw();
         });
     }
@@ -1589,12 +1595,24 @@ impl Page {
     /// Delete (`discardUnsentChat`): out of the thread, not sent.
     fn discard(self: &Rc<Self>, id: u64) {
         self.chat.borrow_mut().discard(id);
+        self.keep_taken();
         self.draw();
+    }
+
+    /// `rememberTaken`: what Retry, Edit or Delete took, kept across launches by its hash. The
+    /// sample's and a screenshot's chats keep nothing.
+    fn keep_taken(&self) {
+        let taken = std::mem::take(&mut self.chat.borrow_mut().taken);
+        if !matches!(self.source, ChatSource::Cloud { .. }) {
+            return;
+        }
+        crate::store::keep_settled_chat(&taken);
     }
 
     /// Edit: out of the thread, its words back in the box.
     fn edit(self: &Rc<Self>, id: u64) {
         let words = self.chat.borrow_mut().edit(id);
+        self.keep_taken();
         if let Some(words) = words {
             self.composer.set_draft(&words);
             self.composer.view.grab_focus();
