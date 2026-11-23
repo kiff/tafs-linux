@@ -260,8 +260,8 @@ from a screen recording or a clipboard manager's history.
   (a saved password or username) or `fill` needs the phone's release beside its answer, and this
   computer has no approval key to make one. So Needs you's card and the dial offer neither Approve
   once nor Extra room on it, and the card says "Approve on your phone instead"
-  (`held::needs_release`, `CardLines::needs_release`). KIFF's own page stays where it was. The
-  server's refusal of an allow without a release, from any client, is kiff/work#21's.
+  (`held::needs_release`, `CardLines::needs_release`), and the key's answer refuses one too
+  (`signed::Act::answer`, `held::release_needed`). KIFF's own page stays where it was.
 - **Removing a taf for good** goes in the iPad's order (`AppModel.removeTaf`): the key approves,
   then its Cards are revoked at KIFF with the session, one plain call each, then tafs cloud's
   `DELETE` goes with the approval. What didn't go is said in the app's words: Cards KIFF didn't
