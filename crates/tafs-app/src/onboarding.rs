@@ -259,6 +259,37 @@ fn picture_of(w: &WordBook, page: Page) -> gtk::Widget {
     }
 }
 
+thread_local! {
+    /// Where How tafs works reads whether Chrome and code sign-in apply: the shell's sources, set
+    /// as it's built (`help_reads`). None before, or signed out: neither section shows.
+    static HELP_READS: std::cell::RefCell<Option<HelpReads>> = const { std::cell::RefCell::new(None) };
+}
+
+/// The reads How tafs works makes when it opens (the iPad's `.task`: `loadCodeSignIn`,
+/// `refreshChromes`).
+#[derive(Clone)]
+pub struct HelpReads {
+    pub chrome: crate::chrome::ChromeSource,
+    pub code: Option<crate::ai_consent::Source>,
+}
+
+/// The shell's sources, for How tafs works wherever it opens.
+pub fn help_reads(r: HelpReads) {
+    HELP_READS.with(|h| *h.borrow_mut() = Some(r));
+}
+
+/// One of How tafs works' sections: the iPad's list header, then a panel with its two lines.
+fn help_section(s: &tafs_core::onboarding::HelpSection, name: &str) -> gtk::Box {
+    let section = gtk::Box::new(gtk::Orientation::Vertical, 6);
+    section.set_widget_name(name);
+    section.append(&eyebrow(&s.title, false));
+    let p = panel(false);
+    p.append(&text(&s.lead, 15, 400, &["tafs-soft"]));
+    p.append(&text(&s.more, 14, 400, &["tafs-dim"]));
+    section.append(&p);
+    section
+}
+
 /// How tafs works' section on approving with a security key: its title, then the two lines.
 fn security_key_section(w: &WordBook) -> gtk::Box {
     let l = |k: &str| w.line(k).unwrap_or_else(|e| panic!("{e}"));
@@ -300,6 +331,44 @@ pub fn how_it_works(window: &impl IsA<gtk::Widget>, w: Rc<WordBook>) {
         cards.append(&row);
     }
     root.append(&cards);
+    // Chrome's and code sign-in's sections, each once its read says it applies, in the iPad's
+    // order; until then (and when neither does) nothing holds their place.
+    let chrome_slot = gtk::Box::new(gtk::Orientation::Vertical, 0);
+    let code_slot = gtk::Box::new(gtk::Orientation::Vertical, 0);
+    root.append(&chrome_slot);
+    root.append(&code_slot);
+    if let Some(reads) = HELP_READS.with(|h| h.borrow().clone()) {
+        let w = w.clone();
+        let (chrome_slot, code_slot) = (chrome_slot.downgrade(), code_slot.downgrade());
+        gtk::glib::spawn_future_local(async move {
+            let words = (*w).clone();
+            let (chrome, code) = (reads.chrome.clone(), reads.code.clone());
+            let read = gtk::gio::spawn_blocking(move || {
+                (
+                    crate::chrome::offered(&words, &chrome),
+                    code.is_some_and(|c| crate::code_sign_in::available(&c, &words)),
+                )
+            })
+            .await;
+            let Ok((chrome, code)) = read else {
+                return;
+            };
+            if let (true, Some(slot), Ok(s)) = (
+                chrome,
+                chrome_slot.upgrade(),
+                tafs_core::onboarding::chrome_help(&w),
+            ) {
+                slot.append(&help_section(&s, "how-it-works.chrome"));
+            }
+            if let (true, Some(slot), Ok(s)) = (
+                code,
+                code_slot.upgrade(),
+                tafs_core::onboarding::code_help(&w),
+            ) {
+                slot.append(&help_section(&s, "how-it-works.code"));
+            }
+        });
+    }
     // Approving here needs a security key on Linux (tafs#1848's Help): its title, what it is,
     // and how it's used. The iPad has no section of its own: it approves with Face ID.
     root.append(&security_key_section(&w));

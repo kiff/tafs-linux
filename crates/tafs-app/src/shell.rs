@@ -194,6 +194,11 @@ pub fn build(
         account_email,
         set_aside,
     } = screens;
+    // How tafs works reads whether Chrome and code sign-in apply, wherever it opens.
+    crate::onboarding::help_reads(crate::onboarding::HelpReads {
+        chrome: chrome.clone(),
+        code: account_reads.as_ref().map(|r| r.source.clone()),
+    });
     let has_coach = !matches!(coach, crate::coach::CoachSource::None);
     let entries = Rc::new(record.entries.clone());
     let lines = model.lines(&w).unwrap_or_else(|e| panic!("{e}"));

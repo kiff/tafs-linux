@@ -113,13 +113,15 @@ Your tafs (the sample's three tafs that move no money, as Home lists them), A Ca
 permission (the sample's Support replies Card, 12 of 40 used today, issued by you, drawn by the
 Card tab's own face), You stay in control (Needs you's card over the sample's Deploys). Skip, Next
 and Get started; Escape is Skip. The last card names how this computer approves:
-`onboarding.control_lead_desktop` (from tafs#1710, in all 40 shipped languages). How tafs works lists the three cards, then
-"Approve with a security key on this computer" (`help.security_key_title`, `_lead`, `_use`, from
+`onboarding.control_lead_desktop` (from tafs#1710, in all 40 shipped languages). How tafs works lists the three cards, then, as the
+iPad's, "tafs can work in your Chrome" (`help.chrome_*`) once planque lists Chromes for this
+person, and "Sign in with a code sent by email" (`help.code_*`) once KIFF says it's available,
+each read when the page opens (`chrome::offered`, `code_sign_in::available`; a failed read shows
+neither), then "Approve with a security key on this computer" (`help.security_key_title`, `_lead`, `_use`, from
 tafs#1848): approving here needs a FIDO2 key with its own PIN, added when this computer is
 paired, and without one this computer only views. Then the four legal pages, KIFF's and tafs's,
-each titled as its page is. The page scrolls when it's taller than the dialog. Not here yet: the
-iPad's sections on Chrome (`help.chrome_*`, shown when planque offers Chrome) and on signing in
-with a code (`help.code_*`, shown when it's available).
+each titled as its page is. The page scrolls when it's taller than the dialog. `--page how-it-works` with `--chromes` and
+`--account-reads` draws both (CI's `how-it-works-help`).
 
 ## The flow
 
