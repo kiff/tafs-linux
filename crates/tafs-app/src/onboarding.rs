@@ -259,6 +259,20 @@ fn picture_of(w: &WordBook, page: Page) -> gtk::Widget {
     }
 }
 
+/// How tafs works' section on approving with a security key: its title, then the two lines.
+fn security_key_section(w: &WordBook) -> gtk::Box {
+    let l = |k: &str| w.line(k).unwrap_or_else(|e| panic!("{e}"));
+    let section = gtk::Box::new(gtk::Orientation::Vertical, 6);
+    section.set_widget_name("how-it-works.security-key");
+    // The iPad's section header, as Linux draws one.
+    section.append(&eyebrow(&l("help.security_key_title"), false));
+    let p = panel(false);
+    p.append(&text(&l("help.security_key_lead"), 15, 400, &["tafs-soft"]));
+    p.append(&text(&l("help.security_key_use"), 14, 400, &["tafs-dim"]));
+    section.append(&p);
+    section
+}
+
 /// How tafs works (Account): the three cards again, each opening where it's tapped, and the
 /// privacy and terms pages, KIFF's and tafs's, each titled as its page is.
 pub fn how_it_works(window: &impl IsA<gtk::Widget>, w: Rc<WordBook>) {
@@ -286,6 +300,9 @@ pub fn how_it_works(window: &impl IsA<gtk::Widget>, w: Rc<WordBook>) {
         cards.append(&row);
     }
     root.append(&cards);
+    // Approving here needs a security key on Linux (tafs#1848's Help): its title, what it is,
+    // and how it's used. The iPad has no section of its own: it approves with Face ID.
+    root.append(&security_key_section(&w));
     let legal = gtk::ListBox::new();
     legal.add_css_class("tafs-group");
     legal.set_selection_mode(gtk::SelectionMode::None);
@@ -328,7 +345,12 @@ pub fn how_it_works(window: &impl IsA<gtk::Widget>, w: Rc<WordBook>) {
     let header = adw::HeaderBar::new();
     let toolbar = adw::ToolbarView::new();
     toolbar.add_top_bar(&header);
-    toolbar.set_content(Some(&root));
+    // With the security key's section, the page can be taller than the dialog: it scrolls.
+    let scroller = gtk::ScrolledWindow::new();
+    scroller.set_hscrollbar_policy(gtk::PolicyType::Never);
+    scroller.set_vexpand(true);
+    scroller.set_child(Some(&root));
+    toolbar.set_content(Some(&scroller));
     crate::widgets::ground(&toolbar);
     dialog.set_child(Some(&toolbar));
     dialog.present(Some(window));
