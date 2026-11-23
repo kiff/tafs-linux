@@ -24,6 +24,9 @@ pub struct Account {
     pub capabilities: Option<Vec<String>>,
     #[serde(default)]
     pub approval_mode: Option<String>,
+    /// The person's role on the account (`member_role`: owner, admin, member…), when KIFF says.
+    #[serde(default)]
+    pub member_role: Option<String>,
 }
 
 impl Account {
@@ -635,6 +638,7 @@ mod tests {
             time_zone: None,
             capabilities: None,
             approval_mode: None,
+            member_role: None,
         }
     }
 
@@ -666,7 +670,15 @@ mod tests {
         })
         .unwrap();
         assert_eq!(a.approval_mode.as_deref(), Some("view"));
+        assert_eq!(a.member_role, None);
         assert_eq!(a.name(), "Acme");
+        // The person's role, which a passkey's Remove waits on (an owner or admin).
+        let owner = Account::read(&Answer {
+            status: 200,
+            body: br#"{"tenant_id":"t1","tenant_slug":"acme","member_role":"owner","approval_mode":"passkey"}"#.to_vec(),
+        })
+        .unwrap();
+        assert_eq!(owner.member_role.as_deref(), Some("owner"));
         assert!(a.allows("holds.answer"));
         assert_eq!(
             Account::read(&Answer {

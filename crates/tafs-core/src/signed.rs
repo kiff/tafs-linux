@@ -206,6 +206,8 @@ pub enum Act {
     RemoveGroupMember { group: String, subject: String },
     /// `removeDevice`: another device signed out, after its question.
     SignOutDevice { device: String },
+    /// `removePasskey`: one of the account's own passkeys removed, after its question.
+    RemovePasskey { passkey: String },
     /// `setAccountTimeZone`: a zone chosen, or this computer's.
     SetTimeZone { zone: String },
     /// `raiseLimit`: the spend limit raised one step.
@@ -358,6 +360,8 @@ impl Act {
             // computer can't keep from a screen recording or a clipboard's history.
             Act::ReopenDoor { .. } => br#"{"open":true}"#.to_vec(),
             Act::RevokeDoorKey { .. } | Act::RemoveApiDoor { .. } => Vec::new(),
+            // `preparePasskeyRemoval`: a DELETE with no body at all (`Data()`), not `{}`.
+            Act::RemovePasskey { .. } => Vec::new(),
             Act::DeleteGroup { .. }
             | Act::RemoveGroupMember { .. }
             | Act::SignOutDevice { .. }
@@ -397,6 +401,10 @@ impl Act {
             Act::SignOutDevice { device } => {
                 ("DELETE", format!("/v1/me/devices/{}", escaped(device)))
             }
+            Act::RemovePasskey { passkey } => (
+                "DELETE",
+                format!("{}/{}", crate::devices::PASSKEYS_PATH, escaped(passkey)),
+            ),
             Act::SetTimeZone { .. } => ("PUT", "/v1/me/time-zone".into()),
             Act::RaiseLimit => ("PUT", "/v1/me/usage/limit".into()),
             Act::DeclineRequest { request } => (
@@ -647,6 +655,9 @@ mod tests {
             },
             Act::SignOutDevice {
                 device: "dev_2".into(),
+            },
+            Act::RemovePasskey {
+                passkey: "pk_1".into(),
             },
             Act::SetTimeZone {
                 zone: "Europe/Paris".into(),
@@ -1076,6 +1087,9 @@ mod tests {
         for act in [
             Act::CreateGroup { name: "x".into() },
             Act::SignOutDevice { device: "d".into() },
+            Act::RemovePasskey {
+                passkey: "p".into(),
+            },
             Act::SetTimeZone { zone: "UTC".into() },
             Act::Resume { agent: None },
             Act::RemoveTaf { taf: "t".into() },

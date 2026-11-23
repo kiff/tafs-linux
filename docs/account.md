@@ -264,8 +264,28 @@ nothing. `--page devices-sign-out` opens the question over the sample's iPhone (
 **Passkeys**, signed in with KIFF (`DevicesView`'s passkeys section): the account's passkeys, read
 as the session with Devices (`GET /v1/me/passkeys`, `tafs-core/devices.rs` › `Passkey`), each by
 its name ("A device" with none), and a computer's own with "Goes with its computer" under it. Why
-they couldn't be read shows under PASSKEYS, apart from the devices'. Removing one takes the
-approval key and adding one is an iPhone's, so on a computer the iPad lists them only, as here.
+they couldn't be read shows under PASSKEYS, apart from the devices'. Adding one is an iPhone's.
+
+**Removing a passkey** (`removePasskey`), with this computer's security key. Remove shows only
+where the iPad's `canAddPasskey` would: on one of the person's own passkeys (an `id`, no
+`device_id`), for an owner or admin (`/v1/me`'s `member_role`), on a session that approves with
+this computer's registered key (`key_approval::can_approve`). A computer's own passkey, this one's
+included, never gets it, so the key that signs can't remove itself. Elsewhere there's no Remove
+and nothing is sent.
+- **The question:** "Remove Rae's iPhone?" ("Remove A device?" for one with no name), Remove in red,
+  and Cancel. When it's the account's last passkey (`removesLastPasskey`, told apart by id, never by
+  name), it says "This is your only passkey that can approve. Without it, you need another device
+  that can approve." KIFF keeps no last-key guard of its own.
+- **The approval:** Remove asks the key, its sheet saying "Remove the passkey Rae's iPhone from
+  your account". It sends exactly `DELETE /v1/me/passkeys/{id}`, with the id escaped as a path part,
+  no body at all (as the iPad's `preparePasskeyRemoval`), and one `KIFF-Passkey-Assertion`. KIFF
+  takes a passkey's assertion for it from a computer's session, and only the person's own.
+- **After:** the passkey leaves the list, and the list is read again. A read that started before
+  the removal is dropped (`passkeysRead`), so it can't bring the passkey back.
+- **When it doesn't go:** a closed sheet says nothing. Anything else says "Remove the passkey …
+  from your account didn't go through." with why in the app's words, under PASSKEYS.
+- **Where:** `tafs-core/devices.rs` (`remove_question`, `removes_last`, `may_remove`) and
+  `signed::Act::RemovePasskey`.
 
 Not on Linux: **Add a device**, since a phone pairs a computer (`PairComputerView`), never the
 computer itself.
