@@ -1094,3 +1094,47 @@ fn homes_labels_on_the_overview() {
     assert_eq!(odd.labels_all(), None);
     assert!(home::taf(&w, &odd.tafs[0]).unwrap().labels.is_empty());
 }
+
+#[test]
+fn a_fill_in_chrome_is_never_answered_with_this_computers_key() {
+    use tafs_core::held::{held, needs_release, read_held};
+    use tafs_core::needs_you::{lines, Holder};
+    let w = en();
+    let call = |browser: &str| {
+        format!(
+            r#"{{"exceptions":[{{"id":"exc_9","subject":"rae","action":"browse_act","entity_id":"e1","status":"held",
+            "breaches":[],"parameters":null,"reason":null,"parameter_units":null,"units_unavailable":null,"next_steps":null,
+            "created_at":"2026-11-15T12:00:00Z","expires_at":"2099-01-01T00:00:00Z","accounting_version":3,
+            "can_approve_once":true{browser}}}]}}"#
+        )
+    };
+    // planque's sealed fill, a plain fill, a Chrome step with neither, and none at all.
+    for (browser, release) in [
+        (
+            r#","browser":{"sealed_fill":{"chrome_id":"chr_1","origin":"https://shop.example"}}"#,
+            true,
+        ),
+        (r#","browser":{"fill":{"field_ref":"f1"}}"#, true),
+        (r#","browser":{"step":"s1","sealed_fill":null}"#, false),
+        ("", false),
+    ] {
+        let calls = read_held(call(browser).as_bytes()).expect("read");
+        let h = held(&w, &calls[0], "taf-rae").unwrap();
+        assert_eq!(h.needs_release, release, "{browser}");
+        assert_eq!(needs_release(&calls[0].browser), release);
+        let tafs = [Holder {
+            key: "taf-rae",
+            name: "Rae",
+            initial: "R",
+            color: 0,
+        }];
+        let now = chrono::Local::now();
+        let card = &lines(&w, std::slice::from_ref(&h), &tafs, true, true, now)
+            .unwrap()
+            .cards[0];
+        // Only the phone answers a fill, with its release: no Approve once, no Extra room here.
+        assert_eq!(card.approvable_once, !release, "{browser}");
+        assert!(!card.extra_room || !release);
+        assert_eq!(card.needs_release, release);
+    }
+}

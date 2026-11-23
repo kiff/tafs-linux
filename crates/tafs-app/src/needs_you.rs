@@ -638,6 +638,15 @@ pub fn held_card(w: &Rc<WordBook>, c: &CardLines) -> gtk::Box {
                 p.append(&b);
                 p.append(&slot);
             }
+            // A fill in the person's Chrome: the phone answers it, with its release.
+            if c.needs_release {
+                p.append(&text(
+                    &w.line("approval.security_key.on_phone").unwrap_or_default(),
+                    13,
+                    400,
+                    &["tafs-soft"],
+                ));
+            }
             p.append(&text(line, 13, 400, &["tafs-soft"]));
             // Beside Approve once here, answering in KIFF is the other way, not the first.
             let b = if key_answers {

@@ -46,6 +46,7 @@ pub fn held(w: &WordBook, held_at: DateTime<Local>) -> Result<Vec<HeldCall>, Wor
         details: vec![],
         taf_about: None,
         taf_reason: None,
+        needs_release: false,
     };
     let always_asks = |rule: &str| -> Result<String, WordsError> {
         w.get("card.check.always_asks", &[("rule", &w.line(rule)?)])

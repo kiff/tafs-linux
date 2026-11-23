@@ -94,6 +94,11 @@ pub struct CardException {
     pub taf_about: Value,
     #[serde(default)]
     pub taf_reason: Value,
+    /// A Chrome step's own block (`browser`): a sealed fill (`sealed_fill`) or a fill (`fill`)
+    /// needs the phone's release beside its answer (kiff/tafs docs/chrome.md, "never an allowing
+    /// answer without its release"), which this computer, with no approval key, can't make.
+    #[serde(default)]
+    pub browser: Value,
 }
 
 /// `heldCalls`: KIFF's answer, `{"exceptions": […]}`. None when it can't be read.
@@ -156,6 +161,9 @@ pub struct HeldCall {
     pub details: Vec<String>,
     pub taf_about: Option<String>,
     pub taf_reason: Option<String>,
+    /// It fills a sign-in in the person's Chrome (`browser.sealed_fill` or `browser.fill`): only
+    /// the phone answers it, with its release; this computer's key never does.
+    pub needs_release: bool,
 }
 
 /// The arguments KIFF's gateway adds to every call, never listed under Details.
@@ -206,7 +214,16 @@ pub fn held(w: &WordBook, e: &CardException, taf: &str) -> Result<HeldCall, Word
         details: details(e),
         taf_about: taf_words(e.taf_about.as_str(), 120),
         taf_reason: taf_words(e.taf_reason.as_str(), 280),
+        needs_release: needs_release(&e.browser),
     })
+}
+
+/// A held call's `browser` block asks for a fill in the person's Chrome: a sealed fill (a saved
+/// password or username) or a plain one. Either needs the phone's release beside the answer.
+pub fn needs_release(browser: &Value) -> bool {
+    ["sealed_fill", "fill"]
+        .iter()
+        .any(|k| browser.get(k).is_some_and(|v| !v.is_null()))
 }
 
 /// `name`: its tool's title as KIFF gives it, else the action in words.
