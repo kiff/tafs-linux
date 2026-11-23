@@ -476,8 +476,9 @@ nothing shows until they're read, or when they can't be. A 401 signs this comput
   asked first ("Install version 3?"), then KIFF's draft is read and, not confirmed live yet, the
   key approves its confirm (`{"version":…}`, "Install version 3 of Rae, with its Card"), then
   tafs cloud installs it as the session (`POST /v1/tafs/{id}/trial/install`), the version going
-  live and the trial ending; without a key, disabled with why; what the trial is, in tafs cloud's words (what's new, what to try it
-  with, that the live taf keeps working, when it ends unused); and the trial's own chat
+  live and the trial ending; without a key, disabled with why; what the trial is, in tafs cloud's
+  words (what's new, what to try it with, that the live taf keeps working, when it ends unused),
+  before its first message only, as the iPad's; and the trial's own chat
   (`/v1/tafs/{id}/trial/conversation`, `/v1/tafs/{id}/trial/messages`, the words alone, no
   files), kept apart from the taf's.
 - `--versions` (with `--trial`) reads them from files (synthetic: no contract at the pin);
@@ -489,6 +490,4 @@ nothing shows until they're read, or when they can't be. A 401 signs this comput
 ## Not yet
 
 - **On the Setup tab:** the sample's Setup (there, dimmed).
-- **In the trial's sheet:** its guide stays above the chat once messages are in (the iPad shows it
-  before the first only), and the chat's box is under it, a scroll down.
 - Remove for good on a computer with no security key (the phone's).

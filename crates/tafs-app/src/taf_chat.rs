@@ -160,7 +160,13 @@ pub fn forget() {
 }
 
 /// The pane and what it holds while it's open.
+/// What hears whether a drawn chat holds anything (`on_drawn`).
+type Drawn = Rc<dyn Fn(bool)>;
+
 struct Page {
+    /// Told, each time the chat is drawn, whether it holds anything yet (`chatItems` not empty):
+    /// the trial's sheet shows its guide before the first message only.
+    on_drawn: RefCell<Option<Drawn>>,
     /// How much of the answer streaming now shows (`SteadyMarkdown`).
     live_shown: crate::chat::Shown,
     w: Rc<WordBook>,
@@ -273,6 +279,7 @@ pub fn pane(w: Rc<WordBook>, taf: ChatTaf, source: ChatSource) -> gtk::Widget {
         reading: Cell::new(false),
         polls: RefCell::new(taf_chat::polls()),
         follow: Cell::new(true),
+        on_drawn: RefCell::new(None),
         root: root.clone(),
         column,
         scroller,
@@ -427,7 +434,22 @@ pub fn pane(w: Rc<WordBook>, taf: ChatTaf, source: ChatSource) -> gtk::Widget {
         }
         ChatSource::None => page.draw(),
     }
+    // SAFETY: only ever read back as the type it's stored as, by `on_drawn`.
+    unsafe { root.set_data("taf-chat", page.clone()) };
     root.upcast()
+}
+
+/// `told` hears, at once and each time the chat `pane` is drawn, whether it holds anything yet.
+pub fn on_drawn(pane: &gtk::Widget, told: Drawn) {
+    // SAFETY: stored by `pane` as an `Rc<Page>`, and read back only as that.
+    let page = unsafe {
+        pane.data::<Rc<Page>>("taf-chat")
+            .map(|p| p.as_ref().clone())
+    };
+    if let Some(page) = page {
+        *page.on_drawn.borrow_mut() = Some(told);
+        page.draw();
+    }
 }
 
 fn wire_composer(page: &Rc<Page>) {
@@ -1429,6 +1451,13 @@ impl Page {
     /// Draws what the chat holds now, unless it's what's drawn already.
     fn draw(self: &Rc<Self>) {
         self.composer_state();
+        let told = self.on_drawn.borrow().clone();
+        if let Some(told) = told {
+            let c = self.chat.borrow();
+            let any = !c.thread.messages.is_empty() || !c.unsent.is_empty() || c.live.is_some();
+            drop(c);
+            told(any);
+        }
         // The doors read again each time the thread's messages change, and once it's read: their
         // knocks sit among them (`.task(id: chats[tafID]?.count)`).
         if let Some((model, seen)) = &self.doors {
