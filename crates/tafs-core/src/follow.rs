@@ -23,6 +23,15 @@ pub const COACH: [Duration; 5] = [
     Duration::from_secs(30),
 ];
 
+/// People: 20 s, as every app read it, then 40, 60 and 120 while nothing changes. It reads for as
+/// long as the screen is open and seen.
+pub const PEOPLE: [Duration; 4] = [
+    Duration::from_secs(20),
+    Duration::from_secs(40),
+    Duration::from_secs(60),
+    Duration::from_secs(120),
+];
+
 /// How long a taf's chat is followed after the owner last wrote (`chatPollBudget`'s 30 reads of
 /// 4 s).
 pub const CHAT_WINDOW: Duration = Duration::from_secs(120);
@@ -33,6 +42,11 @@ pub const COACH_WINDOW: Duration = Duration::from_secs(300);
 
 /// The local tick the app checks `Follow` on. It reads nothing by itself.
 pub const TICK: Duration = Duration::from_millis(500);
+
+/// People's reads, from their first wait, for as long as the screen is open.
+pub fn people() -> Follow<u64> {
+    Follow::new(&PEOPLE, Duration::MAX)
+}
 
 /// `d`, made from 80% to 120% of itself by `r`, a random number from 0 to 1.
 pub fn jitter(d: Duration, r: f64) -> Duration {
@@ -171,6 +185,25 @@ mod tests {
             }
         }
         assert_eq!(reads, [3.0, 6.0, 9.0, 12.0, 18.0, 28.0]);
+    }
+
+    #[test]
+    fn people_backs_off_to_two_minutes_and_goes_on() {
+        let mut f = people();
+        f.tick(TICK, None, 0.5);
+        let mut at = Duration::ZERO;
+        let mut reads = vec![];
+        while at < Duration::from_secs(1_200) {
+            at += TICK;
+            if f.tick(TICK, None, 0.5) {
+                reads.push(at.as_secs());
+                f.read(&0, 0.5);
+            }
+        }
+        // The first read takes the list in; then 40, 60 and 120 s apart: 12 reads in 20 minutes
+        // where 20 s made 60.
+        assert_eq!(reads[..5], [20, 40, 80, 140, 260]);
+        assert_eq!(reads.len(), 12, "{reads:?}");
     }
 
     #[test]

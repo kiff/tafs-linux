@@ -190,7 +190,9 @@ Refunds", sorted; "Uses no taf yet"), its actions (rename, delete) for whoever m
 its people (`GET /v1/tenant/members`, the active ones), managers first, then by email, each with
 the first letter on a raised circle, their email (else KIFF's id), and Manager (amber) or Member;
 then "Add someone to Finance" for whoever manages the group, never for Everyone. "No groups yet."
-when there are none. It reads again every 20 seconds while it's open.
+when there are none. It reads again while it's open and the window is seen: 20 seconds later, then
+further apart while nothing changes (40, 60, then 120 seconds, each a random ±20%), and at once
+when the window is seen again (`tafs-core/src/follow.rs`).
 
 Read as strictly as the iPad's decoders: a group without its `members` or `agents`, or a person
 without `subject`, `role` or `status`, fails the read. The sample has no account: no groups.
