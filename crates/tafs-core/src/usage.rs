@@ -871,6 +871,33 @@ pub fn long_date(language: &str, day: chrono::NaiveDate) -> String {
     crate::locale::long_date(language, day)
 }
 
+/// Where Company (its id `team`) is bought on the web: KIFF's checkout, which signs the person
+/// in first.
+pub const TEAM_CHECKOUT: &str = "https://kiff.dev/dashboard/checkout";
+
+/// Where a computer buys (the PM's ruling A): Solo and credit packs only in the tafs app on the
+/// phone, through its store, and Company on kiff.dev. kiff.dev sells neither Solo nor credit
+/// packs.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Buying {
+    /// "Buy Solo or credits in the tafs app on your phone."
+    pub on_phone: String,
+    /// The web plan's link (`billing.team_on_web`), to `TEAM_CHECKOUT`.
+    pub team: String,
+}
+
+/// Shown where the iPad sells (`BalancePanel`'s Buy credits and Solo): signed in with KIFF, when
+/// tafs cloud's balance offers packs or Solo. Nothing is bought on this computer.
+pub fn buying(w: &WordBook, buy: Option<&Buy>) -> Result<Option<Buying>, WordsError> {
+    if !buy.is_some_and(|b| b.packs || b.solo) {
+        return Ok(None);
+    }
+    Ok(Some(Buying {
+        on_phone: w.line("billing.buy_on_phone")?,
+        team: w.line("billing.team_on_web")?,
+    }))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1063,5 +1090,35 @@ mod tests {
         assert_eq!(a.title, "Ask an admin");
         assert_eq!(a.hint, "What the credits are for");
         assert_eq!(offered_packs(&u, None).len(), 1);
+    }
+
+    #[test]
+    fn a_computer_says_where_to_buy_never_sells() {
+        let w = WordBook::load(&WordBook::default_root(), "en").unwrap();
+        let offer = |solo, packs| Buy {
+            solo,
+            packs,
+            ..Buy::default()
+        };
+        let b = buying(&w, Some(&offer(true, false))).unwrap().unwrap();
+        assert_eq!(
+            b.on_phone,
+            "Buy Solo or credits in the tafs app on your phone."
+        );
+        // The web plan's link, in the shared words (Company on kiff.dev).
+        assert_eq!(b.team, w.line("billing.team_on_web").unwrap());
+        assert!(buying(&w, Some(&offer(false, true))).unwrap().is_some());
+        // Nothing offered, or no offer at all: no lines.
+        assert_eq!(buying(&w, Some(&offer(false, false))).unwrap(), None);
+        assert_eq!(buying(&w, None).unwrap(), None);
+        assert_eq!(TEAM_CHECKOUT, "https://kiff.dev/dashboard/checkout");
+        // Every shipped language has both lines.
+        for lang in crate::words::SHIPPED {
+            let w = WordBook::load(&WordBook::default_root(), lang).unwrap();
+            assert!(
+                buying(&w, Some(&offer(true, true))).unwrap().is_some(),
+                "{lang}"
+            );
+        }
     }
 }

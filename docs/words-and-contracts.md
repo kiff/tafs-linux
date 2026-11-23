@@ -16,7 +16,7 @@ samples: `ios/Tafs/Samples/connect-apps.json`, the reference set's Connect apps.
 - A missing key, or a value a line asks for and isn't given, is an error: no English fallback, no
   `{hole}` on screen.
 
-`tests/at_the_pin.rs` checks every line the ported screens read, in all 40 languages, with the
+`tests/at_the_pin.rs` checks every line the ported screens read, in all 43 languages, with the
 values English has. It also fills every line at the pin, in every language, and fails if a `{`
 is left, so a form this app doesn't read yet fails CI before the pin moves. A new key goes into kiff/tafs first, then the pin moves, in its own PR.
 

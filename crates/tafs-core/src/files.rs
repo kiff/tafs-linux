@@ -366,6 +366,9 @@ const UNITS: &[Units] = &[
     ("ne", &[("other", "{0} byte")], "{0} kB", "{0} MB", "{0} GB"),
     ("km", &[("other", "{0} byte")], "{0} kB", "{0} MB", "{0} GB"),
     ("lo", &[("other", "{0} byte")], "{0} kB", "{0} MB", "{0} GB"),
+    ("tk", &[("other", "{0} B")], "{0} kB", "{0} MB", "{0} GB"),
+    ("hi", &[("other", "{0} बाइट")], "{0} kB", "{0} MB", "{0} GB"),
+    ("ur", &[("other", "{0} byte")], "{0} kB", "{0} MB", "{0} GB"),
 ];
 
 /// A size as the language words it (`FileSize.words`): bytes below a kilobyte; whole kilobytes; megabytes with one
@@ -511,6 +514,12 @@ mod tests {
                 assert!(!s.contains('{') && !s.is_empty(), "{lang} {n}: {s}");
             }
         }
+        // Turkmen, Hindi and Urdu, in CLDR 45's short units (Urdu's is the Latin "byte", for one
+        // too: its short unit has only "other").
+        assert_eq!(size("tk", 512), "512 B");
+        assert_eq!(size("hi", 512), "512 बाइट");
+        assert_eq!(size("ur", 1), "1 byte");
+        assert_eq!(size("ur", 512), "512 byte");
     }
 
     #[test]

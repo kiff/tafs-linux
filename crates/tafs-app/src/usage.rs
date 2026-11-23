@@ -466,7 +466,7 @@ pub fn page(w: Rc<WordBook>, source: UsageSource, names: Names) -> gtk::Widget {
 /// `BalancePanel`: the words, a bar at `meter_pct`, the detail and the warning; else why it
 /// couldn't be read. Signed in with KIFF, tafs cloud's Raise offer under it: raising is signed,
 /// so its tap says this computer can't approve, under it where the iPad says why it wasn't
-/// raised, and sends nothing. Buying waits for the money question.
+/// raised, and sends nothing. Where the iPad sells credits and Solo, where to buy them.
 fn balance_panel(ctx: &Ctx, column: &gtk::Box, s: &State, kiff: bool) {
     let Some(b) = &s.balance else {
         if let Some(why) = &s.balance_error {
@@ -515,6 +515,35 @@ fn balance_panel(ctx: &Ctx, column: &gtk::Box, s: &State, kiff: bool) {
             column.append(&crate::approval::not_ready(n));
         }
     }
+    // Where the iPad sells credits and Solo: on a computer, where to buy them (ruling A).
+    if kiff {
+        if let Ok(Some(b)) = tafs_core::usage::buying(&ctx.w, line.buy.as_ref()) {
+            column.append(&buying_panel(&b));
+        }
+    }
+}
+
+/// Where to buy, on a computer: Solo and credits in the tafs app on the phone, and Company on
+/// kiff.dev, opened in the browser. Nothing is bought here.
+fn buying_panel(b: &tafs_core::usage::Buying) -> gtk::Box {
+    let p = panel(false);
+    p.set_spacing(10);
+    p.set_widget_name("usage.buying");
+    p.append(&text(&b.on_phone, 15, 400, &["tafs-ink"]));
+    let team = outline(&b.team);
+    team.set_widget_name("usage.team-on-web");
+    team.set_halign(gtk::Align::Start);
+    team.set_tooltip_text(Some(tafs_core::usage::TEAM_CHECKOUT));
+    team.connect_clicked(|b| {
+        let window = b.root().and_then(|r| r.downcast::<gtk::Window>().ok());
+        gtk::UriLauncher::new(tafs_core::usage::TEAM_CHECKOUT).launch(
+            window.as_ref(),
+            gtk::gio::Cancellable::NONE,
+            |_| {},
+        );
+    });
+    p.append(&team);
+    p
 }
 
 /// The colour of tafs cloud's tone (`UsageView.color`), with its calm colour.
@@ -1299,7 +1328,7 @@ fn open_sheet(ctx: &Ctx, column: &gtk::Box) {
 /// `requestsPanel`, for someone who manages billing: members' open requests, in the amber,
 /// each its line and reason, then Raise the limit (where tafs cloud offers it) and Decline, which
 /// opens its sheet. Both are signed: their tap says this computer can't approve, and sends
-/// nothing. Approving a pack buys it, which waits for the money question: not drawn.
+/// nothing. Approving a pack buys it in the phone's store: here, where to buy it (ruling A).
 fn requests_panel(ctx: &Ctx, column: &gtk::Box, u: &KiffUsage, manages_billing: bool, s: &State) {
     let open = open_requests(u, manages_billing);
     if open.is_empty() {
@@ -1335,6 +1364,16 @@ fn requests_panel(ctx: &Ctx, column: &gtk::Box, u: &KiffUsage, manages_billing: 
                 .connect_clicked(move |_| ctx2.refuse(&Act::RaiseLimit, |s, n| s.plan_refused = n));
             // `ApprovalGate`, as the iPad's: while this computer can't approve, why in its place.
             buttons.append(&crate::approval::gate(&ctx.w, ctx.mode(), &raise));
+        }
+        let packs_sell = s
+            .balance
+            .as_ref()
+            .and_then(|b| b.balance.buy.as_ref())
+            .is_some_and(|b| b.packs);
+        if r.kind != "raise" && packs_sell {
+            // The iPad's Approve buys the pack in its store: on a computer, while packs sell,
+            // where to buy it.
+            one.append(&text(&l("billing.buy_on_phone"), 14, 400, &["tafs-soft"]));
         }
         let decline_button = outline(&l("usage.requests.decline"));
         decline_button.set_widget_name(&format!("usage.decline.{}", r.id));

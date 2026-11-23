@@ -13,10 +13,10 @@ use serde_json::Value;
 
 /// The languages this app speaks, by their words' folder: every language tafs ships
 /// (`languages.json`'s `shipped`, in its order; Arabic and Hebrew right to left). English first.
-pub const SHIPPED: [&str; 40] = [
+pub const SHIPPED: [&str; 43] = [
     "en", "de", "fr", "es", "it", "pt", "nl", "pl", "ko", "ja", "et", "lt", "lv", "cs", "sk", "sl",
     "hu", "ro", "bg", "hr", "tr", "id", "vi", "th", "zh-Hant", "ar", "sr-Latn", "sq", "ka", "hy",
-    "az", "bn", "he", "ca", "mk", "mn", "ne", "km", "lo", "pt-BR",
+    "az", "bn", "he", "ca", "mk", "mn", "ne", "km", "lo", "tk", "hi", "ur", "pt-BR",
 ];
 
 #[derive(Debug, Clone, PartialEq, Eq)]

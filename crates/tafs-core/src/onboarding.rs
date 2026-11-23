@@ -218,6 +218,10 @@ mod tests {
                 "onboarding.how_it_works",
                 "onboarding.terms_changed",
                 "onboarding.home_lead",
+                // How tafs works' section on approving with a security key.
+                "help.security_key_title",
+                "help.security_key_lead",
+                "help.security_key_use",
             ] {
                 w.line(k).unwrap_or_else(|e| panic!("{lang}: {e}"));
             }

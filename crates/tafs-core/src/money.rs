@@ -84,7 +84,7 @@ impl Money {
         // ("€ 5.000"), or after it with a space ("5.000 €"). A letter symbol before a number
         // always stands apart: "CHF 30".
         match crate::locale::base(language) {
-            "en" | "ja" | "ko" | "tr" | "id" | "th" | "zh" | "lo" => {
+            "en" | "ja" | "ko" | "tr" | "id" | "th" | "zh" | "lo" | "hi" | "ur" => {
                 if symbol.chars().last().is_some_and(char::is_alphabetic) {
                     format!("{symbol}{NBSP}{n}")
                 } else {
@@ -142,13 +142,17 @@ fn symbol(code: &str, language: &str) -> String {
     let s = match (code, crate::locale::base(language)) {
         ("EUR", "hu" | "ro") => "EUR",
         ("EUR", _) => "€",
-        ("USD", "en" | "de" | "ja" | "et" | "lv" | "sl" | "tr" | "mn" | "km" | "hy" | "he") => "$",
+        (
+            "USD",
+            "en" | "de" | "ja" | "et" | "lv" | "sl" | "tr" | "mn" | "km" | "hy" | "he" | "hi"
+            | "ur",
+        ) => "$",
         ("USD", "fr") => "$US",
         ("USD", "bg") => "щ.д.",
         (
             "USD",
             "es" | "pt" | "nl" | "ko" | "cs" | "id" | "vi" | "th" | "zh" | "ar" | "mk" | "ne"
-            | "lo" | "sr" | "sq" | "ka" | "az" | "bn",
+            | "lo" | "sr" | "sq" | "ka" | "az" | "bn" | "tk",
         ) => "US$",
         ("USD", _) => "USD",
         ("GBP", "fr") => "£GB",
@@ -190,6 +194,10 @@ mod tests {
         assert_eq!(euros(5_000, "mn"), "€\u{a0}5,000");
         assert_eq!(euros(5_000, "lo"), "€5.000");
         assert_eq!(euros(5_000, "ca"), "5.000\u{a0}€");
+        // Turkmen after the number; Hindi (in lakhs) and Urdu before it, as CLDR writes them.
+        assert_eq!(euros(5_000, "tk"), "5\u{a0}000\u{a0}€");
+        assert_eq!(euros(150_000, "hi"), "€1,50,000");
+        assert_eq!(euros(150_000, "ur"), "€150,000");
         assert_eq!(euros(5_000, "sr-Latn"), "5.000\u{a0}€");
         assert_eq!(euros(5_000, "he"), "\u{200f}5,000\u{a0}\u{200f}€");
         assert_eq!(euros(5_000, "bn"), "৫,০০০€");
