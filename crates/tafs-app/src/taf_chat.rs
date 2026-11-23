@@ -229,6 +229,10 @@ pub fn pane(w: Rc<WordBook>, taf: ChatTaf, source: ChatSource) -> gtk::Widget {
         attach,
     });
     wire_composer(&page);
+    // No doors offered (or a trial's chat): no knocks kept from an earlier read.
+    if page.doors.is_none() {
+        page.chat.borrow_mut().knocks.clear();
+    }
     // Its doors' open knocks, as they're read or answered: drawn again among the messages.
     if let Some((model, _)) = &page.doors {
         let p = Rc::downgrade(&page);

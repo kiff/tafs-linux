@@ -18,7 +18,7 @@ use tafs_core::words::WordBook;
 use crate::widgets::{eyebrow, outline, panel, primary, text};
 
 /// Where a taf's doors are read and changed.
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub enum DoorsSource {
     /// tafs cloud, as the session.
     Cloud {
@@ -61,13 +61,19 @@ thread_local! {
         RefCell::new(std::collections::HashMap::new());
 }
 
-/// `doors(for:)`: the taf's one doors model, made the first time it's asked for.
+/// `doors(for:)`: the taf's one doors model, made the first time it's asked for, and made anew
+/// when it's asked for with another session or in another language (a new pairing, a language
+/// picked), so it never reads with a session that's gone or draws in words no longer chosen.
 pub fn shared(w: Rc<WordBook>, id: String, source: DoorsSource) -> DoorsModel {
     MODELS.with(|m| {
-        m.borrow_mut()
-            .entry(id.clone())
-            .or_insert_with(|| DoorsModel::new(w, id, source))
-            .clone()
+        let mut m = m.borrow_mut();
+        let same = m
+            .get(&id)
+            .is_some_and(|old| Rc::ptr_eq(&old.w, &w) && old.source == source);
+        if !same {
+            m.insert(id.clone(), DoorsModel::new(w, id.clone(), source));
+        }
+        m[&id].clone()
     })
 }
 

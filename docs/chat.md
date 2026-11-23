@@ -251,8 +251,8 @@ as the session (`POST /v1/tafs/{id}/doors/knocks/{knock}`).
 - One doors model for each taf (`doors(for:)`, `crates/tafs-app/src/doors.rs` › `shared`), shared
   by its chat, its Activity's knocks and its doors' screen: an answer in one shows in all.
 - The doors are read when the chat is first read, and again each time its thread's messages change
-  (`.task(id: chats[tafID]?.count)`); this computer has no push, so a new knock arrives with the
-  thread's next read. A knock doesn't count as the taf's words for a held card waiting for them.
+  (`.task(id: chats[tafID]?.count)`); this computer has no push, so a new knock arrives when the
+  thread's messages next change, or when the chat is opened again. A knock doesn't count as the taf's words for a held card waiting for them.
 - A trial's chat has none. The rules are `tafs-core/src/taf_chat.rs` › `items_of`, with tests; the
   screenshot is `taf-chat-knocks` (`--doors crates/tafs-app/fixtures/taf-doors.json` with the
   chat's fixture).
