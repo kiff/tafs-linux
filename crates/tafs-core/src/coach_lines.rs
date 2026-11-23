@@ -692,8 +692,22 @@ pub fn work_lines(w: &WordBook, work: &Work) -> Result<WorkLines, WordsError> {
 
 /// `AppModel.tafActivityWords`: what a taf is doing, in the owner's words, from the tool it calls.
 /// Every tool that reaches the company's systems goes through KIFF, by its name in words past any
-/// prefix (`KIFFMapping.toolWords`): this computer reads no connection's title for it.
+/// prefix (`KIFFMapping.toolWords`).
 pub fn taf_activity_words(w: &WordBook, tool: &str) -> Result<String, WordsError> {
+    taf_activity_words_titled(w, tool, &std::collections::HashMap::new())
+}
+
+/// `tafActivityWords` with the connections' titles (planque's grants, `tool_titles`): a connected
+/// tool by the title its connection gives it ("Asking KIFF: Reading List payments (charges)…"),
+/// never its name in KIFF, which ends in four letters of its grant (kiff/tafs#236, item 7).
+pub fn taf_activity_words_titled(
+    w: &WordBook,
+    tool: &str,
+    titles: &std::collections::HashMap<String, String>,
+) -> Result<String, WordsError> {
+    if let Some(title) = titles.get(tool) {
+        return w.get("kiff.asking_kiff", &[("title", title)]);
+    }
     match tool {
         "memory" => w.line("taf.activity.reading_notes"),
         "kiff_pending" => w.line("taf.activity.checking_waits"),
@@ -706,7 +720,18 @@ pub fn taf_activity_words(w: &WordBook, tool: &str) -> Result<String, WordsError
 
 /// `WorkSummary` in a taf's chat: every step in the taf's words.
 pub fn taf_work_lines(w: &WordBook, work: &Work) -> Result<WorkLines, WordsError> {
-    work_lines_in(w, work, |tool| taf_activity_words(w, tool).map(Some))
+    taf_work_lines_titled(w, work, &std::collections::HashMap::new())
+}
+
+/// `WorkSummary` in a taf's chat, a connected tool by its connection's title.
+pub fn taf_work_lines_titled(
+    w: &WordBook,
+    work: &Work,
+    titles: &std::collections::HashMap<String, String>,
+) -> Result<WorkLines, WordsError> {
+    work_lines_in(w, work, |tool| {
+        taf_activity_words_titled(w, tool, titles).map(Some)
+    })
 }
 
 /// `WorkSummary` with `WorkLog.rows(running: false)`: each step in `words`' words (one with none

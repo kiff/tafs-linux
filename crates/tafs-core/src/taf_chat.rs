@@ -257,6 +257,9 @@ pub struct TafChat {
     /// Loop cards answered here, by id (`loopTaken`): answered at once, until the thread's words
     /// for it come.
     pub loop_taken: HashSet<String>,
+    /// Each connected tool's title, by its name in KIFF, from planque's grants as last read
+    /// (`toolTitle`): its steps say what it does in its connection's words. None until read.
+    pub tool_titles: HashMap<String, String>,
     /// Each held call's card key by KIFF's decision id (`heldKeys`), once KIFF was read: a call
     /// held in a streamed answer stays placed after it's answered and no longer held.
     pub held_keys: HashMap<String, String>,
@@ -583,7 +586,9 @@ impl TafChat {
                 }
                 let words = match step {
                     Some(s) => s.clone(),
-                    None => crate::coach_lines::taf_activity_words(w, tool)?,
+                    None => {
+                        crate::coach_lines::taf_activity_words_titled(w, tool, &self.tool_titles)?
+                    }
                 };
                 live.activity = Some(words.clone());
                 live.began(tool, Some(&words), call.as_deref());
@@ -1714,7 +1719,7 @@ pub fn lines(
                 report: None,
                 streaming: true,
             },
-            Item::Message(m) => message(w, m)?,
+            Item::Message(m) => message(w, m, &c.tool_titles)?,
             Item::Held { key, .. } => Line::Held(key.to_string()),
             Item::Outcome(e) => Line::Outcome(outcome_line(w, e)?),
             Item::Knock(k) => Line::Knock((*k).clone()),
@@ -1786,7 +1791,7 @@ pub fn lines(
         },
         live: match &c.live {
             Some(l) => crate::coach_lines::live_work_lines(w, l, |tool| {
-                crate::coach_lines::taf_activity_words(w, tool).map(Some)
+                crate::coach_lines::taf_activity_words_titled(w, tool, &c.tool_titles).map(Some)
             })?
             .map(|work| (work, live_at)),
             None => None,
@@ -1824,7 +1829,11 @@ pub fn lines(
     })
 }
 
-fn message(w: &WordBook, m: &ChatMessage) -> Result<Line, WordsError> {
+fn message(
+    w: &WordBook,
+    m: &ChatMessage,
+    titles: &HashMap<String, String>,
+) -> Result<Line, WordsError> {
     if m.kind == MessageKind::Kickoff {
         return Ok(Line::Kickoff(w.get(
             "chat.run_started_with",
@@ -1855,7 +1864,7 @@ fn message(w: &WordBook, m: &ChatMessage) -> Result<Line, WordsError> {
             work: m
                 .work
                 .as_ref()
-                .map(|work| crate::coach_lines::taf_work_lines(w, work))
+                .map(|work| crate::coach_lines::taf_work_lines_titled(w, work, titles))
                 .transpose()?,
             delivered: m.delivered.clone(),
             text: m.text.clone(),

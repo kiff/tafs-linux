@@ -166,6 +166,41 @@ pub fn grants_read_proof(key: &DeviceKey, device: &str, tenant: &str, base: &str
     safe_proof(key, device, tenant, base, Safe::Grants)
 }
 
+/// Each connected tool's title, as its connection gives it, by its name in KIFF (the iPad's
+/// `AppModel.toolTitle`), from planque's `GET …/grants`: `{"grants": [{"request": {"tools":
+/// [{tool, name?, title?}]}}]}`. A tool's name in KIFF is its `name`, else its `tool`; the
+/// first grant to give it a title that isn't blank wins. Read leniently: what can't be read
+/// gives no title, never an error.
+pub fn tool_titles(body: &[u8]) -> std::collections::HashMap<String, String> {
+    let mut titles = std::collections::HashMap::new();
+    let Ok(v) = serde_json::from_slice::<serde_json::Value>(body) else {
+        return titles;
+    };
+    let grants = v.get("grants").and_then(|g| g.as_array());
+    for tool in grants
+        .into_iter()
+        .flatten()
+        .filter_map(|g| g.get("request")?.get("tools")?.as_array())
+        .flatten()
+    {
+        let action = tool
+            .get("name")
+            .and_then(|n| n.as_str())
+            .or_else(|| tool.get("tool").and_then(|t| t.as_str()));
+        let title = tool
+            .get("title")
+            .and_then(|t| t.as_str())
+            .map(str::trim)
+            .filter(|t| !t.is_empty());
+        if let (Some(action), Some(title)) = (action, title) {
+            titles
+                .entry(action.to_string())
+                .or_insert_with(|| title.to_string());
+        }
+    }
+    titles
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -312,5 +347,31 @@ mod tests {
         let e = signing_time();
         assert!(c < d && d < e, "{c} {d} {e}");
         assert!(e.ends_with('Z'));
+    }
+
+    #[test]
+    fn a_tools_title_comes_from_its_connection_by_its_name_in_kiff() {
+        let t = tool_titles(
+            br#"{"grants":[
+                {"id":"g1","request":{"tools":[
+                    {"tool":"list_charges","name":"kiff__stripe_list_charges_ab12","title":"Reading List payments (charges)"},
+                    {"tool":"refund","title":"  "},
+                    {"tool":"plain","title":"Plain"}]}},
+                {"id":"g2","request":{"tools":[
+                    {"tool":"x","name":"kiff__stripe_list_charges_ab12","title":"Later"}]}},
+                {"id":"g3"},
+                {"id":"g4","request":{"tools":"nope"}}]}"#,
+        );
+        assert_eq!(
+            t.get("kiff__stripe_list_charges_ab12").map(String::as_str),
+            Some("Reading List payments (charges)")
+        );
+        // No name: its tool. A blank title is none.
+        assert_eq!(t.get("plain").map(String::as_str), Some("Plain"));
+        assert!(!t.contains_key("refund"));
+        assert_eq!(t.len(), 2);
+        // An answer that can't be read gives no titles, never an error.
+        assert!(tool_titles(b"[]").is_empty());
+        assert!(tool_titles(b"nope").is_empty());
     }
 }
