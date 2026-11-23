@@ -116,6 +116,7 @@ pub fn sidebar(
             badge: None,
             tone: Default::default(),
             rim: None,
+            trial: None,
         };
         tafs.push((
             row,

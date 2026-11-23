@@ -3295,10 +3295,16 @@ fn home_model(
     let rows = ordered
         .iter()
         .map(|t| {
-            (
-                tafs_core::home::row(t),
-                tafs_core::home::relevant(t, waits(t), at),
-            )
+            let mut row = tafs_core::home::row(t);
+            // Its open trial, under it, for whoever manages it: its sheet is reached from the
+            // taf's Versions, which only they see.
+            if access.get(&t.agent).is_some_and(|a| a.manage) {
+                row.trial = tafs_core::home::trial_row(w, t)
+                    .ok()
+                    .flatten()
+                    .map(Box::new);
+            }
+            (row, tafs_core::home::relevant(t, waits(t), at))
         })
         .collect();
     let overview = ordered

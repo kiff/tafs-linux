@@ -189,8 +189,16 @@ pub fn link(w: Rc<WordBook>, taf: VersionsTaf) -> gtk::Box {
                 }
                 return;
             }
-            Read::Failed(_) => return,
+            Read::Failed(_) => {
+                // A trial asked for (its sidebar row) that can't be read: never kept for another page.
+                OPEN.with(|o| *o.borrow_mut() = None);
+                return;
+            }
         };
+        // A trial asked for that ended meanwhile: nothing to open, and nothing kept for later.
+        if trial.is_none() && OPEN.with(|o| *o.borrow()) == Some("trial") {
+            OPEN.with(|o| *o.borrow_mut() = None);
+        }
         let Ok((title, resume)) = versions::link(&w2, Some(&state), trial.as_ref()) else {
             return;
         };

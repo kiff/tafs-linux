@@ -1180,3 +1180,42 @@ fn a_taf_with_a_door_open_has_its_rim() {
     let h = Home::read(&serde_json::to_vec(&answer).unwrap()).unwrap();
     assert_eq!(home::taf(&w, &h.tafs[0]).unwrap().rim, None);
 }
+
+#[test]
+fn an_open_trial_has_its_row_under_its_taf() {
+    let w = en();
+    // At the pin, Home's taf has no trial: no row.
+    let h = Home::read(&contract("home.json")).unwrap();
+    assert_eq!(
+        home::trial_row(&w, &home::taf(&w, &h.tafs[0]).unwrap()).unwrap(),
+        None
+    );
+    let mut answer: Value = serde_json::from_slice(&contract("home.json")).unwrap();
+    answer["tafs"][0]["trial"] = serde_json::json!({
+        "id": "tr_1", "n": 2, "draft": "drf_1", "session": null,
+        "started": "2026-11-22T10:00:00Z", "used": "2026-11-22T11:00:00Z",
+        "ends": "2026-11-29T11:00:00Z"
+    });
+    let h = Home::read(&serde_json::to_vec(&answer).unwrap()).unwrap();
+    let t = home::taf(&w, &h.tafs[0]).unwrap();
+    let r = home::trial_row(&w, &t).unwrap().expect("its trial's row");
+    assert_eq!(r.name, format!("{} · v2", t.name));
+    assert_eq!(r.badge.as_deref(), Some("Trial"));
+    assert!(r.now.starts_with("Trying version 2 · ends "), "{}", r.now);
+    assert!(r.now.ends_with(" if unused"), "{}", r.now);
+    assert_eq!(r.key, t.key);
+    // tafs cloud's own label and title, where it sends them.
+    answer["tafs"][0]["trial"]["label"] = "Test run".into();
+    answer["tafs"][0]["trial"]["title"] = "Trying the new refunds".into();
+    answer["tafs"][0]["trial"]["ends"] = Value::Null;
+    let h = Home::read(&serde_json::to_vec(&answer).unwrap()).unwrap();
+    let r = home::trial_row(&w, &home::taf(&w, &h.tafs[0]).unwrap())
+        .unwrap()
+        .unwrap();
+    assert_eq!(r.badge.as_deref(), Some("Test run"));
+    assert_eq!(r.now, "Trying the new refunds");
+    // Another shape is no trial, and Home still reads.
+    answer["tafs"][0]["trial"] = serde_json::json!("open");
+    let h = Home::read(&serde_json::to_vec(&answer).unwrap()).unwrap();
+    assert_eq!(home::taf(&w, &h.tafs[0]).unwrap().trial, None);
+}

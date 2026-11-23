@@ -90,6 +90,8 @@ pub struct TafRow {
     pub tone: Tone,
     /// The rim round its avatar while a door is open (`DoorRim`).
     pub rim: Option<crate::rim::Rim>,
+    /// Its open trial's row, under it (`trialTaf`), for whoever manages it.
+    pub trial: Option<Box<TafRow>>,
 }
 
 /// A row's line colour (`tafRow`): dim, the amber as text, or red when it's failing.
@@ -545,6 +547,7 @@ mod tests {
             badge: None,
             tone: Tone::default(),
             rim: None,
+            trial: None,
         }
     }
 
