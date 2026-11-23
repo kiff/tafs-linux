@@ -221,6 +221,4 @@ crates/tafs-app/fixtures/balance-home-line.json`, synthetic) is CI's `sidebar-pl
   grants aren't read).
 - **Held calls, steps and knocks** from KIFF: until they're read, Your tafs is what ran or changed.
 - **The account's name** under Account, and its zone for times: from KIFF's account read.
-- **A room's end on a later day** shows its date as 2026-11-16 00:00, not in the language's words
-  yet.
 
