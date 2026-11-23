@@ -255,7 +255,7 @@ struct Options {
 }
 
 const USAGE: &str = "tafs [dev.kiff.tafs:/oauth?…] [--lang <a language tafs speaks: en, de, fr, ar, ja, zh-Hant, pt-BR…>] [--theme light|dark] [--sample] [--signed-in] [--view-only [--paired]]
-     [--home contract.json] [--usage answers.json] [--people answers.json] [--files files-list.json] [--chromes answer.json] [--connect answers.json] [--knob answer.json] [--setup answer.json] [--taf-activity answer.json] [--unproven answers.json] [--recipes answers.json] [--gallery answers.json] [--halt answer.json] [--record-search answers.json] [--access answer.json] [--receipts answer.json] [--activity answer.json] [--calls answer.json] [--receipt answer.json] [--work answer.json] [--doors answer.json] [--account-reads answers.json] [--me answer.json] [--attach files.json] [--held answers.json] [--versions answer.json [--trial answer.json]] [--memory answer.json] [--runs answer.json] [--request answer.json] [--balance answer.json] [--coach answer.json] [--coach-chats answer.json] [--watch-days answers.json] [--coach-drafts answers.json] [--chat answer.json [--report] [--chat-stream events.txt [--pin-check]]] [--brief answer.json] [--mission-log answer.json] [--coach-setup answer.json] [--coach-stream events.txt] [--unreachable network|error] [--new-version vX.Y.Z] [--app-event item.json] [--size WxH] [--page welcome|sign-in|pair|recipe:<id>|gallery|new-taf|halt-all|halt:<id>|halt-resume:<id>|record-search:<q>|record-export|receipt:<proposal id>|run:<taf id>|pin-sheet|share:<key>|share-step2:<key>|coach|coach-tools|coach-full|coach-read-back|coach-hand:<id>|coach-improve:<key>|overview|overview-label:<id>|needs-you|needs-you-key|needs-you-key-room|discard-setup|needs-you-set-all-aside|needs-you-dismiss|needs-you-hold:<id>|versions:<key>|trial:<key>|brief-answer:<decision id>|mission-log:<mission id>|record|calendar|calendar-week|usage|usage-ask|usage-decline|connect-apps|connect-app|connect-connection|connect-remove|connect-which-taf|connect-approve|account|kiff-account|time-zone|time-zone-use|alerts|devices|devices-sign-out|people|people-rename|people-add|taf|taf-card|taf-setup|taf-setup:<id>|starts:<id>|results:<id>|doors:<id>[:<door>]|taf-receipt:<key>:<entry>|files|files-file|files-taf:<id>|chrome|taf-report:<key>:<entry>|consent|connected|sign-in-code] [--screenshot out.png]";
+     [--home contract.json] [--usage answers.json] [--people answers.json] [--files files-list.json] [--chromes answer.json] [--connect answers.json] [--knob answer.json] [--setup answer.json] [--taf-activity answer.json] [--unproven answers.json] [--recipes answers.json] [--gallery answers.json] [--halt answer.json] [--record-search answers.json] [--access answer.json] [--receipts answer.json] [--activity answer.json] [--calls answer.json] [--receipt answer.json] [--work answer.json] [--doors answer.json] [--account-reads answers.json] [--me answer.json] [--attach files.json] [--held answers.json] [--versions answer.json [--trial answer.json]] [--memory answer.json] [--runs answer.json] [--request answer.json] [--balance answer.json] [--coach answer.json] [--coach-chats answer.json] [--watch-days answers.json] [--coach-drafts answers.json] [--chat answer.json [--report] [--chat-stream events.txt [--pin-check]]] [--brief answer.json] [--mission-log answer.json] [--coach-setup answer.json] [--coach-stream events.txt] [--unreachable network|error] [--new-version vX.Y.Z] [--app-event item.json] [--size WxH] [--page welcome|sign-in|pair|recipe:<id>|gallery|new-taf|halt-all|halt:<id>|halt-resume:<id>|record-search:<q>|record-export|receipt:<proposal id>|run:<taf id>|pin-sheet|share:<key>|share-step2:<key>|coach|coach-tools|coach-full|coach-read-back|coach-hand:<id>|coach-improve:<key>|overview|overview-label:<id>|needs-you|needs-you-key|needs-you-key-room|discard-setup|needs-you-set-all-aside|needs-you-dismiss|needs-you-hold:<id>|versions:<key>|trial:<key>|brief-answer:<decision id>|mission-log:<mission id>|record|calendar|calendar-week|usage|usage-ask|usage-decline|connect-apps|connect-app|connect-connection|connect-remove|connect-which-taf|connect-approve|account|kiff-account|time-zone|time-zone-use|alerts|devices|devices-sign-out|people|people-rename|people-add|taf|taf-card|taf-sample-chat|taf-setup|taf-setup:<id>|starts:<id>|results:<id>|doors:<id>[:<door>]|taf-receipt:<key>:<entry>|files|files-file|files-taf:<id>|chrome|taf-report:<key>:<entry>|consent|connected|sign-in-code] [--screenshot out.png]";
 
 fn options() -> Result<Options, String> {
     let mut o = Options::default();
@@ -469,7 +469,9 @@ fn selection_of(page: Option<&str>) -> Selection {
             Selection::Coach
         }
         // The sample's Support replies, as the reference set's taf.png opens it.
-        Some("taf") | Some("taf-card") => Selection::Taf("support".into()),
+        Some("taf") | Some("taf-card") | Some("taf-sample-chat") => {
+            Selection::Taf("support".into())
+        }
         // With `--home`, the contract's first taf.
         Some(other) if other.starts_with("taf:") => Selection::Taf(other["taf:".len()..].into()),
         Some(other) if other.starts_with("run:") => Selection::Taf(other["run:".len()..].into()),
@@ -679,6 +681,7 @@ fn activate(app: &adw::Application, o: &Options) {
             .page
             .as_deref()
             .is_some_and(|p| p == "taf-card" || p.starts_with("taf-card:")),
+        on_sample_chat: o.page.as_deref() == Some("taf-sample-chat"),
         on_setup: o.page.as_deref().is_some_and(|p| {
             p.starts_with("taf-setup:") || p.starts_with("starts:") || p.starts_with("results:")
         }),
@@ -1215,6 +1218,8 @@ struct App {
     screenshot: bool,
     /// `--page taf-card`: the taf opens on its Card tab.
     on_card: bool,
+    /// `--page taf-sample-chat`: the sample's Support replies opens on its chat.
+    on_sample_chat: bool,
     /// `--page taf-setup:<id>`: a taf's page opens on Setup.
     on_setup: bool,
     /// `--page starts:<id>` or `results:<id>`: Setup's screen open over its tab.
@@ -1574,6 +1579,12 @@ impl App {
             })
             .collect();
         // A taf's held calls, as Needs you draws them.
+        // The sample's Record, for what each sample taf says it did lately in its chat.
+        let sample_record = if mode == Mode::Sample {
+            sample::record(w, at).unwrap_or_default()
+        } else {
+            vec![]
+        };
         let held_of = |key: &str| -> Vec<tafs_core::needs_you::CardLines> {
             let calls: Vec<_> = model
                 .held
@@ -1686,12 +1697,19 @@ impl App {
                 .iter()
                 .map(|(t, _)| {
                     let waits = model.held.iter().any(|c| c.taf == t.key);
+                    let paused = taf_chat::sample_paused(&t.key) == Some(true);
+                    // Its Record lines' titles, newest first, for what it says it did lately.
+                    let mut lines: Vec<&tafs_core::record::Entry> =
+                        sample_record.iter().filter(|e| e.taf == t.key).collect();
+                    lines.sort_by_key(|e| std::cmp::Reverse(e.at));
                     taf::TafPage {
                         key: t.key.clone(),
                         name: t.name.clone(),
                         initial: t.initial.clone(),
                         color: t.color_index,
-                        state: if waits {
+                        state: if paused {
+                            tafs_core::taf_page::TafState::Paused
+                        } else if waits {
                             tafs_core::taf_page::TafState::Waiting
                         } else {
                             tafs_core::taf_page::TafState::Working
@@ -1711,6 +1729,7 @@ impl App {
                         cards: sample::full_cards(w, &t.key, self.screenshot).unwrap_or_default(),
                         issued_by: w.line("common.you").unwrap_or_default(),
                         opens_on_card: self.on_card,
+                        opens_on_activity: self.screenshot && !self.on_sample_chat,
                         opens_on_setup: self.on_setup,
                         opens_doors: None,
                         opens_setup_screen: None,
@@ -1720,7 +1739,7 @@ impl App {
                         knob: starts_when::KnobSource::None,
                         works_from_chat: false,
                         next_run_line: None,
-                        paused: false,
+                        paused,
                         results: None,
                         cloud_id: None,
                         source: taf::ActivitySource::None,
@@ -1736,7 +1755,18 @@ impl App {
                         runs_line: None,
                         time_zone_words: None,
                         schedule_time_zone_words: None,
-                        chat: taf_chat::ChatSource::None,
+                        // The sample's chat (`sampleReply`), at the iPad's pace: a beat is half
+                        // of its 0.7 s, none in a screenshot.
+                        chat: taf_chat::ChatSource::Sample {
+                            now_line: t.now.clone(),
+                            done: lines.iter().map(|e| e.title.clone()).collect(),
+                            waiting: model.held.iter().filter(|c| c.taf == t.key).count(),
+                            beat_ms: if self.screenshot {
+                                0
+                            } else {
+                                tafs_core::sample_chat::REPLY_MS / 2
+                            },
+                        },
                     }
                 })
                 .collect(),
@@ -1866,6 +1896,7 @@ impl App {
                             issuer.clone()
                         },
                         opens_on_card: self.on_card,
+                        opens_on_activity: false,
                         opens_on_setup: self.on_setup,
                         opens_doors: self.on_doors.clone(),
                         opens_setup_screen: self.on_setup_screen,
@@ -2224,6 +2255,17 @@ impl App {
             }
             (_, None) => (kiff_model(), vec![], None),
         };
+        // A sample taf paused or told to carry on in its chat says so (`togglePause`).
+        if mode == Mode::Sample {
+            for (row, _) in model.tafs.iter_mut() {
+                let key = match taf_chat::sample_paused(&row.key) {
+                    Some(true) => "taf.now.paused_by_you",
+                    Some(false) => "taf.now.back_to_work",
+                    None => continue,
+                };
+                row.now = words.line(key).unwrap_or_default();
+            }
+        }
         // tafs cloud's line for a Home with no taf, under Your tafs (`recipes.homeWords`).
         model.home_words = cloud
             .as_ref()
@@ -2373,6 +2415,19 @@ impl App {
                 Some(Rc::new(move || {
                     if let Some(me) = me.upgrade() {
                         me.reread_home();
+                    }
+                }))
+            }
+            // The sample reads nothing: its sidebar is drawn again from what its chats changed.
+            (Mode::Sample, _) => {
+                let me = Rc::downgrade(self);
+                Some(Rc::new(move || {
+                    if let Some(me) = me.upgrade() {
+                        let (model, _, _) =
+                            me.sidebar_model(Mode::Sample, None, chrono::Local::now());
+                        if let Some(shell) = me.shell.borrow().as_ref() {
+                            shell.redraw_sidebar(&model);
+                        }
                     }
                 }))
             }

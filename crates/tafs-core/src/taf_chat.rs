@@ -656,6 +656,48 @@ impl TafChat {
         self.live = None;
     }
 
+    /// The sample's chat opened (`loadChat` in the sample): what it starts with, read.
+    pub fn sample_seed(&mut self, opening: Vec<ChatMessage>) {
+        self.thread.messages = opening;
+        self.loaded = true;
+    }
+
+    /// The sample's answer begins (`deliverChatOnce`'s sample branch): written as it streams,
+    /// still sending, so another message waits in the box; never at work, so there's no Stop.
+    pub fn sample_live(&mut self, now: DateTime<Utc>) {
+        self.live = Some(LiveAnswer::new(now.timestamp()));
+    }
+
+    /// The sample's answer written: the owner's message as the thread would have it (the
+    /// sample's session), then the answer with what it worked on (`work`, none when it answered
+    /// at once).
+    pub fn sample_answered(
+        &mut self,
+        d: &Delivery,
+        answer: &str,
+        work: Option<crate::coach::Work>,
+        now: DateTime<Utc>,
+    ) {
+        self.sent.retain(|m| m.id() != d.local);
+        for m in self.thread.messages.iter_mut() {
+            if m.id() == d.local {
+                m.session = crate::sample_chat::SESSION.into();
+            }
+        }
+        let latest = self.thread.messages.iter().map(|m| m.at).max();
+        let mut reply = crate::sample_chat::message(From::Taf, answer, stamp(latest, now));
+        reply.work = work;
+        self.thread.messages.push(reply);
+        self.live = None;
+        self.sending = false;
+    }
+
+    /// The sample's answer given up (the chat closed while it wrote): ready to send again.
+    pub fn sample_gone(&mut self) {
+        self.live = None;
+        self.sending = false;
+    }
+
     /// `retryChatRun`: the message the run that failed part-way started with, to send again.
     pub fn retry_run(&mut self) -> Option<String> {
         match self.ended.take() {

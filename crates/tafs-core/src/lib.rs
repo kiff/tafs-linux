@@ -59,6 +59,7 @@ pub mod removal;
 pub mod report;
 pub mod runs;
 pub mod sample;
+pub mod sample_chat;
 pub mod security_key;
 pub mod session;
 pub mod setup;

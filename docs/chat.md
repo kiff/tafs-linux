@@ -1,7 +1,7 @@
 # A taf's chat
 
 The iPad's taf chat (`TafChatView`), on a taf's page's Chat tab, for a taf tafs cloud runs, signed in
-with KIFF. The page opens on it, as the iPad's does; the sample's Chat is there, dimmed. What it reads,
+with KIFF, and the sample's ([below](#the-samples-chat)). The page opens on it, as the iPad's does. What it reads,
 holds and draws is `tafs-core/src/taf_chat.rs`, tested there and in every language at the pin
 (`tests/at_the_pin.rs`); the pane is `crates/tafs-app/src/taf_chat.rs`. What it shares with Coach's
 conversation ([coach.md](coach.md)) is shared code: the routes, bodies and answers of what's sent
@@ -283,12 +283,40 @@ approved that wasn't done, is on its way, or whose outcome is unknown, as one li
   `items_of`, with tests. The screenshot is `taf-chat-outcomes` (`--activity
   crates/tafs-app/fixtures/taf-chat-activity.json`, synthetic).
 
+## The sample's chat
+
+As the iPad's sample (`loadChat`'s hello, `loadSample`, `sampleReply`, `deliverChatOnce`'s sample
+branch), each sample taf's page has its Chat, and nothing is read or sent
+(`tafs-core/src/sample_chat.rs`, `ChatSource::Sample`):
+
+- **It starts** with the taf's hello: "Hi, I'm Deploys. I'm on it: {what it's doing now}. Ask me
+  what I did, or tell me what to do differently. I stay inside my Card either way." Support replies
+  also has the owner's "How did this morning go?" and its answer. Its held call is there as its
+  card, where it was held, and the chat is kept while the app runs (the iPad keeps none across
+  launches either).
+- **Each message is answered** by the first of `sampleReply`'s rules that matches:
+  - "stop", "pause" or "hold off" anywhere: "Paused. Nothing more goes out until you tell me to
+    carry on.", and the taf is paused;
+  - "go", "carry on", "resume" or "continue", the whole message or its first words: "Back to
+    work.", and a paused taf carries on;
+  - "more", "raise", "limit", "bigger" or "increase" anywhere: "I can't give myself more room: only
+    you can, by changing my Card. …";
+  - anything else: "Lately:" with its last three Record lines, then how many things wait on the
+    owner in Needs you, then "(Sample reply. Signed in with KIFF, your taf answers for real.)".
+- **The answer streams** as a run's does, at the iPad's pace (a beat is 0.35 s): what it's
+  thinking, its notes read (`memory`), then its words, a twelfth of a beat each; then it's kept
+  with what it worked on ("Worked for 2 s"). A second message while it writes stays in the box.
+  There are no files, no Stop and no steering in the sample, as on the iPad.
+- **Paused or carrying on** shows at once on the sidebar's row ("Paused by you", "Back to work");
+  the taf's page shows its state when it's opened again.
+- `--page taf-sample-chat` opens Support replies on its chat, CI's `taf-sample-chat`; a
+  screenshot answers at once. `--page taf` stays on Activity, as the iPad's `-screen taf`.
+
 ## Not yet
 
 - `SteadyMarkdown`.
 - Keeping across launches
   which unread rows were dealt with.
-- The sample's chat (`sampleReply`).
 
 ## Screenshots
 
