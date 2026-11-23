@@ -2222,6 +2222,43 @@ fn intro(w: &WordBook) -> gtk::Widget {
     v.upcast()
 }
 
+/// The sample's Coach (`introBefore` over the sample, which has no Coach to start): board 9,
+/// "Coach mode", what Coach does ("Name an app for your taf, …"), and Start, which only signed
+/// in with KIFF can press (`.disabled(model.mode != .kiff)`).
+pub fn sample_intro(w: &WordBook) -> gtk::Widget {
+    let v = gtk::Box::new(gtk::Orientation::Vertical, 14);
+    v.set_margin_top(24);
+    v.set_margin_start(24);
+    v.set_margin_end(24);
+    v.set_margin_bottom(24);
+    v.append(&crate::illustrations::coach_starting());
+    v.append(&text(
+        &w.line("coach.coach_mode").unwrap_or_default(),
+        30,
+        700,
+        &["tafs-coach-text"],
+    ));
+    let passcode = w.line("approval.your_passcode").unwrap_or_default();
+    v.append(&text(
+        &w.get(
+            "coach.name_tool_taf_should_work",
+            &[("biometry", &passcode)],
+        )
+        .unwrap_or_default(),
+        16,
+        400,
+        &["tafs-soft"],
+    ));
+    let start = crate::widgets::primary(&w.line("coach.start").unwrap_or_default());
+    start.set_sensitive(false);
+    v.append(&start);
+    let scroller = gtk::ScrolledWindow::new();
+    scroller.set_hscrollbar_policy(gtk::PolicyType::Never);
+    scroller.set_child(Some(&v));
+    crate::widgets::ground(&scroller);
+    scroller.upcast()
+}
+
 /// An unsent message's menu (`contextMenu`), on a right click or a long press: Copy, the message
 /// as it was written, and Delete, out of the thread.
 pub(crate) fn unsent_menu(

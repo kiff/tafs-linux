@@ -223,5 +223,4 @@ crates/tafs-app/fixtures/balance-home-line.json`, synthetic) is CI's `sidebar-pl
 - **The account's name** under Account, and its zone for times: from KIFF's account read.
 - **A room's end on a later day** shows its date as 2026-11-16 00:00, not in the language's words
   yet.
-- **The sample's Coach** (the reference set's signed-in sidebar over the sample): its title alone,
-  as the sample has no Coach on this computer.
+

@@ -2,7 +2,9 @@
 
 The iPad's Coach conversation (`SetupChatView` at a regular width) in Coach mode over the app
 (below), with its message box. Its Coach button opens it, signed in with KIFF by someone who may use Coach; the sample
-has no Coach, so there it still opens its title alone. What it reads and how it's decoded is
+has no Coach to start, so there it opens Coach's intro (`introBefore`: board 9, "Coach mode", what
+Coach does, and Start, which only signed in with KIFF can press; `coach::sample_intro`, CI's
+`sample-coach`). What it reads and how it's decoded is
 `tafs-core/src/coach.rs`; the device's proof is `tafs-core/src/planque.rs`; what's sent, and how the
 conversation holds it while it goes, is `tafs-core/src/coach_send.rs`; what it draws is
 `tafs-core/src/coach_lines.rs`, tested there and in every language at the pin

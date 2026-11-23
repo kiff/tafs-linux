@@ -161,6 +161,7 @@ pub fn build(
     view_only: Option<ViewOnly>,
     first: Selection,
 ) -> Shell {
+    let sample = model.mode == tafs_core::sidebar::Mode::Sample;
     let Screens {
         overview,
         needs_you,
@@ -429,7 +430,9 @@ pub fn build(
                 Selection::Usage => {
                     crate::usage::page(w.clone(), usage.clone(), cloud_names.clone())
                 }
-                // Coach, read only, signed in with KIFF; the sample has none, so its title alone.
+                // The sample's Coach: its intro, with Start only signed in with KIFF.
+                Selection::Coach if sample => crate::coach::sample_intro(&w),
+                // Coach, read only, signed in with KIFF.
                 Selection::Coach if !matches!(coach, crate::coach::CoachSource::None) => {
                     crate::coach::page(
                         w.clone(),
@@ -621,7 +624,7 @@ pub fn build(
     };
 
     // Coach, signed in with KIFF, opens Coach mode over what's on screen; anything else is a
-    // screen beside the sidebar. In the sample, Coach is its title.
+    // screen beside the sidebar. In the sample, Coach is its intro.
     let route: Rc<dyn Fn(Selection)> = {
         let (select, mode, selection) = (select.clone(), mode.clone(), selection.clone());
         Rc::new(move |s: Selection| {
