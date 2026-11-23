@@ -469,6 +469,9 @@ pub struct Opens {
     /// The taf's dial, as tafs cloud last sent it, and the held calls its face can show: the
     /// dial stands in the doors' own (`knob(_:held:press:approve:)`).
     pub knob: Option<(crate::starts_when::Knobs, Vec<tafs_core::knob::HeldFace>)>,
+    /// The sheet's foot, under what scrolls: the dial's error line and remote are pinned there
+    /// (`TafDialPanel`'s `safeAreaInset`), not scrolled away with the dial. None: under the dial.
+    pub foot: Option<gtk::Box>,
 }
 
 // Colours, in the appearance on screen.
@@ -1282,6 +1285,7 @@ pub fn view(model: DoorsModel, taf: DoorsTaf, opens: Opens) -> gtk::Box {
                     }
                 }
             }),
+            ctx.opens.foot.clone(),
         ));
     }
     ctx.draw();
@@ -2254,6 +2258,17 @@ pub fn sheet(model: DoorsModel, taf: DoorsTaf, opens: Opens, parent: &impl IsA<g
         let model = model.clone();
         dialog.connect_closed(move |_| model.unlisten(listening));
     }
+    // The dial's error line and remote stay in sight at the sheet's foot while its doors scroll.
+    let foot = gtk::Box::new(gtk::Orientation::Vertical, 0);
+    foot.set_margin_start(16);
+    foot.set_margin_end(16);
+    foot.set_margin_top(8);
+    foot.set_margin_bottom(12);
+    let has_dial = opens.knob.is_some() && opens.focus.is_none();
+    let opens = Opens {
+        foot: has_dial.then(|| foot.clone()),
+        ..opens
+    };
     let content = view(model, taf, opens);
     content.set_margin_start(16);
     content.set_margin_end(16);
@@ -2266,6 +2281,9 @@ pub fn sheet(model: DoorsModel, taf: DoorsTaf, opens: Opens, parent: &impl IsA<g
     let toolbar = adw::ToolbarView::new();
     toolbar.add_top_bar(&adw::HeaderBar::new());
     toolbar.set_content(Some(&scroller));
+    if has_dial {
+        toolbar.add_bottom_bar(&foot);
+    }
     crate::widgets::ground(&toolbar);
     dialog.set_title(&title);
     dialog.set_child(Some(&toolbar));

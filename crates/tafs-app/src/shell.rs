@@ -19,6 +19,9 @@ type Opener = Rc<dyn Fn(Selection)>;
 /// The sidebar's width: the iPad's at full width.
 pub const SIDEBAR_WIDTH: i32 = 320;
 
+/// An open trial's sidebar row is named this, then its taf's key.
+const TRIAL_ROW: &str = "trial:";
+
 thread_local! {
     /// Home read again for the sidebar, in place (`refresh`): set while signed in with KIFF.
     static HOME_REREAD: RefCell<Option<Rc<dyn Fn()>>> = RefCell::new(None);
@@ -158,6 +161,7 @@ pub fn build(
     view_only: Option<ViewOnly>,
     first: Selection,
 ) -> Shell {
+    let sample = model.mode == tafs_core::sidebar::Mode::Sample;
     let Screens {
         overview,
         needs_you,
@@ -426,7 +430,9 @@ pub fn build(
                 Selection::Usage => {
                     crate::usage::page(w.clone(), usage.clone(), cloud_names.clone())
                 }
-                // Coach, read only, signed in with KIFF; the sample has none, so its title alone.
+                // The sample's Coach: its intro, with Start only signed in with KIFF.
+                Selection::Coach if sample => crate::coach::sample_intro(&w),
+                // Coach, read only, signed in with KIFF.
                 Selection::Coach if !matches!(coach, crate::coach::CoachSource::None) => {
                     crate::coach::page(
                         w.clone(),
@@ -618,7 +624,7 @@ pub fn build(
     };
 
     // Coach, signed in with KIFF, opens Coach mode over what's on screen; anything else is a
-    // screen beside the sidebar. In the sample, Coach is its title.
+    // screen beside the sidebar. In the sample, Coach is its intro.
     let route: Rc<dyn Fn(Selection)> = {
         let (select, mode, selection) = (select.clone(), mode.clone(), selection.clone());
         Rc::new(move |s: Selection| {
@@ -635,16 +641,26 @@ pub fn build(
     };
     // The sidebar's rows and buttons, as drawn now and when drawn again.
     let wire: Wire = {
-        let (select, route, rows, finishes) = (
+        let (select, route, rows, finishes, chosen) = (
             select.clone(),
             route.clone(),
             rows.clone(),
             finishes.clone(),
+            selection.clone(),
         );
         Rc::new(move |list, account, coach, plan| {
             {
                 let (select, rows, finishes) = (select.clone(), rows.clone(), finishes.clone());
+                let selection = chosen.clone();
                 list.connect_row_activated(move |_, row| {
+                    // An open trial's row: its taf's page, drawn again with the trial's sheet
+                    // over it, even when that page is open already.
+                    if let Some(key) = row.widget_name().strip_prefix(TRIAL_ROW) {
+                        crate::versions::OPEN.with(|o| *o.borrow_mut() = Some("trial"));
+                        selection.borrow_mut().take();
+                        select(Selection::Taf(key.to_string()));
+                        return;
+                    }
                     // Finish setting up: Coach on the chat where the setup stopped
                     // (`finishSetup`).
                     if let Some((_, session)) = finishes.borrow().iter().find(|(r, _)| r == row) {
@@ -935,7 +951,22 @@ fn sidebar(
         let v = gtk::Box::new(gtk::Orientation::Vertical, 2);
         v.set_hexpand(true);
         v.set_valign(gtk::Align::Center);
-        v.append(&one_line(&taf.name, 15, 600, &["row-title"]));
+        // Its name, and its badge after it where it has one (a trial's "Trial"): white on the amber,
+        // as the iPad's capsule.
+        let name = one_line(&taf.name, 15, 600, &["row-title"]);
+        match &taf.badge {
+            Some(badge) => {
+                let line = gtk::Box::new(gtk::Orientation::Horizontal, 6);
+                name.set_hexpand(false);
+                line.append(&name);
+                let b = gtk::Label::new(Some(badge));
+                b.add_css_class("tafs-taf-badge");
+                b.set_valign(gtk::Align::Center);
+                line.append(&b);
+                v.append(&line);
+            }
+            None => v.append(&name),
+        }
         v.append(&one_line(
             &taf.now,
             13,
@@ -958,6 +989,19 @@ fn sidebar(
         add(section(label, false), None);
         for taf in &lines.your_tafs {
             add(taf_row(taf), Some(Selection::Taf(taf.key.clone())));
+            // Its open trial, a row of its own under it (`tafLinks`): it opens the taf's page
+            // with the trial's sheet over it, where a trial is on Linux.
+            if let Some(trial) = &taf.trial {
+                let row = taf_row(trial);
+                // Its taf's key, read when it's chosen (`TRIAL_ROW`).
+                row.set_widget_name(&format!("{TRIAL_ROW}{}", taf.key));
+                if let Some(child) = row.child() {
+                    child.set_margin_start(18);
+                }
+                add(row.clone(), None);
+                row.set_activatable(true);
+                row.remove_css_class("header");
+            }
         }
         // A taf being set up, among the tafs, by its name, with no state. Its line is Finish setting
         // up's words, from tafs cloud; where Coach can finish it (`canFinishSetup`), the row opens

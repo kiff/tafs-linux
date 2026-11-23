@@ -116,6 +116,7 @@ pub fn sidebar(
             badge: None,
             tone: Default::default(),
             rim: None,
+            trial: None,
         };
         tafs.push((
             row,
@@ -404,4 +405,54 @@ pub fn full_cards(
             card(w, key)?
         },
     }])
+}
+
+/// A sample taf's notes (`sampleNotes`): the kind of thing a real one writes down as it learns,
+/// an hour, a day and three days old, newest first.
+pub fn notes(
+    w: &WordBook,
+    key: &str,
+    now: DateTime<Local>,
+) -> Result<Vec<crate::setup::Note>, WordsError> {
+    let at = now.with_timezone(&chrono::Utc);
+    [
+        ("/how-you-like-it.md", "sample.memory.explain", 3_600),
+        ("/customers/regulars.md", "sample.memory.regulars", 86_400),
+        ("/from-the-owner.md", "sample.memory.ask_first", 3 * 86_400),
+    ]
+    .into_iter()
+    .enumerate()
+    .map(|(i, (path, words, ago))| {
+        Ok(crate::setup::Note {
+            id: format!("sample-{key}-{i}"),
+            path: path.into(),
+            content: w.line(words)?,
+            updated_at: at - Duration::seconds(ago),
+        })
+    })
+    .collect()
+}
+
+#[cfg(test)]
+mod notes_tests {
+    use super::*;
+
+    fn now() -> DateTime<Local> {
+        chrono::TimeZone::with_ymd_and_hms(&Local, 2026, 11, 23, 9, 0, 0).unwrap()
+    }
+
+    #[test]
+    fn a_sample_taf_has_three_notes_newest_first() {
+        let n = notes(
+            &WordBook::load(&WordBook::default_root(), "en").unwrap(),
+            "support",
+            now(),
+        )
+        .unwrap();
+        assert_eq!(n.len(), 3);
+        assert_eq!(n[0].title(), "how you like it");
+        assert_eq!(n[1].title(), "customers · regulars");
+        assert!(n.windows(2).all(|p| p[0].updated_at > p[1].updated_at));
+        assert!(n.iter().all(|x| x.id.starts_with("sample-support-")));
+    }
 }

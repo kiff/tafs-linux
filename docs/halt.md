@@ -16,7 +16,9 @@ in kiff/agents and KIFF at once. It reads **Halted** only once all three parts h
 - planque: it sends nothing to the apps.
 
 Until then it reads **Halting…**. While it's halting, the screen reads it again every 2 seconds,
-at most 60 times (`GET` the same path). A read that can't be read keeps what was there.
+at most 60 times (`GET` the same path). A read that can't be read keeps what was there. Once a
+halt goes through, Home is read again (`refresh()`), so the sidebar's row says it at once, not at
+the next read of the account.
 
 **Resuming gives authority back**, so it's signed by the device (`tafs.resume.v1`). Its button is
 "Resume Rae", or "Resume all your tafs" (the iPad's prompt words, as Linux has no biometry to
@@ -64,5 +66,3 @@ read is the file's, and **nothing is ever sent**. CI's `halt-all`, `halt-all-hal
 ## Not yet
 
 - **Resuming** on a computer with no security key: on another device.
-- The list read again after a halt (`refresh()`): the sidebar's row reads its new state at the
-  next read of the account; the screen itself is current.

@@ -344,6 +344,9 @@ pub struct HomeTaf {
     /// is none.
     #[serde(default)]
     pub avatar_rim: Value,
+    /// Its open trial (`trial`, `OpenTrial`), for whoever manages it; another shape is none.
+    #[serde(default)]
+    pub trial: Value,
     /// Where tafs cloud delivers its results itself (`door_reply`, `app`, `owner_email`), live.
     #[serde(default)]
     pub results: Option<Vec<Value>>,
@@ -513,6 +516,7 @@ impl SettingUp {
             badge: None,
             tone: Tone::Amber,
             rim: None,
+            trial: None,
         }
     }
 }
@@ -677,6 +681,8 @@ pub struct Taf {
     pub labels: Vec<String>,
     /// The rim round its avatar while a door is open (`DoorRim`).
     pub rim: Option<crate::rim::Rim>,
+    /// Its open trial, as Home sends it (`setTrial`): its own row under the taf.
+    pub trial: Option<crate::versions::OpenTrial>,
 }
 
 fn window(w: &WordBook, raw: &str, words: Option<&WindowWords>) -> Result<Window, WordsError> {
@@ -745,6 +751,7 @@ pub fn taf(w: &WordBook, h: &HomeTaf) -> Result<Taf, WordsError> {
         knocks: h.doors.iter().flatten().map(|d| d.knocks).sum(),
         knocked: h.doors.iter().flatten().any(|d| d.knocks > 0),
         rim: crate::rim::read(&h.avatar_rim),
+        trial: serde_json::from_value(h.trial.clone()).ok(),
         cloud: h.id.is_some(),
         state: crate::taf_page::TafState::from_cloud(&h.state, h.unscheduled == Some(true)),
         attention: Work::read(&h.work).is_some_and(|w| w.attention && !w.line.trim().is_empty()),
@@ -789,7 +796,7 @@ fn shown_card(w: &WordBook, c: &CardSummary) -> Result<Option<Card>, WordsError>
                 );
                 m.extra = t.extra_room.as_ref().and_then(Amount::money);
                 m.base = t.base_limit.as_ref().and_then(Amount::money);
-                m.room_ends = t.room_window_end.map(ends_words);
+                m.room_ends = t.room_window_end.map(|t| ends_words(w, t));
                 Some(m)
             }
             None => None,
@@ -843,13 +850,14 @@ fn shown_card(w: &WordBook, c: &CardSummary) -> Result<Option<Card>, WordsError>
     Ok(Some(Card::default()))
 }
 
-/// `endsWords`: the time alone today, else its date with it, in the account's zone.
-fn ends_words(t: DateTime<Utc>) -> String {
+/// `endsWords`: the time alone today, else its date with it in the language's words ("Nov 16,
+/// 2026, 12:00 AM", "16 nov. 2026, 00:00"), in the account's zone.
+pub fn ends_words(w: &WordBook, t: DateTime<Utc>) -> String {
     use crate::account_time::{day, local, short_time};
     if day(&t) == day(&Utc::now()) {
         short_time(&t)
     } else {
-        local(&t).format("%Y-%m-%d %H:%M").to_string()
+        crate::locale::date_time(w.language(), local(&t))
     }
 }
 
@@ -863,12 +871,53 @@ pub fn row(t: &Taf) -> TafRow {
         now: t.health_now.clone().unwrap_or_else(|| t.now.clone()),
         badge: None,
         rim: t.rim,
+        trial: None,
         tone: match (&t.health_now, t.failing) {
             (None, _) => Tone::Dim,
             (Some(_), true) => Tone::No,
             (Some(_), false) => Tone::Amber,
         },
     }
+}
+
+/// An open trial's row under its taf (`trialTaf`): "Refunds · v2", the trial's badge (tafs
+/// cloud's label, else "Trial"), and "Trying version 2 · ends 29 Nov if unused" (tafs cloud's
+/// title where it sent one). None without an open trial.
+pub fn trial_row(w: &WordBook, t: &Taf) -> Result<Option<TafRow>, WordsError> {
+    let Some(trial) = &t.trial else {
+        return Ok(None);
+    };
+    let n = trial.n.to_string();
+    let title = match &trial.title {
+        Some(title) if !title.trim().is_empty() => title.clone(),
+        _ => w.get("version.trial.trying", &[("n", &n)])?,
+    };
+    let ends = match trial.ends {
+        Some(at) => Some(w.get(
+            "version.trial.ends_if_unused",
+            &[(
+                "date",
+                &crate::locale::short_date(w.language(), crate::account_time::day(&at)),
+            )],
+        )?),
+        None => None,
+    };
+    let badge = match &trial.label {
+        Some(l) if !l.trim().is_empty() => l.clone(),
+        _ => w.line("version.trial.badge")?,
+    };
+    let mut r = row(t);
+    r.name = w.get("version.trial.chat_name", &[("taf", &t.name), ("n", &n)])?;
+    r.now = [Some(title), ends]
+        .into_iter()
+        .flatten()
+        .collect::<Vec<_>>()
+        .join(" · ");
+    r.badge = Some(badge);
+    r.tone = Tone::Dim;
+    r.rim = None;
+    r.trial = None;
+    Ok(Some(r))
 }
 
 /// Whether a taf from Home is listed as relevant now: tafs cloud's `relevant_now` whenever it sent
@@ -932,7 +981,7 @@ pub fn full_cards(
         out.holds = r.outside != "refuse";
         out.extra_room = r.extra_room.as_ref().and_then(Amount::money);
         out.base_limit = r.base_limit.as_ref().and_then(Amount::money);
-        out.room_ends = r.room_window_end.map(ends_words);
+        out.room_ends = r.room_window_end.map(|t| ends_words(w, t));
         Ok(out)
     };
     let date =
@@ -1018,6 +1067,27 @@ pub fn long_date(language: &str, day: chrono::NaiveDate) -> String {
 #[cfg(test)]
 mod finish_tests {
     use super::*;
+
+    #[test]
+    fn a_rooms_end_on_a_later_day_is_in_the_languages_words() {
+        let later = Utc::now() + chrono::Duration::days(3);
+        let book = |l: &str| WordBook::load(&WordBook::default_root(), l).unwrap();
+        let (en, fr) = (
+            ends_words(&book("en"), later),
+            ends_words(&book("fr"), later),
+        );
+        let iso = crate::account_time::local(&later)
+            .format("%Y-%m-%d")
+            .to_string();
+        assert!(!en.contains(&iso) && !fr.contains(&iso), "{en} / {fr}");
+        assert_ne!(en, fr);
+        // Today: the time alone.
+        let soon = Utc::now();
+        assert_eq!(
+            ends_words(&book("en"), soon),
+            crate::account_time::short_time(&soon)
+        );
+    }
 
     #[test]
     fn finish_setting_up_opens_only_coach_s_own_chat() {

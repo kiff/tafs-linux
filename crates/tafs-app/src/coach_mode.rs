@@ -41,7 +41,18 @@ pub struct CoachMode {
     make: RefCell<Option<MakePage>>,
     /// Coach's name, for its page in the panel's navigation.
     title: String,
+    /// How far the panel is slid out to the right, 0 in place to 1 out of sight: it slides in
+    /// and out (`.move(edge: .trailing)`) while the shade fades with it.
+    slide: Cell<f64>,
+    /// ⤢'s change of width under way: the width it left, in pixels, and how far it has come (0 to
+    /// 1) to the width chosen.
+    morph: Cell<Option<(f64, f64)>>,
+    /// The slide or ⤢ animation running, so a new one takes over from where it is.
+    moving: RefCell<Option<adw::TimedAnimation>>,
 }
+
+/// The iPad's `.easeOut(duration: 0.22)` for the slide, the shade and ⤢.
+const MOVE_MS: u32 = 220;
 
 impl CoachMode {
     /// Over `under`, the window's screens: the returned overlay takes its place.
@@ -99,6 +110,9 @@ impl CoachMode {
             drag: Cell::new(0.0),
             make: RefCell::new(None),
             title: w.line("coach.title").unwrap_or_default(),
+            slide: Cell::new(0.0),
+            morph: Cell::new(None),
+            moving: RefCell::new(None),
         });
         {
             // The panel at the window's right, its width as chosen; the shade over all of it.
@@ -107,9 +121,15 @@ impl CoachMode {
                 let m = m.upgrade()?;
                 let (w, h) = (o.width(), o.height());
                 if child == m.panel.upcast_ref::<gtk::Widget>() {
-                    let width = (m.width.get().on(f64::from(w), m.drag.get()).round() as i32)
-                        .clamp(1, w.max(1));
-                    return Some(gtk::gdk::Rectangle::new(w - width, 0, width, h));
+                    let chosen = m.width.get().on(f64::from(w), m.drag.get());
+                    // ⤢ under way: from the width it left to the one chosen.
+                    let now = match m.morph.get() {
+                        Some((from, p)) => from + (chosen - from) * p,
+                        None => chosen,
+                    };
+                    let width = (now.round() as i32).clamp(1, w.max(1));
+                    let out = (f64::from(width) * m.slide.get()).round() as i32;
+                    return Some(gtk::gdk::Rectangle::new(w - width + out, 0, width, h));
                 }
                 Some(gtk::gdk::Rectangle::new(0, 0, w, h))
             });
@@ -154,6 +174,27 @@ impl CoachMode {
             handle.add_controller(drag);
         }
         {
+            // A swipe of the conversation to the right, by touch, closes it (`CoachPanel`). Taken
+            // from the conversation's scroll only once it's clearly across.
+            let swipe = gtk::GestureDrag::new();
+            swipe.set_touch_only(true);
+            swipe.set_propagation_phase(gtk::PropagationPhase::Capture);
+            swipe.connect_drag_update(|g, dx, dy| {
+                if tafs_core::coach_mode::swiping(dx, dy) {
+                    g.set_state(gtk::EventSequenceState::Claimed);
+                }
+            });
+            let m = Rc::downgrade(&mode);
+            swipe.connect_drag_end(move |_, dx, dy| {
+                if tafs_core::coach_mode::swipe_closes(dx, dy) {
+                    if let Some(m) = m.upgrade() {
+                        m.close();
+                    }
+                }
+            });
+            mode.slot.add_controller(swipe);
+        }
+        {
             let keys = gtk::EventControllerKey::new();
             let m = Rc::downgrade(&mode);
             keys.connect_key_pressed(move |_, key, _, _| {
@@ -191,16 +232,89 @@ impl CoachMode {
         self.overlay.queue_allocate();
     }
 
-    /// Opens Coach over what's on screen, its conversation read anew; open already, it stays.
+    /// Opens Coach over what's on screen, its conversation read anew, sliding in from the right
+    /// as the shade fades in; open already, it stays (closing, it comes back from where it is).
     pub fn open(self: &Rc<Self>) {
-        if self.is_open() {
+        if self.is_open() && !self.closing() {
             return;
         }
-        self.fill();
-        self.scrim
-            .set_opacity(if self.width.get().full { 0.0 } else { 1.0 });
+        if !self.is_open() {
+            self.fill();
+            self.slide.set(1.0);
+        }
+        self.closing_now(false);
         self.scrim.set_visible(true);
         self.panel.set_visible(true);
+        self.slide_to(0.0, |_| {});
+    }
+
+    /// Slides the panel to `to` (0 in place, 1 out of sight) from where it is, the shade with
+    /// it, then `done`. With the desktop's animations off, at once.
+    fn slide_to(self: &Rc<Self>, to: f64, done: impl Fn(&Rc<CoachMode>) + 'static) {
+        if let Some(a) = self.moving.borrow_mut().take() {
+            a.pause();
+        }
+        let weak = Rc::downgrade(self);
+        let target = adw::CallbackAnimationTarget::new(move |v| {
+            if let Some(m) = weak.upgrade() {
+                m.slide.set(v);
+                let shade = if m.width.get().full { 0.0 } else { 1.0 - v };
+                m.scrim.set_opacity(shade);
+                m.overlay.queue_allocate();
+            }
+        });
+        let a = adw::TimedAnimation::new(&self.overlay, self.slide.get(), to, MOVE_MS, target);
+        a.set_easing(adw::Easing::EaseOutCubic);
+        let weak = Rc::downgrade(self);
+        a.connect_done(move |_| {
+            if let Some(m) = weak.upgrade() {
+                m.moving.borrow_mut().take();
+                done(&m);
+            }
+        });
+        *self.moving.borrow_mut() = Some(a.clone());
+        a.play();
+    }
+
+    /// ⤢: the width chosen, reached from the width it had over the iPad's 0.22 s.
+    fn grow_to(self: &Rc<Self>, chosen: Width) {
+        let from = f64::from(self.panel.width());
+        self.keep(chosen);
+        if let Some(a) = self.moving.borrow_mut().take() {
+            a.pause();
+        }
+        self.morph.set(Some((from, 0.0)));
+        let weak = Rc::downgrade(self);
+        let target = adw::CallbackAnimationTarget::new(move |v| {
+            if let Some(m) = weak.upgrade() {
+                m.morph.set(Some((from, v)));
+                m.overlay.queue_allocate();
+            }
+        });
+        let a = adw::TimedAnimation::new(&self.overlay, 0.0, 1.0, MOVE_MS, target);
+        a.set_easing(adw::Easing::EaseOutCubic);
+        let weak = Rc::downgrade(self);
+        a.connect_done(move |_| {
+            if let Some(m) = weak.upgrade() {
+                m.moving.borrow_mut().take();
+                m.morph.set(None);
+                m.overlay.queue_allocate();
+            }
+        });
+        *self.moving.borrow_mut() = Some(a.clone());
+        a.play();
+    }
+
+    fn closing(&self) -> bool {
+        self.panel.has_css_class("closing")
+    }
+
+    fn closing_now(&self, closing: bool) {
+        if closing {
+            self.panel.add_css_class("closing");
+        } else {
+            self.panel.remove_css_class("closing");
+        }
     }
 
     /// Coach mode opened from elsewhere (a job handed over, a setup to finish): its page drawn
@@ -208,9 +322,9 @@ impl CoachMode {
     pub fn open_afresh(self: &Rc<Self>) {
         if self.is_open() {
             self.fill();
-        } else {
-            self.open();
         }
+        // Closing meanwhile: it comes back.
+        self.open();
     }
 
     /// The page again, with ⤢ in its new state. What Coach pushed on it (a new version's
@@ -266,7 +380,7 @@ impl CoachMode {
             }),
             toggle_full: Rc::new(move || {
                 if let Some(m) = toggle.upgrade() {
-                    m.keep(m.width.get().toggled());
+                    m.grow_to(m.width.get().toggled());
                     m.reopen();
                 }
             }),
@@ -275,14 +389,24 @@ impl CoachMode {
         Some(page)
     }
 
-    /// Closes it: the conversation stays where it is at tafs cloud, and its page goes, so its
-    /// reads stop.
-    pub fn close(&self) {
-        self.scrim.set_visible(false);
-        self.panel.set_visible(false);
-        while let Some(c) = self.slot.first_child() {
-            self.slot.remove(&c);
+    /// Closes it, sliding out to the right as the shade fades: the conversation stays where it
+    /// is at tafs cloud, and its page goes once it's out of sight, so its reads stop.
+    pub fn close(self: &Rc<Self>) {
+        if !self.is_open() || self.closing() {
+            return;
         }
+        self.closing_now(true);
+        self.slide_to(1.0, |m| {
+            if !m.closing() {
+                return;
+            }
+            m.closing_now(false);
+            m.scrim.set_visible(false);
+            m.panel.set_visible(false);
+            while let Some(c) = m.slot.first_child() {
+                m.slot.remove(&c);
+            }
+        });
     }
 }
 

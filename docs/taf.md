@@ -206,9 +206,11 @@ under it, as on the iPad's Doors tab:
   a knock waits, grey while resting, dashed while closed) and its light; the pointer at the chosen
   ring's top stop, or at the rim; the face with its kicker, its big word (the stop's state, its
   size, its label; the call's amount; else the taf's why) and its hint. Choosing a stop turns its
-  ring the short way to bring it to the top (`nearestTurn`) and dims the other rings; a door's
-  stop on When picks that door for the panels below. The rings are shapes; the stops' labels are
-  buttons over them, upright (the iPad turns each with its ring).
+  ring the short way to bring it to the top (`nearestTurn`), springing there as the iPad's ring
+  does (at once with the desktop's animations off), and dims the other rings; a door's stop on
+  When picks that door for the panels below. The rings are shapes; the stops' labels are buttons
+  over them, each turned with its ring and half a turn more in the lower half, so none reads
+  upside down (`labelFlip`).
 - **The face pressed:** a held call that may be approved once (signed: the can't-approve line);
   Coach for an "Add a door" stop; else, for whoever manages the taf, the chosen stop's act as the
   session: a door opened or closed (`PATCH …/doors/{door}`), a run started (`POST …/run`), a
@@ -319,6 +321,12 @@ On the Card tab, as the iPad's `card(_:)`, all from Home as tafs cloud read it f
   `taf-card-lines`.
 
 ## Its Setup
+
+**The sample's Setup** (`crates/tafs-app/src/sample_setup.rs`), as the iPad's over the sample: its
+job (`sample.{key}.job`); what it remembers, the sample's three notes (`sampleNotes`,
+`tafs-core/src/sample.rs` › `notes`), each with Forget, asked first as a real note is, and gone at
+once, nothing sent; then Pause or Resume (`togglePause`), which the sidebar's line says at once
+("Paused by you", "Back to work"), as a "stop" in its chat does. CI's `taf-sample-setup`.
 
 A tafs cloud taf's Setup tab, signed in with KIFF (`TafDetailView.setup(_:)`,
 `crates/tafs-app/src/setup_pane.rs`, `tafs-core/src/setup.rs`), read when the tab is first shown
@@ -474,8 +482,9 @@ nothing shows until they're read, or when they can't be. A 401 signs this comput
   asked first ("Install version 3?"), then KIFF's draft is read and, not confirmed live yet, the
   key approves its confirm (`{"version":…}`, "Install version 3 of Rae, with its Card"), then
   tafs cloud installs it as the session (`POST /v1/tafs/{id}/trial/install`), the version going
-  live and the trial ending; without a key, disabled with why; what the trial is, in tafs cloud's words (what's new, what to try it
-  with, that the live taf keeps working, when it ends unused); and the trial's own chat
+  live and the trial ending; without a key, disabled with why; what the trial is, in tafs cloud's
+  words (what's new, what to try it with, that the live taf keeps working, when it ends unused),
+  before its first message only, as the iPad's; and the trial's own chat
   (`/v1/tafs/{id}/trial/conversation`, `/v1/tafs/{id}/trial/messages`, the words alone, no
   files), kept apart from the taf's.
 - `--versions` (with `--trial`) reads them from files (synthetic: no contract at the pin);
@@ -486,7 +495,4 @@ nothing shows until they're read, or when they can't be. A 401 signs this comput
 
 ## Not yet
 
-- **On the Setup tab:** the sample's Setup (there, dimmed).
-- **In the trial's sheet:** its guide stays above the chat once messages are in (the iPad shows it
-  before the first only), and the chat's box is under it, a scroll down.
 - Remove for good on a computer with no security key (the phone's).

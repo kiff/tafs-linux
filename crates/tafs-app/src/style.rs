@@ -269,6 +269,7 @@ button.tafs-row-button:disabled { opacity: 0.4; }
 
 /* The Record: chips (the chosen one inverts), day headings, rows on the panel with corners of 14. */
 button.tafs-chip-button { background-color: @tafs_panel; background-image: none; color: @tafs_soft; border: 1px solid @tafs_line; border-radius: 999px; padding: 5px 11px; min-height: 0; font-size: 13px; font-weight: 400; box-shadow: none; }
+.tafs-taf-badge { background-color: @tafs_amber; color: #ffffff; border-radius: 999px; padding: 1px 7px; font-size: 11px; font-weight: 700; }
 button.tafs-plain.tafs-file-picked { background-color: alpha(@tafs_ink, 0.06); border-radius: 10px; }
 button.tafs-chip-button.selected { background-color: @tafs_ink; color: @tafs_on_fill; border-color: @tafs_ink; }
 button.tafs-chip-button:checked { background-color: @tafs_ink; color: @tafs_on_fill; border-color: @tafs_ink; }
@@ -370,6 +371,8 @@ button.tafs-strip-cell.selected { background-color: @tafs_amber; }
 button.tafs-strip-cell.today { border-color: @tafs_amber; }
 .tafs-amber-ink { color: @tafs_amber_ink; }
 button.tafs-plain { background: none; border: none; box-shadow: none; padding: 0; min-height: 0; min-width: 0; }
+/* A recipe on Coach's empty chat (`recipeRow`): a raised row, edged in the line. */
+button.tafs-recipe-row { background: @tafs_panel; background-image: none; border: 1px solid @tafs_line; border-radius: 14px; padding: 12px 14px; box-shadow: none; }
 .tafs-hour { border-top: 1px solid @tafs_line; }
 .tafs-slot { border-radius: 6px; padding: 3px 6px; }
 .tafs-dot7 { min-width: 7px; min-height: 7px; border-radius: 999px; }

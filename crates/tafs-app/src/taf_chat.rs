@@ -107,10 +107,59 @@ impl ChatTaf {
     }
 }
 
+/// When a taf's chat, as kept while the app runs, last had a message: Home's order counts it as
+/// the taf being used (`byRecent`'s `chats`). None for a chat not opened since the app started.
+pub fn last_message_at(key: &str) -> Option<chrono::DateTime<chrono::Utc>> {
+    CHATS.with(|c| {
+        c.borrow()
+            .get(key)
+            .and_then(|chat| chat.borrow().thread.messages.iter().map(|m| m.at).max())
+    })
+}
+
+/// Whether a sample taf is paused now (`state == .paused`), for its Setup's Pause or Resume.
+pub fn sample_paused_now(key: &str) -> bool {
+    sample_paused(key) == Some(true)
+}
+
+/// What hears a sample taf's pause: true while it's still there to hear it.
+type PauseSeen = Box<dyn Fn() -> bool>;
+
+/// `seen` hears each pause or resume of a sample taf, until it answers false.
+pub fn on_sample_pause_seen(seen: impl Fn() -> bool + 'static) {
+    SAMPLE_PAUSE_SEEN.with(|s| s.borrow_mut().push(Box::new(seen)));
+}
+
+/// A sample taf paused or set back to work (its chat, its Setup): its page's state draws it again
+/// at once; one that answers false is gone and is dropped.
+fn sample_pause_seen() {
+    let seen = SAMPLE_PAUSE_SEEN.with(|s| std::mem::take(&mut *s.borrow_mut()));
+    let kept: Vec<PauseSeen> = seen.into_iter().filter(|f| f()).collect();
+    SAMPLE_PAUSE_SEEN.with(|s| {
+        let mut s = s.borrow_mut();
+        let added = std::mem::take(&mut *s);
+        *s = kept;
+        s.extend(added);
+    });
+}
+
+/// `togglePause` on a sample taf from its Setup: paused, or back to work. The sidebar's row says
+/// so at once, as a pause from its chat does (`shell::reread_home`).
+pub fn toggle_sample_pause(key: &str) -> bool {
+    let paused = !sample_paused_now(key);
+    SAMPLE_PAUSED.with(|s| s.borrow_mut().insert(key.to_string(), paused));
+    crate::shell::reread_home();
+    sample_pause_seen();
+    paused
+}
+
 thread_local! {
     /// Each sample taf the owner paused (true) or told to carry on (false) in its chat, by its
     /// key: kept while the app runs, as the sample keeps no chats either.
     static SAMPLE_PAUSED: RefCell<HashMap<String, bool>> = RefCell::new(HashMap::new());
+    /// What else shows a sample taf's pause (its page's state chip), each kept while it's there:
+    /// one that answers false is gone and is dropped.
+    static SAMPLE_PAUSE_SEEN: RefCell<Vec<PauseSeen>> = RefCell::default();
     /// Each taf's chat as the app holds it (`chats`, `chatStates`), by its id at tafs cloud: kept
     /// while the app runs, so its page drawn again keeps what was sent and not sent.
     static CHATS: RefCell<HashMap<String, Rc<RefCell<TafChat>>>> = RefCell::new(HashMap::new());
@@ -144,13 +193,20 @@ pub fn sample_paused(key: &str) -> Option<bool> {
 /// Signed out: nothing written for the last account stays.
 pub fn forget() {
     SAMPLE_PAUSED.with(|s| s.borrow_mut().clear());
+    SAMPLE_PAUSE_SEEN.with(|s| s.borrow_mut().clear());
     CHATS.with(|c| c.borrow_mut().clear());
     DRAFTS.with(|d| d.borrow_mut().clear());
     OPEN.with(|o| o.borrow_mut().clear());
 }
 
 /// The pane and what it holds while it's open.
+/// What hears whether a drawn chat holds anything (`on_drawn`).
+type Drawn = Rc<dyn Fn(bool)>;
+
 struct Page {
+    /// Told, each time the chat is drawn, whether it holds anything yet (`chatItems` not empty):
+    /// the trial's sheet shows its guide before the first message only.
+    on_drawn: RefCell<Option<Drawn>>,
     /// How much of the answer streaming now shows (`SteadyMarkdown`).
     live_shown: crate::chat::Shown,
     w: Rc<WordBook>,
@@ -263,6 +319,7 @@ pub fn pane(w: Rc<WordBook>, taf: ChatTaf, source: ChatSource) -> gtk::Widget {
         reading: Cell::new(false),
         polls: RefCell::new(taf_chat::polls()),
         follow: Cell::new(true),
+        on_drawn: RefCell::new(None),
         root: root.clone(),
         column,
         scroller,
@@ -417,7 +474,22 @@ pub fn pane(w: Rc<WordBook>, taf: ChatTaf, source: ChatSource) -> gtk::Widget {
         }
         ChatSource::None => page.draw(),
     }
+    // SAFETY: only ever read back as the type it's stored as, by `on_drawn`.
+    unsafe { root.set_data("taf-chat", page.clone()) };
     root.upcast()
+}
+
+/// `told` hears, at once and each time the chat `pane` is drawn, whether it holds anything yet.
+pub fn on_drawn(pane: &gtk::Widget, told: Drawn) {
+    // SAFETY: stored by `pane` as an `Rc<Page>`, and read back only as that.
+    let page = unsafe {
+        pane.data::<Rc<Page>>("taf-chat")
+            .map(|p| p.as_ref().clone())
+    };
+    if let Some(page) = page {
+        *page.on_drawn.borrow_mut() = Some(told);
+        page.draw();
+    }
 }
 
 fn wire_composer(page: &Rc<Page>) {
@@ -513,8 +585,9 @@ impl Page {
         };
         if let Some(p) = paused {
             SAMPLE_PAUSED.with(|s| s.borrow_mut().insert(self.taf.id.clone(), p));
-            // The sidebar's row says so at once.
+            // The sidebar's row and the taf's page say so at once.
             crate::shell::reread_home();
+            sample_pause_seen();
         }
         let started = std::time::Instant::now();
         self.chat.borrow_mut().sample_live(chrono::Utc::now());
@@ -1419,6 +1492,13 @@ impl Page {
     /// Draws what the chat holds now, unless it's what's drawn already.
     fn draw(self: &Rc<Self>) {
         self.composer_state();
+        let told = self.on_drawn.borrow().clone();
+        if let Some(told) = told {
+            let c = self.chat.borrow();
+            let any = !c.thread.messages.is_empty() || !c.unsent.is_empty() || c.live.is_some();
+            drop(c);
+            told(any);
+        }
         // The doors read again each time the thread's messages change, and once it's read: their
         // knocks sit among them (`.task(id: chats[tafID]?.count)`).
         if let Some((model, seen)) = &self.doors {

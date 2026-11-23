@@ -2,7 +2,9 @@
 
 The iPad's Coach conversation (`SetupChatView` at a regular width) in Coach mode over the app
 (below), with its message box. Its Coach button opens it, signed in with KIFF by someone who may use Coach; the sample
-has no Coach, so there it still opens its title alone. What it reads and how it's decoded is
+has no Coach to start, so there it opens Coach's intro (`introBefore`: board 9, "Coach mode", what
+Coach does, and Start, which only signed in with KIFF can press; `coach::sample_intro`, CI's
+`sample-coach`). What it reads and how it's decoded is
 `tafs-core/src/coach.rs`; the device's proof is `tafs-core/src/planque.rs`; what's sent, and how the
 conversation holds it while it goes, is `tafs-core/src/coach_send.rs`; what it draws is
 `tafs-core/src/coach_lines.rs`, tested there and in every language at the pin
@@ -168,7 +170,9 @@ iPad does, and tafs cloud marks no card. The token, the key and the signature ar
 - **The title**, inline, as the iPad's navigation bar, on Coach's own wash, with New conversation
   and the menu at its trailing edge.
 - **The empty chat:** board 7 while the account has no taf or one, "Ask anything about your tafs"
-  and what Coach does.
+  and what Coach does; then tafs cloud's recipes, by category, as the account's read had them
+  (kiff/tafs#476): each its name (`lead`) and line, a tap puts its words in the box to edit and
+  send, never sending. Not on a conversation that improves a taf.
 - **The plan** (`SetupPlan`) pinned above the thread: "Plan · 1 of 3" and the step it's at,
   opening to every step with its mark.
 - **The thread** in the order already drawn (`SteadyOrder`, iPad tafs#1241, Android's
@@ -227,9 +231,13 @@ Back and ⤢ (Full screen, or Back to its width) before the title, as the iPad's
 on the shade (not when full screen), Escape and Back close it. Closing never ends a conversation:
 its page goes, its reads stop, and opening it again reads it anew, the words not sent kept.
 
-Not on Linux: the swipe of the conversation to the right that closes it on a touch screen (a drag
-there selects text here), and the phone's `PhoneCoachPanel` (a compact width, which this computer's
-sidebar layout doesn't have). The iPad slides it in and out; here it appears and goes.
+On a touch screen, a swipe of the conversation to the right closes it, as the iPad's (over 140 px
+across and under 60 up or down, `coach_mode::swipe_closes`). It's taken from the conversation's
+scroll only once it's clearly across, and a mouse's drag still selects text. It slides in from the
+right and out again, as the iPad's.
+
+Not on Linux: the phone's `PhoneCoachPanel` (a compact width, which this computer's sidebar layout
+doesn't have).
 
 ## Coach's tools
 
@@ -279,12 +287,11 @@ For an approval, a sign-in or a drive it gives none, whatever the text, so nothi
 
 ## Not yet
 
-- Setting a chat aside from Needs you; `startSwitch`'s offer of the taf on screen (`tafOnScreen`):
-  the switch shows only while Coach is on a taf.
-- The microphone and attachments; the recipes on an empty chat.
+- `startSwitch`'s offer of the taf on screen (`tafOnScreen`): the switch shows only while Coach is
+  on a taf.
+- No mic: a Linux desktop has no on-device speech recognition, as in a taf's chat.
 - What the iPad reads beside the thread: planque's grant (its words, terms and profile).
-- Revealing an answer with no stream, and Home's read at the stream's end;
-  and a dial card (`KnobDraftCard`).
+- Revealing an answer with no stream, and a dial card (`KnobDraftCard`).
 - A refused connection's lines are decoded but not drawn: the iPad's Coach doesn't draw them.
 
 ## Screenshots
@@ -299,7 +306,8 @@ questions card waiting, a message its run never read as Not sent, and one tafs c
 `event:`/`data:` lines taken after the contract's conversation, as the app takes them, so an answer
 shows mid-stream: its live line, the steps done and its words so far),
 `coach-empty` (`crates/tafs-app/fixtures/coach-empty.json` with no taf: board 7 over the empty
-chat), `coach-start` (`shared/contracts/setup-start.json`: no Coach yet, board 9) and
+chat), `coach-recipes` (the same, with `crates/tafs-app/fixtures/recipes.json`'s recipes under it),
+`coach-start` (`shared/contracts/setup-start.json`: no Coach yet, board 9) and
 `coach-chats` (`--coach-chats shared/contracts/coach-chats.json`: Previous conversations open over
 the contract's conversation). `--coach-drafts <answers.json>` gives KIFF's answers to the drafts
 by id (`{"status", "answer"}`), never read: `coach-draft`

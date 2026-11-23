@@ -224,6 +224,20 @@ fn the_remote_walks_the_stops_a_filter_shows() {
     assert_eq!(nav::label_width(180.0, 6, 100.0, 12.0), 100.0);
     assert_eq!(nav::label_width(90.0, 1, 100.0, 12.0), 100.0);
     assert_eq!(nav::label_width(2.0, 6, 100.0, 12.0), 0.0);
+    // `testLowerHalfLabelsFlipAfterTheRingTurns`.
+    for (at, flip) in [
+        (0.0, 0.0),
+        (90.0, 0.0),
+        (180.0, 180.0),
+        (270.0, 0.0),
+        (360.0, 0.0),
+        (-180.0, 180.0),
+        // The bottom stop moves to the pointer after half a turn and no longer flips.
+        (180.0 - 2.0 * 90.0, 0.0),
+        (180.0 + 4.0 * 360.0, 180.0),
+    ] {
+        assert_eq!(nav::label_flip(at), flip, "at {at}");
+    }
     let items: Vec<Item> = (0..10)
         .map(|i| Item {
             id: format!("i{i}"),

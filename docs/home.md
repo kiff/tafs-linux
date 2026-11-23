@@ -151,8 +151,8 @@ paired (`KeptSession.paired`); a session kept before that reads as not paired.
 The sidebar's tafs and the Overview's rows are in the iPad's order (`listedTafs`, `byRecent`,
 `tafs-core/src/sidebar.rs` › `by_recent`):
 - a taf a call waits on comes first;
-- then the one used most recently, by its newest call in the Record (KIFF's activity, by its
-  agent);
+- then the one used most recently: its newest call in the Record (KIFF's activity, by its
+  agent), or its chat's newest message, for a chat opened since the app started;
 - then the tafs with nothing yet, in tafs cloud's order.
 The iPad settles this when the list loads and when the app comes back, so it doesn't move while
 the owner looks at it. This computer reads the account afresh each time it opens, so each read
@@ -218,10 +218,7 @@ crates/tafs-app/fixtures/balance-home-line.json`, synthetic) is CI's `sidebar-pl
 ## Not yet
 
 - **Its order, in part:** a connection its vendor signed out doesn't count as waiting yet (planque's
-  grants aren't read), and a taf's chat doesn't count as being at work (chats aren't on Linux).
+  grants aren't read).
 - **Held calls, steps and knocks** from KIFF: until they're read, Your tafs is what ran or changed.
 - **The account's name** under Account, and its zone for times: from KIFF's account read.
-- **A room's end on a later day** shows its date as 2026-11-16 00:00, not in the language's words
-  yet.
-- **The sample's Coach** (the reference set's signed-in sidebar over the sample): its title alone,
-  as the sample has no Coach on this computer.
+

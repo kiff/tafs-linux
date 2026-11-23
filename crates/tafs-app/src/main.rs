@@ -46,6 +46,7 @@ mod record;
 mod record_search;
 mod report_sheet;
 mod runs_panel;
+mod sample_setup;
 mod scheme;
 mod setup_pane;
 mod share;
@@ -2732,6 +2733,11 @@ impl App {
                 })
                 .unwrap_or_default(),
         );
+        // Coach's empty chat lists the recipes the account's read had (`model.recipes`).
+        crate::coach::set_recipes(match (mode, cloud.as_deref()) {
+            (Mode::Kiff, Some(c)) => c.recipes.clone(),
+            _ => None,
+        });
         let screens = shell::Screens {
             set_aside,
             share,
@@ -2768,6 +2774,7 @@ impl App {
                         .as_deref()
                         .and_then(|c| c.account.as_ref())
                         .is_none_or(|a| a.allows("billing.manage")),
+                    may_use_coach: model.may_use_coach,
                 },
                 _ => match &self.usage_file {
                     Some(f) => usage::UsageSource::File(f.clone()),
@@ -3282,22 +3289,30 @@ fn home_model(
         held.push(tafs_core::held::held(w, e, &key)?);
     }
     let waits = |t: &tafs_core::home::Taf| held.iter().any(|c| c.taf == t.key);
-    // Its newest call in the Record, by its KIFF agent.
+    // Its newest call in the Record, by its KIFF agent, or its chat's newest message as kept here
+    // (`byRecent`: "the latest message in its chat").
     let latest = |t: &tafs_core::home::Taf| {
         activity
             .iter()
             .filter(|c| c.actor_id.as_deref() == Some(t.agent.as_str()))
             .map(|c| c.created_at)
+            .chain(taf_chat::last_message_at(&t.key))
             .max()
     };
     let ordered = tafs_core::sidebar::by_recent(&tafs, waits, latest);
     let rows = ordered
         .iter()
         .map(|t| {
-            (
-                tafs_core::home::row(t),
-                tafs_core::home::relevant(t, waits(t), at),
-            )
+            let mut row = tafs_core::home::row(t);
+            // Its open trial, under it, for whoever manages it: its sheet is reached from the
+            // taf's Versions, which only they see.
+            if access.get(&t.agent).is_some_and(|a| a.manage) {
+                row.trial = tafs_core::home::trial_row(w, t)
+                    .ok()
+                    .flatten()
+                    .map(Box::new);
+            }
+            (row, tafs_core::home::relevant(t, waits(t), at))
         })
         .collect();
     let overview = ordered

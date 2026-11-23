@@ -10,7 +10,9 @@
 //! signed: drawn up to the signature, their tap says this computer can't approve.
 //!
 //! The rings, the rim, the pointer and the face are Cairo shapes; every word on them is a label
-//! over the drawing, upright (the iPad turns a stop's label with its ring).
+//! over the drawing. A stop's label turns with its ring, never upside down (`labelFlip`), and a
+//! ring turning to a chosen stop springs there as on the iPad, unless the desktop's animations
+//! are off.
 
 use std::cell::{Cell, RefCell};
 use std::f64::consts::PI;
@@ -76,6 +78,13 @@ struct Dial {
     face: RefCell<Face>,
     filter: RefCell<nav::Filter>,
     turns: RefCell<std::collections::HashMap<Ring, i64>>,
+    /// Each ring's turn as drawn, springing to `turns` (`.spring(response: 0.5,
+    /// dampingFraction: 0.8)`).
+    shown: RefCell<std::collections::HashMap<Ring, f64>>,
+    /// The spring each ring is on, while it turns.
+    spins: RefCell<std::collections::HashMap<Ring, adw::SpringAnimation>>,
+    /// The stops' labels as placed: each turns with its ring while it springs.
+    placed: RefCell<Vec<Placed>>,
     area: gtk::DrawingArea,
     fixed: gtk::Fixed,
     column: gtk::Box,
@@ -84,10 +93,28 @@ struct Dial {
     slot: gtk::Box,
     /// A door's stop on When picks that door for the panels below.
     picks_door: Rc<dyn Fn(&str)>,
+    /// Where the error line and the remote are pinned (a sheet's foot); none, under the dial.
+    foot: Option<gtk::Box>,
     /// Each door's count today when last read, once read (`doorCounts`).
     door_counts: RefCell<Option<std::collections::HashMap<String, i64>>>,
     /// The doors something just arrived at: their lights pulse for 3 s (`arrivals`).
     arrivals: RefCell<std::collections::HashSet<String>>,
+}
+
+/// A stop's label on the dial, to place again as its ring turns.
+struct Placed {
+    widget: gtk::Widget,
+    ring: Ring,
+    index: usize,
+    count: usize,
+    /// The ring's middle, in pixels from the centre.
+    mid: f64,
+}
+
+/// The iPad's spring: a response of 0.5 s, damped 0.8 (SwiftUI's stiffness is (2π / response)²).
+fn spring() -> adw::SpringParams {
+    let response = 0.5_f64;
+    adw::SpringParams::new(0.8, 1.0, (2.0 * PI / response).powi(2))
 }
 
 impl Dial {
@@ -132,10 +159,89 @@ impl Dial {
         (k, w / 2.0, h / 2.0)
     }
 
-    /// A stop's angle on screen in degrees, 0 at the top, clockwise.
+    /// A stop's angle on screen in degrees, 0 at the top, clockwise, as its ring is drawn now.
     fn angle(&self, ring: Ring, index: usize, count: usize) -> f64 {
         let step = 360.0 / count.max(1) as f64;
+        let turn = self
+            .shown
+            .borrow()
+            .get(&ring)
+            .copied()
+            .unwrap_or_else(|| *self.turns.borrow().get(&ring).unwrap_or(&0) as f64);
+        index as f64 * step - turn * step
+    }
+
+    /// Where a stop comes to rest once its ring has turned: its label's flip is set from there,
+    /// as the iPad's `screenAngle` is.
+    fn resting_angle(&self, ring: Ring, index: usize, count: usize) -> f64 {
+        let step = 360.0 / count.max(1) as f64;
         index as f64 * step - *self.turns.borrow().get(&ring).unwrap_or(&0) as f64 * step
+    }
+
+    /// Every ring back to its first stop at once, as a new filter starts.
+    fn unturn(&self) {
+        for (_, spin) in self.spins.borrow_mut().drain() {
+            spin.skip();
+        }
+        self.turns.borrow_mut().clear();
+        self.shown.borrow_mut().clear();
+    }
+
+    /// A ring springs from where it's drawn to its turn; at once with animations off.
+    fn spin(self: &Rc<Self>, ring: Ring) {
+        let to = *self.turns.borrow().get(&ring).unwrap_or(&0) as f64;
+        let from = self.shown.borrow().get(&ring).copied().unwrap_or(to);
+        if let Some(old) = self.spins.borrow_mut().remove(&ring) {
+            old.skip();
+        }
+        if !animates() || from == to {
+            self.shown.borrow_mut().insert(ring, to);
+            return;
+        }
+        let weak = Rc::downgrade(self);
+        let target = adw::CallbackAnimationTarget::new(move |turn| {
+            if let Some(d) = weak.upgrade() {
+                d.shown.borrow_mut().insert(ring, turn);
+                d.place();
+                d.area.queue_draw();
+            }
+        });
+        let a = adw::SpringAnimation::new(&self.area, from, to, spring(), target);
+        a.set_clamp(false);
+        let weak = Rc::downgrade(self);
+        a.connect_done(move |_| {
+            if let Some(d) = weak.upgrade() {
+                d.shown.borrow_mut().insert(ring, to);
+                d.spins.borrow_mut().remove(&ring);
+                d.place();
+                d.area.queue_draw();
+            }
+        });
+        self.spins.borrow_mut().insert(ring, a.clone());
+        a.play();
+    }
+
+    /// Each stop's label at its place on its ring, turned with it, and half a turn more in the
+    /// lower half.
+    fn place(&self) {
+        let (_, cx, cy) = self.grid();
+        for p in self.placed.borrow().iter() {
+            let deg = self.angle(p.ring, p.index, p.count);
+            let flip = nav::label_flip(self.resting_angle(p.ring, p.index, p.count));
+            let a = deg * PI / 180.0;
+            let (_, nat) = p.widget.preferred_size();
+            let t = gtk::gsk::Transform::new()
+                .translate(&gtk::graphene::Point::new(
+                    (cx + a.sin() * p.mid) as f32,
+                    (cy - a.cos() * p.mid) as f32,
+                ))
+                .rotate((deg + flip) as f32)
+                .translate(&gtk::graphene::Point::new(
+                    -(nat.width() as f32) / 2.0,
+                    -(nat.height() as f32) / 2.0,
+                ));
+            self.fixed.set_child_transform(&p.widget, Some(&t));
+        }
     }
 
     fn choose(self: &Rc<Self>, ring: Ring, id: &str) {
@@ -156,7 +262,7 @@ impl Dial {
     }
 
     /// `alignSelection`: the chosen ring turns its stop to the top, the short way.
-    fn align(&self) {
+    fn align(self: &Rc<Self>) {
         let (Some(knob), Some((ring, id))) = (self.knob(), self.chosen()) else {
             return;
         };
@@ -165,6 +271,8 @@ impl Dial {
             let mut turns = self.turns.borrow_mut();
             let now = *turns.get(&ring).unwrap_or(&0);
             turns.insert(ring, nav::nearest_turn(now, i as i64, items.len() as i64));
+            drop(turns);
+            self.spin(ring);
         }
     }
 
@@ -329,6 +437,7 @@ impl Dial {
         while let Some(c) = self.fixed.first_child() {
             self.fixed.remove(&c);
         }
+        self.placed.borrow_mut().clear();
         let Some(knob) = self.knob() else {
             return;
         };
@@ -360,7 +469,6 @@ impl Dial {
             }
             let width = nav::label_width(mid, items.len(), 100.0 * k, 12.0 * k);
             for (i, item) in items.iter().enumerate() {
-                let a = self.angle(ring, i, items.len()) * PI / 180.0;
                 let picked = on && chosen.as_ref().is_some_and(|c| c.1 == item.id);
                 let label = sized(
                     &item.ring_label(),
@@ -404,9 +512,17 @@ impl Dial {
                         d.choose(ring, &id);
                     }
                 });
-                put(b.upcast_ref(), cx + a.sin() * mid, cy - a.cos() * mid);
+                self.fixed.put(&b, 0.0, 0.0);
+                self.placed.borrow_mut().push(Placed {
+                    widget: b.upcast(),
+                    ring,
+                    index: i,
+                    count: items.len(),
+                    mid,
+                });
             }
         }
+        self.place();
         // The face: its kicker, its big word, its hint, as one button.
         let Ok(lines) = knob::face_lines(
             &w,
@@ -741,14 +857,18 @@ impl Dial {
                 self.column.append(&s);
             }
         }
-        // The remote, in sight under the dial: the iPad keeps it above the tab bar, and a sheet
-        // that scrolls has no foot to keep it on.
+        // The remote with its error line: pinned at the sheet's foot where it has one (the
+        // iPad's `safeAreaInset`), so a sheet scrolled down to a door's panels keeps both in
+        // sight; else in sight under the dial.
         if let Some(parent) = self.remote.parent() {
             if let Ok(b) = parent.downcast::<gtk::Box>() {
                 b.remove(&self.remote);
             }
         }
-        self.column.append(&self.remote);
+        match &self.foot {
+            Some(foot) => foot.append(&self.remote),
+            None => self.column.append(&self.remote),
+        }
         if let Some(call) = self.held.iter().find(|h| h.approvable_once) {
             let b = gtk::Button::with_label(&self.l("needs_you.title"));
             b.add_css_class("tafs-link");
@@ -901,7 +1021,7 @@ impl Dial {
                 if let Some(d) = me.upgrade() {
                     // A new filter starts from the job, every ring unturned.
                     *d.filter.borrow_mut() = filter.clone();
-                    d.turns.borrow_mut().clear();
+                    d.unturn();
                     *d.face.borrow_mut() = Face::Overview;
                     d.draw_all();
                 }
@@ -1092,6 +1212,7 @@ pub fn panel(
     held: Vec<HeldFace>,
     details: gtk::Box,
     picks_door: Rc<dyn Fn(&str)>,
+    foot: Option<gtk::Box>,
 ) -> gtk::Box {
     let root = gtk::Box::new(gtk::Orientation::Vertical, 8);
     let column = gtk::Box::new(gtk::Orientation::Vertical, 14);
@@ -1117,6 +1238,9 @@ pub fn panel(
         face: RefCell::new(face),
         filter: RefCell::new(nav::Filter::All),
         turns: RefCell::new(std::collections::HashMap::new()),
+        shown: RefCell::new(std::collections::HashMap::new()),
+        spins: RefCell::new(std::collections::HashMap::new()),
+        placed: RefCell::new(Vec::new()),
         area: area.clone(),
         fixed,
         column,
@@ -1124,6 +1248,7 @@ pub fn panel(
         remote,
         slot: crate::approval::refusal_slot(),
         picks_door,
+        foot,
         door_counts: RefCell::new(None),
         arrivals: RefCell::new(std::collections::HashSet::new()),
     });

@@ -177,14 +177,10 @@ is clicked, not every minute.
 
 ## Not yet
 
-- **Answering from this computer:** KIFF takes an answer signed by the session's key. Until
-  this app signs answers (and approves with a passkey), a call from KIFF is answered in KIFF.
-  The sample's answers come with the sample's Card checks: until then they're dimmed.
-- **Answering a step** (Done, Skip it: signed), **opening Coach** and **setting chats aside**:
-  there, dimmed.
-- **Answering a knock** on the taf's Activity, and the doors' lights on its avatar's rim: with
-  the Doors screen.
-- **Discussing a Card unit request with Coach, and dismissing it:** there, dimmed.
+- **Signed answers:** a held call's answers, a step's Done and Skip it, and dismissing a Card unit
+  request are signed, so their tap says this computer can't approve, and nothing is sent. With a
+  security key, Approve once and Extra room on a held call go from here; the rest stay refused
+  whatever the key ([approval](approval.md)). The sample's answers come with the sample's Card
+  checks: until then they're dimmed.
 - **Alerts** (`AlertsCard`): the iPad offers them only to a session holding an approval key, and a
   Linux session never does. Held calls are notified (above).
-- **Bringing a call into view** from its alert.

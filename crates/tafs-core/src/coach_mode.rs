@@ -91,9 +91,36 @@ impl Width {
     }
 }
 
+/// A swipe of the conversation to the right closes Coach mode (`CoachPanel`'s
+/// `DragGesture(minimumDistance: 30)`): over 140 points across and under 60 up or down, so a
+/// scroll never does.
+pub fn swipe_closes(dx: f64, dy: f64) -> bool {
+    dx > 140.0 && dy.abs() < 60.0
+}
+
+/// Whether a touch's drag is a swipe across yet, not a scroll: 30 points to the right, more across
+/// than up or down. Until it is, the conversation scrolls.
+pub fn swiping(dx: f64, dy: f64) -> bool {
+    dx >= 30.0 && dx > dy.abs() * 2.0 && dy.abs() < 60.0
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_swipe_to_the_right_closes_it_and_a_scroll_never_does() {
+        assert!(swipe_closes(141.0, 0.0));
+        assert!(swipe_closes(200.0, -59.0));
+        assert!(!swipe_closes(140.0, 0.0));
+        assert!(!swipe_closes(300.0, 60.0));
+        assert!(!swipe_closes(-300.0, 0.0));
+        // Taken as a swipe only once it's clearly across.
+        assert!(!swiping(20.0, 0.0));
+        assert!(swiping(30.0, 5.0));
+        assert!(!swiping(40.0, 30.0));
+        assert!(!swiping(-40.0, 0.0));
+    }
 
     #[test]
     fn it_opens_at_a_third_and_follows_its_edge() {

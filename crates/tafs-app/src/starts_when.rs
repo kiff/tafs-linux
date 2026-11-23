@@ -1033,6 +1033,7 @@ impl Screens {
                 removes_slack: true,
                 add_slack: Some(Rc::new(|_| {})),
                 knob: None,
+                foot: None,
             },
         );
         content.set_margin_start(16);

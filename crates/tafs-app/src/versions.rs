@@ -189,8 +189,16 @@ pub fn link(w: Rc<WordBook>, taf: VersionsTaf) -> gtk::Box {
                 }
                 return;
             }
-            Read::Failed(_) => return,
+            Read::Failed(_) => {
+                // A trial asked for (its sidebar row) that can't be read: never kept for another page.
+                OPEN.with(|o| *o.borrow_mut() = None);
+                return;
+            }
         };
+        // A trial asked for that ended meanwhile: nothing to open, and nothing kept for later.
+        if trial.is_none() && OPEN.with(|o| *o.borrow()) == Some("trial") {
+            OPEN.with(|o| *o.borrow_mut() = None);
+        }
         let Ok((title, resume)) = versions::link(&w2, Some(&state), trial.as_ref()) else {
             return;
         };
@@ -1032,6 +1040,16 @@ impl Opener {
         );
         chat.set_size_request(-1, 420);
         sheet.column.append(&chat);
+        // Before its first message only, what this trial is and what to try (kiff/tafs#247).
+        let g = guide.downgrade();
+        crate::taf_chat::on_drawn(
+            &chat,
+            Rc::new(move |any| {
+                if let Some(g) = g.upgrade() {
+                    g.set_visible(!any);
+                }
+            }),
+        );
         sheet.dialog.present(Some(over));
     }
 }
