@@ -52,6 +52,12 @@ fn get(source: &Source, w: &WordBook) -> Result<CodeSignIn, String> {
     }
 }
 
+/// Whether signing in with a code is available to this account (How tafs works' code section,
+/// the iPad's `codeSignIn?.available == true`). A failed read is no.
+pub fn available(source: &Source, w: &WordBook) -> bool {
+    get(source, w).is_ok_and(|c| c.available)
+}
+
 /// Turning it off, as the session: the new setting, or why it didn't change. A screenshot's sends nothing.
 fn turn_off(source: &Source, w: &WordBook) -> Result<Option<CodeSignIn>, String> {
     let Source::Cloud { token, languages } = source else {

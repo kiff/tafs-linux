@@ -73,6 +73,12 @@ fn unpair(source: &ChromeSource, id: &str) -> bool {
         .is_ok_and(|a| (200..300).contains(&a.status))
 }
 
+/// Whether planque offers Chrome to this person: its list read (How tafs works' Chrome section,
+/// the iPad's `model.chromes != nil`). A failed read is no.
+pub fn offered(w: &WordBook, source: &ChromeSource) -> bool {
+    matches!(read(w, source), Ok(Listed::Chromes(_)))
+}
+
 /// Account's Chrome row: hidden until planque lists Chromes for this person.
 pub fn show_row_when_offered(w: Rc<WordBook>, source: ChromeSource, row: &gtk::ListBoxRow) {
     row.set_visible(false);

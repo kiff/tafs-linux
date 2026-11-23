@@ -126,6 +126,49 @@ pub fn kiff_page(language: &str, name: &str) -> String {
     }
 }
 
+/// One of How tafs works' sections: its title, then its two lines.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HelpSection {
+    pub title: String,
+    pub lead: String,
+    pub more: String,
+}
+
+/// "tafs can work in your Chrome" (`HowTafsWorksView`'s Chrome section), shown once planque
+/// offers Chrome: pairing, its own tabs, Needs you; then where the Chromes are managed.
+pub fn chrome_help(w: &WordBook) -> Result<HelpSection, WordsError> {
+    Ok(HelpSection {
+        title: w.line("help.chrome_title")?,
+        lead: w.get(
+            "help.chrome_lead",
+            &[("needs_you", &w.line("needs_you.title")?)],
+        )?,
+        more: w.get(
+            "help.chrome_manage",
+            &[
+                ("account", &w.line("settings.title")?),
+                ("chrome", &w.line("chrome.title")?),
+            ],
+        )?,
+    })
+}
+
+/// "Sign in with a code sent by email" (its code section), shown once KIFF says it's available:
+/// where it's turned on, how the code works, and never to give it to anyone.
+pub fn code_help(w: &WordBook) -> Result<HelpSection, WordsError> {
+    Ok(HelpSection {
+        title: w.line("help.code_title")?,
+        lead: w.get(
+            "help.code_lead",
+            &[
+                ("account", &w.line("settings.title")?),
+                ("sign_in", &w.line("settings.sign_in_code.title")?),
+            ],
+        )?,
+        more: w.line("help.code_safe")?,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -236,6 +279,30 @@ mod tests {
                 &[("kiff_privacy", "a"), ("tafs_privacy", "b")],
             )
             .unwrap();
+        }
+    }
+
+    #[test]
+    fn how_tafs_works_chrome_and_code_sections() {
+        let c = chrome_help(&words("en")).unwrap();
+        assert_eq!(c.title, "tafs can work in your Chrome");
+        assert!(c.lead.ends_with("waits for you in Needs you."));
+        assert!(c.more.starts_with("Account › Chrome lists your Chromes"));
+        let k = code_help(&words("en")).unwrap();
+        assert_eq!(k.title, "Sign in with a code sent by email");
+        assert!(k.lead.starts_with("Turn it on in Account › "));
+        assert_eq!(
+            k.more,
+            "Never give this code to anyone. KIFF will never ask you for it."
+        );
+        // Every shipped language has both, with nothing left unfilled.
+        for lang in crate::words::SHIPPED {
+            let w = words(lang);
+            for s in [chrome_help(&w).unwrap(), code_help(&w).unwrap()] {
+                for line in [&s.title, &s.lead, &s.more] {
+                    assert!(!line.is_empty() && !line.contains('{'), "{lang}: {line}");
+                }
+            }
         }
     }
 }

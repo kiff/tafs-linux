@@ -1369,6 +1369,106 @@ impl Page {
 
     /// Stop (`stopChat`): the taf's current run is cancelled, over here at once, then the thread
     /// read again.
+    /// The loop card (`LoopCardView`): "Still reading" and its line, in tafs cloud's words; its
+    /// answers (the first one primary) while the run waits on it, else how it was answered.
+    fn loop_card(
+        self: &Rc<Self>,
+        id: &str,
+        title: &str,
+        words: &str,
+        options: &[tafs_core::coach::Choice],
+        answered: Option<&str>,
+        taken: bool,
+    ) -> gtk::Widget {
+        let p = panel(false);
+        p.set_widget_name(&format!("taf-chat.loop.{id}"));
+        if !title.is_empty() {
+            p.append(&text(title, 15, 600, &["tafs-ink"]));
+        }
+        if !words.is_empty() {
+            p.append(&text(words, 14, 400, &["tafs-soft"]));
+        }
+        match answered {
+            Some(how) => {
+                if !how.is_empty() {
+                    p.append(&text(how, 13, 400, &["tafs-dim"]));
+                }
+            }
+            None => {
+                for (i, o) in options.iter().enumerate() {
+                    let b = if i == 0 {
+                        crate::widgets::primary(&o.label)
+                    } else {
+                        outline(&o.label)
+                    };
+                    b.set_widget_name(&format!("taf-chat.loop.{}", o.value));
+                    b.set_sensitive(!taken);
+                    let (me, id, value) = (self.clone(), id.to_string(), o.value.clone());
+                    b.connect_clicked(move |_| me.answer_loop(&id, &value));
+                    p.append(&b);
+                }
+            }
+        }
+        p.upcast()
+    }
+
+    /// `answerLoopCard`: the answer goes to the taf's own route with the card's chat
+    /// (`POST /v1/tafs/{id}/components/{component}/answer`), unsigned as the session. Taken, the
+    /// thread is read again and the run that waited is followed to its end. A card that no
+    /// longer waits (409) is read again; anything else says why above the box.
+    fn answer_loop(self: &Rc<Self>, id: &str, value: &str) {
+        if !matches!(self.source, ChatSource::Cloud { .. }) {
+            return;
+        }
+        let Some((component, body, what)) = self.chat.borrow_mut().answer_loop(id, value) else {
+            return;
+        };
+        self.draw();
+        let p = self.clone();
+        glib::spawn_future_local(async move {
+            let Some(answer) = p
+                .post(coach_send::answer_path(&p.taf.id, &component), body)
+                .await
+            else {
+                return;
+            };
+            let failed = match answer {
+                Ok(a) if a.status == 401 => return p.signed_out(),
+                Ok(a) if a.status == 409 => None,
+                Ok(a) if (200..300).contains(&a.status) => {
+                    match coach_send::card_answered(&a.body) {
+                        Some(r) => {
+                            p.chat
+                                .borrow_mut()
+                                .loop_answered(&r.run, chrono::Utc::now());
+                            p.draw();
+                            p.load().await;
+                            p.resume().await;
+                            return;
+                        }
+                        None => Some(tafs_core::signin::plain_words(&p.w, 200).unwrap_or_default()),
+                    }
+                }
+                Ok(a) => Some(
+                    Refusal::read(a.status, &a.body)
+                        .words(&p.w)
+                        .unwrap_or_default(),
+                ),
+                Err(why) => Some(why),
+            };
+            let why = failed.map(|why| {
+                p.w.get("common.didnt_go_through", &[("what", &what), ("why", &why)])
+                    .unwrap_or(why)
+            });
+            let reread = why.is_none();
+            p.chat.borrow_mut().loop_not_taken(&component, why);
+            p.draw();
+            if reread {
+                p.load().await;
+            }
+        });
+    }
+
     fn stop(self: &Rc<Self>) {
         if !self.sends() {
             return;
@@ -1737,6 +1837,14 @@ impl Page {
                     }
                     None => continue,
                 },
+                Line::Loop {
+                    id,
+                    title,
+                    text: words,
+                    options,
+                    answered,
+                    taken,
+                } => self.loop_card(id, title, words, options, answered.as_deref(), *taken),
                 Line::AskCoach { text: words, ask } => {
                     let p = panel(false);
                     let l = text(words, 15, 400, &["tafs-ink"]);

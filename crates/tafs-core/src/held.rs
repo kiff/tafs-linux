@@ -472,32 +472,37 @@ pub fn ordinal(language: &str, n: i64) -> String {
             };
             format!("{d}{suffix}")
         }
-        // ICU's own data for these: Mongolian and Urdu take the English "th", and Lao Thai's "ที่".
-        "mn" | "ur" => format!("{d}th"),
-        // ICU's Turkmen, English as its fallback (as Mongolian): "rd" for CLDR's Turkmen ordinal
-        // "few" (n % 10 = 6 or 9, or n = 10), else "th".
+        // Where ICU falls back to English, each language's own, for the Card's lines, which are
+        // all about a call (legal-i18n's words). Mongolian: -р, the usual written ordinal.
+        "mn" => format!("{d}-р"),
+        // Urdu: کال is feminine, so ویں after a number.
+        "ur" => format!("{d}ویں"),
+        // Turkmen: -njy for CLDR's Turkmen ordinal "few" (n % 10 = 6 or 9, or n = 10), else -nji.
         "tk" => {
             let few = matches!(n % 10, 6 | 9) || n == 10;
-            format!("{d}{}", if few { "rd" } else { "th" })
+            format!("{d}-{}", if few { "njy" } else { "nji" })
         }
-        // ICU's Hindi: 1ला, 2रा, 3रा, 4था, 6ठा, every other वाँ; 0 has none.
+        // Hindi: कॉल is feminine ("यह 6ठी कॉल होती"), so 1ली, 2री, 3री, 4थी, 6ठी, every other
+        // वीं; 0 has none.
         "hi" => match n {
             0 => d,
-            1 => format!("{d}ला"),
-            2 | 3 => format!("{d}रा"),
-            4 => format!("{d}था"),
-            6 => format!("{d}ठा"),
-            _ => format!("{d}वाँ"),
+            1 => format!("{d}ली"),
+            2 | 3 => format!("{d}री"),
+            4 => format!("{d}थी"),
+            6 => format!("{d}ठी"),
+            _ => format!("{d}वीं"),
         },
         "km" => format!("ទី{d}"),
         "az" => format!("{d}'inci"),
-        // ICU's Bengali: English's suffixes by CLDR's Bengali ordinal classes.
+        // Bengali: its own suffix by CLDR's Bengali ordinal classes, where ICU writes English's:
+        // one (1, 5, 7–10) ম, two (2, 3) য়, few (4) র্থ, many (6) ষ্ঠ, else তম.
         "bn" => {
             let suffix = match crate::locale::ordinal_class(language, n) {
-                "one" => "st",
-                "two" => "nd",
-                "few" => "rd",
-                _ => "th",
+                "one" => "ম",
+                "two" => "য়",
+                "few" => "র্থ",
+                "many" => "ষ্ঠ",
+                _ => "তম",
             };
             format!("{d}{suffix}")
         }
@@ -813,17 +818,23 @@ mod tests {
         );
         assert_eq!(ordinal("zh-Hant", 3), "第3");
         assert_eq!(ordinal("pt-BR", 3), "3º");
-        // Turkmen, Hindi and Urdu, as ICU writes them (tafs-windows' tables agree).
+        // Turkmen, Hindi and Urdu in their own words, for a call (legal-i18n's): ICU writes
+        // English's suffixes for Turkmen and Urdu, and Hindi's masculine forms.
         let some = |l: &str| {
-            [1, 2, 4, 6, 9, 10, 21]
+            [1, 2, 3, 4, 6, 9, 10, 21]
                 .iter()
                 .map(|n| ordinal(l, *n))
                 .collect::<Vec<_>>()
                 .join(" ")
         };
-        assert_eq!(some("tk"), "1th 2th 4th 6rd 9rd 10rd 21th");
-        assert_eq!(some("hi"), "1ला 2रा 4था 6ठा 9वाँ 10वाँ 21वाँ");
-        assert_eq!(some("ur"), "1th 2th 4th 6th 9th 10th 21th");
+        assert_eq!(
+            some("tk"),
+            "1-nji 2-nji 3-nji 4-nji 6-njy 9-njy 10-njy 21-nji"
+        );
+        assert_eq!(some("hi"), "1ली 2री 3री 4थी 6ठी 9वीं 10वीं 21वीं");
+        assert_eq!(some("ur"), "1ویں 2ویں 3ویں 4ویں 6ویں 9ویں 10ویں 21ویں");
+        assert_eq!(some("bn"), "১ম ২য় ৩য় ৪র্থ ৬ষ্ঠ ৯ম ১০ম ২১তম");
+        assert_eq!(some("mn"), "1-р 2-р 3-р 4-р 6-р 9-р 10-р 21-р");
         assert_eq!(ordinal("hi", 0), "0");
         assert_eq!(ordinal("th", 3), "ที่\u{a0}3");
         assert_eq!(ordinal("ro", 3), "3a");
@@ -837,6 +848,6 @@ mod tests {
         assert_eq!(ordinal("az", 21), "21'inci");
         assert_eq!(ordinal("sr-Latn", 3), "3.");
         assert_eq!(ordinal("he", 3), "3");
-        assert_eq!(all("bn"), "১st ২nd ৩nd ৭st ১১th ২১th ১০০th ১,০০১th");
+        assert_eq!(all("bn"), "১ম ২য় ৩য় ৭ম ১১তম ২১তম ১০০তম ১,০০১তম");
     }
 }
