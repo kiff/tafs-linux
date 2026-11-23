@@ -707,32 +707,37 @@ pub(crate) fn go_on(w: &Rc<WordBook>, taf: &str, call: &str, say: Rc<dyn Fn(&str
     let Some(path) = tafs_core::held::continue_path(taf, call) else {
         return;
     };
+    // No session kept any more: signed out, said as such, not dropped.
     let Some(kept) = crate::store::load(chrono::Utc::now().timestamp()) else {
+        say(&why(w, &tafs_core::signin::KiffError::Unauthorized));
         return;
     };
     let languages =
         tafs_core::language::screen_languages(&tafs_core::language::preferred_from_env());
-    let (taf, words) = (taf.to_string(), (**w).clone());
+    let (taf, words, after) = (taf.to_string(), (**w).clone(), w.clone());
     glib::spawn_future_local(async move {
         let said = gio::spawn_blocking(move || {
             match crate::kiff::cloud_send(&kept.token, &languages, "POST", &path, None) {
-                Err(e) => Some((false, e.words(&words).unwrap_or_default())),
+                Err(e) => Some((false, why(&words, &e))),
                 Ok(a) => match tafs_core::held::read_gone_on(a.status, &a.body) {
                     GoneOn::Goes(_) | GoneOn::WentOn => None,
                     GoneOn::RunEnded(said) => Some((true, said)),
                     GoneOn::Refused => Some((
                         false,
-                        tafs_core::signin::refusal(&a, Some(&words))
-                            .words(&words)
-                            .unwrap_or_default(),
+                        why(&words, &tafs_core::signin::refusal(&a, Some(&words))),
                     )),
                 },
             }
         })
         .await
-        .ok()
-        .flatten();
-        let Some((ended, said)) = said.filter(|(_, s)| !s.trim().is_empty()) else {
+        // The call's thread itself failed: said as the app's own fault, never dropped.
+        .unwrap_or_else(|_| {
+            Some((
+                false,
+                why(&after, &tafs_core::signin::KiffError::Unreadable),
+            ))
+        });
+        let Some((ended, said)) = said else {
             return;
         };
         if ended {
@@ -740,6 +745,17 @@ pub(crate) fn go_on(w: &Rc<WordBook>, taf: &str, call: &str, say: Rc<dyn Fn(&str
         }
         say(&said);
     });
+}
+
+/// Why `go_on` didn't go, in the app's words, never blank: the error's own line, else the
+/// app's own-fault line (`error.ours`). Both are in every word book (the strings tests), so the
+/// last fallback is only there so that nothing is ever dropped.
+fn why(w: &WordBook, e: &tafs_core::signin::KiffError) -> String {
+    [e.words(w), w.line("error.ours")]
+        .into_iter()
+        .filter_map(Result::ok)
+        .find(|s| !s.trim().is_empty())
+        .unwrap_or_else(|| "Something went wrong on our side.".to_string())
 }
 
 /// What `go_on` says on Needs you's card, which went once the key's answer went: drawn again in
@@ -794,5 +810,55 @@ fn tap_for_screenshot(which: &'static str, b: &gtk::Button) {
             });
             glib::ControlFlow::Break
         });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tafs_core::signin::KiffError;
+
+    #[test]
+    fn a_continue_that_didnt_go_always_says_why() {
+        let w = WordBook::load(&WordBook::default_root(), "en").expect("the words at the pin");
+        // Signed out, unreached, unreadable, and refusals by status (an older tafs cloud's bare
+        // 404, 403, 5xx, 429): each has a line, never blank, so nothing is swallowed.
+        let errors = [
+            KiffError::Unauthorized,
+            KiffError::Offline,
+            KiffError::Unreadable,
+            KiffError::Server {
+                status: 404,
+                message: "not_found".into(),
+            },
+            KiffError::Server {
+                status: 403,
+                message: "forbidden".into(),
+            },
+            KiffError::Server {
+                status: 502,
+                message: "KIFF answered 502".into(),
+            },
+            KiffError::Server {
+                status: 429,
+                message: "busy".into(),
+            },
+        ];
+        for e in &errors {
+            let said = why(&w, e);
+            assert!(!said.trim().is_empty(), "{e:?} said nothing");
+            // A refusal's machine-readable error is never shown as it is.
+            if let KiffError::Server { message, .. } = e {
+                assert_ne!(&said, message);
+            }
+        }
+        assert_eq!(
+            why(&w, &KiffError::Unauthorized),
+            w.line("error.signed_out").unwrap()
+        );
+        assert_eq!(
+            why(&w, &KiffError::Offline),
+            w.line("error.offline").unwrap()
+        );
     }
 }
