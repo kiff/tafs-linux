@@ -7,6 +7,7 @@ publish.workspace = true
 description = "tafs for Linux: the portable part. Words, KIFF's sign-in, the session, the device key and the sidebar. No UI."
 
 [dependencies]
+image = { version = "0.25", default-features = false, features = ["webp"] }
 serde.workspace = true
 serde_json.workspace = true
 p256 = { version = "0.13", features = ["ecdsa", "pkcs8", "pem"] }

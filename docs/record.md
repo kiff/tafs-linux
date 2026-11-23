@@ -103,6 +103,18 @@ A call from a taf that isn't on Home (tafs cloud's id isn't one of Home's tafs) 
 iPad's plain panel: its title (15 semibold), detail (13, soft), amount (14) and time (12, dim), with no
 next step to take from here. In the screenshot, Sam's "Send a reply" is one.
 
+## The picture before a Chrome step (signed in)
+
+A receipt whose operation a paired Chrome acted for lists "See the page before this step", one per picture planque kept
+(`GET /v1/accounts/{t}/chromes/screenshots?op={proposal_id}`), each opening its step's
+(`…/chromes/screenshots/{step}`). Both are planque's safe routes, signed by this computer's device key; no session token
+goes. None kept, planque's switch off (404) or a failed read: no link. A picture is shown only if it checks out (WebP, at
+most 120 KB, the SHA-256 planque kept, the step asked for, a time it was taken), with when it was taken and "Kept for 30
+days, then deleted."; a 404 says no picture is kept; anything else, or a picture that won't decode, says it couldn't be
+loaded (`tafs-core/src/chrome_shots.rs`, `crates/tafs-app/src/chrome_shots.rs`). `--chrome-shots <file>` with
+`--page taf-receipt-shot:<key>:<entry>` draws it from a file for the screenshots
+(`crates/tafs-app/fixtures/chrome-shots.json`, synthetic).
+
 ## Exporting receipts (signed in)
 
 The iPad's `ExportReceiptsRow` (`RecordSearchViews.swift`), with `exportReceipts` from
