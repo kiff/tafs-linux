@@ -2,9 +2,11 @@
 //! under a tafs cloud taf's name ("Version 2 · live", and "Trying v3 · Resume" while a trial is
 //! open), the versions in a sheet, newest first, and the open trial in a sheet of its own, with
 //! its own chat (`tafs-core/versions.rs`). What the phone signs is drawn up to the signature:
-//! Install this version, Finish and Go back say this computer can't approve, and Start trying
-//! and Install stand disabled with why (`ApprovalNotice`). Cancelling a switch, and chatting with
-//! the trial, are sent.
+//! Install this version, Finish and Go back say this computer can't approve. With a security key,
+//! Start trying and a trial's Install go from here: the key approves KIFF's confirm of the trial
+//! Card's draft (`Act::ConfirmDraft`), and tafs cloud's own calls go as the session; without one,
+//! they stand disabled with why (`ApprovalNotice`). Cancelling a switch, and chatting with the
+//! trial, are sent.
 
 use std::cell::RefCell;
 use std::path::PathBuf;
@@ -24,8 +26,12 @@ thread_local! {
     /// `--versions answer.json` and `--trial answer.json`: tafs cloud's answers for the
     /// screenshots; nothing is read or sent.
     pub static FILES: RefCell<Option<(PathBuf, Option<PathBuf>)>> = const { RefCell::new(None) };
-    /// `--page versions:<key>` or `trial:<key>`: that sheet, open over the page.
+    /// `--page versions:<key>` or `trial:<key>`: that sheet, open over the page; `try:<key>`,
+    /// the versions with the first one's Try it open over them.
     pub static OPEN: RefCell<Option<&'static str>> = const { RefCell::new(None) };
+    /// `--trial-draft answer.json`: KIFF's draft a trial's Card is, for the screenshots: the
+    /// start sheet draws it; nothing is read or sent.
+    pub static DRAFT: RefCell<Option<PathBuf>> = const { RefCell::new(None) };
 }
 
 /// The taf the versions are of: tafs cloud's id, its name, and where its chat reads.
@@ -221,8 +227,14 @@ pub fn link(w: Rc<WordBook>, taf: VersionsTaf) -> gtk::Box {
                 glib::idle_add_local_once(move || r.emit_clicked());
             }
         }
-        if OPEN.with(|o| *o.borrow()) == Some("versions") {
-            OPEN.with(|o| *o.borrow_mut() = None);
+        if matches!(OPEN.with(|o| *o.borrow()), Some("versions" | "try")) {
+            // `try`: kept, so the versions' first Try it opens over them once they're drawn.
+            OPEN.with(|o| {
+                let mut o = o.borrow_mut();
+                if *o == Some("versions") {
+                    *o = None;
+                }
+            });
             glib::idle_add_local_once(move || b.emit_clicked());
         }
     });
@@ -297,9 +309,100 @@ struct Opener {
     taf: VersionsTaf,
 }
 
+/// The draft a trial's Card is, as read here: tafs cloud's id for it and KIFF's draft.
+type Shown = Rc<RefCell<Option<tafs_core::drafts::AgentDraft>>>;
+
 impl Opener {
     fn l(&self, key: &str) -> String {
         self.w.line(key).unwrap_or_default()
+    }
+
+    /// The session and languages, signed in with KIFF; none for a screenshot's files.
+    fn session(&self) -> Option<(String, Vec<&'static str>)> {
+        match &self.source {
+            Source::Cloud {
+                token, languages, ..
+            } => Some((token.clone(), languages.clone())),
+            Source::File { .. } => None,
+        }
+    }
+
+    /// A change at tafs cloud as the session (`try`, `PUT …/trial`, `install`), off the main
+    /// thread: its answer's body, or why it didn't go, in tafs cloud's words or the app's.
+    async fn send(
+        &self,
+        method: &'static str,
+        path: String,
+        body: Option<Vec<u8>>,
+    ) -> Result<Vec<u8>, String> {
+        let Some((token, languages)) = self.session() else {
+            return Err(String::new());
+        };
+        let words = (*self.w).clone();
+        gio::spawn_blocking(move || {
+            let a = crate::kiff::cloud_send(&token, &languages, method, &path, body.as_deref())
+                .map_err(|e| e.words(&words).unwrap_or_default())?;
+            if (200..300).contains(&a.status) {
+                Ok(a.body)
+            } else {
+                Err(tafs_core::signin::refusal(&a, Some(&words))
+                    .words(&words)
+                    .unwrap_or_default())
+            }
+        })
+        .await
+        .unwrap_or_else(|_| Err(String::new()))
+    }
+
+    /// `kiff.draft(id:)`: KIFF's draft as the session, unsigned.
+    async fn draft(&self, id: &str) -> Result<tafs_core::drafts::AgentDraft, String> {
+        let Some((token, languages)) = self.session() else {
+            return Err(String::new());
+        };
+        let (words, path) = ((*self.w).clone(), tafs_core::drafts::draft_path(id));
+        gio::spawn_blocking(move || {
+            let a = crate::kiff::kiff_get(&token, &languages, &path)
+                .map_err(|e| e.words(&words).unwrap_or_default())?;
+            if !(200..300).contains(&a.status) {
+                return Err(tafs_core::signin::refusal(&a, Some(&words))
+                    .words(&words)
+                    .unwrap_or_default());
+            }
+            tafs_core::drafts::AgentDraft::read(&a.body)
+                .ok_or_else(|| tafs_core::signin::plain_words(&words, 200).unwrap_or_default())
+        })
+        .await
+        .unwrap_or_else(|_| Err(String::new()))
+    }
+
+    /// Whether this computer's security key approves a trial Card's confirm here.
+    fn key_confirms(&self) -> bool {
+        let kept = crate::store::load(chrono::Utc::now().timestamp());
+        self.session().is_some()
+            && crate::key_approval::can_approve(
+                kept.as_ref(),
+                &Act::ConfirmDraft {
+                    draft: "d".into(),
+                    version: "v".into(),
+                    trial: true,
+                },
+            )
+    }
+
+    /// A draft's Cards, as the owner reads them before the key (`DraftCardsView`): each Card's
+    /// lines in a panel, under "Its Card".
+    fn draw_card(&self, into: &gtk::Box, draft: &tafs_core::drafts::AgentDraft) {
+        while let Some(c) = into.first_child() {
+            into.remove(&c);
+        }
+        into.append(&eyebrow(&self.l("card.its_card"), false));
+        for lines in draft.card_lines(&self.w).unwrap_or_default() {
+            let p = panel(false);
+            for line in lines {
+                p.append(&text(&line, 14, 400, &["tafs-ink"]));
+            }
+            into.append(&p);
+        }
     }
 
     /// `VersionsScreen`: the panel, read when it opens and again after a change. Pushed on the
@@ -410,6 +513,11 @@ impl Opener {
                     if let Some(v) = state.versions.iter().find(|v| v.n == row.n) {
                         let (me, v) = (self.clone(), v.clone());
                         t.connect_clicked(move |b| me.start(&v, b));
+                        if OPEN.with(|o| *o.borrow()) == Some("try") {
+                            OPEN.with(|o| *o.borrow_mut() = None);
+                            let t = t.clone();
+                            glib::idle_add_local_once(move || t.emit_clicked());
+                        }
                     }
                     buttons.append(&t);
                     let i = outline(install);
@@ -458,8 +566,11 @@ impl Opener {
         });
     }
 
-    /// `TrialStartSheet`: what trying the version means, and Start trying, disabled with why:
-    /// its Card is the KIFF draft the phone confirms, which this computer doesn't ask for.
+    /// `TrialStartSheet`: what trying the version means, its Card as KIFF's draft says it, and
+    /// Start trying. With a security key, Start trying reads the draft again (changed since it
+    /// was shown, it's shown again to read first), the key approves KIFF's confirm of it as a
+    /// trial, and once KIFF says it's trying, tafs cloud opens the trial and its chat opens.
+    /// Without one, it stands disabled with why.
     fn start(self: &Rc<Self>, v: &Version, over: &gtk::Button) {
         let Ok(l) = versions::start_lines(&self.w, v) else {
             return;
@@ -477,12 +588,356 @@ impl Opener {
             p.append(&text(line, 14, 400, &["tafs-ink"]));
         }
         sheet.column.append(&p);
-        if let Ok(Some(n)) =
-            tafs_core::approval::notice(&self.w, Mode::Kiff, tafs_core::approval::THIS_COMPUTER)
-        {
+        // Its Card, then Start trying, with the key.
+        self.trial_card(v, &sheet, over);
+        // Why it can't go from here, unless this computer's security key approves it.
+        if let (false, Ok(Some(n))) = (
+            self.key_confirms(),
+            tafs_core::approval::notice(&self.w, Mode::Kiff, tafs_core::approval::THIS_COMPUTER),
+        ) {
             sheet.column.append(&crate::approval::not_ready(&n));
         }
         sheet.dialog.present(Some(over));
+    }
+
+    /// The trial's Card in the start sheet, read when it opens (`trialCard`: tafs cloud's draft
+    /// for it, then KIFF's), and Start trying wired to the key.
+    fn trial_card(self: &Rc<Self>, v: &Version, sheet: &crate::sheet::Sheet, over: &gtk::Button) {
+        if self.session().is_none() {
+            // A screenshot's draft, from its file: drawn, and Start trying stays as it is.
+            let file = DRAFT.with(|d| d.borrow().clone());
+            if let Some(d) = file
+                .and_then(|p| std::fs::read(p).ok())
+                .and_then(|b| tafs_core::drafts::AgentDraft::read(&b))
+            {
+                let card = gtk::Box::new(gtk::Orientation::Vertical, 8);
+                self.draw_card(&card, &d);
+                sheet.column.append(&card);
+            }
+            return;
+        }
+        let card = gtk::Box::new(gtk::Orientation::Vertical, 8);
+        card.append(
+            &gtk::Spinner::builder()
+                .spinning(true)
+                .halign(gtk::Align::Start)
+                .build(),
+        );
+        sheet.column.append(&card);
+        let error = text("", 13, 400, &["tafs-no"]);
+        error.set_visible(false);
+        sheet.column.append(&error);
+        let slot = crate::approval::refusal_slot();
+        sheet.column.append(&slot);
+        let shown: Shown = Rc::default();
+        let n = v.n;
+        let start = sheet.confirm.clone();
+        {
+            let (me, card, error, shown, start) = (
+                self.clone(),
+                card.clone(),
+                error.clone(),
+                shown.clone(),
+                start.clone(),
+            );
+            glib::spawn_future_local(async move {
+                let read = match me
+                    .send("POST", versions::try_path(&me.taf.id, n), None)
+                    .await
+                {
+                    Ok(body) => match versions::read_try(&body) {
+                        Some(id) => me.draft(&id).await,
+                        None => Err(tafs_core::signin::plain_words(&me.w, 200).unwrap_or_default()),
+                    },
+                    Err(why) => Err(why),
+                };
+                match read {
+                    Ok(d) if d.cards.is_some() => {
+                        me.draw_card(&card, &d);
+                        *shown.borrow_mut() = Some(d);
+                        if let Some(start) = &start {
+                            start.set_sensitive(me.key_confirms());
+                        }
+                    }
+                    other => {
+                        while let Some(c) = card.first_child() {
+                            card.remove(&c);
+                        }
+                        let why = other.err().unwrap_or_default();
+                        error.set_label(&if why.is_empty() {
+                            me.l("version.trial_card_unreadable")
+                        } else {
+                            me.w.get(
+                                "version.trial.card_not_read",
+                                &[("n", &n.to_string()), ("why", &why)],
+                            )
+                            .unwrap_or_default()
+                        });
+                        error.set_visible(true);
+                    }
+                }
+            });
+        }
+        let Some(start) = start else { return };
+        let (me, dialog, over) = (self.clone(), sheet.dialog.clone(), over.clone());
+        let label = start.label().unwrap_or_default();
+        start.connect_clicked(move |b| {
+            let Some(was) = shown.borrow().clone() else {
+                return;
+            };
+            b.set_sensitive(false);
+            b.set_label(&me.l("common.starting"));
+            let (me, b, card, error, slot, shown, dialog, over, label) = (
+                me.clone(),
+                b.clone(),
+                card.clone(),
+                error.clone(),
+                slot.clone(),
+                shown.clone(),
+                dialog.clone(),
+                over.clone(),
+                label.clone(),
+            );
+            glib::spawn_future_local(async move {
+                let back = |b: &gtk::Button| {
+                    b.set_label(&label);
+                    b.set_sensitive(true);
+                };
+                error.set_visible(false);
+                // What the owner read is what the key approves: changed since, read it again.
+                let now = match me.draft(&was.id).await {
+                    Ok(d) => d,
+                    Err(why) => {
+                        error.set_label(
+                            &me.w
+                                .get(
+                                    "version.trial.cant_try",
+                                    &[("n", &n.to_string()), ("why", &why)],
+                                )
+                                .unwrap_or_default(),
+                        );
+                        error.set_visible(true);
+                        return back(&b);
+                    }
+                };
+                if now.version != was.version {
+                    me.draw_card(&card, &now);
+                    *shown.borrow_mut() = Some(now);
+                    error.set_label(&me.l("version.trial.changed"));
+                    error.set_visible(true);
+                    return back(&b);
+                }
+                let act = Act::ConfirmDraft {
+                    draft: was.id.clone(),
+                    version: was.version.clone(),
+                    trial: true,
+                };
+                let what =
+                    me.w.get(
+                        "version.trial.prompt",
+                        &[("n", &n.to_string()), ("taf", &me.taf.name)],
+                    )
+                    .ok();
+                let opened: Rc<dyn Fn()> = {
+                    let (me, b, error, dialog, over, draft) = (
+                        me.clone(),
+                        b.clone(),
+                        error.clone(),
+                        dialog.clone(),
+                        over.clone(),
+                        was.id.clone(),
+                    );
+                    Rc::new(move || {
+                        let (me, b, error, dialog, over, draft) = (
+                            me.clone(),
+                            b.clone(),
+                            error.clone(),
+                            dialog.clone(),
+                            over.clone(),
+                            draft.clone(),
+                        );
+                        glib::spawn_future_local(async move {
+                            me.opened(n, &draft, &b, &error, &dialog, &over).await;
+                        });
+                    })
+                };
+                crate::approval::refuse_then(
+                    &me.w,
+                    Mode::Kiff,
+                    &act,
+                    what,
+                    vec![],
+                    &slot,
+                    Some(opened),
+                );
+                back(&b);
+            });
+        });
+    }
+
+    /// The key's confirm went: only a KIFF that runs trials answers "trying", and anything else
+    /// is never taken for a trial. Then tafs cloud opens it, and its chat opens.
+    async fn opened(
+        self: &Rc<Self>,
+        n: i64,
+        draft: &str,
+        b: &gtk::Button,
+        error: &gtk::Label,
+        dialog: &adw::Dialog,
+        over: &gtk::Button,
+    ) {
+        let say = |why: String| {
+            error.set_label(&why);
+            error.set_visible(true);
+        };
+        let trying = match self.draft(draft).await {
+            Ok(d) if d.status == "trying" => true,
+            Ok(d) if d.status == "confirmed" => {
+                say(self.l("version.not_a_trial.confirmed"));
+                false
+            }
+            Ok(d) => {
+                say(self
+                    .w
+                    .get("version.not_a_trial.other", &[("status", &d.status)])
+                    .unwrap_or_default());
+                false
+            }
+            Err(why) => {
+                say(self
+                    .w
+                    .get(
+                        "version.trial.not_started",
+                        &[("n", &n.to_string()), ("why", &why)],
+                    )
+                    .unwrap_or_default());
+                false
+            }
+        };
+        if !trying {
+            b.set_sensitive(false);
+            return;
+        }
+        let opened = self
+            .send(
+                "PUT",
+                versions::trial_path(&self.taf.id),
+                Some(versions::open_trial_body(n, draft)),
+            )
+            .await
+            .and_then(|body| {
+                versions::read_opened(&body)
+                    .ok_or_else(|| tafs_core::signin::plain_words(&self.w, 200).unwrap_or_default())
+            });
+        match opened {
+            Ok(t) => {
+                dialog.close();
+                self.trial(&t, over);
+            }
+            Err(why) => say(self
+                .w
+                .get(
+                    "version.trial.not_started",
+                    &[("n", &n.to_string()), ("why", &why)],
+                )
+                .unwrap_or_default()),
+        }
+    }
+
+    /// `installTrial`: asked first, then KIFF's draft read; not confirmed live yet, the key
+    /// approves KIFF's confirm of it; then tafs cloud installs it (the version goes live, the
+    /// trial ends) and the sheet closes.
+    fn install(
+        self: &Rc<Self>,
+        t: &OpenTrial,
+        l: &versions::TrialLines,
+        b: &gtk::Button,
+        slot: &gtk::Box,
+        dialog: &adw::Dialog,
+    ) {
+        let ask = adw::AlertDialog::new(Some(&l.install_title), Some(&l.install_body));
+        ask.add_response("cancel", &self.l("common.cancel"));
+        ask.add_response("install", &l.install);
+        ask.set_response_appearance("install", adw::ResponseAppearance::Suggested);
+        ask.set_default_response(Some("cancel"));
+        ask.set_close_response("cancel");
+        let (me, t, slot, dialog) = (self.clone(), t.clone(), slot.clone(), dialog.clone());
+        ask.connect_response(None, move |_, response| {
+            if response != "install" {
+                return;
+            }
+            let (me, t, slot, dialog) = (me.clone(), t.clone(), slot.clone(), dialog.clone());
+            glib::spawn_future_local(async move {
+                let unfinished = |why: String| {
+                    me.w.get(
+                        "version.trial.install_unfinished",
+                        &[("n", &t.n.to_string()), ("why", &why)],
+                    )
+                    .unwrap_or_default()
+                };
+                let installed: Rc<dyn Fn()> = {
+                    let (me, t, slot, dialog) =
+                        (me.clone(), t.clone(), slot.clone(), dialog.clone());
+                    Rc::new(move || {
+                        let (me, t, slot, dialog) =
+                            (me.clone(), t.clone(), slot.clone(), dialog.clone());
+                        glib::spawn_future_local(async move {
+                            match me
+                                .send("POST", versions::install_path(&me.taf.id), None)
+                                .await
+                            {
+                                Ok(_) => {
+                                    dialog.close();
+                                }
+                                Err(why) => {
+                                    slot.append(&text(
+                                        &me.w
+                                            .get(
+                                                "version.trial.install_unfinished",
+                                                &[("n", &t.n.to_string()), ("why", &why)],
+                                            )
+                                            .unwrap_or_default(),
+                                        13,
+                                        400,
+                                        &["tafs-no"],
+                                    ));
+                                    slot.set_visible(true);
+                                }
+                            }
+                        });
+                    })
+                };
+                match me.draft(&t.draft).await {
+                    Ok(d) if d.confirmed() => installed(),
+                    Ok(d) => {
+                        let what =
+                            me.w.get(
+                                "version.prompt.install",
+                                &[("n", &t.n.to_string()), ("taf", &me.taf.name)],
+                            )
+                            .ok();
+                        crate::approval::refuse_then(
+                            &me.w,
+                            Mode::Kiff,
+                            &Act::ConfirmDraft {
+                                draft: d.id.clone(),
+                                version: d.version.clone(),
+                                trial: false,
+                            },
+                            what,
+                            vec![],
+                            &slot,
+                            Some(installed),
+                        );
+                    }
+                    Err(why) => {
+                        slot.append(&text(&unfinished(why), 13, 400, &["tafs-no"]));
+                        slot.set_visible(true);
+                    }
+                }
+            });
+        });
+        ask.present(Some(b));
     }
 
     /// `TrialScreen`: the bar (trying, not live, Go back and Install with their asks), what the
@@ -530,14 +985,27 @@ impl Opener {
             });
         }
         buttons.append(&back);
-        // Install waits on the approval key: disabled here, with why under the bar.
+        // Install: with a security key, from here (asked, then the key confirms the draft live,
+        // then tafs cloud installs it); without one, disabled, with why under the bar.
         let install = outline(&l.install);
-        install.set_sensitive(false);
+        install.set_sensitive(self.key_confirms());
+        {
+            let (me, t, l, slot, dialog) = (
+                self.clone(),
+                t.clone(),
+                l.clone(),
+                slot.clone(),
+                sheet.dialog.clone(),
+            );
+            install.connect_clicked(move |b| me.install(&t, &l, b, &slot, &dialog));
+        }
         buttons.append(&install);
         bar.append(&buttons);
-        if let Ok(Some(n)) =
-            tafs_core::approval::notice(&self.w, Mode::Kiff, tafs_core::approval::THIS_COMPUTER)
-        {
+        // Why it can't go from here, unless this computer's security key approves it.
+        if let (false, Ok(Some(n))) = (
+            self.key_confirms(),
+            tafs_core::approval::notice(&self.w, Mode::Kiff, tafs_core::approval::THIS_COMPUTER),
+        ) {
             bar.append(&crate::approval::not_ready(&n));
         }
         bar.append(&slot);

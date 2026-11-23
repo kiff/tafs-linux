@@ -221,7 +221,7 @@ on KIFF's side of it (kiff/cloud#96), and is on (`passkey::ENABLED`).
 **Approving** (`key_approval.rs`, from `approval::refuse`): signed in with such a session, a tap
 that would sign asks the key instead, for the acts whose whole request this app writes
 (`Act::request`, the iPad's `KIFFClient` bodies: groups and their members, signing a device out,
-the time zone, sharing, resuming, discarding a setup, removing a taf, trials, and an API door's
+the time zone, sharing, resuming, discarding a setup, removing a taf, going back from a trial, a trial's Card confirmed in KIFF to start trying it or to install it (`Act::ConfirmDraft`: KIFF's `POST /v1/me/agent-drafts/{id}/confirm` and nothing else, tafs cloud's own trial calls going as the session after it; [taf](taf.md#its-versions-and-its-trial)), and an API door's
 reopening, a key's revoking and the door's removal, at tafs cloud, whose `doorSigned` takes the
 passkey header as the device's; then the doors are read again). **An API door's New key stays on
 the phone** (the PM's 00:19): its answer is the key, shown once, which this computer can't keep
