@@ -3,6 +3,8 @@
 # from. So no coordination thread, no PM, no dated rule, and no team's own name for its lanes.
 # Those names are matched by the first 16 hex digits of their SHA-256, so this script doesn't name
 # them either. CODEOWNERS is read for everything but names: it works by logins. Fails with where.
+# Every run first proves the check on planted lines ("planted-lane" is a name kept for that), so a
+# copy that lost a character fails here rather than passing on everything.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 python3 - <<'PY'
@@ -11,7 +13,7 @@ import hashlib, re, subprocess, sys
 NAMES = set("""
 3c32e58c6fc3cf62 20cca48ece26c362 f5068c4b858ead38 fe9c6bd7a66301f4 50077b782480811e
 be896ac583d76627 afb42e3f1a4bce7e d419916f176e52d3 bd184cdc7aea9ef8 ab63a9b276c86bec
-2ad06b22b301f873 3c00d0a9d4c2eb08 018a7f9527b114ab 94c6cdf43ac3f929
+2ad06b22b301f873 3c00d0a9d4c2eb08 018a7f9527b114ab 94c6cdf43ac3f929 0344d07edb285217
 """.split())
 MONTH = r"(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*"
 SAID = re.compile(
@@ -20,6 +22,35 @@ SAID = re.compile(
 )
 WORD = re.compile(r"(?:^|(?<=[^@\w-]))[a-z0-9]+(?:-[a-z0-9]+)*(?=[^\w-]|$)")
 SELF, OWNERS = "tools/public-text.sh", ".github/CODEOWNERS"
+
+
+def named(path, line):
+    if SAID.search(line):
+        return True
+    return path != OWNERS and any(
+        hashlib.sha256(w.group().encode()).hexdigest()[:16] in NAMES
+        for w in WORD.finditer(line.lower()))
+
+
+PLANTED = [  # (path, line, whether it must fail)
+    ("a.rs", "// planted-lane's note on a review", True),
+    ("a.rs", "// as (Planted-Lane) said", True),
+    ("a.md", "the rule from kiff/work, item 3", True),
+    ("a.md", "as the PM said", True),
+    ("a.md", "the PM's ruling", True),
+    ("a.md", "(PM, at noon)", True),
+    ("a.md", "the owner's 22 Nov rule", True),
+    ("a.md", "the owner, 3 December", True),
+    ("a.md", "tafs cloud's words, read at 4:30 PM", False),
+    ("a.md", "planted-laneway and replanted-lane are other words", False),
+    (OWNERS, "* @planted-lane", False),
+    (OWNERS, "# one of the two (the owner, 22 Nov)", True),
+]
+wrong = [p for p in PLANTED if named(p[0], p[1]) != p[2]]
+if wrong:
+    print("The public-text check itself is broken: these planted lines came out wrong:")
+    print("\n".join(f"{p}: {l} (should {'fail' if f else 'pass'})" for p, l, f in wrong))
+    sys.exit(2)
 
 files = subprocess.run(["git", "ls-files", "-z"], capture_output=True, check=True).stdout
 found = []
@@ -30,16 +61,11 @@ for path in files.decode().split("\0"):
         text = open(path, encoding="utf-8").read()
     except (UnicodeDecodeError, IsADirectoryError, FileNotFoundError):
         continue  # binary, a submodule or gone: no words to read
-    for n, line in enumerate(text.splitlines(), 1):
-        why = SAID.search(line)
-        if not why and path != OWNERS:
-            why = next((w for w in WORD.finditer(line.lower())
-                        if hashlib.sha256(w.group().encode()).hexdigest()[:16] in NAMES), None)
-        if why:
-            found.append(f"{path}:{n}: {line.strip()[:160]}")
+    found += [f"{path}:{n}: {line.strip()[:160]}"
+              for n, line in enumerate(text.splitlines(), 1) if named(path, line)]
 if found:
     print("Public text names a thread, a lane, the PM or a dated rule; say the rule itself:")
     print("\n".join(found))
     sys.exit(1)
-print("Public text: clean")
+print(f"Public text: clean ({len(PLANTED)} planted lines checked first)")
 PY
