@@ -198,8 +198,9 @@ it over the window.
 - **Under a line, "KIFF receipt"** (green) once KIFF says its receipt is signed; the sheet's own
   check is what checks it.
 - **Open in the taf's chat** opens the taf's page and closes the sheet; **Done** closes it.
-- **Not on Linux:** the "signed on this device" panel. This computer signs no answer, so a line
-  has no signature of its own.
+- **Not on Linux:** the "signed on this device" panel: the iPad's seal on the line it logs itself
+  for an answer it just signed, until KIFF's record takes its place. Linux logs no line of its own:
+  an answer signed here with a security key (Approve once, Extra room) shows as KIFF records it.
 
 The screenshot (`--page receipt:prop_receipt_1`) reads
 `crates/tafs-app/fixtures/activity.json` and `receipt.json`, both synthetic: a receipt not
