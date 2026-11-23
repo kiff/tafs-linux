@@ -70,6 +70,8 @@ struct State {
     /// `why`), and where the plan's message goes (answering a raise request).
     raise_refused: Option<NotReady>,
     plan_refused: Option<NotReady>,
+    /// `refreshUsage` is on its way: a pull asks nothing more.
+    refreshing: bool,
 }
 
 thread_local! {
@@ -270,6 +272,7 @@ pub fn page(w: Rc<WordBook>, source: UsageSource, names: Names) -> gtk::Widget {
             if !matches!(source, UsageSource::Cloud { .. }) {
                 return;
             }
+            state.borrow_mut().refreshing = true;
             let (words, source, state, redraw) =
                 ((*w).clone(), source.clone(), state.clone(), redraw.clone());
             gtk::glib::spawn_future_local(async move {
@@ -329,11 +332,32 @@ pub fn page(w: Rc<WordBook>, source: UsageSource, names: Names) -> gtk::Widget {
                         }
                     }
                     s.read = true;
+                    s.refreshing = false;
                 }
                 redraw();
             });
         })
     };
+    // Pull to refresh (`.refreshable { await model.refreshUsage() }`): the balance, the credits
+    // and KIFF's usage read again, and the period before too once it was asked for. What was read
+    // stays in sight meanwhile; not while a read is on its way.
+    let refresh: Rc<dyn Fn()> = {
+        let (state, reload, read_previous) = (state.clone(), reload.clone(), read_previous.clone());
+        Rc::new(move || {
+            let again_previous = {
+                let s = state.borrow();
+                if s.refreshing || !s.read {
+                    return;
+                }
+                s.previous.is_some() || s.previous_error.is_some()
+            };
+            reload();
+            if again_previous {
+                read_previous();
+            }
+        })
+    };
+    crate::widgets::refreshable(&scroller, &outer, refresh);
     let ctx = Ctx {
         w: w.clone(),
         state: state.clone(),
@@ -882,7 +906,7 @@ fn runs_page(
                     400,
                     &["tafs-soft"],
                 ));
-                // There's no pull on a desktop: the page reads again on Try again.
+                // A pull reads again (its words say so), and Try again for a mouse.
                 let again = outline(&l("common.try_again"));
                 let load = load.clone();
                 again.connect_clicked(move |_| load(false));
@@ -948,6 +972,12 @@ fn runs_page(
             }
         }
     }));
+    // Pull to refresh (`.refreshable`): its credits and newest runs read again, what was read in
+    // sight meanwhile. Not while a read is on its way.
+    {
+        let load = load.clone();
+        crate::widgets::refreshable(&scroller, &outer, Rc::new(move || load(false)));
+    }
     redraw();
     load(false);
     crate::widgets::ground(&outer);

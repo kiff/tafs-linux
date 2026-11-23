@@ -86,6 +86,12 @@ request's Decline with Decline tapped (`usage-decline`).
   yet, from here. A
   run that doesn't open, and the screenshots' file, stay plain lines.
 
+Pulled past its top (`.refreshable`: a touchpad's or a touch screen's pull, as GTK reports it),
+or on Ctrl+R or F5 while the focus is in it, the screen reads again in place (`refreshUsage`): the balance, the credits and
+KIFF's usage, and the period before once it was asked for. A taf's runs read their credits and
+newest runs again the same way, and keep Try again while nothing is read, for a mouse. What was
+read stays in sight meanwhile, and a pull while a read is on its way asks nothing more.
+
 A read that fails keeps what was read before and says why: tafs cloud's own `words` when it
 sends them, else "{what} couldn't be read: {why}". A tafs cloud without a read (404) shows
 nothing for it. Each read goes to tafs cloud only, as the session (`may_send_to`).
@@ -101,5 +107,3 @@ it signed in with KIFF from a file of synthetic answers (`balance`, `credits`, `
 
 - **Buying** packs and Solo, and approving a member's pack (which buys it): the iPad's are the
   App Store's. They're held for the owner's money question.
-- **Refreshing in place**: the iPad pulls to refresh; here the screen reads again when it opens,
-  after an ask or a withdrawal, and a taf's runs have Try again.

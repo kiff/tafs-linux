@@ -42,8 +42,8 @@ compact layout, as the reference set's `calendar.png`.
 ## Reading again
 
 The screen reads its month's range when it opens, on Try again, and when pulled past its top
-(`.refreshable`: a touchpad's or a touch screen's pull, as GTK reports it) or on Ctrl+R or F5, a
-computer's way to ask. A pull while a read is on its way asks nothing more.
+(`.refreshable`: a touchpad's or a touch screen's pull, as GTK reports it) or on Ctrl+R or F5 while
+the focus is in it, a computer's way to ask. A pull while a read is on its way asks nothing more.
 
 ## Not yet
 

@@ -79,6 +79,8 @@ pub struct Knobs {
     sending: Rc<RefCell<Vec<String>>>,
     listeners: Listeners,
     next: Rc<Cell<u64>>,
+    /// A pull's read is on its way: another pull asks nothing more.
+    pulled: Rc<Cell<bool>>,
 }
 
 /// What a request came to.
@@ -107,6 +109,7 @@ impl Knobs {
             sending: Rc::new(RefCell::new(Vec::new())),
             listeners: Rc::new(RefCell::new(Vec::new())),
             next: Rc::new(Cell::new(0)),
+            pulled: Rc::new(Cell::new(false)),
         }
     }
 
@@ -272,7 +275,24 @@ impl Knobs {
         glib::spawn_future_local(async move { me.load().await });
     }
 
-    /// Its work (`loadWork`), for the replies given up on.
+    /// Pull to refresh (`.refreshable`): the dial read again (`loadKnob`), then its work too
+    /// where Results go to draws it (`loadWork`). What was read stays in sight meanwhile, and a
+    /// pull while one is on its way asks nothing more.
+    pub(crate) fn pull(&self, work: bool) {
+        if self.pulled.replace(true) {
+            return;
+        }
+        let me = self.clone();
+        glib::spawn_future_local(async move {
+            me.load().await;
+            me.pulled.set(false);
+            if work {
+                me.load_work();
+            }
+        });
+    }
+
+    /// Its work (`loadWork`), for the replies given up on; a read that fails changes nothing.
     pub(crate) fn load_work(&self) {
         let me = self.clone();
         glib::spawn_future_local(async move {
@@ -292,7 +312,10 @@ impl Knobs {
             .await
             .ok()
             .flatten();
-            *me.work.borrow_mut() = read;
+            // A read that fails keeps what was read before, as `loadWork` keeps `works`.
+            if read.is_some() {
+                *me.work.borrow_mut() = read;
+            }
             me.changed_now();
         });
     }
@@ -532,7 +555,12 @@ pub fn open(knobs: Knobs, screen: Screen, parent: &impl IsA<gtk::Widget>) {
             (nav, Some(dialog))
         }
     };
-    let shown = page(&title, &column);
+    let (shown, scroller) = scrolled_page(&title, &column);
+    {
+        let knobs = knobs.clone();
+        let work = screen == Screen::ResultsGoTo;
+        crate::widgets::refreshable(&scroller, &shown, Rc::new(move || knobs.pull(work)));
+    }
     nav.push(&shown);
     let ctx = Rc::new(Screens {
         knobs: knobs.clone(),
@@ -591,6 +619,11 @@ pub fn open(knobs: Knobs, screen: Screen, parent: &impl IsA<gtk::Widget>) {
 
 /// A screen pushed on a navigation: Back and its title in its bar, its column scrolled.
 pub(crate) fn page(title: &str, content: &gtk::Box) -> adw::NavigationPage {
+    scrolled_page(title, content).0
+}
+
+/// `page`, and its scroller, for a screen that reads again when pulled.
+fn scrolled_page(title: &str, content: &gtk::Box) -> (adw::NavigationPage, gtk::ScrolledWindow) {
     let scroller = gtk::ScrolledWindow::new();
     scroller.set_hscrollbar_policy(gtk::PolicyType::Never);
     scroller.set_child(Some(content));
@@ -604,7 +637,7 @@ pub(crate) fn page(title: &str, content: &gtk::Box) -> adw::NavigationPage {
     toolbar.add_css_class("tafs-pushed");
     toolbar.set_content(Some(&scroller));
     crate::widgets::ground(&toolbar);
-    adw::NavigationPage::new(&toolbar, title)
+    (adw::NavigationPage::new(&toolbar, title), scroller)
 }
 
 /// A screen's state while it's open.

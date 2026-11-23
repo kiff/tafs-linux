@@ -163,6 +163,38 @@ pub fn ground<W: IsA<gtk::Widget>>(w: &W) {
     w.add_css_class("tafs-ground");
 }
 
+/// Pull to refresh (`.refreshable`): `refresh` runs when `scroller` is pulled past its top (a
+/// touchpad's or a touch screen's pull, as GTK reports it), and on Ctrl+R or F5 while the focus is
+/// in `host`, a computer's way to ask: only there (`Local`), so the sidebar and the screen beside
+/// it never compete for the keys. Whether a read is already on its way is `refresh`'s to say.
+pub fn refreshable<W: IsA<gtk::Widget>>(
+    scroller: &gtk::ScrolledWindow,
+    host: &W,
+    refresh: std::rc::Rc<dyn Fn()>,
+) {
+    {
+        let refresh = refresh.clone();
+        scroller.connect_edge_overshot(move |_, edge| {
+            if edge == gtk::PositionType::Top {
+                refresh();
+            }
+        });
+    }
+    let keys = gtk::ShortcutController::new();
+    keys.set_scope(gtk::ShortcutScope::Local);
+    for trigger in ["<Control>r", "F5"] {
+        let refresh = refresh.clone();
+        keys.add_shortcut(gtk::Shortcut::new(
+            gtk::ShortcutTrigger::parse_string(trigger),
+            Some(gtk::CallbackAction::new(move |_, _| {
+                refresh();
+                gtk::glib::Propagation::Stop
+            })),
+        ));
+    }
+    host.add_controller(keys);
+}
+
 /// Writes a file the person saved from tafs (their chats, their receipts) readable by them alone
 /// (0600), whatever the umask: other accounts on a shared computer can't read it. A file already
 /// there by that name is replaced, and keeps the same mode.

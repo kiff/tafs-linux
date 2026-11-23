@@ -22,6 +22,9 @@ pub const SIDEBAR_WIDTH: i32 = 320;
 thread_local! {
     /// Home read again for the sidebar, in place (`refresh`): set while signed in with KIFF.
     static HOME_REREAD: RefCell<Option<Rc<dyn Fn()>>> = RefCell::new(None);
+    /// The sidebar pulled (`.refreshable { await model.refresh() }`): set while signed in with
+    /// KIFF.
+    static HOME_PULL: RefCell<Option<Rc<dyn Fn()>>> = RefCell::new(None);
 }
 
 /// What reads Home again for the sidebar, or none.
@@ -35,6 +38,11 @@ pub fn reread_home() {
     if let Some(f) = HOME_REREAD.with(|h| h.borrow().clone()) {
         f();
     }
+}
+
+/// What a pull of the sidebar does, or none.
+pub fn set_home_pull(pull: Option<Rc<dyn Fn()>>) {
+    HOME_PULL.with(|h| *h.borrow_mut() = pull);
 }
 
 pub struct Shell {
@@ -690,6 +698,12 @@ pub fn build(
             };
             // What the Unreachable line said stays, until the window says otherwise.
             let line = unreachable.borrow().first_child();
+            // Whether the focus was in the sidebar: it goes back there once it's drawn again, so
+            // a second Ctrl+R or F5 still reaches it.
+            let old_side = side.borrow().clone();
+            let focused = old_side.root().and_then(|r| r.focus()).is_some_and(|f| {
+                f.is_ancestor(&old_side) || &f == old_side.upcast_ref::<gtk::Widget>()
+            });
             rows.borrow_mut().clear();
             finishes.borrow_mut().clear();
             let foot = self::sidebar(
@@ -718,6 +732,13 @@ pub fn build(
             *unreachable.borrow_mut() = foot.unreachable;
             if let Some(s) = selection.borrow().as_ref() {
                 mark_chosen(&rows, &list_now.borrow(), &icon_now.borrow(), s);
+            }
+            if focused {
+                let list = list_now.borrow().clone();
+                match list.selected_row() {
+                    Some(row) => row.grab_focus(),
+                    None => list.grab_focus(),
+                };
             }
         })
     };
@@ -1093,6 +1114,11 @@ fn sidebar(
     scroller.set_vexpand(true);
     scroller.set_child(Some(&list));
     pane.append(&scroller);
+    // Pull to refresh: Home read again, signed in with KIFF; the sample's sidebar has nothing to
+    // read, so it takes no pull and no keys.
+    if let Some(pull) = HOME_PULL.with(|h| h.borrow().clone()) {
+        crate::widgets::refreshable(&scroller, &pane, pull);
+    }
 
     // Coach, then the account just under it: always in sight.
     let foot = gtk::Box::new(gtk::Orientation::Vertical, 8);
