@@ -468,7 +468,6 @@ nothing shows until they're read, or when they can't be. A 401 signs this comput
 
 ## Not yet
 
-- **The sample's Chat**, there, dimmed. A tafs cloud taf's page opens on its chat ([chat.md](chat.md)).
 - **On the Setup tab:** the sample's Setup (there, dimmed).
 - **In the trial's sheet:** its guide stays above the chat once messages are in (the iPad shows it
   before the first only), and the chat's box is under it, a scroll down.
