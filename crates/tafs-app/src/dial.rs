@@ -188,6 +188,13 @@ impl Dial {
                     // With this computer's security key, signed here, then the taf read again;
                     // else "Approve on your phone instead".
                     let knobs = self.knobs.clone();
+                    // Then the run that paused on it goes on (`continueHeld`).
+                    let (taf, held, w) = (
+                        self.knobs.taf().id.clone(),
+                        id.clone(),
+                        self.knobs.words().clone(),
+                    );
+                    let slot = self.slot.clone();
                     // The key's sheet names the call ("Answer {summary}", `AppModel.answer`).
                     let what = self
                         .knobs
@@ -204,7 +211,19 @@ impl Dial {
                         what,
                         vec![],
                         &self.slot,
-                        Some(Rc::new(move || knobs.reload())),
+                        Some(Rc::new(move || {
+                            knobs.reload();
+                            let slot = slot.clone();
+                            crate::needs_you::go_on(
+                                &w,
+                                &taf,
+                                &held,
+                                Rc::new(move |said| {
+                                    slot.append(&crate::widgets::text(said, 13, 400, &["tafs-no"]));
+                                    slot.set_visible(true);
+                                }),
+                            );
+                        })),
                     );
                 }
             }

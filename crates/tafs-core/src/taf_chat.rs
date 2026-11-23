@@ -656,6 +656,36 @@ impl TafChat {
         self.live = None;
     }
 
+    /// An approval that landed after its run had ended (`runEndedAfterApproval`, kiff/tafs#1812):
+    /// tafs cloud's words, in the line a run that failed part-way shows, with Retry on the owner's
+    /// last message, and nothing at work. With no message of the owner's to send again, the words
+    /// go above the box. Blank words change nothing; whether anything changed is returned.
+    pub fn run_ended_after_approval(&mut self, words: &str) -> bool {
+        let words = words.trim();
+        if words.is_empty() {
+            return false;
+        }
+        self.awaiting = None;
+        self.thread.working = None;
+        let last = self
+            .thread
+            .messages
+            .iter()
+            .rev()
+            .find(|m| m.from == From::Owner);
+        match last {
+            Some(m) => {
+                self.ended = Some(Ended::Failed {
+                    retry: m.text.clone(),
+                });
+                self.went_through.clear();
+                self.failed_why = Some(words.to_string());
+            }
+            None => self.error = Some(words.to_string()),
+        }
+        true
+    }
+
     /// The sample's chat opened (`loadChat` in the sample): what it starts with, read.
     pub fn sample_seed(&mut self, opening: Vec<ChatMessage>) {
         self.thread.messages = opening;

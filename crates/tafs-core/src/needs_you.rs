@@ -77,6 +77,9 @@ pub struct CardLines {
     pub extra_room: bool,
     /// KIFF's decision id (`kiffID`): a streamed answer names the call it held by it.
     pub kiff_id: Option<String>,
+    /// Its taf's key (`HeldCall.taf`): where the run that paused on it goes on once it's
+    /// answered here (`continueHeld`).
+    pub taf: String,
     /// Its key in its taf's chat (`heldKey`): its Record line's id, so the card and what became
     /// of it are one row there.
     pub record: String,
@@ -259,6 +262,7 @@ pub fn lines(
             accounting_version: call.accounting_version,
             extra_room: may_answer && manages_cards && !call.approvable_once,
             kiff_id: call.kiff_id.clone(),
+            taf: call.taf.clone(),
             record: crate::record::held_key(
                 call.proposal_id.as_deref(),
                 call.kiff_id.as_deref(),

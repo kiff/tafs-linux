@@ -1905,3 +1905,37 @@ fn a_knock_doesn_t_count_as_the_taf_s_words_for_a_held_card() {
     assert!(!ids.contains(&"k|card".to_string()), "{ids:?}");
     assert!(ids.contains(&"d|k1".to_string()));
 }
+
+#[test]
+fn an_approval_after_its_run_ended_says_nothing_ran_and_offers_retry() {
+    let w = en();
+    let json = format!(
+        r#"{{"messages":[{},{}],"working":{{"session":"s1"}}}}"#,
+        owner("Refund pi_1", "2026-11-16T09:59:00Z", "s1"),
+        taf("It's held for your yes.", "2026-11-16T10:00:05Z", "s1")
+    );
+    let mut c = chat_of(&json);
+    let now = at("2026-11-16T10:01:00Z");
+    let rae = Whose {
+        name: Some("Rae"),
+        ask_coach: false,
+    };
+    let words = "That run had ended, so nothing ran.";
+    assert!(c.thinking());
+    // Blank words change nothing.
+    assert!(!c.run_ended_after_approval("  "));
+    assert!(c.ended.is_none());
+    assert!(c.run_ended_after_approval(words));
+    assert!(!c.thinking());
+    let l = lines(&w, &c, &rae, &[], now).unwrap();
+    let (failed, retry) = l.failed.unwrap();
+    assert_eq!(failed, words);
+    assert_eq!(retry, w.line("chat.retry").unwrap());
+    assert_eq!(c.retry_run().as_deref(), Some("Refund pi_1"));
+
+    // No message of the owner's to send again: the words go above the box.
+    let mut c = chat_of(r#"{"messages":[]}"#);
+    assert!(c.run_ended_after_approval(words));
+    assert!(c.ended.is_none());
+    assert_eq!(c.error.as_deref(), Some(words));
+}
