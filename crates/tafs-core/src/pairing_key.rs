@@ -1,6 +1,6 @@
 //! A security key registered with this computer when it's paired (kiff/tafs
-//! `docs/computer-passkeys.md`, "A security key goes with its computer"; the PM's decision (i),
-//! kiff/work#17, 22 Nov): the computer makes a credential on the key before it shows the QR, the
+//! `docs/computer-passkeys.md`, "A security key goes with its computer"): the
+//! computer makes a credential on the key before it shows the QR, the
 //! QR names it (`credential: {id, public_key}`), the phone approves the pairing as any pairing,
 //! and the claim proves the key made that credential for this pairing and no other
 //! (`credential_proof`, KIFF's `VerifyPairingCredential`). The device key stays in software and

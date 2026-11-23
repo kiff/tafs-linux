@@ -57,7 +57,7 @@ pub struct OverviewLines {
     /// labelled taf; and the first chip's word (`labelsAllWords`).
     pub labels: Vec<crate::brief::Label>,
     pub labels_all: String,
-    /// The first Home (the PM's (b), kiff/work#20, 22 Nov, as the iPad's `HomeView` draws it):
+    /// The first Home (as the iPad's `HomeView` draws it, on every desktop):
     /// with no taf, for someone who may use Coach, tafs cloud's own empty line (else "No tafs
     /// yet" and what Coach does), then Ask Coach and How tafs works. None otherwise.
     pub first_home: Option<(String, Option<String>)>,

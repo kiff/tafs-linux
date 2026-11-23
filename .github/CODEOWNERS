@@ -1,10 +1,10 @@
 # Every change is reviewed by a code owner: kiff-qa or agentgabo, each standing in for the other
-# on the other's own PRs, or kiffagents (the parity lanes) on what isn't below. kiffagents never
-# approves kiffagents' own PRs.
+# on the other's own PRs, or kiffagents on what isn't below. kiffagents never approves kiffagents'
+# own PRs.
 * @kiff-qa @agentgabo @kiffagents
 
 # Keys, signing, pairing, sign-in and approvals stay kiff-qa's or agentgabo's: the last matching
-# line wins, so a change that touches them still needs one of the two (the owner, 22 Nov).
+# line wins, so a change that touches them still needs one of the two.
 /crates/tafs-core/src/keys.rs @kiff-qa @agentgabo
 /crates/tafs-core/src/signed.rs @kiff-qa @agentgabo
 /crates/tafs-core/src/passkey.rs @kiff-qa @agentgabo

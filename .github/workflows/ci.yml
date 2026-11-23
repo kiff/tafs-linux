@@ -29,6 +29,8 @@ jobs:
         run: rustup toolchain install stable --profile minimal -c clippy,rustfmt && rustup default stable
       - name: Words and contracts at the pin
         run: tools/sync.sh
+      - name: Public text names no thread, lane or PM
+        run: tools/public-text.sh
       - name: Format
         run: cargo fmt --all --check
       - name: Lint

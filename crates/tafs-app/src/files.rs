@@ -112,7 +112,7 @@ fn refused(w: &WordBook, a: &tafs_core::signin::Answer) -> String {
 }
 
 /// The file's bytes (`contents(of:)`): the address tafs cloud gives for a minute, read with no session. Or why not:
-/// the offline line only when nothing answered, else what tafs cloud or storage said (dev-android's note on #86).
+/// the offline line only when nothing answered, else what tafs cloud or storage said.
 fn read_bytes(w: &WordBook, source: &FilesSource, id: &str) -> Result<Vec<u8>, String> {
     let FilesSource::Cloud { token, languages } = source else {
         return Err(w.line("error.offline").unwrap_or_default());
@@ -744,7 +744,7 @@ fn detail_column(
                     .await
                     .unwrap_or(Err(offline))
                     // Saved on this computer, or "Download didn't go through." in the reader's language: the
-                    // system's own reason is in English whatever the app's (desktop-windows' note on #87).
+                    // system's own reason is in English whatever the app's.
                     .and_then(|b| {
                         crate::widgets::write_private(&path, &b).map_err(|_| not_saved(&w))
                     });

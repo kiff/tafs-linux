@@ -8,7 +8,7 @@ use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine;
 use sha2::{Digest, Sha256};
 
-/// On: KIFF takes a software-key computer's security key (kiff/cloud#96, the PM's decision (i)).
+/// On: KIFF takes a software-key computer's security key (kiff/cloud#96).
 /// A session approves with it only when KIFF made it `passkey` and its pairing registered the key.
 pub const ENABLED: bool = true;
 
@@ -37,7 +37,7 @@ pub fn request_v1(tenant: &str, method: &str, uri: &str, body: &[u8], signed_at:
 }
 
 /// What the security key's check of the person signs before this computer ends connections at
-/// planque with its device key (`tafs.presence.v1`, the owner's 22 Nov rule: Disconnect and Clear,
+/// planque with its device key (`tafs.presence.v1`, the owner's rule: Disconnect and Clear,
 /// a touch and a PIN, never a password alone). It's never sent anywhere: its own first line keeps
 /// it from ever being a `kiff.request.v1` or `kiff.answer.v1` message KIFF would take.
 pub fn presence_v1(tenant: &str, grants: &[String], signed_at: &str) -> Vec<u8> {

@@ -1,7 +1,7 @@
 //! planque, which keeps a taf's vendor sign-ins (`PlanqueClient`): what this computer signs for it,
 //! with its device key and no prompt, and nothing else. Only planque's *safe* routes, those that
 //! take a device key as it is because they read or only take authority away (planque's
-//! `signedSafe`, agentgabo's read, kiff/work#20, 22 Nov):
+//! `signedSafe`):
 //! - its read of the account's grants (`grantsReadProof`), which tafs cloud forwards as the
 //!   device's proof (`Planque-Device-Signature`), so Coach's cards say what a sign-in can't be
 //!   narrowed to (`wider`);

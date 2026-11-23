@@ -100,7 +100,7 @@ kiff/cloud's `api/internal/appsignin/README.md`.
 ## The first Home
 
 Signed in with no taf, for someone who may use Coach, the Overview shows the first Home under
-board 2 (the iPad's `HomeView` 137–152, on every desktop at the PM's (b), kiff/work#20, 22 Nov):
+board 2 (the iPad's `HomeView` 137–152, on every desktop):
 tafs cloud's own empty line when it sends one, else "No tafs yet" and what Coach does; **Ask
 Coach**, a new conversation (`startNewTaf`); and **How tafs works**, the cards and the legal pages
 (`overview::with_first_home`, `overview.rs` › `first_home`).

@@ -841,7 +841,7 @@ fn closes(dialog: &adw::Dialog) -> Rc<dyn Fn()> {
 }
 
 /// Remove access's question; its yes ends the connection at planque, signed by the device once
-/// this computer's security key checked the person (the owner's 22 Nov rule), and `then` once it
+/// this computer's security key checked the person (the owner's rule: never on the device key alone), and `then` once it
 /// went; with no key here, this computer says it can't approve, and the connection stays.
 fn disconnect_question(
     w: &Rc<WordBook>,

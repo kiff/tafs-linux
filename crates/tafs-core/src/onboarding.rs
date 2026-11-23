@@ -10,7 +10,7 @@ use crate::words::{WordBook, WordsError};
 /// The age every country reads (`MinimumAge.standard`).
 pub const STANDARD_AGE: u32 = 16;
 
-/// legal-i18n's table of the age of digital consent where the law asks more than 16
+/// The table of the age of digital consent where the law asks more than 16
 /// (`app/strings/ages.json`, the iPad's generated `MinimumAge`), by region.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct MinimumAge {

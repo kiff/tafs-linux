@@ -1,5 +1,5 @@
 //! Approving one act with this computer's security key (kiff/tafs `docs/computer-passkeys.md`,
-//! "What a passkey approval carries"; the PM's decision (i), kiff/work#17, 22 Nov): the act's
+//! "What a passkey approval carries"): the act's
 //! whole request (`Act::request`) is the message a device key would sign (`kiff.request.v1`), its
 //! hash the challenge; the PIN sheet asks the key registered with this computer when it was
 //! paired, once; the answer is checked as KIFF checks it; and the request goes with its
@@ -175,7 +175,7 @@ pub fn approve(
     crate::pin_sheet::present(w, parent, what, attempt, read_tries, stop, sheet_done);
 }
 
-/// Whether `act` can end its connections here (the owner's 22 Nov rule): it's Disconnect or Clear,
+/// Whether `act` can end its connections here (the owner's rule: a key's touch and PIN first): it's Disconnect or Clear,
 /// and this computer has a security key, so a touch and a PIN check the person before the device
 /// key signs at planque. Anything that grants access never can; a computer with no key, the phone.
 pub fn can_end(kept: Option<&KeptSession>, act: &Act) -> bool {
