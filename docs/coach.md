@@ -285,12 +285,12 @@ For an approval, a sign-in or a drive it gives none, whatever the text, so nothi
 
 ## Not yet
 
-- Setting a chat aside from Needs you; `startSwitch`'s offer of the taf on screen (`tafOnScreen`):
-  the switch shows only while Coach is on a taf.
-- The microphone and attachments; the recipes on an empty chat.
+- `startSwitch`'s offer of the taf on screen (`tafOnScreen`): the switch shows only while Coach is
+  on a taf.
+- The recipes on an empty chat. (No mic: a Linux desktop has no on-device speech recognition, as
+  in a taf's chat.)
 - What the iPad reads beside the thread: planque's grant (its words, terms and profile).
-- Revealing an answer with no stream, and Home's read at the stream's end;
-  and a dial card (`KnobDraftCard`).
+- Revealing an answer with no stream, and a dial card (`KnobDraftCard`).
 - A refused connection's lines are decoded but not drawn: the iPad's Coach doesn't draw them.
 
 ## Screenshots
