@@ -162,4 +162,3 @@ None: ChromeViews, the last, is ported (batch (d), to the "Your Chrome" contract
 
 ## Coverage
 
-Ported 51, partial 1, not started 0, not for Linux 6: the 58 view files at the pin.
