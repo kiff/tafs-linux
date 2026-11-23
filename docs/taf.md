@@ -405,8 +405,13 @@ one is on its way asks nothing more.
   account's zone; Skip it or Run after while still working); app events (Approve, disabled as the
   iPad disables it where the device can't approve; or Listening and Stop); its doors (each with
   Edit, opening the door's screen on top, [its doors](#its-doors), and Add a door…, whose Slack door
-  opens Slack's sheet: planque's Slack connections aren't read here, so it says to connect the bot
-  first); follow-ups it set itself, with their end and Remove; Change when it starts with Coach;
+  opens Slack's sheet (`SlackDoorSheet`): the taf's own Slack bot connections, from planque's
+  grants read with this computer's device key (connected, its agent's, Slack bots); one is chosen
+  at once, and a chosen bot's channels are read the same way (`…/grants/{id}/channels`), each by
+  its name, a private one marked, "The Slack bot sees no channel yet…" with none, and why when
+  they can't be read. Adding the door on a channel subscribes it at planque, signed with the
+  phone's key, so in its place this computer says it can't approve. With no bot, it says to
+  connect one first); follow-ups it set itself, with their end and Remove; Change when it starts with Coach;
   Pause every start, or Resume ("Not every start could be paused. Try again." on a 502).
 - **Results go to** (`ResultsGoToView`): at least one place stays on; tafs' own places (Reply to
   the sender, Alert our phones, Email me with the person's email), switched from the live taf's

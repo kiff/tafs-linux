@@ -347,6 +347,19 @@ impl Grant {
         self.status == "approved" && self.signed_in != Some(true)
     }
     /// A sign-in planque holds that no taf uses yet.
+    /// A Slack bot connection (`slackBot`): planque's catalog entry, else a connector's
+    /// `slackbot` toolkit.
+    pub fn slack_bot(&self) -> bool {
+        self.entry.as_deref() == Some("connector:composio:slackbot")
+            || (self.entry.is_none()
+                && self
+                    .request
+                    .connector
+                    .as_ref()
+                    .and_then(|c| c.toolkit.as_deref())
+                    == Some("slackbot"))
+    }
+
     pub fn holds_sign_in(&self) -> bool {
         self.listed() || (self.status == "pending" && self.signed_in == Some(true))
     }
@@ -734,6 +747,15 @@ pub fn misplaced(w: &WordBook, app: &App, g: &Grant) -> Result<Option<String>, W
         )?)),
         None => Ok(None),
     }
+}
+
+/// The taf's Slack bot connections a Slack door can listen through (`slackBots(for:)`):
+/// connected, its own agent's, Slack bots.
+pub fn slack_bots<'a>(grants: &'a [Grant], agent: &str) -> Vec<&'a Grant> {
+    grants
+        .iter()
+        .filter(|g| g.slack_bot() && g.connected() && !agent.is_empty() && g.request.agent == agent)
+        .collect()
 }
 
 #[cfg(test)]
@@ -1164,5 +1186,28 @@ mod tests {
             entry("g_01", &plain_v1, v1_digest, ""),
         ]);
         assert!(twice.iter().all(|g| !g.digest_matches));
+    }
+
+    #[test]
+    fn a_tafs_slack_bots() {
+        let g = Grant::read_all(
+            br#"{"grants":[
+                {"id":"b1","status":"connected","text":"t","digest":"d","events":[],"entry":"connector:composio:slackbot","title":"Acme Slack","request":{"server":"s","agent":"ag_1","tools":[],"connector":{"toolkit":"slackbot"}}},
+                {"id":"b2","status":"connected","text":"t","digest":"d","events":[],"account":"provider-id","request":{"server":"s","agent":"ag_1","tools":[],"connector":{"toolkit":"slackbot"}}},
+                {"id":"b3","status":"pending","text":"t","digest":"d","events":[],"entry":"connector:composio:slackbot","request":{"server":"s","agent":"ag_1","tools":[]}},
+                {"id":"b4","status":"connected","text":"t","digest":"d","events":[],"entry":"connector:composio:slackbot","request":{"server":"s","agent":"ag_2","tools":[]}},
+                {"id":"g5","status":"connected","text":"t","digest":"d","events":[],"account":"me@acme","request":{"server":"s","agent":"ag_1","tools":[]}}]}"#,
+        )
+        .unwrap();
+        let bots: Vec<_> = slack_bots(&g, "ag_1")
+            .iter()
+            .map(|b| b.id.as_str())
+            .collect();
+        // Connected, its own agent's, Slack bots only.
+        assert_eq!(bots, ["b1", "b2"]);
+        assert!(slack_bots(&g, "").is_empty());
+        // Its title; never a managed provider's account id.
+        assert_eq!(g[0].name().as_deref(), Some("Acme Slack"));
+        assert_eq!(g[1].name(), None);
     }
 }

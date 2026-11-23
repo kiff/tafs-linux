@@ -114,12 +114,17 @@ pub enum Safe<'a> {
     Shots(&'a str),
     /// `GET …/chromes/screenshots/{step}`: one step's picture.
     Shot(&'a str),
+    /// `GET …/grants/{grant}/channels`: the channels a Slack bot connection can see, setup
+    /// metadata, never a message.
+    Channels(&'a str),
 }
 
 impl Safe<'_> {
     pub fn method(self) -> &'static str {
         match self {
-            Safe::Grants | Safe::Chromes | Safe::Shots(_) | Safe::Shot(_) => "GET",
+            Safe::Grants | Safe::Chromes | Safe::Shots(_) | Safe::Shot(_) | Safe::Channels(_) => {
+                "GET"
+            }
             Safe::Unpair(_) | Safe::Disconnect(_) => "DELETE",
         }
     }
@@ -148,6 +153,7 @@ impl Safe<'_> {
                 segment(tenant),
                 segment(step)
             ),
+            Safe::Channels(grant) => format!("{}/{}/channels", grants_path(tenant), segment(grant)),
         }
     }
 }
@@ -164,6 +170,52 @@ pub fn safe_proof(key: &DeviceKey, device: &str, tenant: &str, base: &str, route
 /// `grantsReadProof`: this device's signed read of the account's grants.
 pub fn grants_read_proof(key: &DeviceKey, device: &str, tenant: &str, base: &str) -> String {
     safe_proof(key, device, tenant, base, Safe::Grants)
+}
+
+/// A Slack channel a Slack bot connection can see (`PlanqueClient.Channel`): setup metadata,
+/// never a message.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Channel {
+    pub id: String,
+    pub name: String,
+    pub private: bool,
+}
+
+impl Channel {
+    /// "#name", else "#id".
+    pub fn label(&self) -> String {
+        format!(
+            "#{}",
+            if self.name.is_empty() {
+                &self.id
+            } else {
+                &self.name
+            }
+        )
+    }
+}
+
+/// planque's `GET …/grants/{grant}/channels` (`{"channels": [{id, name?, private?}]}`): none
+/// when it can't be read; a channel without an id is left out.
+pub fn channels(body: &[u8]) -> Option<Vec<Channel>> {
+    let v: serde_json::Value = serde_json::from_slice(body).ok()?;
+    Some(
+        v.get("channels")?
+            .as_array()?
+            .iter()
+            .filter_map(|c| {
+                Some(Channel {
+                    id: c.get("id")?.as_str()?.to_string(),
+                    name: c
+                        .get("name")
+                        .and_then(|n| n.as_str())
+                        .unwrap_or_default()
+                        .to_string(),
+                    private: c.get("private").and_then(|p| p.as_bool()) == Some(true),
+                })
+            })
+            .collect(),
+    )
 }
 
 /// Each connected tool's title, as its connection gives it, by its name in KIFF (the iPad's
@@ -373,5 +425,20 @@ mod tests {
         // An answer that can't be read gives no titles, never an error.
         assert!(tool_titles(b"[]").is_empty());
         assert!(tool_titles(b"nope").is_empty());
+    }
+
+    #[test]
+    fn a_slack_bots_channels_and_their_route() {
+        let c = channels(br#"{"channels":[{"id":"C1","name":"refunds"},{"id":"C2","private":true},{"name":"no id"}]}"#).unwrap();
+        assert_eq!(c.len(), 2);
+        assert_eq!(c[0].label(), "#refunds");
+        assert_eq!(c[1].label(), "#C2");
+        assert!(c[1].private);
+        assert_eq!(channels(b"{}"), None);
+        assert_eq!(
+            Safe::Channels("b/1").path("t1"),
+            "/v1/accounts/t1/grants/b%2F1/channels"
+        );
+        assert_eq!(Safe::Channels("b1").method(), "GET");
     }
 }
