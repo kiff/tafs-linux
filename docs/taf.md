@@ -322,6 +322,12 @@ On the Card tab, as the iPad's `card(_:)`, all from Home as tafs cloud read it f
 
 ## Its Setup
 
+**The sample's Setup** (`crates/tafs-app/src/sample_setup.rs`), as the iPad's over the sample: its
+job (`sample.{key}.job`); what it remembers, the sample's three notes (`sampleNotes`,
+`tafs-core/src/sample.rs` › `notes`), each with Forget, asked first as a real note is, and gone at
+once, nothing sent; then Pause or Resume (`togglePause`), which the sidebar's line says at once
+("Paused by you", "Back to work"), as a "stop" in its chat does. CI's `taf-sample-setup`.
+
 A tafs cloud taf's Setup tab, signed in with KIFF (`TafDetailView.setup(_:)`,
 `crates/tafs-app/src/setup_pane.rs`, `tafs-core/src/setup.rs`), read when the tab is first shown
 (`GET /v1/tafs/{id}/setup`, as strictly as the iPad's `SetupView`). Linux reads it without
@@ -489,5 +495,4 @@ nothing shows until they're read, or when they can't be. A 401 signs this comput
 
 ## Not yet
 
-- **On the Setup tab:** the sample's Setup (there, dimmed).
 - Remove for good on a computer with no security key (the phone's).

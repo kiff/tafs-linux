@@ -117,6 +117,20 @@ pub fn last_message_at(key: &str) -> Option<chrono::DateTime<chrono::Utc>> {
     })
 }
 
+/// Whether a sample taf is paused now (`state == .paused`), for its Setup's Pause or Resume.
+pub fn sample_paused_now(key: &str) -> bool {
+    sample_paused(key) == Some(true)
+}
+
+/// `togglePause` on a sample taf from its Setup: paused, or back to work. The sidebar's row says
+/// so at once, as a pause from its chat does (`shell::reread_home`).
+pub fn toggle_sample_pause(key: &str) -> bool {
+    let paused = !sample_paused_now(key);
+    SAMPLE_PAUSED.with(|s| s.borrow_mut().insert(key.to_string(), paused));
+    crate::shell::reread_home();
+    paused
+}
+
 thread_local! {
     /// Each sample taf the owner paused (true) or told to carry on (false) in its chat, by its
     /// key: kept while the app runs, as the sample keeps no chats either.

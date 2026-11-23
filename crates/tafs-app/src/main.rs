@@ -46,6 +46,7 @@ mod record;
 mod record_search;
 mod report_sheet;
 mod runs_panel;
+mod sample_setup;
 mod scheme;
 mod setup_pane;
 mod share;

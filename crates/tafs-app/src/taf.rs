@@ -213,9 +213,9 @@ pub fn page(
         (None, true) => Some(t.key.clone()),
         (None, false) => None,
     };
-    let has_setup = !t.sample
-        && t.cloud_id.is_some()
-        && !matches!(t.setup, crate::setup_pane::SetupSource::None);
+    // The sample's Setup is its own (`sample_setup`): its job, its notes, Pause or Resume.
+    let has_setup = t.sample
+        || (t.cloud_id.is_some() && !matches!(t.setup, crate::setup_pane::SetupSource::None));
     let tabs = gtk::Box::new(gtk::Orientation::Horizontal, 0);
     tabs.add_css_class("tafs-segmented");
     tabs.set_homogeneous(true);
@@ -503,8 +503,28 @@ pub fn page(
         }),
         _ => None,
     };
+    // The sample's Setup: drawn when it's first shown.
+    if t.sample {
+        let scroller = gtk::ScrolledWindow::new();
+        scroller.set_hscrollbar_policy(gtk::PolicyType::Never);
+        scroller.set_vexpand(true);
+        fold.watch(&scroller);
+        let column = gtk::Box::new(gtk::Orientation::Vertical, 0);
+        scroller.set_child(Some(&column));
+        panes.add_named(&scroller, Some("setup"));
+        let made = std::cell::Cell::new(false);
+        let (w, key, panes) = (w.clone(), t.key.clone(), panes.clone());
+        setup_tab.connect_toggled(move |b| {
+            if b.is_active() {
+                if !made.replace(true) {
+                    column.append(&crate::sample_setup::pane(w.clone(), &key));
+                }
+                panes.set_visible_child_name("setup");
+            }
+        });
+    }
     // Setup: read when it's first shown.
-    if let (true, Some(id)) = (has_setup, &t.cloud_id) {
+    if let (true, false, Some(id)) = (has_setup, t.sample, &t.cloud_id) {
         let setup_scroller = gtk::ScrolledWindow::new();
         setup_scroller.set_hscrollbar_policy(gtk::PolicyType::Never);
         setup_scroller.set_vexpand(true);
