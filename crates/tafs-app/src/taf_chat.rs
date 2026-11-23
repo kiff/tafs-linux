@@ -217,6 +217,8 @@ struct Page {
     chat: Rc<RefCell<TafChat>>,
     drawn: RefCell<Option<ChatLines>>,
     reading: Cell<bool>,
+    /// planque's grants were read for the tools' titles (`toolTitle`), once per chat opened.
+    titled: Cell<bool>,
     polls: RefCell<Polls>,
     /// The thread goes to its latest at the next draw.
     follow: Cell<bool>,
@@ -317,6 +319,7 @@ pub fn pane(w: Rc<WordBook>, taf: ChatTaf, source: ChatSource) -> gtk::Widget {
         chat,
         drawn: RefCell::new(None),
         reading: Cell::new(false),
+        titled: Cell::new(false),
         polls: RefCell::new(taf_chat::polls()),
         follow: Cell::new(true),
         on_drawn: RefCell::new(None),
@@ -669,6 +672,9 @@ impl Page {
         if self.open() {
             self.draw();
         }
+        if !self.titled.replace(true) {
+            self.read_tool_titles();
+        }
         if run_over {
             crate::shell::reread_home();
             self.reread_held().await;
@@ -719,6 +725,30 @@ impl Page {
                 self.polls.borrow_mut().read(&thread, glib::random_double());
             }
         }
+    }
+
+    /// Each connected tool's title from planque's grants, read once with this computer's device
+    /// key (`toolTitle`), so the taf's steps say what it does in its connection's words. A read
+    /// that fails leaves the steps in their KIFF names' words, as before.
+    fn read_tool_titles(self: &Rc<Self>) {
+        let Some(source) = crate::onboarding::chrome_source() else {
+            return;
+        };
+        let p = self.clone();
+        glib::spawn_future_local(async move {
+            let Ok(titles) =
+                gtk::gio::spawn_blocking(move || crate::chrome::tool_titles(&source)).await
+            else {
+                return;
+            };
+            if titles.is_empty() {
+                return;
+            }
+            p.chat.borrow_mut().tool_titles = titles;
+            if p.open() {
+                p.draw();
+            }
+        });
     }
 
     async fn post(&self, path: String, body: Vec<u8>) -> Option<crate::chat::Sent> {
@@ -1367,8 +1397,6 @@ impl Page {
         taken
     }
 
-    /// Stop (`stopChat`): the taf's current run is cancelled, over here at once, then the thread
-    /// read again.
     /// The loop card (`LoopCardView`): "Still reading" and its line, in tafs cloud's words; its
     /// answers (the first one primary) while the run waits on it, else how it was answered.
     fn loop_card(
@@ -1469,6 +1497,8 @@ impl Page {
         });
     }
 
+    /// Stop (`stopChat`): the taf's current run is cancelled, over here at once, then the thread
+    /// read again.
     fn stop(self: &Rc<Self>) {
         if !self.sends() {
             return;
