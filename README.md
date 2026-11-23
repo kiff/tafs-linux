@@ -52,3 +52,9 @@ cargo test -p tafs-core         # the core's tests
 cargo run -p tafs               # the app
 cargo run -p tafs -- --sample   # over the iPad's sample
 ```
+
+## License
+
+[FSL-1.1-ALv2](LICENSE.md), the Functional Source License. You may use, change and share tafs for
+anything except a product that competes with it. Each version becomes Apache 2.0 two years after
+its release.
