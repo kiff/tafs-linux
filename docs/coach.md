@@ -267,12 +267,15 @@ into it. Narrower, the conversation is alone. It reads only what this computer a
 "Taking shape", the taf's name once a result hands it over (else the plan's title); the plan's
 steps with their marks, the step at work as "Needs you" while a card waits for the owner
 (`setupWaiting`), a skipped step struck through; with no plan, each card that asked the owner
-something and where it stands; then the Card KIFF drafted for the latest approval that names one,
+something and where it stands; then **the tools it connects** (`tools`): each vendor the
+conversation's cards name, once, in the order they came, from planque's grants read once with this
+computer's device key while the panel shows (`chrome::grants`): Connected in green, Signed in or
+Waiting for you in amber, Not connected in red with planque's words for why, its tools once
+connected, and "No taf sees your sign-ins."; then the Card KIFF drafted for the latest approval that names one,
 dashed until KIFF confirms it, with "A draft until you approve it in the conversation." With
 nothing made yet, what will show there.
 
-The iPad also lists the apps being connected, from planque's grants: this computer doesn't read
-them, so that part isn't drawn. The iPad shows the panel only once the phone is enrolled with
+A grants read that fails leaves the tools out, as before. The iPad shows the panel only once the phone is enrolled with
 planque (`planqueReady`), which is how it starts Coach; this computer starts nothing, and shows the
 panel beside any conversation tafs cloud has for it.
 

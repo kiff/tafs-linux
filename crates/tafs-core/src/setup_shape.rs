@@ -41,7 +41,27 @@ pub struct ShapeCard {
     pub confirmed: bool,
 }
 
-/// `SetupShape`, without the tools.
+/// A tool's state in the panel (`SetupShape.Tool.State`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ToolState {
+    Connected,
+    SignedIn,
+    Waiting,
+    /// planque's words for why, when it sends them.
+    Failed(Option<String>),
+}
+
+/// A vendor the conversation connects, from planque's grant (`SetupShape.Tool`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ShapeTool {
+    pub id: String,
+    pub vendor: String,
+    pub state: ToolState,
+    /// The tools the taf calls through it, once connected.
+    pub actions: Vec<String>,
+}
+
+/// `SetupShape`.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct SetupShape {
     /// The taf's name, once Coach hands it over.
@@ -49,6 +69,8 @@ pub struct SetupShape {
     /// The plan's title.
     pub title: Option<String>,
     pub steps: Vec<Step>,
+    /// The vendors the conversation's cards name, from planque's grants as read here.
+    pub tools: Vec<ShapeTool>,
     pub card: Option<ShapeCard>,
 }
 
@@ -102,11 +124,68 @@ pub fn waiting(c: &Conversation) -> Option<&ShownComponent> {
 impl SetupShape {
     /// `isEmpty`.
     pub fn is_empty(&self) -> bool {
-        self.name.is_none() && self.steps.is_empty() && self.card.is_none()
+        self.name.is_none() && self.steps.is_empty() && self.tools.is_empty() && self.card.is_none()
     }
 
-    /// `SetupShape(thread:grants:drafts:waiting:states:)`, from the conversation as held here.
+    /// `SetupShape(thread:grants:drafts:waiting:states:)`, from the conversation as held here,
+    /// with no grants read.
     pub fn new(w: &WordBook, c: &Conversation) -> Result<SetupShape, WordsError> {
+        Self::with_grants(w, c, &[])
+    }
+
+    /// The tools it connects (`tools`): the grants the conversation's cards name, in the order
+    /// they came, each once, by their state at planque.
+    pub fn tools(c: &Conversation, grants: &[crate::connections::Grant]) -> Vec<ShapeTool> {
+        let mut seen = std::collections::HashSet::new();
+        c.thread
+            .components
+            .iter()
+            .filter_map(|s| {
+                let id = s.component.grant.as_ref()?;
+                let g = grants.iter().find(|g| &g.id == id)?;
+                if !seen.insert(id.clone()) {
+                    return None;
+                }
+                let state = if g.connected() {
+                    ToolState::Connected
+                } else if g.status == "failed" || g.status == "disconnected" {
+                    // planque's words for its state, never its `reason` (English, for the log).
+                    ToolState::Failed(
+                        g.status_words
+                            .as_deref()
+                            .map(str::trim)
+                            .filter(|w| !w.is_empty())
+                            .map(str::to_string),
+                    )
+                } else if g.holds_sign_in() {
+                    ToolState::SignedIn
+                } else {
+                    ToolState::Waiting
+                };
+                Some(ShapeTool {
+                    id: id.clone(),
+                    vendor: g.vendor().to_string(),
+                    actions: if g.connected() {
+                        g.request
+                            .tools
+                            .iter()
+                            .map(|t| t.action().to_string())
+                            .collect()
+                    } else {
+                        Vec::new()
+                    },
+                    state,
+                })
+            })
+            .collect()
+    }
+
+    /// `SetupShape` with planque's grants as read here.
+    pub fn with_grants(
+        w: &WordBook,
+        c: &Conversation,
+        grants: &[crate::connections::Grant],
+    ) -> Result<SetupShape, WordsError> {
         let thread = &c.thread;
         let shown: Vec<&crate::coach::Component> =
             thread.components.iter().map(|s| &s.component).collect();
@@ -217,6 +296,7 @@ impl SetupShape {
             name,
             title,
             steps,
+            tools: Self::tools(c, grants),
             card,
         })
     }
@@ -255,7 +335,20 @@ pub struct ShapeLines {
     pub empty: Option<String>,
     /// "Plan · 2 of 4", and each step.
     pub plan: Option<(String, Vec<StepLine>)>,
+    /// "Tools", each vendor's row, and "No taf sees your sign-ins.".
+    pub tools: Option<(String, Vec<ToolLine>, String)>,
     pub card: Option<CardLines>,
+}
+
+/// A vendor's row (`SetupShapePanel.tools`): its name, its state in words and tone ("ok",
+/// "amber" or "no"), the tools it gives once connected, and planque's why when it failed.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ToolLine {
+    pub vendor: String,
+    pub status: String,
+    pub tone: &'static str,
+    pub actions: Option<String>,
+    pub why: Option<String>,
 }
 
 /// `SetupShapePanel.mark`.
@@ -305,6 +398,37 @@ pub fn lines(w: &WordBook, shape: &SetupShape) -> Result<ShapeLines, WordsError>
             .collect::<Result<_, WordsError>>()?;
         Some((progress, steps))
     };
+    let tools = if shape.tools.is_empty() {
+        None
+    } else {
+        let rows = shape
+            .tools
+            .iter()
+            .map(|t| {
+                let (key, tone) = match &t.state {
+                    ToolState::Connected => ("connect.status.connected", "ok"),
+                    ToolState::SignedIn => ("coach.answer.signed_in", "amber"),
+                    ToolState::Waiting => ("chat.waiting_for_you", "amber"),
+                    ToolState::Failed(_) => ("coach.shape.not_connected", "no"),
+                };
+                Ok(ToolLine {
+                    vendor: t.vendor.clone(),
+                    status: w.line(key)?,
+                    tone,
+                    actions: (!t.actions.is_empty()).then(|| t.actions.join(", ")),
+                    why: match &t.state {
+                        ToolState::Failed(why) => why.clone(),
+                        _ => None,
+                    },
+                })
+            })
+            .collect::<Result<Vec<_>, WordsError>>()?;
+        Some((
+            w.line("coach.tools_eyebrow")?,
+            rows,
+            w.line("connect.sign_ins_kept_sealed_no")?,
+        ))
+    };
     let card = match &shape.card {
         Some(c) => Some(CardLines {
             eyebrow: w.line(if c.confirmed {
@@ -336,6 +460,7 @@ pub fn lines(w: &WordBook, shape: &SetupShape) -> Result<ShapeLines, WordsError>
             None
         },
         plan,
+        tools,
         card,
     })
 }
@@ -518,5 +643,57 @@ mod tests {
             lines(&w, &SetupShape::new(&w, &c).unwrap()).unwrap();
             lines(&w, &SetupShape::default()).unwrap();
         }
+    }
+
+    #[test]
+    fn the_tools_it_connects_come_from_planques_grants_each_once() {
+        let w = WordBook::load(&WordBook::default_root(), "en").unwrap();
+        let approval = |id: &str, seq: i64, grant: &str| {
+            card(
+                id,
+                seq,
+                json!({"type": "approval", "id": id, "grant": grant}),
+            )
+        };
+        let c = conv(
+            serde_json::json!([]),
+            serde_json::json!([
+                approval("a1", 1, "g1"),
+                approval("a2", 2, "g2"),
+                approval("a3", 3, "g1"),
+                approval("a4", 4, "g3"),
+                approval("a5", 5, "gone")
+            ]),
+        );
+        let grants = crate::connections::Grant::read_all(
+            br#"{"grants":[
+                {"id":"g1","status":"connected","text":"t","digest":"d","events":[],"vendor":"Stripe","request":{"server":"s","agent":"a","tools":[{"tool":"refund","name":"kiff__stripe_refund"}]}},
+                {"id":"g2","status":"listed","text":"t","digest":"d","events":[],"vendor":"Gmail","request":{"server":"s","agent":"a","tools":[{"tool":"send"}]}},
+                {"id":"g3","status":"failed","text":"t","digest":"d","events":[],"status_words":"Shopify refused the sign-in","vendor":"Shopify","request":{"server":"s","agent":"a","tools":[]}}]}"#,
+        )
+        .unwrap();
+        let shape = SetupShape::with_grants(&w, &c, &grants).unwrap();
+        // In the order the cards came, each once; a grant planque doesn't list isn't drawn.
+        let l = lines(&w, &shape).unwrap().tools.unwrap();
+        assert_eq!(l.0, "Tools");
+        assert_eq!(l.2, "No taf sees your sign-ins.");
+        let rows: Vec<_> =
+            l.1.iter()
+                .map(|r| (r.vendor.as_str(), r.status.as_str(), r.tone))
+                .collect();
+        assert_eq!(
+            rows,
+            [
+                ("Stripe", "Connected", "ok"),
+                ("Gmail", "Signed in", "amber"),
+                ("Shopify", "Not connected", "no")
+            ]
+        );
+        // Its tools only once connected; planque's why only when it failed.
+        assert_eq!(l.1[0].actions.as_deref(), Some("kiff__stripe_refund"));
+        assert_eq!(l.1[1].actions, None);
+        assert_eq!(l.1[2].why.as_deref(), Some("Shopify refused the sign-in"));
+        // With no grants read, no tools, as before.
+        assert!(SetupShape::new(&w, &c).unwrap().tools.is_empty());
     }
 }

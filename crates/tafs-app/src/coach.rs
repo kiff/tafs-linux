@@ -139,6 +139,9 @@ struct Page {
     side: gtk::Box,
     shape: gtk::Box,
     shape_drawn: RefCell<Option<tafs_core::setup_shape::ShapeLines>>,
+    /// planque's grants, read once while "Taking shape" shows, for the tools it connects.
+    grants: RefCell<Vec<tafs_core::connections::Grant>>,
+    grants_read: Cell<bool>,
 }
 
 /// What a draw shows, to compare with the last.
@@ -319,6 +322,8 @@ pub fn page(
         side,
         shape,
         shape_drawn: RefCell::new(None),
+        grants: RefCell::new(Vec::new()),
+        grants_read: Cell::new(false),
     });
     // Opened for a new taf, a job handed over or a setup to finish: that conversation.
     crate::coach_start::apply(&mut page.conv.borrow_mut());
@@ -1619,6 +1624,26 @@ impl Page {
         dialog.present(Some(&self.root));
     }
 
+    /// planque's grants, read once with this computer's device key, for "Taking shape"'s tools
+    /// (`SetupShape`'s `grants`). A read that fails leaves the panel as it was.
+    fn read_grants(self: &Rc<Self>) {
+        let Some(source) = crate::onboarding::chrome_source() else {
+            return;
+        };
+        let p = self.clone();
+        glib::spawn_future_local(async move {
+            let Ok(grants) = gtk::gio::spawn_blocking(move || crate::chrome::grants(&source)).await
+            else {
+                return;
+            };
+            if grants.is_empty() {
+                return;
+            }
+            *p.grants.borrow_mut() = grants;
+            p.draw_shape();
+        });
+    }
+
     /// `shaping`: a wide window with Coach's conversation shows what it has made so far beside
     /// it (`SetupShapePanel`), drawn again only when it changed. Whether it shows.
     fn draw_shape(&self) -> bool {
@@ -1627,9 +1652,12 @@ impl Page {
         if !shaping {
             return false;
         }
-        let Ok(lines) = tafs_core::setup_shape::SetupShape::new(&self.w, &self.conv.borrow())
-            .and_then(|s| tafs_core::setup_shape::lines(&self.w, &s))
-        else {
+        let Ok(lines) = tafs_core::setup_shape::SetupShape::with_grants(
+            &self.w,
+            &self.conv.borrow(),
+            &self.grants.borrow(),
+        )
+        .and_then(|s| tafs_core::setup_shape::lines(&self.w, &s)) else {
             return true;
         };
         if self.shape_drawn.borrow().as_ref() == Some(&lines) {
@@ -1707,6 +1735,9 @@ impl Page {
         drop(c);
         self.draw_tools_row();
         let shaping = self.draw_shape();
+        if shaping && !self.grants_read.replace(true) {
+            self.read_grants();
+        }
         if self.drawn.borrow().as_ref() == Some(&now) {
             return;
         }
@@ -2749,6 +2780,36 @@ fn shape_panel(into: &gtk::Box, l: &tafs_core::setup_shape::ShapeLines) {
             row.append(&words);
             v.append(&row);
         }
+        into.append(&v);
+    }
+    // The tools it connects, from planque's grants: each vendor, its state, its tools once
+    // connected, planque's why when it failed; then that no taf sees the sign-ins.
+    if let Some((title, rows, sealed)) = &l.tools {
+        let v = gtk::Box::new(gtk::Orientation::Vertical, 10);
+        v.append(&eyebrow(title, false));
+        for r in rows {
+            let row = gtk::Box::new(gtk::Orientation::Vertical, 3);
+            row.add_css_class("tafs-shape-card");
+            let head = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+            let vendor = text(&r.vendor, 15, 600, &["tafs-ink"]);
+            vendor.set_hexpand(true);
+            head.append(&vendor);
+            let class = match r.tone {
+                "ok" => "tafs-ok",
+                "no" => "tafs-no",
+                _ => "tafs-amber-text",
+            };
+            head.append(&text(&r.status, 12, 600, &[class]));
+            row.append(&head);
+            if let Some(a) = &r.actions {
+                row.append(&text(a, 12, 400, &["tafs-soft", "tafs-mono"]));
+            }
+            if let Some(why) = &r.why {
+                row.append(&text(why, 12, 400, &["tafs-soft"]));
+            }
+            v.append(&row);
+        }
+        v.append(&text(sealed, 12, 400, &["tafs-dim"]));
         into.append(&v);
     }
     if let Some(card) = &l.card {

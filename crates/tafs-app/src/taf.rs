@@ -73,6 +73,8 @@ pub struct TafPage {
     pub results: Option<Vec<serde_json::Value>>,
     /// tafs cloud's id for it, and where its Activity is read from.
     pub cloud_id: Option<String>,
+    /// Its agent in KIFF (Home's `kiff_agent`): its Slack bots are the ones it asked for.
+    pub kiff_agent: String,
     pub source: ActivitySource,
     /// Its job in words (`taf.job`), and where its Setup tab is read.
     pub job: String,
@@ -514,6 +516,7 @@ pub fn page(
                 w.clone(),
                 crate::starts_when::KnobTaf {
                     id: id.clone(),
+                    agent: t.kiff_agent.clone(),
                     name: t.name.clone(),
                     initial: t.initial.clone(),
                     color: t.color,

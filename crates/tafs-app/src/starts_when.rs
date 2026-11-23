@@ -35,6 +35,8 @@ pub enum KnobSource {
 /// The taf Setup's screens are for.
 pub struct KnobTaf {
     pub id: String,
+    /// Its agent in KIFF, whose Slack bots a Slack door can listen through.
+    pub agent: String,
     pub name: String,
     pub initial: String,
     pub color: i64,
@@ -994,9 +996,15 @@ impl Screens {
             add.connect_clicked(move |b| {
                 let Some(c) = me.upgrade() else { return };
                 let slack = {
-                    let (w, name, b) = (c.knobs.w.clone(), c.knobs.taf.name.clone(), b.clone());
-                    Rc::new(move |_app: tafs_core::doors::DoorApp| slack_sheet(&w, &name, &b))
-                        as Rc<dyn Fn(tafs_core::doors::DoorApp)>
+                    let (w, name, agent, b) = (
+                        c.knobs.w.clone(),
+                        c.knobs.taf.name.clone(),
+                        c.knobs.taf.agent.clone(),
+                        b.clone(),
+                    );
+                    Rc::new(move |_app: tafs_core::doors::DoorApp| {
+                        slack_sheet(&w, &name, &agent, &b)
+                    }) as Rc<dyn Fn(tafs_core::doors::DoorApp)>
                 };
                 crate::doors::add_door_sheet(&c.door_model(), Some(slack), Rc::new(|_| {}), b);
             });
@@ -1222,19 +1230,141 @@ impl Screens {
     }
 }
 
-/// `SlackDoorSheet`: a Slack door listens through one of the taf's Slack bot connections. Those
-/// are planque's grants, which this computer doesn't read (its only planque call is the grants
-/// proof tafs cloud forwards), so it has none to offer: the sheet says to connect it first, as
-/// the iPad's does with none, and Cancel.
-fn slack_sheet(w: &WordBook, taf: &str, parent: &impl IsA<gtk::Widget>) {
+/// `SlackDoorSheet`: a Slack door listens through one of the taf's Slack bot connections, on
+/// one channel. Its bots are planque's grants and their channels planque's `…/channels`, both
+/// read with this computer's device key. With none, it says to connect one first, as the
+/// iPad's does. Choosing a channel subscribes it at planque, signed with the phone's key, so
+/// where the iPad's tap adds the door, this computer says to approve on another device.
+fn slack_sheet(w: &Rc<WordBook>, taf: &str, agent: &str, parent: &impl IsA<gtk::Widget>) {
     let l = |k: &str| w.line(k).unwrap_or_default();
     let s = crate::sheet::new(&l("door.slack_door"), &l("common.cancel"), None, 480);
-    s.column.append(&text(
-        &w.get("door.slack.connect_first_in_connect_apps", &[("taf", taf)])
-            .unwrap_or_default(),
-        15,
-        400,
-        &["tafs-soft"],
-    ));
+    let body = gtk::Box::new(gtk::Orientation::Vertical, 10);
+    s.column.append(&body);
+    let none = {
+        let w = w.clone();
+        let taf = taf.to_string();
+        move |body: &gtk::Box| {
+            body.append(&text(
+                &w.get("door.slack.connect_first_in_connect_apps", &[("taf", &taf)])
+                    .unwrap_or_default(),
+                15,
+                400,
+                &["tafs-soft"],
+            ));
+        }
+    };
     s.dialog.present(Some(parent));
+    let Some(source) = crate::onboarding::chrome_source() else {
+        none(&body);
+        return;
+    };
+    let (w, agent, body) = (w.clone(), agent.to_string(), body.downgrade());
+    glib::spawn_future_local(async move {
+        let read = source.clone();
+        let grants = gio::spawn_blocking(move || crate::chrome::grants(&read))
+            .await
+            .unwrap_or_default();
+        let Some(body) = body.upgrade() else { return };
+        let bots: Vec<tafs_core::connections::Grant> =
+            tafs_core::connections::slack_bots(&grants, &agent)
+                .into_iter()
+                .cloned()
+                .collect();
+        if bots.is_empty() {
+            none(&body);
+            return;
+        }
+        body.append(&eyebrow(
+            &w.line("door.slack_workspace").unwrap_or_default(),
+            false,
+        ));
+        let channels = gtk::Box::new(gtk::Orientation::Vertical, 8);
+        for bot in &bots {
+            let name = bot.name();
+            let b = outline(name.as_deref().unwrap_or(bot.vendor()));
+            b.set_widget_name(&format!("door.slack.bot.{}", bot.id));
+            let (w, source, id, channels) = (
+                w.clone(),
+                source.clone(),
+                bot.id.clone(),
+                channels.downgrade(),
+            );
+            b.connect_clicked(move |_| {
+                if let Some(c) = channels.upgrade() {
+                    slack_channels(&w, &source, &id, &c);
+                }
+            });
+            body.append(&b);
+        }
+        body.append(&channels);
+        // One bot: its channels at once, as the iPad's.
+        if let [only] = bots.as_slice() {
+            slack_channels(&w, &source, &only.id, &channels);
+        }
+    });
+}
+
+/// A Slack bot's channels, read with this computer's device key: each by its name, a private one
+/// marked; "The Slack bot sees no channel yet…" with none; why when it can't be read. Then, in the
+/// iPad's place for adding the door on one, that this computer can't approve it.
+fn slack_channels(
+    w: &Rc<WordBook>,
+    source: &crate::chrome::ChromeSource,
+    grant: &str,
+    into: &gtk::Box,
+) {
+    while let Some(c) = into.first_child() {
+        into.remove(&c);
+    }
+    let (w, source, grant, into) = (
+        w.clone(),
+        source.clone(),
+        grant.to_string(),
+        into.downgrade(),
+    );
+    glib::spawn_future_local(async move {
+        let words = (*w).clone();
+        let read = gio::spawn_blocking(move || crate::chrome::channels(&words, &source, &grant))
+            .await
+            .unwrap_or_else(|_| Err(String::new()));
+        let Some(into) = into.upgrade() else { return };
+        into.append(&eyebrow(&w.line("door.channel").unwrap_or_default(), false));
+        match read {
+            Ok(list) if list.is_empty() => into.append(&text(
+                &w.line("door.slack_bot_sees_no_channel").unwrap_or_default(),
+                14,
+                400,
+                &["tafs-dim"],
+            )),
+            Ok(list) => {
+                for c in &list {
+                    let row = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+                    row.append(&crate::widgets::symbol(
+                        if c.private {
+                            "changes-prevent-symbolic"
+                        } else {
+                            "format-text-plaintext-symbolic"
+                        },
+                        14,
+                    ));
+                    row.append(&text(&c.label(), 15, 400, &["tafs-ink"]));
+                    into.append(&row);
+                }
+                // Adding the door on a channel is signed at planque with the phone's key.
+                let gate = crate::approval::gate(
+                    &w,
+                    tafs_core::sidebar::Mode::Kiff,
+                    &gtk::Label::new(None),
+                );
+                into.append(&gate);
+            }
+            Err(why) => into.append(&text(
+                &w.get("door.slack_channels_could_not_read", &[("why", &why)])
+                    .unwrap_or(why),
+                13,
+                400,
+                &["tafs-no"],
+            )),
+        }
+    });
 }
