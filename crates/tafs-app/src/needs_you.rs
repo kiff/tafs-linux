@@ -712,11 +712,13 @@ pub(crate) fn go_on(w: &Rc<WordBook>, taf: &str, call: &str, say: Rc<dyn Fn(&str
         say(&why(w, &tafs_core::signin::KiffError::Unauthorized));
         return;
     };
-    let languages =
-        tafs_core::language::screen_languages(&tafs_core::language::preferred_from_env());
+    // The app's language first (`--lang`, then Account › Language, then this computer's), as
+    // every other read asks, so tafs cloud's words come in the language the screen is in.
+    let languages = app_languages(w);
     let (taf, words, after) = (taf.to_string(), (**w).clone(), w.clone());
     glib::spawn_future_local(async move {
         let said = gio::spawn_blocking(move || {
+            let languages: Vec<&str> = languages.iter().map(String::as_str).collect();
             match crate::kiff::cloud_send(&kept.token, &languages, "POST", &path, None) {
                 Err(e) => Some((false, why(&words, &e))),
                 Ok(a) => match tafs_core::held::read_gone_on(a.status, &a.body) {
@@ -745,6 +747,20 @@ pub(crate) fn go_on(w: &Rc<WordBook>, taf: &str, call: &str, say: Rc<dyn Fn(&str
         }
         say(&said);
     });
+}
+
+/// The languages a read asks tafs cloud for: the words' own first (KIFF's code, "pt-BR" is
+/// "pt"), then this computer's others, as `main.rs` builds them for every other read.
+fn app_languages(w: &WordBook) -> Vec<String> {
+    let first = tafs_core::language::kiff_code(w.language()).to_string();
+    let mut out = vec![first.clone()];
+    out.extend(
+        tafs_core::language::screen_languages(&tafs_core::language::preferred_from_env())
+            .into_iter()
+            .filter(|l| *l != first)
+            .map(str::to_string),
+    );
+    out
 }
 
 /// Why `go_on` didn't go, in the app's words, never blank: the error's own line, else the
@@ -817,6 +833,16 @@ fn tap_for_screenshot(which: &'static str, b: &gtk::Button) {
 mod tests {
     use super::*;
     use tafs_core::signin::KiffError;
+
+    #[test]
+    fn a_continue_asks_in_the_apps_language_first() {
+        // Someone who picked French in Account › Language gets tafs cloud's words in French,
+        // whatever this computer's own language is.
+        let fr = WordBook::load(&WordBook::default_root(), "fr").expect("the words at the pin");
+        let langs = app_languages(&fr);
+        assert_eq!(langs.first().map(String::as_str), Some("fr"));
+        assert_eq!(langs.iter().filter(|l| *l == "fr").count(), 1);
+    }
 
     #[test]
     fn a_continue_that_didnt_go_always_says_why() {
