@@ -26,6 +26,9 @@ struct Row {
     into: gtk::Box,
     now: RefCell<Option<CodeSignIn>>,
     busy: Cell<bool>,
+    /// Turn on opened KIFF's page, and the read waits for this window to be in front again:
+    /// a second tap meanwhile opens the page again but waits once, so it's read once.
+    waiting: Cell<bool>,
     error: RefCell<Option<String>>,
 }
 
@@ -78,6 +81,7 @@ pub fn row(w: Rc<WordBook>, source: Source, into: gtk::Box, shown: Rc<dyn Fn()>)
         into,
         now: RefCell::new(None),
         busy: Cell::new(false),
+        waiting: Cell::new(false),
         error: RefCell::new(None),
     });
     read(&r, Some(shown));
@@ -200,6 +204,9 @@ fn on(r: &Rc<Row>, from: &gtk::Button) {
     }
     gtk::UriLauncher::new(&page).launch(window.as_ref(), gio::Cancellable::NONE, |_| {});
     let Some(window) = window else { return };
+    if r.waiting.replace(true) {
+        return;
+    }
     // Once: the first time the window is active again after it went to the browser.
     let left = Rc::new(Cell::new(false));
     let handler: Rc<RefCell<Option<glib::SignalHandlerId>>> = Rc::default();
@@ -211,6 +218,7 @@ fn on(r: &Rc<Row>, from: &gtk::Button) {
             if let Some(id) = h2.borrow_mut().take() {
                 win.disconnect(id);
             }
+            r2.waiting.set(false);
             read(&r2, None);
         }
     });

@@ -114,8 +114,8 @@ pub fn pixels(shot: &Shot) -> Option<(u32, u32, Vec<u8>)> {
     // At most 120 KB, but a WebP can still claim any size: a page's picture is never wider or
     // taller than this, and decoding stops before it takes more memory (`image::Limits`).
     let mut limits = image::Limits::default();
-    limits.max_image_width = Some(MAX_SIDE);
-    limits.max_image_height = Some(MAX_SIDE);
+    limits.max_image_width = Some(MAX_WIDTH);
+    limits.max_image_height = Some(MAX_HEIGHT);
     limits.max_alloc = Some(MAX_ALLOC);
     let mut reader = image::ImageReader::with_format(
         std::io::Cursor::new(&shot.image[..]),
@@ -126,9 +126,11 @@ pub fn pixels(shot: &Shot) -> Option<(u32, u32, Vec<u8>)> {
     Some((rgba.width(), rgba.height(), rgba.into_raw()))
 }
 
-/// The widest or tallest picture shown, in pixels.
-pub const MAX_SIDE: u32 = 4096;
-/// The most memory one picture's decoding may take: 4096 × 4096 RGBA.
+/// The widest picture shown, in pixels: well over the 1280 the extension keeps (`chrome/src/shot.js`).
+pub const MAX_WIDTH: u32 = 4096;
+/// The tallest, as the extension and planque keep them: up to 8000 (`MAX_HEIGHT`, a whole tall page).
+pub const MAX_HEIGHT: u32 = 8000;
+/// The most memory one picture's decoding may take: 1280 × 8000 RGBA is about 41 MB.
 pub const MAX_ALLOC: u64 = 64 * 1024 * 1024;
 
 #[cfg(test)]
@@ -138,7 +140,7 @@ mod tests {
     #[test]
     fn a_picture_wider_than_any_page_has_no_pixels() {
         let mut out = std::io::Cursor::new(Vec::new());
-        image::RgbaImage::from_pixel(MAX_SIDE + 1, 1, image::Rgba([0, 0, 0, 255]))
+        image::RgbaImage::from_pixel(MAX_WIDTH + 1, 1, image::Rgba([0, 0, 0, 255]))
             .write_to(&mut out, image::ImageFormat::WebP)
             .unwrap();
         let shot = |image| Shot {
@@ -148,6 +150,27 @@ mod tests {
         };
         assert_eq!(pixels(&shot(out.into_inner())), None);
         assert!(pixels(&shot(webp())).is_some());
+    }
+
+    #[test]
+    fn a_whole_tall_page_as_the_extension_keeps_it_has_pixels() {
+        // The extension keeps a page up to 8000 tall (`MAX_HEIGHT` in chrome/src/shot.js).
+        let shot = |w: u32, h: u32| {
+            let mut out = std::io::Cursor::new(Vec::new());
+            image::RgbaImage::from_pixel(w, h, image::Rgba([0, 0, 0, 255]))
+                .write_to(&mut out, image::ImageFormat::WebP)
+                .unwrap();
+            Shot {
+                step: "s".into(),
+                taken_at: Utc::now(),
+                image: out.into_inner(),
+            }
+        };
+        assert_eq!(
+            pixels(&shot(1, MAX_HEIGHT)).map(|(w, h, _)| (w, h)),
+            Some((1, MAX_HEIGHT))
+        );
+        assert_eq!(pixels(&shot(1, MAX_HEIGHT + 1)), None);
     }
 
     /// A 1×1 lossless WebP.
