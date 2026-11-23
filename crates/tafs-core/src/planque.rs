@@ -104,6 +104,11 @@ pub enum Safe<'a> {
     Chromes,
     /// `DELETE …/chromes/{chrome}`: one unpaired. It only takes authority away.
     Unpair(&'a str),
+    /// `DELETE …/grants/{grant}`: a connection ended (Disconnect, Clear). It only takes access
+    /// away, and this computer sends it only once its security key's touch and PIN checked the
+    /// person (the owner's rule), never on the device key alone
+    /// (`key_approval::end_with_presence`).
+    Disconnect(&'a str),
     /// `GET …/chromes/screenshots?op={operation}`: the pictures kept for one operation's Chrome
     /// steps, without their bytes (planque#359).
     Shots(&'a str),
@@ -115,7 +120,7 @@ impl Safe<'_> {
     pub fn method(self) -> &'static str {
         match self {
             Safe::Grants | Safe::Chromes | Safe::Shots(_) | Safe::Shot(_) => "GET",
-            Safe::Unpair(_) => "DELETE",
+            Safe::Unpair(_) | Safe::Disconnect(_) => "DELETE",
         }
     }
 
@@ -131,6 +136,7 @@ impl Safe<'_> {
                     segment(chrome)
                 )
             }
+            Safe::Disconnect(grant) => format!("{}/{}", grants_path(tenant), segment(grant)),
             // The query is part of what's signed.
             Safe::Shots(op) => format!(
                 "/v1/accounts/{}/chromes/screenshots?op={}",
@@ -182,9 +188,13 @@ mod tests {
         ] {
             assert!(!code.contains(&format!("\"{route}")), "{route}");
         }
-        // DELETE only for unpairing a Chrome.
+        // DELETE only for what takes access away: unpairing a Chrome, and ending a connection.
         assert_eq!(code.matches("\"DELETE\"").count(), 1);
-        assert!(code.contains(r#"Safe::Unpair(_) => "DELETE""#));
+        assert!(code.contains(r#"Safe::Unpair(_) | Safe::Disconnect(_) => "DELETE""#));
+        assert_eq!(
+            Safe::Disconnect("g/1").path("t 1"),
+            "/v1/accounts/t%201/grants/g%2F1"
+        );
         assert_eq!(Safe::Chromes.path("t 1"), "/v1/accounts/t%201/chromes");
         assert_eq!(
             Safe::Unpair("c/1").path("t"),

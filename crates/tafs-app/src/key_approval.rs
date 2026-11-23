@@ -175,6 +175,147 @@ pub fn approve(
     crate::pin_sheet::present(w, parent, what, attempt, read_tries, stop, sheet_done);
 }
 
+/// Whether `act` can end its connections here (the owner's 22 Nov rule): it's Disconnect or Clear,
+/// and this computer has a security key, so a touch and a PIN check the person before the device
+/// key signs at planque. Anything that grants access never can; a computer with no key, the phone.
+pub fn can_end(kept: Option<&KeptSession>, act: &Act) -> bool {
+    passkey::ENABLED
+        && kept.is_some_and(|k| {
+            k.approval_mode == ApprovalMode::Passkey
+                && k.security_key.is_some()
+                // The key's answer is checked against its own public key, so a session kept
+                // without it asks the phone instead.
+                && k.security_key_public.as_deref().and_then(passkey::credential_id).is_some()
+        })
+        && act.ends_connections().is_some()
+}
+
+/// Disconnect or Clear with this computer's security key: the PIN sheet asks the key registered
+/// here to touch and take its PIN over `tafs.presence.v1` (never sent anywhere), checked as KIFF
+/// checks an assertion (kiff.dev's, the person present and verified, the credential asked, not a
+/// synced passkey); only then does the device key sign each connection's `DELETE` at planque
+/// (`planque::Safe::Disconnect`), one after another. `done` hears once, as `approve`'s.
+pub fn end_with_presence(
+    w: Rc<WordBook>,
+    parent: &impl gtk::prelude::IsA<gtk::Widget>,
+    kept: KeptSession,
+    languages: Vec<&'static str>,
+    act: &Act,
+    what: Option<&str>,
+    done: Approved,
+) {
+    let Some(grants) = act.ends_connections() else {
+        return;
+    };
+    let Some(credential) = kept
+        .security_key
+        .as_deref()
+        .and_then(passkey::credential_id)
+    else {
+        return;
+    };
+    // The registered key's public half: its answer is checked against it, since nothing else
+    // ever will. None: nothing goes (`can_end` already offered the phone).
+    let Some(public_key) = kept
+        .security_key_public
+        .as_deref()
+        .and_then(passkey::credential_id)
+    else {
+        return;
+    };
+    let tenant = kept.tenant.clone().unwrap_or_default();
+    let open = Arc::new(OpenKey::default());
+    let refused: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
+    let attempt: crate::pin_sheet::Attempt = {
+        let (open, refused, w2) = (open.clone(), refused.clone(), (*w).clone());
+        Arc::new(move |pin| {
+            let signed_at = SIGNING_TIME
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .next(chrono::Utc::now());
+            let message = passkey::presence_v1(&tenant, &grants, &signed_at);
+            let client_data = passkey::client_data_json(&message);
+            let ask = AssertionAsk::new(&passkey::client_data_hash(&client_data), &credential)?;
+            let answer = open.get_assertion(&ask, Some(pin))?;
+            let answered = answer
+                .credential_id
+                .clone()
+                .unwrap_or_else(|| credential.clone());
+            // The person checked as KIFF would check them, or nothing is sent; and the answer is
+            // the registered key's own, by its signature, since it's never sent to be checked.
+            if passkey::refusal(&answer.authenticator_data, &credential, &answered).is_some()
+                || !passkey::signature_holds(
+                    &public_key,
+                    &answer.authenticator_data,
+                    &client_data,
+                    &answer.signature,
+                )
+            {
+                return Err(KeyError::Unreadable);
+            }
+            let line = end_at_planque(&w2, &kept, &languages, &grants);
+            *refused.lock().unwrap_or_else(|e| e.into_inner()) = line.clone();
+            match line {
+                None => Ok(()),
+                Some(_) => Err(KeyError::Sent),
+            }
+        })
+    };
+    let read_tries: crate::pin_sheet::ReadTries = {
+        let open = Arc::new(OpenKey::default());
+        Arc::new(move || open.tries_left())
+    };
+    let stop: crate::pin_sheet::StopKey = {
+        let open = open.clone();
+        Arc::new(move || open.cancel())
+    };
+    let sheet_done: crate::pin_sheet::Done = {
+        let w = w.clone();
+        Rc::new(move |e| {
+            let kiff = refused.lock().unwrap_or_else(|e| e.into_inner()).take();
+            done(closed_with(&w, e, kiff))
+        })
+    };
+    crate::pin_sheet::present(w, parent, what, attempt, read_tries, stop, sheet_done);
+}
+
+/// Each connection's `DELETE` at planque, signed by the device key once the security key checked
+/// the person: none when every one went, else planque's line for the first that didn't (one
+/// already gone counts as gone). Never tried again from here: the sheet closes with the line.
+fn end_at_planque(
+    w: &WordBook,
+    kept: &KeptSession,
+    languages: &[&'static str],
+    grants: &[String],
+) -> Option<String> {
+    let Some(device) = crate::coach::this_device(kept, languages) else {
+        return Some(
+            tafs_core::signin::KiffError::Offline
+                .words(w)
+                .unwrap_or_default(),
+        );
+    };
+    for grant in grants {
+        match crate::kiff::planque_safe(
+            kept,
+            &device,
+            languages,
+            tafs_core::planque::Safe::Disconnect(grant),
+        ) {
+            Ok(a) if (200..300).contains(&a.status) || a.status == 404 => {}
+            Ok(a) => {
+                return Some(
+                    tafs_core::signin::refusal(&a, Some(w))
+                        .words(w)
+                        .unwrap_or_default(),
+                )
+            }
+            Err(e) => return Some(e.words(w).unwrap_or_default()),
+        }
+    }
+    None
+}
+
 /// What the key signs: a request, its assertion in a header (`kiff.request.v1`); or a held call's
 /// answer, its assertion in the body (`kiff.answer.v1`).
 enum Signs {
@@ -238,6 +379,90 @@ mod tests {
     }
 
     #[test]
+    fn only_disconnect_and_clear_end_with_the_key_and_only_with_it() {
+        use tafs_core::keys::DeviceKey;
+        let token: tafs_core::signin::DeviceToken = serde_json::from_value(serde_json::json!({
+            "access_token": "t", "token_type": "Bearer", "expires_in": 0,
+            "tenant": "x", "subject": "s", "approval_mode": "passkey"
+        }))
+        .unwrap();
+        let key = DeviceKey::generate();
+        let cred = tafs_core::pairing_key::Credential {
+            id: b"c".to_vec(),
+            public_key: b"spki".to_vec(),
+        };
+        let keyed = tafs_core::pairing::kept_with_key(&token, &key, &cred, 0);
+        let disconnect = Act::Disconnect { grant: "g1".into() };
+        let clear = Act::ClearRemoved {
+            grants: vec!["g1".into(), "g2".into()],
+        };
+        assert!(can_end(Some(&keyed), &disconnect));
+        assert!(can_end(Some(&keyed), &clear));
+        // Neither is a request the key approves itself.
+        assert!(!can_approve(Some(&keyed), &disconnect));
+        // What grants access never ends this way.
+        for act in [
+            Act::SignInAgain { grant: "g1".into() },
+            Act::ConnectAgain { grant: "g1".into() },
+            Act::CreateGroup { name: "x".into() },
+        ] {
+            assert!(!can_end(Some(&keyed), &act), "{act:?}");
+        }
+        // A computer with no key, or a view-only session: the phone.
+        let view = tafs_core::pairing::kept(&token, &key, 0);
+        assert!(!can_end(Some(&view), &disconnect));
+        let unkeyed = KeptSession {
+            security_key: None,
+            security_key_public: None,
+            ..keyed
+        };
+        assert!(!can_end(Some(&unkeyed), &disconnect));
+        assert!(!can_end(None, &disconnect));
+        // A session kept before the key's public half was: its answer couldn't be checked, so
+        // the phone.
+        let unchecked = KeptSession {
+            security_key_public: None,
+            ..unkeyed.clone()
+        };
+        let unchecked = KeptSession {
+            security_key: keyed.security_key.clone(),
+            ..unchecked
+        };
+        assert!(!can_end(Some(&unchecked), &disconnect));
+    }
+
+    #[test]
+    fn a_connection_is_ended_at_planque_only_behind_the_key() {
+        // `Safe::Disconnect` is sent from one place: after the key's touch and PIN, here.
+        let root = env!("CARGO_MANIFEST_DIR");
+        for entry in std::fs::read_dir(format!("{root}/src")).unwrap() {
+            let path = entry.unwrap().path();
+            let source = std::fs::read_to_string(&path).unwrap();
+            let code = source.split("#[cfg(test)]").next().unwrap_or_default();
+            // A call, not a mention in a comment.
+            let uses = code.matches("Safe::Disconnect(").count();
+            if path.ends_with("key_approval.rs") {
+                assert_eq!(uses, 1, "one send, in end_at_planque");
+                let send = code.find("Safe::Disconnect(").unwrap();
+                let checked = code
+                    .find("passkey::refusal(&answer.authenticator_data")
+                    .unwrap();
+                // The answer's own signature, against the registered key, before anything goes.
+                let signed = code.find("passkey::signature_holds(").unwrap();
+                assert!(checked < signed, "flags, then the signature");
+                assert!(
+                    signed < code.find("end_at_planque(&w2").unwrap(),
+                    "the signature is checked before planque hears anything"
+                );
+                let ended = code.find("end_at_planque(&w2").unwrap();
+                assert!(checked < ended && ended < send, "checked, then ended");
+            } else {
+                assert_eq!(uses, 0, "{}", path.display());
+            }
+        }
+    }
+
+    #[test]
     fn only_a_session_with_the_key_approves() {
         use tafs_core::keys::DeviceKey;
         let act = Act::CreateGroup { name: "x".into() };
@@ -283,6 +508,7 @@ mod tests {
         assert!(!can_approve(Some(&view), &act));
         let unkeyed = KeptSession {
             security_key: None,
+            security_key_public: None,
             ..keyed
         };
         assert!(!can_approve(Some(&unkeyed), &act));

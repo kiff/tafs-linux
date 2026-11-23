@@ -554,6 +554,21 @@ impl Act {
         )
     }
 
+    /// The connections an act ends at planque (Disconnect, Clear): what this computer may end with
+    /// its device key once its security key checked the person (the owner, 22 Nov). None for any
+    /// other act, above all what grants access (connecting, Sign in again, keys, approvals).
+    pub fn ends_connections(&self) -> Option<Vec<String>> {
+        match self {
+            Act::Disconnect { grant } if !grant.is_empty() => Some(vec![grant.clone()]),
+            Act::ClearRemoved { grants }
+                if !grants.is_empty() && grants.iter().all(|g| !g.is_empty()) =>
+            {
+                Some(grants.clone())
+            }
+            _ => None,
+        }
+    }
+
     /// The call goes to planque, which this computer never reaches (`session::may_send_to`).
     pub fn at_planque(&self) -> bool {
         matches!(
@@ -1068,6 +1083,43 @@ mod tests {
         ] {
             let (m, p, _) = act.request().unwrap();
             assert!(signed(m, &p) || signed_at_cloud(m, &p), "{m} {p}");
+        }
+    }
+
+    #[test]
+    fn only_disconnect_and_clear_end_connections() {
+        assert_eq!(
+            Act::Disconnect { grant: "g1".into() }.ends_connections(),
+            Some(vec!["g1".to_string()])
+        );
+        assert_eq!(
+            Act::ClearRemoved {
+                grants: vec!["g1".into(), "g2".into()]
+            }
+            .ends_connections(),
+            Some(vec!["g1".to_string(), "g2".to_string()])
+        );
+        // Nothing to end, or a blank id: none.
+        assert_eq!(
+            Act::Disconnect { grant: "".into() }.ends_connections(),
+            None
+        );
+        assert_eq!(
+            Act::ClearRemoved { grants: vec![] }.ends_connections(),
+            None
+        );
+        assert_eq!(
+            Act::ClearRemoved {
+                grants: vec!["g1".into(), "".into()]
+            }
+            .ends_connections(),
+            None
+        );
+        // Never what grants access: connecting, signing in again, keys, approvals.
+        for act in acts() {
+            if !matches!(act, Act::Disconnect { .. } | Act::ClearRemoved { .. }) {
+                assert_eq!(act.ends_connections(), None, "{act:?}");
+            }
         }
     }
 

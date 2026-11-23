@@ -282,6 +282,8 @@ pub fn kept_with_key(
     if kept.approval_mode == ApprovalMode::Passkey {
         kept.security_key =
             Some(base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(&credential.id));
+        kept.security_key_public =
+            Some(base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(&credential.public_key));
     } else {
         kept.approval_mode = ApprovalMode::View;
     }
@@ -692,7 +694,7 @@ mod tests {
         let key = DeviceKey::generate();
         let cred = crate::pairing_key::Credential {
             id: b"cred-1".to_vec(),
-            public_key: vec![],
+            public_key: b"spki-1".to_vec(),
         };
         let token = |mode: &str| -> DeviceToken {
             serde_json::from_value(json!({"access_token":"t","token_type":"Bearer","expires_in":0,"tenant":"x","subject":"s","approval_mode":mode})).unwrap()
@@ -700,11 +702,14 @@ mod tests {
         let granted = kept_with_key(&token("passkey"), &key, &cred, 0);
         assert_eq!(granted.approval_mode, ApprovalMode::Passkey);
         assert_eq!(granted.security_key.as_deref(), Some("Y3JlZC0x"));
+        // Its public half too, which checks the key's answers that are never sent.
+        assert_eq!(granted.security_key_public.as_deref(), Some("c3BraS0x"));
         assert!(granted.paired);
         // KIFF said view (it didn't take the key): nothing is claimed.
         let view = kept_with_key(&token("view"), &key, &cred, 0);
         assert_eq!(view.approval_mode, ApprovalMode::View);
         assert_eq!(view.security_key, None);
+        assert_eq!(view.security_key_public, None);
         let body = claim_body_with_key(
             "n",
             "p",
