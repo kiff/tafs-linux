@@ -8,7 +8,7 @@ languages, are in `packaging/release-notes/` and on its GitHub release page.
 **Signing in and languages**
 - Sign in inside the app, with KIFF's page in the browser and the way back to the app, or with a
   code sent by email (Account › Sign-in). The first run shows how tafs works.
-- 34 languages, with Arabic and Hebrew right to left; Brazilian Portuguese opens its own legal pages.
+- 43 languages, with Arabic and Hebrew right to left; Brazilian Portuguese opens its own legal pages.
 
 **Approving on this computer**
 - A USB security key approves what this computer may: making, renaming and changing groups,
