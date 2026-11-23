@@ -243,7 +243,12 @@ pub fn page(w: Rc<WordBook>, source: Rc<HaltSource>, whose: Whose) -> gtk::Widge
                                 .unwrap_or_else(|_| Err(String::new()));
                         busy.set(false);
                         match sent {
-                            Ok(h) => *state.borrow_mut() = h,
+                            Ok(h) => {
+                                *state.borrow_mut() = h;
+                                // The list reads it halted at once, not at its next read
+                                // (`refresh()`, kiff/tafs#236 item 13).
+                                crate::shell::reread_home();
+                            }
                             Err(why) => {
                                 problem.set_label(&why);
                                 problem.set_visible(!why.is_empty());
