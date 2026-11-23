@@ -297,6 +297,18 @@ only those for these cards: "declined" for an approval or a drive, "not now" for
 nothing else whatever the text, so nothing here can build "approved" or "signed in". A test
 holds it to that.
 
+## An approval's connection
+
+planque's grants are read once Coach's conversation is there, with this computer's device key on
+planque's safe route (as Connect apps reads them). An approval card then shows its grant as the
+iPad does: planque's words for the request, its exact terms folded under Details, KIFF's words for
+its profile (read and checked as Connect apps' are), and "This request doesn't match what it shows,
+so it can't be approved." when its digest doesn't; or its one line once connected, or signed in and
+reading what the vendor offers. The card's state takes the grant's too (`setupCardState`): failed
+or disconnected at planque in planque's words, a sign-in done once connected or listed. The vendor
+is named from the grant first, an approved card whose connection is connected says so, and Coach's
+Card-next words show only with the grant. Until the grants are read, the card's own words stand.
+
 ## An answer with no stream
 
 When a message couldn't stream (the stream didn't open, so it was sent plainly), Coach's answer
@@ -318,7 +330,6 @@ replaced this one." once another is newer.
 ## Not yet
 
 - No mic: a Linux desktop has no on-device speech recognition, as in a taf's chat.
-- What the iPad reads beside the thread: planque's grant (its words, terms and profile).
 - A refused connection's lines are decoded but not drawn: the iPad's Coach doesn't draw them.
 
 ## Screenshots

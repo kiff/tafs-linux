@@ -1677,7 +1677,8 @@ impl Page {
     }
 
     /// planque's grants, read once with this computer's device key, for "Taking shape"'s tools
-    /// (`SetupShape`'s `grants`). A read that fails leaves the panel as it was.
+    /// (`SetupShape`'s `grants`) and the approval cards' requests (`AppModel.grants`). A read that
+    /// fails leaves both as they were.
     fn read_grants(self: &Rc<Self>) {
         let Some(source) = crate::onboarding::chrome_source() else {
             return;
@@ -1691,8 +1692,10 @@ impl Page {
             if grants.is_empty() {
                 return;
             }
+            p.conv.borrow_mut().grants = Some(grants.clone());
             *p.grants.borrow_mut() = grants;
             p.draw_shape();
+            p.draw();
         });
     }
 
@@ -1787,7 +1790,9 @@ impl Page {
         drop(c);
         self.draw_tools_row();
         let shaping = self.draw_shape();
-        if shaping && !self.grants_read.replace(true) {
+        // Read once Coach's conversation is there, wide window or narrow: "Taking shape" and the
+        // approval cards both show what it holds.
+        if self.conv.borrow().setup.is_some() && !self.grants_read.replace(true) {
             self.read_grants();
         }
         if self.drawn.borrow().as_ref() == Some(&now) {
