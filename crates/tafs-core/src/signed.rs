@@ -555,8 +555,8 @@ impl Act {
     }
 
     /// The connections an act ends at planque (Disconnect, Clear): what this computer may end with
-    /// its device key once its security key checked the person (the owner, 22 Nov). None for any
-    /// other act, above all what grants access (connecting, Sign in again, keys, approvals).
+    /// its device key once its security key checked the person, never on the device key alone. None
+    /// for any other act, above all what grants access (connecting, Sign in again, keys, approvals).
     pub fn ends_connections(&self) -> Option<Vec<String>> {
         match self {
             Act::Disconnect { grant } if !grant.is_empty() => Some(vec![grant.clone()]),
