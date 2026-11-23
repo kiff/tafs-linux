@@ -202,6 +202,30 @@ pub fn refusal(authenticator_data: &[u8], asked: &[u8], answered: &[u8]) -> Opti
     None
 }
 
+/// Whether `signature` (DER ECDSA) is the registered key's over what an assertion signs,
+/// `authenticator_data || SHA-256(client_data_json)`: `public_key` is the credential's SPKI DER,
+/// as the pairing code named it. KIFF checks this itself for what it's sent; an answer kept here
+/// (`tafs.presence.v1`) is checked here, or any device answering with the credential's id would
+/// pass. Anything unreadable doesn't hold.
+pub fn signature_holds(
+    public_key: &[u8],
+    authenticator_data: &[u8],
+    client_data_json: &[u8],
+    signature: &[u8],
+) -> bool {
+    use p256::ecdsa::signature::Verifier;
+    use p256::pkcs8::DecodePublicKey;
+    let Ok(key) = p256::ecdsa::VerifyingKey::from_public_key_der(public_key) else {
+        return false;
+    };
+    let Ok(sig) = p256::ecdsa::Signature::from_der(signature) else {
+        return false;
+    };
+    let mut signed = authenticator_data.to_vec();
+    signed.extend_from_slice(&client_data_hash(client_data_json));
+    key.verify(&signed, &sig).is_ok()
+}
+
 /// What an authenticator answered for one assertion.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Assertion {
@@ -269,6 +293,68 @@ impl SigningTime {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_the_registered_keys_own_signature_holds() {
+        use p256::ecdsa::signature::Signer;
+        use p256::ecdsa::{DerSignature, SigningKey};
+        use p256::pkcs8::EncodePublicKey;
+        let key = SigningKey::from_slice(&[5u8; 32]).unwrap();
+        let other = SigningKey::from_slice(&[6u8; 32]).unwrap();
+        let public = key
+            .verifying_key()
+            .to_public_key_der()
+            .unwrap()
+            .as_bytes()
+            .to_vec();
+        let auth = b"authenticator-data".to_vec();
+        let client = b"{\"type\":\"webauthn.get\"}".to_vec();
+        let mut signed = auth.clone();
+        signed.extend_from_slice(&client_data_hash(&client));
+        let sig = |k: &SigningKey, m: &[u8]| -> Vec<u8> {
+            let s: DerSignature = k.sign(m);
+            s.as_bytes().to_vec()
+        };
+        // The registered key's signature over authenticatorData and the client data's hash.
+        assert!(signature_holds(
+            &public,
+            &auth,
+            &client,
+            &sig(&key, &signed)
+        ));
+        // Right flags and credential id, but another key's signature: refused.
+        assert!(!signature_holds(
+            &public,
+            &auth,
+            &client,
+            &sig(&other, &signed)
+        ));
+        // Over something else (another client data, other authenticator data): refused.
+        let mut elsewhere = auth.clone();
+        elsewhere.extend_from_slice(&client_data_hash(b"{}"));
+        assert!(!signature_holds(
+            &public,
+            &auth,
+            &client,
+            &sig(&key, &elsewhere)
+        ));
+        assert!(!signature_holds(
+            &public,
+            b"other",
+            &client,
+            &sig(&key, &signed)
+        ));
+        // Nothing unreadable holds: no signature, a bad one, no key.
+        assert!(!signature_holds(&public, &auth, &client, &[]));
+        assert!(!signature_holds(&public, &auth, &client, b"not der"));
+        assert!(!signature_holds(&[], &auth, &client, &sig(&key, &signed)));
+        assert!(!signature_holds(
+            b"spki",
+            &auth,
+            &client,
+            &sig(&key, &signed)
+        ));
+    }
 
     #[test]
     fn a_presence_check_is_never_a_message_kiff_takes() {

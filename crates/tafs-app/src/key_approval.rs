@@ -180,8 +180,13 @@ pub fn approve(
 /// key signs at planque. Anything that grants access never can; a computer with no key, the phone.
 pub fn can_end(kept: Option<&KeptSession>, act: &Act) -> bool {
     passkey::ENABLED
-        && kept
-            .is_some_and(|k| k.approval_mode == ApprovalMode::Passkey && k.security_key.is_some())
+        && kept.is_some_and(|k| {
+            k.approval_mode == ApprovalMode::Passkey
+                && k.security_key.is_some()
+                // The key's answer is checked against its own public key, so a session kept
+                // without it asks the phone instead.
+                && k.security_key_public.as_deref().and_then(passkey::credential_id).is_some()
+        })
         && act.ends_connections().is_some()
 }
 
@@ -209,6 +214,15 @@ pub fn end_with_presence(
     else {
         return;
     };
+    // The registered key's public half: its answer is checked against it, since nothing else
+    // ever will. None: nothing goes (`can_end` already offered the phone).
+    let Some(public_key) = kept
+        .security_key_public
+        .as_deref()
+        .and_then(passkey::credential_id)
+    else {
+        return;
+    };
     let tenant = kept.tenant.clone().unwrap_or_default();
     let open = Arc::new(OpenKey::default());
     let refused: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
@@ -227,8 +241,16 @@ pub fn end_with_presence(
                 .credential_id
                 .clone()
                 .unwrap_or_else(|| credential.clone());
-            // The person checked as KIFF would check them, or nothing is sent.
-            if passkey::refusal(&answer.authenticator_data, &credential, &answered).is_some() {
+            // The person checked as KIFF would check them, or nothing is sent; and the answer is
+            // the registered key's own, by its signature, since it's never sent to be checked.
+            if passkey::refusal(&answer.authenticator_data, &credential, &answered).is_some()
+                || !passkey::signature_holds(
+                    &public_key,
+                    &answer.authenticator_data,
+                    &client_data,
+                    &answer.signature,
+                )
+            {
                 return Err(KeyError::Unreadable);
             }
             let line = end_at_planque(&w2, &kept, &languages, &grants);
@@ -367,7 +389,7 @@ mod tests {
         let key = DeviceKey::generate();
         let cred = tafs_core::pairing_key::Credential {
             id: b"c".to_vec(),
-            public_key: vec![],
+            public_key: b"spki".to_vec(),
         };
         let keyed = tafs_core::pairing::kept_with_key(&token, &key, &cred, 0);
         let disconnect = Act::Disconnect { grant: "g1".into() };
@@ -391,10 +413,22 @@ mod tests {
         assert!(!can_end(Some(&view), &disconnect));
         let unkeyed = KeptSession {
             security_key: None,
+            security_key_public: None,
             ..keyed
         };
         assert!(!can_end(Some(&unkeyed), &disconnect));
         assert!(!can_end(None, &disconnect));
+        // A session kept before the key's public half was: its answer couldn't be checked, so
+        // the phone.
+        let unchecked = KeptSession {
+            security_key_public: None,
+            ..unkeyed.clone()
+        };
+        let unchecked = KeptSession {
+            security_key: keyed.security_key.clone(),
+            ..unchecked
+        };
+        assert!(!can_end(Some(&unchecked), &disconnect));
     }
 
     #[test]
@@ -413,6 +447,13 @@ mod tests {
                 let checked = code
                     .find("passkey::refusal(&answer.authenticator_data")
                     .unwrap();
+                // The answer's own signature, against the registered key, before anything goes.
+                let signed = code.find("passkey::signature_holds(").unwrap();
+                assert!(checked < signed, "flags, then the signature");
+                assert!(
+                    signed < code.find("end_at_planque(&w2").unwrap(),
+                    "the signature is checked before planque hears anything"
+                );
                 let ended = code.find("end_at_planque(&w2").unwrap();
                 assert!(checked < ended && ended < send, "checked, then ended");
             } else {
@@ -467,6 +508,7 @@ mod tests {
         assert!(!can_approve(Some(&view), &act));
         let unkeyed = KeptSession {
             security_key: None,
+            security_key_public: None,
             ..keyed
         };
         assert!(!can_approve(Some(&unkeyed), &act));

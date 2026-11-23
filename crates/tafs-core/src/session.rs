@@ -64,6 +64,12 @@ pub struct KeptSession {
     /// key grants nothing. None: view-only.
     #[serde(default)]
     pub security_key: Option<String>,
+    /// That credential's public key (SPKI DER, base64url), as the pairing code named it: what
+    /// checks the key's answer that is never sent anywhere (`passkey::signature_holds`), so only
+    /// the registered key passes. None for a session kept before it was kept: such a check
+    /// refuses, and the phone approves.
+    #[serde(default)]
+    pub security_key_public: Option<String>,
 }
 
 impl std::fmt::Debug for KeptSession {
@@ -98,6 +104,7 @@ impl KeptSession {
             device_key: base64::engine::general_purpose::STANDARD.encode(key.to_pkcs8()),
             paired: false,
             security_key: None,
+            security_key_public: None,
         }
     }
 

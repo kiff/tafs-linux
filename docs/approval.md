@@ -269,7 +269,9 @@ from a screen recording or a clipboard manager's history.
   `signedSafe` at planque, as Unpair). What the key signs is `tafs.presence.v1` (the tenant,
   `signed_at`, each `DELETE grants/{id}`), never sent and never a message KIFF takes; its answer
   is checked as KIFF checks one (kiff.dev's, present and verified, the credential asked, not a
-  synced passkey) before anything goes. The sheet names it as the question did ("Remove access
+  synced passkey), and its signature against the registered key's public half, kept from the
+  pairing code (`passkey::signature_holds`), since nothing else ever checks it, before anything
+  goes. A session kept before that public half was asks the phone instead. The sheet names it as the question did ("Remove access
   to Slack?", "Clear 2 connections from removed tafs?"), and Setup's sheet closes once it went, so Setup is read
   again. A connection planque already ended (404) counts as ended. Anything that grants access
   (connecting, Sign in again, keys, approvals) never goes this way, and a computer with no key
