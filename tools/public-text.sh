@@ -2,7 +2,7 @@
 # This repository is public: its code, docs and tests say each rule as itself, never where it came
 # from. So no coordination thread, no PM, no dated rule, and no team's own name for its lanes.
 # Those names are matched by the first 16 hex digits of their SHA-256, so this script doesn't name
-# them either. CODEOWNERS is read for everything but names: it works by logins. Fails with where.
+# them either, nor the reviewer logins outside CODEOWNERS, where GitHub reads them. Fails with where.
 # Every run first proves the check on planted lines ("planted-lane" is a name kept for that), so a
 # copy that lost a character fails here rather than passing on everything.
 set -euo pipefail
@@ -13,11 +13,15 @@ import hashlib, re, subprocess, sys
 NAMES = set("""
 3c32e58c6fc3cf62 20cca48ece26c362 f5068c4b858ead38 fe9c6bd7a66301f4 50077b782480811e
 be896ac583d76627 afb42e3f1a4bce7e d419916f176e52d3 bd184cdc7aea9ef8 ab63a9b276c86bec
-2ad06b22b301f873 3c00d0a9d4c2eb08 018a7f9527b114ab 94c6cdf43ac3f929 0344d07edb285217
+2ad06b22b301f873 3c00d0a9d4c2eb08 018a7f9527b114ab 94c6cdf43ac3f929 4a25962615e31ac6
+0344d07edb285217
 """.split())
+# Reviewer logins: named only where GitHub reads them, in CODEOWNERS.
+LOGINS = set("53dd1be914bd441c f66e74c6b8883a1f 3726111e555e250c".split())
 MONTH = r"(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*"
 SAID = re.compile(
-    r"kiff/work|\bthe PM\b|\bPM's\b|\(PM[ ,)]"
+    r"kiff/work\b|\bthe PM\b|\bPM's\b|\(PM[ ,)]|\bPM [0-9]{1,2}:[0-9]{2}"
+    r"|\b(review|probe|ask|point|negatives|read) (on|of)\)"
     rf"|\bowner(?:'s|,) [0-9]{{1,2}} {MONTH}\b"
 )
 WORD = re.compile(r"(?:^|(?<=[^@\w-]))[a-z0-9]+(?:-[a-z0-9]+)*(?=[^\w-]|$)")
@@ -27,9 +31,11 @@ SELF, OWNERS = "tools/public-text.sh", ".github/CODEOWNERS"
 def named(path, line):
     if SAID.search(line):
         return True
-    return path != OWNERS and any(
-        hashlib.sha256(w.group().encode()).hexdigest()[:16] in NAMES
-        for w in WORD.finditer(line.lower()))
+    for w in WORD.finditer(line.lower()):
+        h = hashlib.sha256(w.group().encode()).hexdigest()[:16]
+        if path != OWNERS and (h in NAMES or h in LOGINS):
+            return True
+    return False
 
 
 PLANTED = [  # (path, line, whether it must fail)
@@ -44,6 +50,7 @@ PLANTED = [  # (path, line, whether it must fail)
     ("a.md", "tafs cloud's words, read at 4:30 PM", False),
     ("a.md", "planted-laneway and replanted-lane are other words", False),
     (OWNERS, "* @planted-lane", False),
+    ("a.md", "as the PM 20:12 said", True),
     (OWNERS, "# one of the two (the owner, 22 Nov)", True),
 ]
 wrong = [p for p in PLANTED if named(p[0], p[1]) != p[2]]
