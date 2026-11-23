@@ -285,8 +285,8 @@ panel beside any conversation tafs cloud has for it.
 
 Approve, a sign-in's button, and a drive's Approve are the phone's. Approving a card ends in tafs
 cloud's report signed by the device behind Face ID, and its other steps grant access (planque's
-approve, tools and Cards together), which a computer never does (the PM's 19:52 (b), with qa-kiff:
-a security-key report for a `cards`-only ask is a design question first). Signing in at a vendor
+approve, tools and Cards together), which a computer never does; a security-key report for a
+`cards`-only ask would be a new signed protocol, so it's a design question first. Signing in at a vendor
 grants access, and a drive runs on the phone for KIFF's critical key. Those cards keep the
 can't-approve line where those buttons go.
 
