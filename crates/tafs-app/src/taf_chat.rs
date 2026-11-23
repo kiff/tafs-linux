@@ -1,8 +1,9 @@
 //! A taf's chat on its page's Chat tab (`TafChatView`), for a taf tafs cloud runs, signed in with
 //! KIFF: its thread as tafs cloud reads it, drawn as the iPad draws it, with the message box. The
 //! owner writes to the taf as the session, unsigned: a message into its live chat, or, while it
-//! works, words to its run; Stop cancels the run. Linux has no stream: the thread is read again
-//! every 4 s while the taf owes an answer or works (`followChat`'s plain reads). What the chat
+//! works, words to its run; Stop cancels the run. An answer is drawn as it streams; while nothing
+//! streams and the taf owes an answer or works, the thread is read again, backing off
+//! (`followChat`'s plain reads). What the chat
 //! holds is kept per taf while the app runs, so the page drawn again keeps it. The lines are
 //! `tafs-core/src/taf_chat.rs`.
 
@@ -218,7 +219,7 @@ pub fn pane(w: Rc<WordBook>, taf: ChatTaf, source: ChatSource) -> gtk::Widget {
         chat,
         drawn: RefCell::new(None),
         reading: Cell::new(false),
-        polls: RefCell::new(Polls::default()),
+        polls: RefCell::new(taf_chat::polls()),
         follow: Cell::new(true),
         root: root.clone(),
         column,
@@ -467,14 +468,24 @@ impl Page {
         }
     }
 
-    /// `followChat`: the thread read again every 4 s while the taf owes an answer or works, at
-    /// most 30 times for each message of the owner's. A read never overlaps another; leaving the
-    /// chat ends it.
+    /// `followChat`: while the taf owes an answer or works and nothing streams, the thread read
+    /// again as `follow` says: 2.5 s after the owner wrote, then further apart while nothing
+    /// changes (5, 10, 30 s, each ±20%), for two minutes. Nothing is read while the window isn't
+    /// seen, and it's read at once when it is again. The timer is local; a read never overlaps
+    /// another; leaving the chat ends it.
     async fn follow_chat(self: &Rc<Self>) {
+        let mut hidden = false;
         loop {
-            glib::timeout_future(taf_chat::POLL).await;
+            glib::timeout_future(tafs_core::follow::TICK).await;
             if !self.open() {
                 return;
+            }
+            if !crate::chat::seen(self.root.upcast_ref()) {
+                hidden = true;
+                continue;
+            }
+            if std::mem::take(&mut hidden) {
+                self.polls.borrow_mut().seen_again();
             }
             // A stream shows what the taf does, and reads the thread itself.
             if self.reading.get() || self.chat.borrow().live.is_some() {
@@ -484,9 +495,18 @@ impl Page {
             if self.chat.borrow().live.is_some() {
                 continue;
             }
-            let read = self.polls.borrow_mut().read_now(&self.chat.borrow());
-            if read {
+            let Some(owner) = self.chat.borrow().to_follow() else {
+                continue;
+            };
+            let due = self.polls.borrow_mut().tick(
+                tafs_core::follow::TICK,
+                Some(owner),
+                glib::random_double(),
+            );
+            if due {
                 self.load().await;
+                let thread = self.chat.borrow().thread.clone();
+                self.polls.borrow_mut().read(&thread, glib::random_double());
             }
         }
     }

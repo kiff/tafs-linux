@@ -1510,7 +1510,7 @@ impl App {
         }
     }
 
-    /// The app's own next try, `RETRY_WAITS[tries]` seconds from now, unless the account's reads
+    /// The app's own next try, `RETRY_WAITS[tries]` seconds from now (±20%), unless the account's reads
     /// moved on meanwhile.
     fn try_again_later(
         self: &Rc<Self>,
@@ -1523,7 +1523,10 @@ impl App {
             return;
         };
         let me = Rc::downgrade(self);
-        glib::timeout_add_seconds_local_once(*wait as u32, move || {
+        // A random ±20%, so a blip doesn't bring everyone back in the same second.
+        let wait =
+            tafs_core::follow::jitter(std::time::Duration::from_secs(*wait), glib::random_double());
+        glib::timeout_add_local_once(wait, move || {
             if let Some(me) = me.upgrade() {
                 if me.account_reads.get() == generation {
                     me.read_account(kept, view_only);
@@ -2052,7 +2055,12 @@ impl App {
         let (me, languages) = (self.clone(), self.languages.clone());
         glib::spawn_future_local(async move {
             loop {
-                glib::timeout_future(hold_alert::PERIOD).await;
+                // A random ±20%, so computers don't read KIFF in step (docs/scale.md).
+                glib::timeout_future(tafs_core::follow::jitter(
+                    hold_alert::PERIOD,
+                    glib::random_double(),
+                ))
+                .await;
                 if me.held_watch.get() != watch {
                     return;
                 }

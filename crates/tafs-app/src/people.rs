@@ -1,5 +1,5 @@
 //! Account › People & groups (`PeopleGroupsView`): the account's groups, each with its people,
-//! managers first, and the tafs it uses. Read again every 20 seconds while it's open. Every change
+//! managers first, and the tafs it uses. Read again while it's open, backing off. Every change
 //! (a group, its name, its people, their role) is the person's act, signed: this computer only
 //! views, so each is drawn as the iPad's, with its sheet (`GroupNameSheet`, `AddToGroupSheet`) or
 //! question, up to the signature, and the tap that would sign says this computer can't approve.
@@ -58,6 +58,10 @@ struct State {
     account: Option<Account>,
     error: Option<String>,
     loaded: bool,
+    /// Reads finished, and reads that found the groups or people changed: People's reads back
+    /// off while nothing changes (`follow::PEOPLE`).
+    reads: u64,
+    changes: u64,
 }
 
 fn read(w: &WordBook, source: &PeopleSource) -> Result<Read, String> {
@@ -376,7 +380,7 @@ pub fn page(
             }
         })
     };
-    // Reads now, then every 20 seconds while the screen is open, so someone who joins shows.
+    // Reads now, then again while the screen is open, so someone who joins shows.
     let load: Rc<dyn Fn()> = {
         let (w, source, state, draw, list) = (
             w.clone(),
@@ -397,6 +401,9 @@ pub fn page(
                     match got {
                         Ok((groups, people, account)) => {
                             let (groups, people) = arrange(groups, people);
+                            if groups != s.groups || people != s.people {
+                                s.changes += 1;
+                            }
                             s.groups = groups;
                             s.people = people;
                             if account.is_some() {
@@ -407,6 +414,7 @@ pub fn page(
                         Err(e) => s.error = Some(e),
                     }
                     s.loaded = true;
+                    s.reads += 1;
                 }
                 draw();
                 // A screenshot's sheet, over the first group that takes one: renaming it, with
@@ -436,12 +444,43 @@ pub fn page(
         })
     };
     load();
+    // Read again while the screen is open and seen: 20 s, then further apart while nothing
+    // changes (40, 60, 120 s, each ±20%); read at once when the window is seen again. The timer
+    // is local and reads nothing by itself.
     {
         let weak = scroller.downgrade();
-        let load = load.clone();
-        gtk::glib::timeout_add_seconds_local(20, move || match weak.upgrade() {
+        let (load, state) = (load.clone(), state.clone());
+        let polls = RefCell::new(tafs_core::follow::people());
+        let hidden = std::cell::Cell::new(false);
+        // The read count when a read was asked for, until it's done.
+        let asked = std::cell::Cell::new(None::<u64>);
+        let tick = tafs_core::follow::TICK;
+        gtk::glib::timeout_add_local(tick, move || match weak.upgrade() {
             Some(s) if s.parent().is_some() => {
-                load();
+                if !crate::chat::seen(s.upcast_ref()) {
+                    hidden.set(true);
+                    return gtk::glib::ControlFlow::Continue;
+                }
+                if hidden.replace(false) {
+                    polls.borrow_mut().seen_again();
+                }
+                if let Some(at) = asked.get() {
+                    let st = state.borrow();
+                    if st.reads == at {
+                        return gtk::glib::ControlFlow::Continue;
+                    }
+                    asked.set(None);
+                    polls
+                        .borrow_mut()
+                        .read(&st.changes, gtk::glib::random_double());
+                }
+                if polls
+                    .borrow_mut()
+                    .tick(tick, None, gtk::glib::random_double())
+                {
+                    asked.set(Some(state.borrow().reads));
+                    load();
+                }
                 gtk::glib::ControlFlow::Continue
             }
             _ => gtk::glib::ControlFlow::Break,

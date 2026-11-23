@@ -29,6 +29,7 @@ pub mod doors;
 pub mod drafts;
 pub mod export_chats;
 pub mod files;
+pub mod follow;
 pub mod halt;
 pub mod held;
 pub mod hold_alert;

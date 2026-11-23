@@ -24,10 +24,14 @@ and the person's live chat (`conversation`). It's decoded as the iPad's `thread(
 - `components` must be a list; of its cards, only an `ask_coach` card with words is kept (`AskCoachCard`),
   and one it can't read is left out. A taf's other cards aren't drawn in its chat, as on the iPad.
 
-The thread is read when the Chat tab first shows, then every 4 s while the taf owes an answer (the
-owner's message is the thread's last) or works, at most 30 times for each message of the owner's
-(`followChat`'s plain reads), except while an answer streams, which reads it itself. One read at a
-time, and none once the pane is gone.
+The thread is read when the Chat tab first shows. After that, plain reads are the fallback when
+nothing streams (`followChat`; kiff/tafs `docs/scale.md`, `tafs-core/src/follow.rs`). While the taf
+owes an answer (the owner's message is the thread's last) or works, the thread is read 2.5 s after
+the owner wrote, then further apart while it doesn't change (5, 10, then 30 s; back to 2.5 s once it
+does), each wait a random ±20%, for two minutes after each message of the owner's. An answer that
+streams reads the thread itself, so nothing else is read meanwhile. Nothing is read while the window
+is minimised or suspended, and it's read at once when it's seen again. One read at a time, and none
+once the pane is gone.
 What the chat holds (the thread, what was sent and not sent, the stop) is kept for each taf while the
 app runs, and signing out forgets it, with the box's words.
 

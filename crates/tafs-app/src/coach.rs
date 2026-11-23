@@ -2,7 +2,7 @@
 //! cloud reads it with this computer's proof, drawn as the iPad draws it, with its message box.
 //! The owner writes to Coach, unsigned, as the session (`TafsCloud.sendMessage`, `steer`, `stop`);
 //! the sent message shows at once until tafs cloud's copy takes its place, and the thread is read
-//! again every few seconds while the page is open (`followSetup`, no stream on this computer).
+//! as it streams, and read again as a fallback while nothing streams (`followSetup`, backing off).
 //! A confirm's choices and a questions card are answered here as data (`answerCard`); where an
 //! approval's or a sign-in's buttons would be, it says this computer can't approve
 //! (`ApprovalGate`), under tafs cloud's `wider` line. The lines are `tafs-core/src/coach_lines.rs`,
@@ -294,7 +294,7 @@ pub fn page(
         drawn: RefCell::new(None),
         reading: Cell::new(false),
         no_coach: Cell::new(false),
-        polls: RefCell::new(Polls::default()),
+        polls: RefCell::new(coach_send::polls()),
         follow: Cell::new(true),
         root: root.clone(),
         tools,
@@ -798,22 +798,38 @@ impl Page {
         }
     }
 
-    /// `followSetup`: the thread read again while the page is open, every second while Coach
-    /// works, else every three, for five minutes after the owner last wrote. A read never
-    /// overlaps another; leaving the page ends it.
+    /// `followSetup`: while the page is open and nothing streams, the thread read again as
+    /// `follow` says: 3 s after the owner wrote, then further apart while nothing changes (6, 10,
+    /// 15, 30 s, each ±20%; never every second), for five minutes. Nothing is read while the
+    /// window isn't seen, and it's read at once when it is again. The timer is local; a read
+    /// never overlaps another; leaving the page ends it.
     async fn follow_setup(self: &Rc<Self>) {
+        let mut hidden = false;
         loop {
-            let wait = Polls::interval(&self.conv.borrow());
-            glib::timeout_future(wait).await;
+            glib::timeout_future(tafs_core::follow::TICK).await;
             if !self.open() {
                 return;
             }
-            if self.reading.get() {
+            if !crate::chat::seen(self.root.upcast_ref()) {
+                hidden = true;
                 continue;
             }
-            let read = self.polls.borrow_mut().read_now(&self.conv.borrow());
-            if read {
+            if std::mem::take(&mut hidden) {
+                self.polls.borrow_mut().seen_again();
+            }
+            // A stream shows Coach's words as it writes them, and reads the thread at its end.
+            if self.reading.get() || self.conv.borrow().live.is_some() {
+                continue;
+            }
+            let owner = self.conv.borrow().last_owner();
+            let due =
+                self.polls
+                    .borrow_mut()
+                    .tick(tafs_core::follow::TICK, owner, glib::random_double());
+            if due {
                 self.load_thread().await;
+                let thread = self.conv.borrow().thread.clone();
+                self.polls.borrow_mut().read(&thread, glib::random_double());
             }
         }
     }
@@ -3157,7 +3173,7 @@ impl Page {
         self.chatting.borrow_mut().clear();
         *self.typing.borrow_mut() = None;
         *self.drawn.borrow_mut() = None;
-        *self.polls.borrow_mut() = Polls::default();
+        *self.polls.borrow_mut() = coach_send::polls();
         self.draw();
     }
 
