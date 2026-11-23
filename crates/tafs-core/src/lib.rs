@@ -52,6 +52,7 @@ pub mod payment_report;
 pub mod people;
 pub mod pin;
 pub mod planque;
+pub mod prefs;
 pub mod profile_words;
 pub mod receipt_check;
 pub mod receipt_view;
