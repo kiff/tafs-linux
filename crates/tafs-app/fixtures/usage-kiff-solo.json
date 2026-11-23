@@ -1,0 +1,42 @@
+{
+ "_comment": "Synthetic. Solo, near its credits, offered credit packs (tafs cloud's balance `buy`): a computer says where to buy them, and Team's link (the PM's ruling A). Billed by the App Store; no members.",
+ "manages_billing": true,
+ "balance": {
+  "balance": {
+   "state": "warning",
+   "meter_pct": 88,
+   "words": "Solo · 60 of 500 credits left this period",
+   "detail": "Your tafs stop when the credits run out.",
+   "buy": {
+    "solo": false,
+    "packs": true
+   }
+  }
+ },
+ "credits": {
+  "credits": 860,
+  "runs": 51,
+  "words": "This period: 860 credits used · ends on 30 Nov",
+  "tafs": [
+   {
+    "taf": "taf-aaaa0000000000000000",
+    "credits": 610,
+    "runs": 38,
+    "words": "Rae · 610 credits · 38 runs"
+   },
+   {
+    "credits": 250,
+    "runs": 13,
+    "words": "Tafs removed since · 250 credits · 13 runs"
+   }
+  ],
+  "note": "Each run counts once, when it ends, in whole credits."
+ },
+ "usage": {
+  "plan": "solo",
+  "billing": {
+   "source": "apple"
+  },
+  "requests": []
+ }
+}
