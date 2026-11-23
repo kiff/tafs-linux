@@ -217,6 +217,8 @@ pub struct Entry {
     /// The taf, by its key; KIFF's agent for a call from KIFF.
     pub taf: String,
     pub kind: Kind,
+    /// KIFF's name for the call's tool (`action`): what a connection's last failure is found by.
+    pub action: Option<String>,
     pub title: String,
     pub detail: String,
     pub at: DateTime<Utc>,
@@ -417,6 +419,7 @@ pub fn record(
             id: record_id(&c.proposal_id),
             taf,
             kind,
+            action: Some(c.action_name.clone()),
             title: crate::held::name(&c.action_name, c.title.as_deref()),
             detail,
             at: c.created_at,

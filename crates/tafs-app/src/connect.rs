@@ -44,6 +44,8 @@ pub enum ConnectSource {
         holders: Vec<(String, String)>,
         /// What each taf's live Card draws on (`tafsUsing`).
         using: Vec<tafs_core::connections::Using>,
+        /// The Record's lines, for a connection's last failure (`lastFailure`).
+        record: Vec<tafs_core::record::Entry>,
     },
     /// A screenshot's answers (`--connect`): `answer` as tafs cloud's first page. A fixture's
     /// read never sends.
@@ -110,6 +112,8 @@ pub(crate) struct Ctx {
     pub holders: Vec<(String, String)>,
     /// What each taf's live Card draws on (`tafsUsing`), for what removing a connection stops.
     pub using: Vec<tafs_core::connections::Using>,
+    /// The Record's lines, for a connection's last failure (`lastFailure`).
+    pub record: Vec<tafs_core::record::Entry>,
     /// Reads the connections again (`refreshConnections`), after an act the key approved.
     pub reread: RefCell<Option<Rc<dyn Fn()>>>,
 }
@@ -131,21 +135,34 @@ impl Ctx {
             .map(|(_, name)| name.clone())
     }
 
+    /// `lastFailure`: a connection's last failed call, its own taf's first.
+    pub(crate) fn last_failure(&self, g: &Grant) -> Option<String> {
+        let own = self
+            .using
+            .iter()
+            .find(|u| u.agent == g.request.agent)
+            .map(|u| u.key.as_str());
+        tafs_core::connections::last_failure(&self.w, g, &self.record, own)
+            .ok()
+            .flatten()
+    }
+
+    /// What draws a connection to the top of its app's list (`connectionGroups`' attention): a
+    /// sign-in that waits, one its vendor signed out, or a last failure.
+    pub(crate) fn attention(&self, g: &Grant) -> bool {
+        tafs_core::connections::attention(g) || self.last_failure(g).is_some()
+    }
+
     /// The tafs whose connections to an app this computer names (`connectionGroups(of:).tafs`),
     /// for "Used by" while tafs cloud sends no `used_by`.
     fn used_here(&self, app: &App, removed: &std::collections::BTreeSet<String>) -> Vec<String> {
         let grants = self.grants.borrow();
         let conns = connections_of(app, &grants);
-        tafs_core::connections::groups(
-            &conns,
-            &|g| self.taf_of(g),
-            removed,
-            &tafs_core::connections::attention,
-        )
-        .tafs
-        .into_iter()
-        .map(|g| g.taf)
-        .collect()
+        tafs_core::connections::groups(&conns, &|g| self.taf_of(g), removed, &|g| self.attention(g))
+            .tafs
+            .into_iter()
+            .map(|g| g.taf)
+            .collect()
     }
 }
 
@@ -364,6 +381,10 @@ pub fn page(w: Rc<WordBook>, source: ConnectSource, open_coach: Rc<dyn Fn()>) ->
         holders,
         using: match &source {
             ConnectSource::Cloud { using, .. } => using.clone(),
+            _ => vec![],
+        },
+        record: match &source {
+            ConnectSource::Cloud { record, .. } => record.clone(),
             _ => vec![],
         },
         reread: RefCell::new(None),

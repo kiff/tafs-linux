@@ -13,9 +13,9 @@ use std::rc::Rc;
 use adw::prelude::*;
 use tafs_core::connect::{App, ConnectStart, RemovedTaf};
 use tafs_core::connections::{
-    attention, cancel_title, cancel_word, clearable, connections_of, disconnect_message,
-    disconnect_title, end_word, groups, kept_by, misplaced, removed_listed, row_used_by,
-    shows_footer, status_line, Action, Grant,
+    cancel_title, cancel_word, clearable, connections_of, disconnect_message, disconnect_title,
+    end_word, groups, kept_by, misplaced, removed_listed, row_used_by, shows_footer, status_line,
+    Action, Grant,
 };
 use tafs_core::signed::Act;
 
@@ -136,7 +136,9 @@ pub(crate) fn app_page(
     let grants = ctx.grants.borrow();
     let conns = connections_of(&app, &grants);
     let removed_agents = removed_tafs.iter().map(|t| t.agent.clone()).collect();
-    let grouped = groups(&conns, &|g| ctx.taf_of(g), &removed_agents, &attention);
+    let grouped = groups(&conns, &|g| ctx.taf_of(g), &removed_agents, &|g| {
+        ctx.attention(g)
+    });
     // What tafs cloud says of each removed taf's connection: only one it lists with nobody using
     // it is cleared. Not listed means no Clear.
     let listed = removed_listed(&removed_tafs);
@@ -327,8 +329,16 @@ fn row(ctx: &Rc<Ctx>, app: &App, g: &Grant, refuse: &Refuse) -> gtk::Widget {
         600,
         &["tafs-ink"],
     ));
+    // The other tafs whose Card draws on it (`alsoOnCards`).
+    if let Ok(Some(also)) = tafs_core::connections::also_on_cards(&w, g, &ctx.using) {
+        v.append(&text(&also, 13, 400, &["tafs-soft"]));
+    }
     if let Ok(Some(s)) = status_line(&w, g) {
         v.append(&text(&s, 13, 400, &["tafs-dim"]));
+    }
+    // Its last failed call, in KIFF's words.
+    if let Some(failed) = ctx.last_failure(g) {
+        v.append(&text(&failed, 13, 400, &["tafs-no"]));
     }
     if let Ok(Some(m)) = misplaced(&w, app, g) {
         v.append(&text(&m, 13, 400, &["tafs-amber-text"]));
@@ -501,6 +511,9 @@ fn connection_page(
         }
         if let Ok(Some(used)) = row_used_by(&w, g) {
             lines.append(&text(&used, 14, 400, &["tafs-soft"]));
+        }
+        if let Some(failed) = ctx.last_failure(g) {
+            lines.append(&text(&failed, 13, 400, &["tafs-no"]));
         }
         first.append(&lines);
         column.append(&first);

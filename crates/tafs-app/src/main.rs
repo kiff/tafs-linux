@@ -1968,6 +1968,37 @@ impl App {
 
     /// The Record's lines: the sample's, or KIFF's activity for the tafs Home lists, by the
     /// agent each call was made as. Its chips are every taf.
+    /// KIFF's activity as the Record's lines (`KIFFMapping.record`), each by its taf's key in the
+    /// Record: tafs cloud's id, else `agent:` and its holder in KIFF.
+    fn cloud_record(&self, c: &Cloud) -> Vec<tafs_core::record::Entry> {
+        let agents: Vec<(String, String)> = c
+            .home
+            .tafs
+            .iter()
+            .map(|t| {
+                (
+                    t.kiff_agent.clone(),
+                    tafs_core::connections::Using::key_of(t),
+                )
+            })
+            .collect();
+        let taf_of = |actor: &str| {
+            agents
+                .iter()
+                .find(|(a, _)| a == actor)
+                .map(|(_, k)| k.clone())
+        };
+        // `toolVendors`: the vendor of each connected tool, from the account's connections,
+        // which the Record doesn't read from planque: none, so a call a vendor refused says
+        // "The app", as the iPad's does without them.
+        let vendors = tafs_core::connections::tool_vendors(&[]);
+        tafs_core::record::naming(
+            tafs_core::record::record(&self.words, &c.activity, &taf_of, &vendors)
+                .unwrap_or_default(),
+            &c.call_refs,
+        )
+    }
+
     fn record_data(
         &self,
         mode: Mode,
@@ -2004,35 +2035,7 @@ impl App {
         tafs.sort_by_key(|t| order.iter().position(|k| *k == t.key).unwrap_or(usize::MAX));
         let entries = match (mode, cloud) {
             (Mode::Sample, _) => sample::record(&self.words, at).unwrap_or_default(),
-            (_, Some(c)) => {
-                let agents: Vec<(String, String)> = c
-                    .home
-                    .tafs
-                    .iter()
-                    .map(|t| {
-                        (
-                            t.kiff_agent.clone(),
-                            t.id.clone()
-                                .unwrap_or_else(|| format!("agent:{}", t.kiff_agent)),
-                        )
-                    })
-                    .collect();
-                let taf_of = |actor: &str| {
-                    agents
-                        .iter()
-                        .find(|(a, _)| a == actor)
-                        .map(|(_, k)| k.clone())
-                };
-                // `toolVendors`: the vendor of each connected tool, from the account's
-                // connections, which this computer doesn't read from planque: none, so a call a
-                // vendor refused says "The app", as the iPad's does without them.
-                let vendors = tafs_core::connections::tool_vendors(&[]);
-                tafs_core::record::naming(
-                    tafs_core::record::record(&self.words, &c.activity, &taf_of, &vendors)
-                        .unwrap_or_default(),
-                    &c.call_refs,
-                )
-            }
+            (_, Some(c)) => self.cloud_record(c),
             _ => vec![],
         };
         // `isWaiting`: the sample's held lines wait; KIFF's while KIFF still holds their call.
@@ -2987,6 +2990,10 @@ impl App {
                                     .filter_map(tafs_core::connections::Using::of)
                                     .collect()
                             })
+                            .unwrap_or_default(),
+                        record: cloud
+                            .as_deref()
+                            .map(|c| self.cloud_record(c))
                             .unwrap_or_default(),
                     },
                     _ => connect::ConnectSource::None,

@@ -214,6 +214,7 @@ pub fn record(w: &WordBook, now: DateTime<Local>) -> Result<Vec<crate::record::E
         id: format!("sample-{taf}-{title}"),
         taf: taf.into(),
         kind,
+        action: None,
         title,
         detail,
         at,
