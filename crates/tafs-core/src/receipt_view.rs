@@ -406,6 +406,7 @@ mod tests {
             title: "Refund a payment".into(),
             detail: "Done, within its Card".into(),
             at: Utc.with_ymd_and_hms(2026, 10, 21, 0, 41, 3).unwrap(),
+            made_at: None,
             owner_approved: false,
             amount: None,
             read_only: false,
@@ -527,6 +528,7 @@ mod tests {
             you: Some(true),
             signed: None,
             device: None,
+            at: None,
         });
         assert!(!answer_mismatch(&e, &s));
         e.answer.as_mut().unwrap().decision = "refused".into();
@@ -609,6 +611,7 @@ mod tests {
             you: Some(true),
             signed: Some(true),
             device: Some("iPhone".into()),
+            at: None,
         });
         assert_eq!(state_label(&w, &e).unwrap(), "Approved once by you");
         assert_eq!(decided_by(&w, &e, true).unwrap(), "You, signed on iPhone");

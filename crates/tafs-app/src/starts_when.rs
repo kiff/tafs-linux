@@ -931,7 +931,7 @@ impl Screens {
         if let Some((m, _)) = self.doors.borrow().as_ref() {
             return m.clone();
         }
-        let m = crate::doors::DoorsModel::new(
+        let m = crate::doors::shared(
             self.knobs.w.clone(),
             self.knobs.taf.id.clone(),
             self.knobs.taf.doors.clone(),

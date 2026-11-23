@@ -38,6 +38,12 @@ pub enum Mark {
     Check,
     Minus,
     Below,
+    /// `xmark.circle.fill`: a call refused or not done.
+    Cross,
+    /// `clock.fill`: sent, waiting for the app.
+    Clock,
+    /// `questionmark.circle.fill`: its outcome unknown.
+    Question,
 }
 
 /// An answered card, folded to one line (`OutcomeLine`).

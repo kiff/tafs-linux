@@ -18,7 +18,7 @@ use tafs_core::words::WordBook;
 use crate::widgets::{eyebrow, outline, panel, primary, text};
 
 /// Where a taf's doors are read and changed.
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub enum DoorsSource {
     /// tafs cloud, as the session.
     Cloud {
@@ -52,6 +52,34 @@ pub struct DoorsModel {
     pub state: Rc<RefCell<DoorsState>>,
     listeners: Listeners,
     next: Rc<Cell<u64>>,
+}
+
+thread_local! {
+    /// Each taf's doors (`doorModels`), by its id at tafs cloud: one model shared by its doors
+    /// sheet, its Activity's knocks and its chat, so an answer in one shows in all.
+    static MODELS: RefCell<std::collections::HashMap<String, DoorsModel>> =
+        RefCell::new(std::collections::HashMap::new());
+}
+
+/// `doors(for:)`: the taf's one doors model, made the first time it's asked for, and made anew
+/// when it's asked for with another session or in another language (a new pairing, a language
+/// picked), so it never reads with a session that's gone or draws in words no longer chosen.
+pub fn shared(w: Rc<WordBook>, id: String, source: DoorsSource) -> DoorsModel {
+    MODELS.with(|m| {
+        let mut m = m.borrow_mut();
+        let same = m
+            .get(&id)
+            .is_some_and(|old| Rc::ptr_eq(&old.w, &w) && old.source == source);
+        if !same {
+            m.insert(id.clone(), DoorsModel::new(w, id.clone(), source));
+        }
+        m[&id].clone()
+    })
+}
+
+/// Signed out: no taf's doors stay.
+pub fn forget() {
+    MODELS.with(|m| m.borrow_mut().clear());
 }
 
 /// What a change answered: the door it's now, nothing to show (a screenshot's), or why not.

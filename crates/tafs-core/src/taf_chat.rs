@@ -186,6 +186,12 @@ pub struct TafChat {
     /// Where each held call was made (`anchors`, kiff/tafs#206): the item it came after, by its
     /// card's key. Its card stays there.
     pub anchors: HashMap<String, String>,
+    /// This taf's Record lines as KIFF's activity was last read (`entries(for:)`): what became
+    /// of its calls, and what each moved.
+    pub record: Vec<crate::record::Entry>,
+    /// Its doors' open knocks as last read (`chatKnocks`): someone wrote through a door, and the
+    /// owner answers it here. None where tafs cloud offers no doors.
+    pub knocks: Vec<crate::doors::Knock>,
 }
 
 /// A taf's stream followed (`followChatStream`'s own): how the run ended, once it says, what
@@ -862,6 +868,12 @@ pub enum Item<'a> {
         at: DateTime<Utc>,
     },
     AskCoach(&'a AskCoachCard),
+    /// What became of a held call, or a call the owner approved, from the Record (`outcome`): the
+    /// same row as its card, by its key.
+    Outcome(&'a crate::record::Entry),
+    /// Someone wrote through a door (`knock`), at its time among the messages: the owner answers
+    /// it there.
+    Knock(&'a crate::doors::Knock),
     /// The taf's words in the answer streaming now, up to a tool call or being written.
     Streaming {
         id: String,
@@ -877,6 +889,8 @@ impl Item<'_> {
             Item::Message(m) => format!("m|{}", m.id()),
             Item::Held { key, .. } => format!("k|{key}"),
             Item::AskCoach(c) => format!("a|{}", c.id),
+            Item::Outcome(e) => format!("k|{}", e.id),
+            Item::Knock(k) => format!("d|{}", k.id),
             Item::Streaming { id, .. } => id.clone(),
         }
     }
@@ -886,7 +900,26 @@ impl Item<'_> {
             Item::Message(m) => m.at,
             Item::Held { at, .. } => *at,
             Item::AskCoach(c) => c.at,
+            // When the owner answered it: after the taf's "waiting for your approval" and before
+            // what it did next. Without the answer's time, where its card was: when it was made.
+            Item::Outcome(e) => e
+                .answer
+                .as_ref()
+                .and_then(|a| a.at)
+                .or(e.made_at)
+                .unwrap_or(e.at),
+            Item::Knock(k) => k.at,
             Item::Streaming { at, .. } => *at,
+        }
+    }
+
+    /// A held call's card, or its outcome while it has no answer's time (`isCard`): it goes after
+    /// the taf's words that ask for it, and where it was made.
+    fn card_key(&self) -> Option<&str> {
+        match self {
+            Item::Held { key, .. } => Some(key),
+            Item::Outcome(e) if e.answer.as_ref().and_then(|a| a.at).is_none() => Some(&e.id),
+            _ => None,
         }
     }
 
@@ -900,6 +933,22 @@ impl Item<'_> {
             _ => None,
         }
     }
+}
+
+/// The Record lines a taf's chat shows (`chatItems`' outcomes): since its first message, what
+/// became of every call approved or refused, and of a call the owner approved that wasn't done,
+/// is on its way, or whose outcome is unknown. None before the chat's first message.
+pub fn outcomes(
+    record: &[crate::record::Entry],
+    first: Option<DateTime<Utc>>,
+) -> impl Iterator<Item = &crate::record::Entry> {
+    use crate::record::Kind;
+    record.iter().filter(move |e| {
+        first.is_some_and(|first| e.at >= first)
+            && (matches!(e.kind, Kind::Approved | Kind::Refused)
+                || (e.owner_approved
+                    && matches!(e.kind, Kind::NotDone | Kind::Sending | Kind::Unknown)))
+    })
 }
 
 /// `chatItems`: the messages, the calls KIFF holds for the owner where they were held, and the
@@ -957,7 +1006,17 @@ pub fn items_of<'a>(
             .filter(|(key, _)| !streaming.contains(key.as_str()))
             .map(|(key, at)| Item::Held { key, at: *at }),
     );
+    // A door's knocks sit at their own times, so a reply newer than a knock comes after it.
+    all.extend(c.knocks.iter().map(Item::Knock));
     all.extend(c.thread.ask_coach.iter().map(Item::AskCoach));
+    // What became of its calls, done or not (kiff/tafs#115); those of the answer streaming now
+    // are placed in it.
+    let first = c.thread.messages.first().map(|m| m.at);
+    all.extend(
+        outcomes(&c.record, first)
+            .filter(|e| !streaming.contains(e.id.as_str()))
+            .map(Item::Outcome),
+    );
     all.sort_by_key(|i| i.at());
     let mut all = placed(all, &c.anchors);
     if let Some(live) = &c.live {
@@ -979,11 +1038,19 @@ pub fn items_of<'a>(
         for part in &live.parts {
             match part {
                 ReplyPart::Text(t) => words(t, &mut all),
-                // Where it was made in the answer, while KIFF still holds it.
+                // Where it was made in the answer: its card while KIFF holds it, then what became
+                // of it, in the same place.
                 ReplyPart::Held { exception, .. } => {
-                    if let Some((key, at)) =
-                        key_of(exception).and_then(|k| held.iter().find(|(key, _)| key == k))
-                    {
+                    let Some(k) = key_of(exception) else {
+                        continue;
+                    };
+                    let answered = c
+                        .record
+                        .iter()
+                        .find(|e| e.id == k && e.kind != crate::record::Kind::Held);
+                    if let Some(e) = answered {
+                        all.push(Item::Outcome(e));
+                    } else if let Some((key, at)) = held.iter().find(|(key, _)| key == k) {
                         all.push(Item::Held { key, at: *at });
                     }
                 }
@@ -1001,10 +1068,8 @@ pub fn items_of<'a>(
 /// `placed`: each held call moved to just after the item it was made after, when that item is in
 /// the chat; the rest keep their place by time.
 pub fn placed<'a>(items: Vec<Item<'a>>, anchors: &HashMap<String, String>) -> Vec<Item<'a>> {
-    let anchor = |i: &Item| match i {
-        Item::Held { key, .. } => anchors.get(*key).cloned(),
-        _ => None,
-    };
+    // An answered call goes where it was answered, by time, not where it was held.
+    let anchor = |i: &Item| i.card_key().and_then(|k| anchors.get(k).cloned());
     let present: HashSet<String> = items.iter().map(Item::id).collect();
     let (moving, staying): (Vec<_>, Vec<_>) = items
         .into_iter()
@@ -1059,7 +1124,7 @@ fn streaming_items(live: &LiveAnswer, recorded: &[ChatMessage]) -> Vec<Item<'sta
 pub fn held_after_its_words(mut out: Vec<Item<'_>>) -> Vec<Item<'_>> {
     let mut i = 0;
     while i < out.len() {
-        if !matches!(out[i], Item::Held { .. }) {
+        if out[i].card_key().is_none() {
             i += 1;
             continue;
         }
@@ -1149,6 +1214,11 @@ pub enum Line {
     },
     /// A call KIFF holds for the owner: its card, by its key.
     Held(String),
+    /// What became of a call, from the Record (`OutcomeLine`), where its card was or when it was
+    /// answered.
+    Outcome(crate::coach_lines::Outcome),
+    /// Someone wrote through a door (`KnockCard`): its card, answered here.
+    Knock(crate::doors::Knock),
     /// A setting the taf hands to Coach, with Ask Coach where it's offered.
     AskCoach { text: String, ask: Option<String> },
 }
@@ -1242,21 +1312,91 @@ pub fn composer(
     })
 }
 
+/// `OutcomeLine` in a taf's chat (`outcomeText`, `outcomeTone`, `outcomeMark`): what became of a
+/// call, as the Record says it. Approved "by you" only when KIFF says the reader answered it
+/// (`answer.you`); this computer answers none, so there is no line of its own.
+pub fn outcome_line(
+    w: &WordBook,
+    e: &crate::record::Entry,
+) -> Result<crate::coach_lines::Outcome, WordsError> {
+    use crate::coach_lines::{Mark, Outcome, Tone};
+    use crate::record::Kind;
+    let title = [("title", e.title.as_str())];
+    let text = match e.kind {
+        // Why, as the Record says it: a vendor's refusal still counts (kiff/tafs#206 6.13).
+        Kind::NotDone => w.get(
+            "chat.outcome.not_done",
+            &[("title", e.title.as_str()), ("detail", e.detail.as_str())],
+        )?,
+        Kind::Sending => w.get("chat.outcome.sending", &title)?,
+        Kind::Unknown => w.get("chat.outcome.unknown", &title)?,
+        Kind::Refused => w.get("chat.outcome.refused", &title)?,
+        Kind::Approved if e.answer.as_ref().and_then(|a| a.you) == Some(true) => {
+            w.get("chat.outcome.approved", &title)?
+        }
+        Kind::Approved => w.get("chat.outcome.approved_done", &title)?,
+        // The Record's own title for anything else, as the iPad's default.
+        _ => e.title.clone(),
+    };
+    Ok(Outcome {
+        text,
+        tone: match e.kind {
+            Kind::Approved => Tone::Ok,
+            Kind::NotDone => Tone::No,
+            Kind::Sending | Kind::Unknown => Tone::Amber,
+            _ => Tone::Dim,
+        },
+        mark: match e.kind {
+            Kind::Approved => Mark::Check,
+            Kind::Sending => Mark::Clock,
+            Kind::Unknown => Mark::Question,
+            _ => Mark::Cross,
+        },
+        more: false,
+        hint: None,
+    })
+}
+
+/// What each of a taf's calls moved, by KIFF's key for it (`recordEntry(forCall:)?.amountText`):
+/// the first Record line for the key, as the iPad finds it.
+pub fn call_amounts(
+    w: &WordBook,
+    record: &[crate::record::Entry],
+) -> Result<HashMap<String, String>, WordsError> {
+    let mut out = HashMap::new();
+    for e in record {
+        let Some(key) = &e.entity_id else { continue };
+        if out.contains_key(key) || crate::record::entry_for_call(record, key) != Some(e) {
+            continue;
+        }
+        if let Some(a) = e.amount_text(w)? {
+            out.insert(key.clone(), a);
+        }
+    }
+    Ok(out)
+}
+
 /// `failedWords`: a run that failed part-way, in tafs cloud's words when it gave some, then what
-/// went through before it stopped: each call by its tool's name in words, and what it acted on.
+/// went through before it stopped: each call by its tool's name in words, what it acted on, and
+/// what it moved, from the Record (`amounts`, by KIFF's key for the call).
 pub fn failed_words(
     w: &WordBook,
     taf: &str,
     done: &[DoneCall],
+    amounts: &HashMap<String, String>,
     why: Option<&str>,
 ) -> Result<String, WordsError> {
     let calls: Vec<String> = done
         .iter()
         .map(|c| {
             let words = crate::held::tool_words(&c.tool);
-            match &c.resource {
+            let on = match &c.resource {
                 Some(r) => format!("{words} on {r}"),
                 None => words,
+            };
+            match c.invocation.as_ref().and_then(|k| amounts.get(k)) {
+                Some(a) => format!("{on}, {a}"),
+                None => on,
             }
         })
         .collect();
@@ -1379,6 +1519,8 @@ pub fn lines(
             },
             Item::Message(m) => message(w, m)?,
             Item::Held { key, .. } => Line::Held(key.to_string()),
+            Item::Outcome(e) => Line::Outcome(outcome_line(w, e)?),
+            Item::Knock(k) => Line::Knock((*k).clone()),
             Item::AskCoach(card) => Line::AskCoach {
                 text: card.text.clone(),
                 ask: if whose.ask_coach {
@@ -1446,7 +1588,13 @@ pub fn lines(
         },
         failed: match (&c.ended, thinking) {
             (Some(Ended::Failed { .. }), false) => Some((
-                failed_words(w, &the_taf, &c.went_through, c.failed_why.as_deref())?,
+                failed_words(
+                    w,
+                    &the_taf,
+                    &c.went_through,
+                    &call_amounts(w, &c.record)?,
+                    c.failed_why.as_deref(),
+                )?,
                 w.line("chat.retry")?,
             )),
             _ => None,

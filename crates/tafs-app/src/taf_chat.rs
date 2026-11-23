@@ -63,6 +63,12 @@ pub struct ChatTaf {
     pub trial: bool,
     /// How its held calls are read again, from KIFF, for a tafs cloud taf.
     pub reread: Option<HeldReread>,
+    /// Its Record lines as the page had them (`entries(for:)`): what became of its calls, until
+    /// KIFF's activity is read again here.
+    pub record: Vec<tafs_core::record::Entry>,
+    /// Where its doors are read, where tafs cloud offers doors (`doorsOffered`): their knocks sit
+    /// among the messages. None for a trial's chat.
+    pub doors: crate::doors::DoorsSource,
 }
 
 /// What reading a taf's held calls again takes (`refresh`'s, for this taf): its KIFF agent, and
@@ -127,6 +133,9 @@ struct Page {
     composer: Composer,
     /// The files picked for the next message (`chatFiles[taf]`).
     attach: Rc<crate::attach::Attach>,
+    /// Its doors (`doors(for:)`), shared with its Activity and its doors sheet, and how many
+    /// messages the thread had when they were last read: they're read again when that changes.
+    doors: Option<(crate::doors::DoorsModel, Cell<Option<usize>>)>,
 }
 
 /// The Chat tab's pane: the thread, the line above the box, and the box.
@@ -187,9 +196,22 @@ pub fn pane(w: Rc<WordBook>, taf: ChatTaf, source: ChatSource) -> gtk::Widget {
             .or_insert_with(|| Rc::new(RefCell::new(TafChat::new(&taf.id))))
             .clone()
     });
+    // What became of its calls, as the page had them: from the same read as its held cards, so a
+    // card answered since shows what became of it (a trial's chat has none).
+    if !taf.trial {
+        chat.borrow_mut().record = taf.record.clone();
+    }
+    let doors = match (&taf.doors, taf.trial) {
+        (crate::doors::DoorsSource::None, _) | (_, true) => None,
+        (source, false) => Some((
+            crate::doors::shared(w.clone(), taf.id.clone(), source.clone()),
+            Cell::new(None),
+        )),
+    };
     let page = Rc::new(Page {
         live_shown: crate::chat::Shown::default(),
         w,
+        doors,
         held: RefCell::new(taf.held.clone()),
         taf,
         source,
@@ -207,6 +229,29 @@ pub fn pane(w: Rc<WordBook>, taf: ChatTaf, source: ChatSource) -> gtk::Widget {
         attach,
     });
     wire_composer(&page);
+    // No doors offered (or a trial's chat): no knocks kept from an earlier read.
+    if page.doors.is_none() {
+        page.chat.borrow_mut().knocks.clear();
+    }
+    // Its doors' open knocks, as they're read or answered: drawn again among the messages.
+    if let Some((model, _)) = &page.doors {
+        let p = Rc::downgrade(&page);
+        let listening = model.listen(Rc::new(move || {
+            if let Some(p) = p.upgrade() {
+                let knocks = p.doors.as_ref().map(|(m, _)| m.open_knocks());
+                p.chat.borrow_mut().knocks = knocks.unwrap_or_default();
+                // Busy or not, the cards' buttons change with it.
+                p.drawn.take();
+                if p.open() {
+                    p.draw();
+                }
+            }
+        }));
+        page.chat.borrow_mut().knocks = model.open_knocks();
+        let model = model.clone();
+        page.root
+            .connect_destroy(move |_| model.unlisten(listening));
+    }
     {
         let p = Rc::downgrade(&page);
         page.attach.on_change(Rc::new(move || {
@@ -228,10 +273,20 @@ pub fn pane(w: Rc<WordBook>, taf: ChatTaf, source: ChatSource) -> gtk::Widget {
                 .and_then(|b| TafThread::read(&b));
             match read {
                 Some(t) => {
-                    // A screenshot's chat starts from its file alone.
-                    let fresh = TafChat::new(&page.taf.id);
+                    // A screenshot's chat starts from its file alone, with the page's Record.
+                    let mut fresh = TafChat::new(&page.taf.id);
+                    fresh.record = page.taf.record.clone();
                     *page.chat.borrow_mut() = fresh;
                     page.chat.borrow_mut().took(&page.w, t, chrono::Utc::now());
+                    // Kept while it's open, as a read's loop keeps a signed-in chat: what's read
+                    // after it's drawn (its doors) still reaches it.
+                    let p = page.clone();
+                    glib::spawn_future_local(async move {
+                        glib::timeout_future(std::time::Duration::from_secs(1)).await;
+                        while p.open() {
+                            glib::timeout_future(std::time::Duration::from_secs(1)).await;
+                        }
+                    });
                     match stream {
                         Some(stream) if crate::chat::PIN_CHECK.with(|c| c.get()) => {
                             page.pin_check(&stream)
@@ -385,6 +440,10 @@ impl Page {
         .await
         .unwrap_or_else(|_| Err(Some(String::new())));
         self.reading.set(false);
+        // A run seen at work here, over now: what it did reaches the record (`loadChat`'s
+        // `refresh`).
+        let run_over = matches!(&read, Ok(t) if t.working.is_none())
+            && self.chat.borrow().thread.working.is_some();
         match read {
             Err(None) => return self.signed_out(),
             Ok(t) => self.chat.borrow_mut().took(&self.w, t, chrono::Utc::now()),
@@ -398,6 +457,13 @@ impl Page {
         }
         if self.open() {
             self.draw();
+        }
+        if run_over {
+            crate::shell::reread_home();
+            self.reread_held().await;
+            if self.open() {
+                self.draw();
+            }
         }
     }
 
@@ -722,8 +788,20 @@ impl Page {
     }
 
     /// `refresh`, for this taf: KIFF's held calls read again, and its cards as Needs you draws
-    /// them. A read that fails changes nothing.
+    /// them; then KIFF's activity, for what became of its calls. A read that fails changes
+    /// nothing.
     async fn reread_held(self: &Rc<Self>) {
+        // Signed out by the first read: the second isn't sent.
+        if self.reread_calls().await {
+            return;
+        }
+        self.reread_record().await;
+    }
+
+    /// `refresh`'s activity, for this taf (`activityCalls`, `KIFFMapping.record`): its Record
+    /// lines, for the outcomes in its chat and what each call moved. A read that fails changes
+    /// nothing.
+    async fn reread_record(self: &Rc<Self>) {
         let (
             Some(r),
             ChatSource::Cloud {
@@ -736,7 +814,7 @@ impl Page {
             return;
         };
         let (token, languages, signed_out) = (token.clone(), languages.clone(), signed_out.clone());
-        let read = gtk::gio::spawn_blocking(move || crate::kiff::held(&token, &languages).ok())
+        let read = gtk::gio::spawn_blocking(move || crate::kiff::activity(&token, &languages).ok())
             .await
             .ok()
             .flatten();
@@ -745,11 +823,49 @@ impl Page {
             signed_out();
             return;
         }
+        let Some(calls) = (answer.status == 200)
+            .then(|| tafs_core::record::read_activity(&answer.body))
+            .flatten()
+        else {
+            return;
+        };
+        let taf_of = |actor: &str| (actor == r.agent).then(|| r.key.clone());
+        // `toolVendors`: none, as this computer doesn't read planque's connections (the Record's).
+        let vendors = tafs_core::connections::tool_vendors(&[]);
+        if let Ok(entries) = tafs_core::record::record(&self.w, &calls, &taf_of, &vendors) {
+            self.chat.borrow_mut().record = entries;
+        }
+    }
+
+    /// KIFF's held calls read again, for this taf, and its cards as Needs you draws them. True
+    /// when KIFF said the session is over, and this computer was signed out.
+    async fn reread_calls(self: &Rc<Self>) -> bool {
+        let (
+            Some(r),
+            ChatSource::Cloud {
+                token,
+                languages,
+                signed_out,
+            },
+        ) = (self.taf.reread.clone(), &self.source)
+        else {
+            return false;
+        };
+        let (token, languages, signed_out) = (token.clone(), languages.clone(), signed_out.clone());
+        let read = gtk::gio::spawn_blocking(move || crate::kiff::held(&token, &languages).ok())
+            .await
+            .ok()
+            .flatten();
+        let Some(answer) = read else { return false };
+        if answer.status == 401 {
+            signed_out();
+            return true;
+        }
         let Some(exceptions) = (answer.status == 200)
             .then(|| tafs_core::held::read_held(&answer.body))
             .flatten()
         else {
-            return;
+            return false;
         };
         let calls: Vec<_> = exceptions
             .iter()
@@ -771,6 +887,7 @@ impl Page {
         ) {
             *self.held.borrow_mut() = l.cards;
         }
+        false
     }
 
     /// A screenshot's stream, from its file: each line read as the stream's are, taken as
@@ -1138,12 +1255,23 @@ impl Page {
     /// Draws what the chat holds now, unless it's what's drawn already.
     fn draw(self: &Rc<Self>) {
         self.composer_state();
+        // The doors read again each time the thread's messages change, and once it's read: their
+        // knocks sit among them (`.task(id: chats[tafID]?.count)`).
+        if let Some((model, seen)) = &self.doors {
+            let c = self.chat.borrow();
+            let count = c.loaded.then_some(c.thread.messages.len());
+            drop(c);
+            if count.is_some() && seen.get() != count {
+                seen.set(count);
+                model.load();
+            }
+        }
         // Which call each held card is, by KIFF's id: a streamed answer names its held calls so.
         let known: Vec<(String, String)> = self
             .held
             .borrow()
             .iter()
-            .filter_map(|h| Some((h.kiff_id.clone()?, h.id.clone())))
+            .filter_map(|h| Some((h.kiff_id.clone()?, h.record.clone())))
             .collect();
         self.chat.borrow_mut().know_held(known);
         let c = self.chat.borrow();
@@ -1161,7 +1289,7 @@ impl Page {
             .held
             .borrow()
             .iter()
-            .map(|h| (h.id.clone(), h.held_at.with_timezone(&chrono::Utc)))
+            .map(|h| (h.record.clone(), h.held_at.with_timezone(&chrono::Utc)))
             .collect();
         let whose = Whose {
             name: Some(&self.taf.name),
@@ -1197,13 +1325,14 @@ impl Page {
                 let at = lines
                     .lines
                     .iter()
-                    .position(|l| matches!(l, Line::Held(k) if k == &h.id))?;
+                    .position(|l| matches!(l, Line::Held(k) if k == &h.record))?;
                 Some((h, at))
             })
             .max_by_key(|(h, _)| h.held_at);
         let near_end = waiting.is_none_or(|(_, at)| lines.lines.len() - at <= 3);
         let pill = waiting.and_then(|(h, _)| {
-            let card = crate::coach::named(self.column.upcast_ref(), &format!("held.{}", h.id))?;
+            let card =
+                crate::coach::named(self.column.upcast_ref(), &format!("held.{}", h.record))?;
             let words = self.w.get("chat.needs_you", &[]).ok()? + &h.summary;
             Some((words, card))
         });
@@ -1337,11 +1466,30 @@ impl Page {
                     }
                     v.upcast()
                 }
-                Line::Held(key) => match self.held.borrow().iter().find(|h| &h.id == key) {
+                Line::Held(key) => match self.held.borrow().iter().find(|h| &h.record == key) {
                     Some(card) => {
                         let c = crate::needs_you::held_card(&self.w, card);
                         c.set_widget_name(&format!("held.{key}"));
                         c.upcast()
+                    }
+                    None => continue,
+                },
+                // What became of a call, from the Record, where its card was or when answered.
+                Line::Outcome(o) => crate::coach::outcome(o).upcast(),
+                // Someone wrote through a door: its card, answered here, eight lines of it.
+                Line::Knock(k) => match &self.doors {
+                    Some((model, _)) => {
+                        let busy = model.state.borrow().busy;
+                        let card = crate::knocks::knock_card(
+                            model,
+                            Some(&self.taf.name),
+                            k,
+                            busy,
+                            false,
+                            &self.column,
+                        );
+                        card.set_widget_name(&format!("knock.{}", k.id));
+                        card.upcast()
                     }
                     None => continue,
                 },

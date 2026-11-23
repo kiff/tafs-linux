@@ -134,6 +134,7 @@ mod tests {
             title: "Refund a payment".into(),
             detail: "Done".into(),
             at: Utc.with_ymd_and_hms(2026, 10, 21, 9, 0, 0).unwrap(),
+            made_at: None,
             owner_approved: false,
             amount: Some(Amount {
                 value: "150.00".into(),

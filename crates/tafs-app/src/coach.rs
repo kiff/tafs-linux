@@ -2403,7 +2403,7 @@ fn plan_panel(plan: &PlanLines) -> gtk::Box {
 }
 
 /// `OutcomeLine`: an answered card in one line, its mark in its colour.
-fn outcome(o: &Outcome) -> gtk::Box {
+pub(crate) fn outcome(o: &Outcome) -> gtk::Box {
     outcome_with(o, &[])
 }
 
@@ -2416,6 +2416,10 @@ fn outcome_with(o: &Outcome, detail: &[String]) -> gtk::Box {
         Mark::Check => ("tafs-check-circle-fill-symbolic", tone_class(o.tone)),
         Mark::Minus => ("tafs-minus-circle-fill-symbolic", tone_class(o.tone)),
         Mark::Below => ("tafs-down-circle-fill-symbolic", tone_class(o.tone)),
+        // `xmark.circle.fill`, `clock.fill`, `questionmark.circle.fill`: a taf's chat's calls.
+        Mark::Cross => ("tafs-xmark-circle-fill-symbolic", tone_class(o.tone)),
+        Mark::Clock => ("tafs-clock-fill-symbolic", tone_class(o.tone)),
+        Mark::Question => ("tafs-questionmark-circle-fill-symbolic", tone_class(o.tone)),
     };
     let m = symbol(icon, 14);
     m.add_css_class(class);

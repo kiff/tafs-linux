@@ -122,6 +122,8 @@ pub fn page(
     open_coach: Rc<dyn Fn()>,
     open_connect: Rc<dyn Fn()>,
 ) -> gtk::Widget {
+    // Its Record lines, for its chat's outcomes and amounts (`entries(for:)`).
+    let chat_record: Vec<Entry> = entries.iter().filter(|e| e.taf == t.key).cloned().collect();
     // Coach from a tafs cloud taf's page is Coach on this taf (`improveTaf`, `askCoachAbout`): a
     // new conversation whose first message goes with the taf's context, the words in the box.
     // How Activity is narrowed to an app's calls, once it's drawn.
@@ -561,6 +563,8 @@ pub fn page(
             held: t.held.clone(),
             trial: false,
             reread: t.held_reread.clone(),
+            record: chat_record,
+            doors: t.doors.clone(),
         }));
         let panes = panes.clone();
         chat_tab.connect_toggled(move |b| {
@@ -660,7 +664,7 @@ pub fn page(
     // for it at the pin, so a screenshot opens it over the page.
     if let (Some(focus), Some(id)) = (&t.opens_doors, &t.cloud_id) {
         if !matches!(t.doors, crate::knocks::DoorsSource::None) {
-            let model = crate::doors::DoorsModel::new(w.clone(), id.clone(), t.doors.clone());
+            let model = crate::doors::shared(w.clone(), id.clone(), t.doors.clone());
             let taf = crate::doors::DoorsTaf {
                 name: t.name.clone(),
                 initial: t.initial.clone(),

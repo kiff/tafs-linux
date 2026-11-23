@@ -1239,6 +1239,7 @@ impl App {
         self.unreachable.set(None);
         // And nothing written to a taf.
         taf_chat::forget();
+        crate::doors::forget();
         // Signed out: no account, so this computer's zone.
         tafs_core::account_time::use_zone(None);
         // Signed out: the minute's read ends, and the last account's notifications never stay.
