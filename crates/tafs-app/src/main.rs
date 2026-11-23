@@ -3177,6 +3177,22 @@ fn read_contract(path: &str) -> Option<Home> {
 /// (`listedTafs`, `byRecent`); Your tafs those relevant now, and tafs cloud's count of what waits.
 /// Everything the window reads at tafs cloud and KIFF as the session (`refresh`): Home, KIFF's held
 /// calls and activity, the account, and the rest the screens draw. Blocking: off the main loop.
+/// This computer's id in KIFF for Home's grants read, read once per session and kept: each Home
+/// read after the first adds only planque's grants read. A session that changed reads it again.
+fn home_device(kept: &KeptSession, languages: &[&'static str]) -> Option<String> {
+    static DEVICE: std::sync::Mutex<Option<(String, String)>> = std::sync::Mutex::new(None);
+    if let Some((token, id)) = DEVICE.lock().ok()?.as_ref() {
+        if *token == kept.token {
+            return Some(id.clone());
+        }
+    }
+    let id = coach::this_device(kept, languages)?;
+    if let Ok(mut d) = DEVICE.lock() {
+        *d = Some((kept.token.clone(), id.clone()));
+    }
+    Some(id)
+}
+
 fn read_cloud(kept: &KeptSession, languages: &[&'static str], words: &WordBook) -> Read {
     let token = kept.token.as_str();
     let signed_out = |a: &tafs_core::signin::Answer| a.status == 401;
@@ -3284,7 +3300,7 @@ fn read_cloud(kept: &KeptSession, languages: &[&'static str], words: &WordBook) 
     // The account's connections (`refreshConnections`), read with this computer's device key on
     // planque's safe route: a taf whose connection its vendor signed out waits on the owner. One
     // that can't be read gives none, and the rest still is.
-    let grants = coach::this_device(kept, languages)
+    let grants = home_device(kept, languages)
         .and_then(|device| {
             kiff::planque_safe(kept, &device, languages, tafs_core::planque::Safe::Grants).ok()
         })
