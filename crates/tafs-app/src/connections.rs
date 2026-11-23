@@ -13,9 +13,9 @@ use std::rc::Rc;
 use adw::prelude::*;
 use tafs_core::connect::{App, ConnectStart, RemovedTaf};
 use tafs_core::connections::{
-    attention, cancel_title, cancel_word, clearable, connections_of, disconnect_message,
-    disconnect_title, end_word, groups, kept_by, misplaced, removed_listed, row_used_by,
-    shows_footer, status_line, Action, Grant,
+    cancel_title, cancel_word, clearable, connections_of, disconnect_message, disconnect_title,
+    end_word, groups, kept_by, misplaced, removed_listed, row_used_by, shows_footer, status_line,
+    Action, Grant,
 };
 use tafs_core::signed::Act;
 
@@ -136,7 +136,9 @@ pub(crate) fn app_page(
     let grants = ctx.grants.borrow();
     let conns = connections_of(&app, &grants);
     let removed_agents = removed_tafs.iter().map(|t| t.agent.clone()).collect();
-    let grouped = groups(&conns, &|g| ctx.taf_of(g), &removed_agents, &attention);
+    let grouped = groups(&conns, &|g| ctx.taf_of(g), &removed_agents, &|g| {
+        ctx.attention(g)
+    });
     // What tafs cloud says of each removed taf's connection: only one it lists with nobody using
     // it is cleared. Not listed means no Clear.
     let listed = removed_listed(&removed_tafs);
@@ -327,8 +329,16 @@ fn row(ctx: &Rc<Ctx>, app: &App, g: &Grant, refuse: &Refuse) -> gtk::Widget {
         600,
         &["tafs-ink"],
     ));
+    // The other tafs whose Card draws on it (`alsoOnCards`).
+    if let Ok(Some(also)) = tafs_core::connections::also_on_cards(&w, g, &ctx.using) {
+        v.append(&text(&also, 13, 400, &["tafs-soft"]));
+    }
     if let Ok(Some(s)) = status_line(&w, g) {
         v.append(&text(&s, 13, 400, &["tafs-dim"]));
+    }
+    // Its last failed call, in KIFF's words.
+    if let Some(failed) = ctx.last_failure(g) {
+        v.append(&text(&failed, 13, 400, &["tafs-no"]));
     }
     if let Ok(Some(m)) = misplaced(&w, app, g) {
         v.append(&text(&m, 13, 400, &["tafs-amber-text"]));
@@ -502,6 +512,9 @@ fn connection_page(
         if let Ok(Some(used)) = row_used_by(&w, g) {
             lines.append(&text(&used, 14, 400, &["tafs-soft"]));
         }
+        if let Some(failed) = ctx.last_failure(g) {
+            lines.append(&text(&failed, 13, 400, &["tafs-no"]));
+        }
         first.append(&lines);
         column.append(&first);
         let actions = g.known_actions();
@@ -664,7 +677,22 @@ pub(crate) fn approval_sheet(ctx: &Ctx, start: &ConnectStart, over: &gtk::Widget
 /// verbatim and what KIFF can't check in amber; "Reading KIFF's words…" until they're read from
 /// KIFF as the session (`loadProfileWords`), and why when they can't be, or don't check.
 fn profile_words(ctx: &Ctx, profile: &serde_json::Value) -> gtk::Widget {
-    let w = ctx.w.clone();
+    let read = match &ctx.source {
+        crate::connect::ConnectSource::Cloud {
+            kept, languages, ..
+        } => Some((kept.token.clone(), languages.clone())),
+        _ => None,
+    };
+    profile_words_panel(ctx.w.clone(), read, profile)
+}
+
+/// `ProfileWordsView`, read as the session `read` names (none in a screenshot: it stays reading),
+/// shared by Connect apps' approval and Coach's card.
+pub(crate) fn profile_words_panel(
+    w: Rc<tafs_core::words::WordBook>,
+    read: Option<(String, Vec<&'static str>)>,
+    profile: &serde_json::Value,
+) -> gtk::Widget {
     let panel = crate::widgets::panel(false);
     panel.append(&crate::widgets::eyebrow(
         &w.line("coach.kiff_counts_way").unwrap_or_default(),
@@ -678,13 +706,10 @@ fn profile_words(ctx: &Ctx, profile: &serde_json::Value) -> gtk::Widget {
         &["tafs-dim"],
     ));
     panel.append(&lines);
-    let crate::connect::ConnectSource::Cloud {
-        kept, languages, ..
-    } = &ctx.source
-    else {
+    let Some((token, languages)) = read else {
         return panel.upcast();
     };
-    let (token, languages, profile) = (kept.token.clone(), languages.clone(), profile.clone());
+    let profile = profile.clone();
     gtk::glib::spawn_future_local(async move {
         let words = (*w).clone();
         let read = gtk::gio::spawn_blocking(move || {

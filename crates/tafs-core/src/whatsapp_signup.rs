@@ -92,6 +92,7 @@ impl Signup {
             || url.path() != "/whatsapp"
             || url.port().is_some()
             || !url.username().is_empty()
+            || url.password().is_some()
             || url.fragment().is_some()
         {
             return None;
@@ -234,6 +235,7 @@ mod tests {
             format!("tafs://evil/whatsapp?{ok}"),
             format!("tafs://doors:1/whatsapp?{ok}"),
             format!("tafs://x@doors/whatsapp?{ok}"),
+            format!("tafs://:pw@doors/whatsapp?{ok}"),
             format!("https://doors/whatsapp?{ok}"),
             format!("dev.kiff.tafs:/doors/whatsapp?{ok}"),
             format!("{}#frag", back(&ok)),

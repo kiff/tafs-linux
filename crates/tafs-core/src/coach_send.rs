@@ -379,8 +379,13 @@ pub fn answer_value(kind: Kind, text: &str) -> Option<AnswerValue> {
             }
             Some(AnswerValue::Questions(out))
         }
-        // The phone's: approving, declining, signing in, Not now, a drive.
-        Kind::Approval | Kind::SignIn | Kind::Drive => None,
+        // Only the refusals, which grant nothing and are plain answers on the iPad too (outside
+        // `ApprovalGate`): Decline on an approval or a drive, Not now on a sign-in. Approving,
+        // signing in and a drive's start are signed, the phone's: never built here.
+        Kind::Approval | Kind::Drive => {
+            (text == "declined").then(|| AnswerValue::Text("declined".into()))
+        }
+        Kind::SignIn => (text == "not now").then(|| AnswerValue::Text("not now".into())),
         _ => None,
     }
 }
@@ -748,6 +753,10 @@ pub struct Conversation {
     pub drafts: HashMap<String, crate::drafts::AgentDraft>,
     /// Why KIFF's draft wasn't read, by id, until a read gives it (`setupDraftErrors`).
     pub draft_errors: HashMap<String, String>,
+    /// planque's grants as this computer read them (`AppModel.grants`): None until read.
+    pub grants: Option<Vec<crate::connections::Grant>>,
+    /// Each dial card's taf's dial as tafs cloud read it, by tafs cloud's id (`knobs`).
+    pub knobs: HashMap<String, crate::knob::Knob>,
     /// The taf this new conversation improves, until its first message has gone
     /// (`setupImproving`).
     pub improving: Option<Improving>,
@@ -876,6 +885,39 @@ impl Conversation {
             out.push(d.clone());
         }
         out
+    }
+
+    /// The tafs whose dial a dial card waits on (`KnobDraftCard`'s `loadKnob`): each card's taf
+    /// whose dial isn't read, or was read before the card's version.
+    pub fn knobs_to_read(&self) -> Vec<String> {
+        let mut out: Vec<String> = Vec::new();
+        for c in &self.thread.components {
+            let c = &c.component;
+            if c.kind != Kind::Knob {
+                continue;
+            }
+            let Some(id) = c.taf_id.as_deref().filter(|i| !i.is_empty()) else {
+                continue;
+            };
+            let read = self.knobs.get(id).is_some_and(|k| {
+                let newest = k
+                    .draft
+                    .as_ref()
+                    .map(|d| d.version)
+                    .max(k.version)
+                    .unwrap_or(0);
+                c.version.is_none_or(|v| newest >= v)
+            });
+            if !read && !out.iter().any(|o| o == id) {
+                out.push(id.to_string());
+            }
+        }
+        out
+    }
+
+    /// `loadKnob`'s answer for a dial card's taf.
+    pub fn took_knob(&mut self, taf: &str, knob: crate::knob::Knob) {
+        self.knobs.insert(taf.to_string(), knob);
     }
 
     /// `readCardDraft`'s answer: the draft, kept and its error gone; or KIFF's reason, kept for
@@ -1689,20 +1731,35 @@ mod tests {
 
     #[test]
     fn this_computer_never_builds_an_approval_a_sign_in_or_a_drive_answer() {
-        // View-only: whatever the text, the phone's cards get no answer from here.
+        // Whatever the text, nothing that approves, signs in or starts a drive is built here:
+        // only Decline (an approval, a drive) and Not now (a sign-in).
         for kind in [Kind::Approval, Kind::SignIn, Kind::Drive] {
             for text in [
                 "approved",
                 "approved, signed in",
-                "declined",
                 "already approved: g_1",
                 "signed in",
-                "not now",
                 "failed: no key",
+                "Declined",
+                " declined",
+                "declined, approved",
             ] {
                 assert_eq!(answer_value(kind, text), None, "{kind:?} {text}");
             }
         }
+        let said = |v: Option<AnswerValue>| v.map(|v| v.json());
+        for kind in [Kind::Approval, Kind::Drive] {
+            assert_eq!(
+                said(answer_value(kind, "declined")),
+                Some(json!("declined"))
+            );
+            assert_eq!(answer_value(kind, "not now"), None);
+        }
+        assert_eq!(
+            said(answer_value(Kind::SignIn, "not now")),
+            Some(json!("not now"))
+        );
+        assert_eq!(answer_value(Kind::SignIn, "declined"), None);
         // And so no answer to send for one, through the same path the app takes.
         let mut c = Conversation {
             setup: Some("coach".into()),
@@ -1711,6 +1768,7 @@ mod tests {
         assert!(c.answer("q1", Kind::Confirm, "live").is_some());
         assert!(c.answer("a1", Kind::Approval, "approved").is_none());
         assert!(c.answer("s1", Kind::SignIn, "signed in").is_none());
+        assert!(c.answer("a1", Kind::Approval, "declined").is_some());
     }
 
     #[test]

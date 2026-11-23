@@ -131,6 +131,7 @@ mod tests {
             id: "e".into(),
             taf: "rae".into(),
             kind: Kind::Done,
+            action: None,
             title: "Refund a payment".into(),
             detail: "Done".into(),
             at: Utc.with_ymd_and_hms(2026, 10, 21, 9, 0, 0).unwrap(),

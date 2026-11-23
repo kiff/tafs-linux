@@ -108,6 +108,12 @@ for a key where it goes ("The key goes from this phone…"), and in the approve 
 offers that the app knows (`known`), Remove in red asking once more in planque's words with what
 stops.
 
+**A connection's last failure** (`lastFailure`): on its row and its detail, in red, the newest
+Record line through one of its tools that wasn't done, its own taf's first ("Last failed: … · …"),
+from KIFF's activity as the Record reads it; such a connection comes first in its app's list, as
+one needing attention. **Its other Cards** (`alsoOnCards`): the row names the other tafs whose
+Card draws on it ("Also on Invoices's Card").
+
 **What else stops** (`alsoStops`): Remove access's question names the other tafs whose live Card
 draws on the connection's tools (a rule or a tool on one of its actions, from Home), as the iPad's
 `tafsUsing`.
@@ -145,5 +151,3 @@ picked, with the can't-approve line; a fixture's read never sends.
 - **Approving, giving a key, and the receipt**: signed. The key's sheet in tafs cloud's words
   (`ConnectionSheet`), pasting a key, the Card signed with it, its receipt with board 5 (an app
   connected) and its Remove access come only after a signature, so not here.
-- **A connection's last failure** (`lastFailure`): it needs each Record line's action, which this
-  computer's Record doesn't keep yet.

@@ -403,6 +403,7 @@ mod tests {
             id: "e".into(),
             taf: "rae".into(),
             kind,
+            action: None,
             title: "Refund a payment".into(),
             detail: "Done, within its Card".into(),
             at: Utc.with_ymd_and_hms(2026, 10, 21, 0, 41, 3).unwrap(),

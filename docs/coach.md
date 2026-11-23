@@ -128,7 +128,9 @@ out, as every other read does.
   message with `coach.improve_no_files` under them, and the paperclip isn't offered meanwhile, as
   the iPad's `improvementHoldsFiles`), the dots from the send; then the conversation
   goes on in the chat tafs cloud answered with, as any other. A new conversation, or another
-  reopened, is on no taf. Empty, it says what it's about as a choice at its top (`startSwitch`: New
+  reopened, is on no taf. Opened over the page of a taf this person manages (`tafOnScreen`), an
+  empty new conversation offers it: the switch with New taf chosen and "Improve Rae", which turns
+  it into one on that taf. Empty, it says what it's about as a choice at its top (`startSwitch`: New
   taf starts a new conversation; "Improve Rae" is chosen), then "Improve Rae" and "Say what should
   change, or ask how it's going…", and three first messages that send as they are
   (`improveExamples`: How is it going?, Why was something refused or held?, It can't find the work
@@ -281,20 +283,53 @@ panel beside any conversation tafs cloud has for it.
 
 ## The phone's, never this computer's
 
-Approve, Decline, a sign-in's button and Not now, and a drive's buttons. This computer is
-view-only: those cards keep the can't-approve line where their buttons go. Decline and Not now
-are unsigned on the iPad, but they stay with the phone too, so the whole card is answered in one
-place. `coach_send::answer_value` takes only a confirm's choice and a questions card's answers.
-For an approval, a sign-in or a drive it gives none, whatever the text, so nothing here can build
-"approved" or "signed in" by mistake. A test holds it to that.
+Approve, a sign-in's button, and a drive's Approve are the phone's. Approving a card ends in tafs
+cloud's report signed by the device behind Face ID, and its other steps grant access (planque's
+approve, tools and Cards together), which a computer never does; a security-key report for a
+`cards`-only ask would be a new signed protocol, so it's a design question first. Signing in at a vendor
+grants access, and a drive runs on the phone for KIFF's critical key. Those cards keep the
+can't-approve line where those buttons go.
+
+Their refusals are answered here, as on the iPad, where they sit outside `ApprovalGate`: Decline
+on an approval, Not now on a sign-in (in tafs cloud's words when it gives some) and Not now on a
+drive (which declines it), each `answerCard` as data, unsigned. `coach_send::answer_value` builds
+only those for these cards: "declined" for an approval or a drive, "not now" for a sign-in, and
+nothing else whatever the text, so nothing here can build "approved" or "signed in". A test
+holds it to that.
+
+## An approval's connection
+
+planque's grants are read once Coach's conversation is there, with this computer's device key on
+planque's safe route (as Connect apps reads them). An approval card then shows its grant as the
+iPad does: planque's words for the request, its exact terms folded under Details, KIFF's words for
+its profile (read and checked as Connect apps' are), and "This request doesn't match what it shows,
+so it can't be approved." when its digest doesn't; or its one line once connected, or signed in and
+reading what the vendor offers. The card's state takes the grant's too (`setupCardState`): failed
+or disconnected at planque in planque's words, a sign-in done once connected or listed. The vendor
+is named from the grant first, an approved card whose connection is connected says so, and Coach's
+Card-next words show only with the grant. Until the grants are read, the card's own words stand.
+
+## An answer with no stream
+
+When a message couldn't stream (the stream didn't open, so it was sent plainly), Coach's answer
+that comes after the page opened is revealed letter by letter as it arrives (`RevealingBubble`):
+about 400 characters a second, two seconds at most, from where it stood across redraws, with what
+it's in the middle of closed on the way. The cards that come with it wait until it's whole
+(`textBeforeCards`). With animations off it shows at once and holds nothing.
+
+## A dial card
+
+`KnobDraftCard`: "{taf} will work like this", then the dial version Coach drafted, read from tafs
+cloud with the taf's dial (`GET …/knob`, as the session, again once the card's version is newer):
+each connection's rings apart under its name, When, What and Where in tafs cloud's words, or the
+draft's own words when it has no ring. Change goes back to the message box. Confirm makes that
+version live, which the device checks before it goes, so the gate's line stands in its place,
+with "One confirmation sets all three rings." "This dial is live." once it is, and "A newer dial
+replaced this one." once another is newer.
 
 ## Not yet
 
-- `startSwitch`'s offer of the taf on screen (`tafOnScreen`): the switch shows only while Coach is
-  on a taf.
 - No mic: a Linux desktop has no on-device speech recognition, as in a taf's chat.
-- What the iPad reads beside the thread: planque's grant (its words, terms and profile).
-- Revealing an answer with no stream, and a dial card (`KnobDraftCard`).
 - A refused connection's lines are decoded but not drawn: the iPad's Coach doesn't draw them.
 
 ## Screenshots

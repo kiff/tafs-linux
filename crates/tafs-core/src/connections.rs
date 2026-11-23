@@ -522,11 +522,19 @@ pub fn tool_vendors(grants: &[Grant]) -> BTreeMap<String, String> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Using {
     pub agent: String,
+    /// Its key in the Record (`Using::key_of`).
+    pub key: String,
     pub name: String,
     pub actions: BTreeSet<String>,
 }
 
 impl Using {
+    /// A taf's key in the Record: tafs cloud's id, else `agent:` and its holder in KIFF.
+    pub fn key_of(t: &crate::home::HomeTaf) -> String {
+        t.id.clone()
+            .unwrap_or_else(|| format!("agent:{}", t.kiff_agent))
+    }
+
     /// A taf on Home: none for one whose Card is revoked, which draws on nothing.
     pub fn of(t: &crate::home::HomeTaf) -> Option<Using> {
         if !t.card.active {
@@ -540,6 +548,7 @@ impl Using {
             .chain(t.card.tools.iter().cloned())
             .collect();
         Some(Using {
+            key: Using::key_of(t),
             agent: t.kiff_agent.clone(),
             name: t.name.clone(),
             actions,
@@ -551,16 +560,7 @@ impl Using {
 /// of the actions it connects), by name, as Home lists them. KIFF's tools are the account's, so a
 /// taf can draw on a connection another taf asked for; removing it stops them too.
 pub fn also_stops(g: &Grant, tafs: &[Using]) -> Vec<String> {
-    let actions: BTreeSet<&str> = match &g.tools {
-        Some(tools) => tools.iter().map(String::as_str).collect(),
-        None => g
-            .request
-            .tools
-            .iter()
-            .filter(|t| t.tafs())
-            .map(Tool::action)
-            .collect(),
-    };
+    let actions = actions_of(g);
     if actions.is_empty() {
         return vec![];
     }
@@ -569,6 +569,71 @@ pub fn also_stops(g: &Grant, tafs: &[Using]) -> Vec<String> {
         .filter(|t| t.actions.iter().any(|a| actions.contains(a.as_str())))
         .map(|t| t.name.clone())
         .collect()
+}
+
+/// The actions a connection's tools are, by their names in KIFF: planque's connected tools where
+/// it lists them, else the request's tools a taf uses.
+fn actions_of(g: &Grant) -> BTreeSet<&str> {
+    match &g.tools {
+        Some(tools) => tools.iter().map(String::as_str).collect(),
+        None => g
+            .request
+            .tools
+            .iter()
+            .filter(|t| t.tafs())
+            .map(Tool::action)
+            .collect(),
+    }
+}
+
+/// `alsoOnCards`: a row's line naming the other tafs whose Card draws on its tools, none alone.
+pub fn also_on_cards(
+    w: &WordBook,
+    g: &Grant,
+    tafs: &[Using],
+) -> Result<Option<String>, WordsError> {
+    let names = also_stops(g, tafs);
+    Ok(match names.as_slice() {
+        [] => None,
+        [one] => Some(w.get("connect.apps.also_on_one", &[("owner", one)])?),
+        _ => Some(w.get(
+            "connect.apps.also_on_many",
+            &[("tafs", &list(w.language(), &names))],
+        )?),
+    })
+}
+
+/// `lastFailure`: a connection's last failed call, the newest Record line through one of its
+/// tools that wasn't done, its own taf's first (`own`, by its key in the Record), in KIFF's words
+/// for it. None when the Record has none.
+pub fn last_failure(
+    w: &WordBook,
+    g: &Grant,
+    record: &[crate::record::Entry],
+    own: Option<&str>,
+) -> Result<Option<String>, WordsError> {
+    let actions = actions_of(g);
+    if actions.is_empty() {
+        return Ok(None);
+    }
+    let failed: Vec<&crate::record::Entry> = record
+        .iter()
+        .filter(|e| e.kind == crate::record::Kind::NotDone)
+        .filter(|e| e.action.as_deref().is_some_and(|a| actions.contains(a)))
+        .collect();
+    let mine: Vec<&crate::record::Entry> = failed
+        .iter()
+        .copied()
+        .filter(|e| own.is_some_and(|o| e.taf == o))
+        .collect();
+    let pool = if mine.is_empty() { failed } else { mine };
+    Ok(match pool.into_iter().max_by_key(|e| e.at) {
+        Some(e) => Some(w.get(
+            "connect.last_failed",
+            &[("title", &e.title), ("detail", &e.detail)],
+        )?),
+        None => None,
+    })
 }
 
 /// `ConnectApprovalSheet.host(of:)`: the host a key is used with, without its scheme or path;
@@ -1115,6 +1180,7 @@ mod tests {
     #[test]
     fn removing_a_connection_also_stops_the_other_tafs_drawing_on_its_tools() {
         let using = |agent: &str, name: &str, actions: &[&str]| Using {
+            key: agent.into(),
             agent: agent.into(),
             name: name.into(),
             actions: actions.iter().map(|a| a.to_string()).collect(),
@@ -1209,5 +1275,71 @@ mod tests {
         // Its title; never a managed provider's account id.
         assert_eq!(g[0].name().as_deref(), Some("Acme Slack"));
         assert_eq!(g[1].name(), None);
+    }
+
+    #[test]
+    fn a_rows_other_cards_and_its_last_failure() {
+        use chrono::TimeZone;
+        let w = words("en");
+        let using = |agent: &str, name: &str| Using {
+            key: agent.into(),
+            agent: agent.into(),
+            name: name.into(),
+            actions: ["fetch".to_string()].into(),
+        };
+        let g = grant(serde_json::json!({}));
+        // Its own taf alone: no line.
+        assert_eq!(also_on_cards(&w, &g, &[using("a1", "Mine")]).unwrap(), None);
+        assert_eq!(
+            also_on_cards(&w, &g, &[using("a2", "Invoices")]).unwrap(),
+            Some(
+                w.get("connect.apps.also_on_one", &[("owner", "Invoices")])
+                    .unwrap()
+            )
+        );
+        let many = also_on_cards(&w, &g, &[using("a2", "Invoices"), using("a3", "Leads")])
+            .unwrap()
+            .unwrap();
+        assert!(
+            many.starts_with("Also on the Cards of ") && many.contains("Leads"),
+            "{many}"
+        );
+
+        let at = |h: u32| chrono::Utc.with_ymd_and_hms(2026, 11, 23, h, 0, 0).unwrap();
+        let base = crate::sample::record(&w, chrono::Local::now())
+            .unwrap()
+            .remove(0);
+        let entry = |taf: &str, kind: crate::record::Kind, action: &str, title: &str, h: u32| {
+            let mut e = base.clone();
+            e.taf = taf.into();
+            e.kind = kind;
+            e.action = Some(action.into());
+            e.title = title.into();
+            e.detail = "timed out".into();
+            e.at = at(h);
+            e
+        };
+        use crate::record::Kind::*;
+        let record = vec![
+            entry("t-other", NotDone, "fetch", "Other's", 12),
+            entry("t-mine", NotDone, "fetch", "Mine, older", 9),
+            entry("t-mine", Done, "fetch", "Mine, done", 13),
+            entry("t-mine", NotDone, "send", "Another tool", 14),
+        ];
+        // Its own taf's first, newest; else any taf's; a line not done through another tool
+        // isn't its.
+        assert_eq!(
+            last_failure(&w, &g, &record, Some("t-mine"))
+                .unwrap()
+                .as_deref(),
+            Some("Last failed: Mine, older · timed out")
+        );
+        assert_eq!(
+            last_failure(&w, &g, &record, Some("t-none"))
+                .unwrap()
+                .as_deref(),
+            Some("Last failed: Other's · timed out")
+        );
+        assert_eq!(last_failure(&w, &g, &record[2..], None).unwrap(), None);
     }
 }

@@ -149,6 +149,28 @@ pub struct ApprovalLines {
     pub draft: Option<DraftShown>,
     /// What was approved, under the folded line: the signed Card's lines, as KIFF has them.
     pub signed_lines: Vec<String>,
+    /// planque's grant connected, or signed in and reading what the vendor offers: its one line,
+    /// in place of the request.
+    pub connected: Option<String>,
+    /// planque's request, while it waits: its words, its terms and KIFF's words for its profile.
+    pub request: Option<Box<RequestShown>>,
+    /// Decline, beside where Approve would be, while the card asks.
+    pub decline: Option<Refuse>,
+}
+
+/// An approval's request as planque has it (`SetupApproval`'s grant): what the owner reads before
+/// approving.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RequestShown {
+    /// planque's words for it, in the owner's language.
+    pub text: String,
+    /// The exact terms, folded under Details.
+    pub terms: Vec<String>,
+    pub details: String,
+    /// The connection's profile, whose words KIFF gives (`ProfileWordsView`).
+    pub profile: Option<serde_json::Value>,
+    /// Its digest isn't what it covers: it can't be approved.
+    pub mismatch: Option<String>,
 }
 
 /// The taf's Card on an approval (`SetupApproval`): KIFF's draft as it reads, or why it isn't
@@ -178,6 +200,10 @@ pub enum DraftShown {
 pub struct Drafts<'a> {
     pub read: &'a HashMap<String, AgentDraft>,
     pub errors: &'a HashMap<String, String>,
+    /// planque's grants, once read (`AppModel.grants`): None until then.
+    pub grants: Option<&'a [crate::connections::Grant]>,
+    /// Each dial card's taf's dial, by tafs cloud's id, as read.
+    pub knobs: Option<&'a HashMap<String, crate::knob::Knob>>,
 }
 
 impl<'a> Drafts<'a> {
@@ -198,6 +224,19 @@ pub struct SignInLines {
     pub note: String,
     pub wider: Option<String>,
     pub gate: Option<NotReady>,
+    /// Not now, in tafs cloud's words where it gives some.
+    pub not_now: Option<Refuse>,
+}
+
+/// A card's refusal, answered here as data (`answerCard`): the card's id, the button's words, and
+/// the answer it sends ("declined", "not now"). It grants nothing, as on the iPad, where it sits
+/// outside `ApprovalGate`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Refuse {
+    pub kind: Kind,
+    pub id: String,
+    pub words: String,
+    pub answer: &'static str,
 }
 
 /// A result: a new taf handed over, or an improvement's new version.
@@ -223,6 +262,8 @@ pub struct ResultLines {
 /// A card, by its kind.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Card {
+    /// Coach's dial card (`KnobDraftCard`).
+    Knob(KnobLines),
     Notice {
         title: Option<String>,
         text: String,
@@ -251,7 +292,7 @@ pub enum Card {
         talking: String,
         show_again: String,
     },
-    Approval(ApprovalLines),
+    Approval(Box<ApprovalLines>),
     SignIn(SignInLines),
     Result(ResultLines),
     /// Coach asks to drive the app (`DriveCard`), never on this computer.
@@ -260,6 +301,8 @@ pub enum Card {
         task: String,
         note: String,
         gate: Option<NotReady>,
+        /// Not now, which declines the drive.
+        not_now: Refuse,
     },
     /// A dial card: its title alone, until it's ported.
     Title(String),
@@ -284,6 +327,9 @@ pub enum Line {
         work: Option<WorkLines>,
         text: String,
         report: Option<crate::report::Reported>,
+        /// Its id and time: an answer that came with no stream is revealed once, as it arrives.
+        id: String,
+        at: DateTime<Utc>,
     },
     Card {
         card_ref: String,
@@ -518,8 +564,8 @@ pub struct Listed {
     pub name: String,
 }
 
-/// Where an approval or a sign-in stands (`AppModel.CardState`), from the thread alone: this
-/// computer reads no grant from planque.
+/// Where an approval or a sign-in stands (`AppModel.CardState`), from the thread and, once read,
+/// planque's grants (`grants`: None until read).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CardState {
     NeedsYou,
@@ -528,10 +574,23 @@ pub enum CardState {
     Failed(Option<String>),
 }
 
-/// `setupCardState`, without planque's grant.
-pub fn card_state(thread: &SetupThread, c: &Component) -> CardState {
+/// `setupCardState`: the card's answer first; then planque's grant, failed or disconnected in
+/// planque's words for it (never its `reason`), or, for a sign-in, connected or listed.
+pub fn card_state(
+    thread: &SetupThread,
+    c: &Component,
+    grants: Option<&[crate::connections::Grant]>,
+) -> CardState {
+    let grant = grants.and_then(|gs| {
+        c.grant
+            .as_deref()
+            .and_then(|id| gs.iter().find(|g| g.id == id))
+    });
+    let broken = grant.is_some_and(|g| g.status == "failed" || g.status == "disconnected");
     let answer = thread.answer_to(&c.id);
+    // `approvalFinished`: by its answer alone, unless planque failed the grant since.
     if c.kind == Kind::Approval
+        && !broken
         && answer.as_ref().is_some_and(|a| {
             !a.failed()
                 && (a.text.starts_with("approved") || a.text.starts_with("already approved"))
@@ -547,8 +606,13 @@ pub fn card_state(thread: &SetupThread, c: &Component) -> CardState {
             return CardState::Failed(a.why());
         }
     }
-    if c.kind == Kind::SignIn && answer.is_some() {
+    if c.kind == Kind::SignIn
+        && (answer.is_some() || grant.is_some_and(|g| g.connected() || g.listed()))
+    {
         return CardState::Done;
+    }
+    if broken {
+        return CardState::Failed(grant.and_then(|g| nonblank(g.status_words.as_deref())));
     }
     CardState::NeedsYou
 }
@@ -944,7 +1008,7 @@ fn approval_lines(
     mode: Mode,
     drafts: Drafts,
 ) -> Result<ApprovalLines, WordsError> {
-    let state = card_state(thread, c);
+    let state = card_state(thread, c, drafts.grants);
     let draft = drafts.of(c);
     // The draft whose Card this card's approval signed: KIFF took the signature, and it holds
     // tools (`signedCard`).
@@ -952,8 +1016,14 @@ fn approval_lines(
     let replaced = thread.replaced(&c.id);
     let answer = thread.answer_to(&c.id);
     let title = nonblank(c.title.as_deref());
-    let vendor = match &c.service {
-        Some(s) => vendor_words(s),
+    // planque's grant for the card, once read: it names the vendor first.
+    let grant = drafts.grants.and_then(|gs| {
+        c.grant
+            .as_deref()
+            .and_then(|id| gs.iter().find(|g| g.id == id))
+    });
+    let vendor = match grant.map(|g| g.vendor().to_string()).or(c.service.clone()) {
+        Some(s) => vendor_words(&s),
         None => w.line("coach.the_vendor")?,
     };
     let folded = if replaced {
@@ -1016,6 +1086,8 @@ fn approval_lines(
             )?
         } else if declined {
             w.get("coach.answer.declined_title", &[("title", &vendor)])?
+        } else if grant.is_some_and(|g| g.connected()) {
+            w.get("coach.answer.approved_connected", &[("vendor", &vendor)])?
         } else {
             w.get("coach.approved_signed", &[("vendor", &vendor)])?
         };
@@ -1044,9 +1116,10 @@ fn approval_lines(
         .as_ref()
         .and_then(|x| x.done_words())
         .map(str::to_string);
-    // `cardNextWords`: only on a card with no draft, and not when its mark says the Card is
-    // signed now or the connection is already done.
-    let card_next = if c.draft.is_none()
+    // `cardNextWords`: only with the card's grant read, on a card with no draft, and not when its
+    // mark says the Card is signed now or the connection is already done.
+    let card_next = if grant.is_some()
+        && c.draft.is_none()
         && c.signs.as_ref().and_then(|s| s.card) != Some(true)
         && done.is_none()
     {
@@ -1089,7 +1162,54 @@ fn approval_lines(
         (CardState::Done, Some(d)) => d.lines(w)?,
         _ => vec![],
     };
+    // With the grant read: connected (contract 5), or signed in and reading what the vendor
+    // offers, said in one line; else the request as planque has it. tafs cloud's line that the
+    // connection is done comes first.
+    let (connected, request) = match grant {
+        Some(_) if done.is_some() => (None, None),
+        Some(g) if g.connected() => (
+            Some(w.get(
+                "coach.connected_keys_kept_sealed",
+                &[("vendor", g.vendor())],
+            )?),
+            None,
+        ),
+        Some(g) if g.listed() => (
+            Some(w.get(
+                "coach.signed_reading_what_offers",
+                &[("vendor", g.vendor())],
+            )?),
+            None,
+        ),
+        Some(g) => (
+            None,
+            Some(Box::new(RequestShown {
+                text: g.text.clone(),
+                terms: g.terms.clone().unwrap_or_default(),
+                details: w.line("common.details")?,
+                profile: g.profile.clone(),
+                mismatch: if g.digest_matches {
+                    None
+                } else {
+                    Some(w.line("connect.request_does_not_match_what")?)
+                },
+            })),
+        ),
+        None => (None, None),
+    };
     Ok(ApprovalLines {
+        decline: if asks {
+            Some(Refuse {
+                kind: Kind::Approval,
+                id: c.id.clone(),
+                words: w.line("coach.approval.decline")?,
+                answer: "declined",
+            })
+        } else {
+            None
+        },
+        connected,
+        request: request.clone(),
         draft: draft_shown,
         signed_lines,
         fold: if folded.is_some() {
@@ -1110,7 +1230,7 @@ fn approval_lines(
             }
         },
         title: if done.is_some() { None } else { title },
-        text: if done.is_some() {
+        text: if done.is_some() || grant.is_some() {
             None
         } else {
             nonblank(c.text.as_deref())
@@ -1138,6 +1258,7 @@ fn sign_in(
     thread: &SetupThread,
     c: &Component,
     mode: Mode,
+    drafts: Drafts,
 ) -> Result<Card, WordsError> {
     // The app by name: the card's service; "the vendor" only when it names none.
     let app = nonblank(c.service.as_deref());
@@ -1145,7 +1266,7 @@ fn sign_in(
         Some(a) => a.clone(),
         None => w.line("coach.the_vendor")?,
     };
-    let state = card_state(thread, c);
+    let state = card_state(thread, c, drafts.grants);
     Ok(match state {
         CardState::Done => Card::Outcome(Outcome {
             text: w.get("coach.answer.signed_in_at", &[("vendor", &vendor)])?,
@@ -1188,6 +1309,15 @@ fn sign_in(
                 },
                 wider: c.wider_words().map(str::to_string),
                 gate: gate(w, mode)?,
+                not_now: Some(Refuse {
+                    kind: Kind::SignIn,
+                    id: c.id.clone(),
+                    words: match nonblank(c.no.as_deref()) {
+                        Some(no) => no,
+                        None => w.line("common.not_now")?,
+                    },
+                    answer: "not now",
+                }),
             })
         }
     })
@@ -1426,8 +1556,8 @@ fn card(
                 },
             }
         }
-        Kind::Approval => Card::Approval(approval_lines(w, thread, c, mode, drafts)?),
-        Kind::SignIn => sign_in(w, thread, c, mode)?,
+        Kind::Approval => Card::Approval(Box::new(approval_lines(w, thread, c, mode, drafts)?)),
+        Kind::SignIn => sign_in(w, thread, c, mode, drafts)?,
         Kind::Result => result(w, thread, shown, listed)?,
         Kind::Drive => {
             let task = match (&c.text, &c.title) {
@@ -1454,14 +1584,136 @@ fn card(
                     task,
                     note: w.line("drive.card_note_scrolls_pauses")?,
                     gate: gate(w, mode)?,
+                    not_now: Refuse {
+                        kind: Kind::Drive,
+                        id: c.id.clone(),
+                        words: w.line("common.not_now")?,
+                        answer: "declined",
+                    },
                 },
             }
         }
-        Kind::Knob => match nonblank(c.title.as_deref()).or(nonblank(c.text.as_deref())) {
-            Some(t) => Card::Title(t),
-            None => return Ok(None),
+        Kind::Knob => match knob_card(w, c, listed, mode, drafts)? {
+            Some(k) => Card::Knob(k),
+            None => match nonblank(c.title.as_deref()).or(nonblank(c.text.as_deref())) {
+                Some(t) => Card::Title(t),
+                None => return Ok(None),
+            },
         },
     }))
+}
+
+/// Coach's dial card (`KnobDraftCard`): "{taf} will work like this", then the dial version
+/// Coach drafted, ring by ring in tafs cloud's words, each connection's apart; "This dial is
+/// live." once it is; "A newer dial replaced this one." once another is newer; reading until
+/// its taf's dial is read.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct KnobLines {
+    pub eyebrow: Option<String>,
+    pub body: KnobBody,
+    /// Change, which goes back to Coach, and why this computer can't confirm in Confirm's
+    /// place (making a dial version live is the device's, checked before it goes).
+    pub change: Option<String>,
+    pub gate: Option<NotReady>,
+    pub one_confirmation: Option<String>,
+}
+
+/// A ring's name and its lines.
+pub type Ring = (String, Vec<String>);
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum KnobBody {
+    Live(String),
+    /// Each connection's rings under its name (none for a draft without groups), or the
+    /// draft's own words when it has no ring.
+    Draft {
+        groups: Vec<(Option<String>, Vec<Ring>)>,
+        words: Vec<String>,
+    },
+    Replaced(String),
+    Reading,
+}
+
+/// A draft's rings, as the iPad orders them: When, What, Where, each only with lines.
+fn rings(
+    w: &WordBook,
+    wakes: &[String],
+    what: &[String],
+    results: &[String],
+) -> Result<Vec<Ring>, WordsError> {
+    [
+        ("knob.ring.when", wakes),
+        ("knob.ring.what", what),
+        ("knob.ring.where", results),
+    ]
+    .into_iter()
+    .filter(|(_, l)| !l.is_empty())
+    .map(|(k, l)| Ok((w.line(k)?, l.to_vec())))
+    .collect()
+}
+
+/// A dial card's lines, once tafs cloud's id names its taf; none without one (its title stands).
+fn knob_card(
+    w: &WordBook,
+    c: &Component,
+    listed: &[Listed],
+    mode: Mode,
+    drafts: Drafts,
+) -> Result<Option<KnobLines>, WordsError> {
+    let Some(id) = c.taf_id.as_deref().filter(|i| !i.is_empty()) else {
+        return Ok(None);
+    };
+    let eyebrow = match listed.iter().find(|l| l.key == id) {
+        Some(l) => Some(format!("{}{}", l.name, w.line("coach.will_work_like")?)),
+        None => None,
+    };
+    let knob = drafts.knobs.and_then(|k| k.get(id));
+    let live = knob.and_then(|k| k.version);
+    let draft = knob.and_then(|k| k.draft.as_ref());
+    let mut lines = KnobLines {
+        eyebrow,
+        body: KnobBody::Reading,
+        change: None,
+        gate: None,
+        one_confirmation: None,
+    };
+    lines.body = match (c.version, live, draft) {
+        (Some(v), Some(l), _) if l >= v => KnobBody::Live(w.line("knob.live")?),
+        (v, _, Some(d)) if v == Some(d.version) => {
+            let groups = if !d.groups.is_empty() {
+                d.groups
+                    .iter()
+                    .map(|g| {
+                        Ok((
+                            Some(g.name.clone()),
+                            rings(w, &g.wakes, &g.what, &g.results)?,
+                        ))
+                    })
+                    .collect::<Result<_, WordsError>>()?
+            } else {
+                let r = rings(w, &d.wakes, &d.what, &d.results)?;
+                if r.is_empty() {
+                    vec![]
+                } else {
+                    vec![(None, r)]
+                }
+            };
+            lines.change = Some(w.line("knob.change")?);
+            lines.gate = gate(w, mode)?;
+            lines.one_confirmation = Some(w.line("knob.one_confirmation")?);
+            KnobBody::Draft {
+                words: if groups.is_empty() {
+                    d.words.clone()
+                } else {
+                    vec![]
+                },
+                groups,
+            }
+        }
+        _ if knob.is_some() => KnobBody::Replaced(w.line("knob.replaced")?),
+        _ => KnobBody::Reading,
+    };
+    Ok(Some(lines))
 }
 
 /// `DriveRecapCard`: "What I did", the task, each step with what it touched, then why it ended:
@@ -1545,6 +1797,8 @@ pub fn lines(
             drafts: Drafts {
                 read: &HashMap::new(),
                 errors: &HashMap::new(),
+                grants: None,
+                knobs: None,
             },
             live: None,
             streaming: false,
@@ -1574,6 +1828,8 @@ pub fn conversation_lines(
             drafts: Drafts {
                 read: &c.drafts,
                 errors: &c.draft_errors,
+                grants: c.grants.as_deref(),
+                knobs: Some(&c.knobs),
             },
             live: c.live.as_ref().map(|l| (l, &c.live_before)),
             streaming: !c.live_text().is_empty(),
@@ -1805,6 +2061,8 @@ fn message(w: &WordBook, thread: &SetupThread, m: &ChatMessage) -> Result<Line, 
                 .transpose()?,
             text: m.text.clone(),
             report: crate::report::reportable(m),
+            id: m.id(),
+            at: m.at,
         },
     })
 }
@@ -2120,7 +2378,7 @@ mod tests {
                 Line::Card {
                     card: Card::Approval(a),
                     ..
-                } => Some(a),
+                } => Some(*a),
                 _ => None,
             })
             .unwrap()
@@ -2550,5 +2808,173 @@ mod tests {
         assert_eq!(healed("Refunded **$20*"), "Refunded **$20**");
         // An italic closed inside an open bold keeps its star.
         assert_eq!(healed("**x *a*"), "**x *a***");
+    }
+
+    /// A thread with one approval of grant `g1` (no draft), answered with `answer` or waiting.
+    fn grant_thread(answer: Option<&str>) -> crate::coach_send::Conversation {
+        let mut card = json!({
+            "at": "2026-10-16T12:00:25.000Z", "session": "sess1", "run": "run2", "seq": 6,
+            "component": {"type": "approval", "id": "card", "grant": "g1", "service": "gmail",
+                          "text": "Coach's own words.", "waits": "owner",
+                          "signs": {"card": false, "words": "Then its Card."}},
+            "key": "sess1#card"
+        });
+        if let Some(a) = answer {
+            card["answer"] =
+                json!({"state": "answered", "words": a, "at": "2026-10-16T12:00:40.000Z"});
+        }
+        let mut c = crate::coach_send::Conversation::default();
+        c.took(read(&json!({"messages": [], "components": [card]})), now());
+        c
+    }
+
+    fn grant(status: &str, extra: Value) -> crate::connections::Grant {
+        let mut g = json!({"id": "g1", "status": status, "text": "Read and send your mail.",
+            "digest": "d", "vendor": "Gmail", "terms": ["mail.read", "mail.send"],
+            "request": {"server": "https://mail.example", "agent": "a1", "tools": [{"tool": "fetch"}]},
+            "events": []});
+        for (k, v) in extra.as_object().unwrap() {
+            g[k] = v.clone();
+        }
+        crate::connections::Grant::read_list(json!([g]).to_string().as_bytes())
+            .unwrap()
+            .remove(0)
+    }
+
+    #[test]
+    fn an_approval_shows_planques_grant_once_read() {
+        let mut c = grant_thread(None);
+        // Not read: the card's own words, and no Card-next line without a grant.
+        let a = approval_of(&c);
+        assert_eq!(a.text.as_deref(), Some("Coach's own words."));
+        assert_eq!((a.request, a.connected, a.card_next), (None, None, None));
+        // Read and waiting: planque's words, its terms under Details, the digest line.
+        c.grants = Some(vec![grant("pending", json!({}))]);
+        let a = approval_of(&c);
+        assert_eq!(a.text, None);
+        let r = a.request.unwrap();
+        assert_eq!(r.text, "Read and send your mail.");
+        assert_eq!(r.terms, ["mail.read", "mail.send"]);
+        assert_eq!(
+            r.mismatch.as_deref(),
+            Some("This request doesn't match what it shows, so it can't be approved.")
+        );
+        assert_eq!(a.card_next.as_deref(), Some("Then its Card."));
+        assert!(a.gate.is_some());
+        // Connected: its one line.
+        c.grants = Some(vec![grant("connected", json!({}))]);
+        let a = approval_of(&c);
+        assert_eq!(a.connected.as_deref(), Some("Gmail is connected"));
+        assert_eq!(a.request, None);
+        // planque failed it: the card says so in planque's words, never its reason.
+        c.grants = Some(vec![grant(
+            "failed",
+            json!({"status_words": "Gmail refused the sign-in.", "reason": "invalid_grant"}),
+        )]);
+        let a = approval_of(&c);
+        let failed = a.failed.unwrap();
+        assert!(failed.contains("Gmail refused the sign-in."), "{failed}");
+        assert!(!failed.contains("invalid_grant"), "{failed}");
+        // Approved, and connected: said so.
+        let mut c = grant_thread(Some("approved"));
+        c.grants = Some(vec![grant("connected", json!({}))]);
+        let a = approval_of(&c);
+        assert_eq!(a.folded.unwrap().text, "Approved · Gmail is connected");
+        // Approved, then failed at planque: not done.
+        c.grants = Some(vec![grant("disconnected", json!({}))]);
+        assert_eq!(
+            card_state(
+                &c.thread,
+                &c.thread.components[0].component,
+                c.grants.as_deref()
+            ),
+            CardState::Failed(None)
+        );
+    }
+
+    #[test]
+    fn a_dial_card_shows_its_draft_ring_by_ring() {
+        let card = json!({
+            "at": "2026-10-16T12:00:25.000Z", "session": "sess1", "run": "run2", "seq": 6,
+            "component": {"type": "knob", "id": "k1", "title": "Refunds' dial",
+                          "taf_id": "taf-1", "version": 8},
+            "key": "sess1#k1"
+        });
+        let mut c = crate::coach_send::Conversation::default();
+        c.took(read(&json!({"messages": [], "components": [card]})), now());
+        let listed = [Listed {
+            agent: "a1".into(),
+            key: "taf-1".into(),
+            name: "Refunds".into(),
+        }];
+        let knob_of = |c: &crate::coach_send::Conversation| {
+            conversation_lines(&book(), c, &listed, Mode::Kiff, now())
+                .unwrap()
+                .lines
+                .into_iter()
+                .find_map(|l| match l {
+                    Line::Card {
+                        card: Card::Knob(k),
+                        ..
+                    } => Some(k),
+                    _ => None,
+                })
+                .unwrap()
+        };
+        // Not read: reading, and its taf's dial is asked for.
+        assert_eq!(c.knobs_to_read(), ["taf-1"]);
+        let k = knob_of(&c);
+        assert_eq!(k.eyebrow.as_deref(), Some("Refunds will work like this"));
+        assert_eq!(k.body, KnobBody::Reading);
+        let mut dial: serde_json::Value = serde_json::from_slice(
+            &std::fs::read(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../tafs-app/fixtures/taf-knob-dial.json"
+            ))
+            .unwrap(),
+        )
+        .unwrap();
+        // Its draft: the rings in tafs cloud's words, Change and the gate where Confirm goes.
+        dial["draft"] =
+            json!({"version": 8, "wakes": ["Every morning"], "what": [], "results": ["To Slack"]});
+        let knob = crate::knob::read(&serde_json::to_vec(&dial).unwrap()).unwrap();
+        c.took_knob("taf-1", knob.clone());
+        assert!(c.knobs_to_read().is_empty());
+        let k = knob_of(&c);
+        assert_eq!(
+            k.body,
+            KnobBody::Draft {
+                groups: vec![(
+                    None,
+                    vec![
+                        ("When".into(), vec!["Every morning".into()]),
+                        ("Where".into(), vec!["To Slack".into()])
+                    ]
+                )],
+                words: vec![],
+            }
+        );
+        assert_eq!(k.change.as_deref(), Some("Change"));
+        assert!(k.gate.is_some(), "Confirm is the device's");
+        // Live since: said so, and nothing to confirm.
+        dial["version"] = json!(8);
+        c.took_knob(
+            "taf-1",
+            crate::knob::read(&serde_json::to_vec(&dial).unwrap()).unwrap(),
+        );
+        let k = knob_of(&c);
+        assert_eq!(k.body, KnobBody::Live("This dial is live.".into()));
+        assert_eq!((k.change, k.gate), (None, None));
+        // Another draft since: replaced.
+        dial["version"] = json!(7);
+        dial["draft"]["version"] = json!(9);
+        c.took_knob(
+            "taf-1",
+            crate::knob::read(&serde_json::to_vec(&dial).unwrap()).unwrap(),
+        );
+        assert_eq!(
+            knob_of(&c).body,
+            KnobBody::Replaced("A newer dial replaced this one.".into())
+        );
     }
 }

@@ -95,6 +95,12 @@ enum Fail {
 struct Page {
     /// How much of the answer streaming now shows (`SteadyMarkdown`).
     live_shown: crate::chat::Shown,
+    /// When the page opened: Coach's answers after it, with no stream, are revealed as they come.
+    opened_at: chrono::DateTime<chrono::Utc>,
+    /// Whether the last send streamed (`setupStreamWorks`): false once a stream couldn't open.
+    stream_works: Cell<bool>,
+    /// How far each answer being revealed shows, by its id (`revealed` once whole).
+    reveals: RefCell<HashMap<String, crate::chat::Shown>>,
     w: Rc<WordBook>,
     source: CoachSource,
     listed: Rc<Vec<Listed>>,
@@ -292,6 +298,9 @@ pub fn page(
 
     let page = Rc::new(Page {
         live_shown: crate::chat::Shown::default(),
+        opened_at: chrono::Utc::now(),
+        stream_works: Cell::new(true),
+        reveals: RefCell::new(HashMap::new()),
         w,
         source,
         listed,
@@ -645,6 +654,44 @@ impl Page {
         if !wanted.is_empty() {
             self.read_drafts(wanted).await;
             self.draw();
+        }
+        // What a dial card shows: its taf's dial, read again once the card's version is newer.
+        let knobs = self.conv.borrow().knobs_to_read();
+        if !knobs.is_empty() {
+            self.read_knobs(knobs).await;
+            self.draw();
+        }
+    }
+
+    /// `loadKnob` for each dial card's taf, as the session; one that can't be read stays reading.
+    async fn read_knobs(self: &Rc<Self>, ids: Vec<String>) {
+        let CoachSource::Cloud {
+            kept, languages, ..
+        } = self.source.clone()
+        else {
+            return;
+        };
+        for id in ids {
+            let (token, languages, path) = (
+                kept.token.clone(),
+                languages.clone(),
+                tafs_core::knob::path(&id, None),
+            );
+            let read = gtk::gio::spawn_blocking(move || {
+                crate::kiff::cloud(&token, &languages, &path)
+                    .ok()
+                    .filter(|a| (200..300).contains(&a.status))
+                    .and_then(|a| tafs_core::knob::read(&a.body))
+            })
+            .await
+            .ok()
+            .flatten();
+            if !self.open() {
+                return;
+            }
+            if let Some(k) = read {
+                self.conv.borrow_mut().took_knob(&id, k);
+            }
         }
     }
 
@@ -1042,6 +1089,7 @@ impl Page {
         } else {
             match self.open_stream(&setup, body.clone()).await {
                 Streamed::Opened(events) => {
+                    self.stream_works.set(true);
                     if self.conv.borrow().generation != d.generation {
                         return false;
                     }
@@ -1055,7 +1103,11 @@ impl Page {
                     return true;
                 }
                 Streamed::Refused(a) => Some(Ok(a)),
-                Streamed::Plain => self.post(path, body).await,
+                Streamed::Plain => {
+                    // No stream: the answer, once read, is revealed as it arrives.
+                    self.stream_works.set(false);
+                    self.post(path, body).await
+                }
             }
         };
         if improving.is_some()
@@ -1625,7 +1677,8 @@ impl Page {
     }
 
     /// planque's grants, read once with this computer's device key, for "Taking shape"'s tools
-    /// (`SetupShape`'s `grants`). A read that fails leaves the panel as it was.
+    /// (`SetupShape`'s `grants`) and the approval cards' requests (`AppModel.grants`). A read that
+    /// fails leaves both as they were.
     fn read_grants(self: &Rc<Self>) {
         let Some(source) = crate::onboarding::chrome_source() else {
             return;
@@ -1639,8 +1692,10 @@ impl Page {
             if grants.is_empty() {
                 return;
             }
+            p.conv.borrow_mut().grants = Some(grants.clone());
             *p.grants.borrow_mut() = grants;
             p.draw_shape();
+            p.draw();
         });
     }
 
@@ -1735,7 +1790,9 @@ impl Page {
         drop(c);
         self.draw_tools_row();
         let shaping = self.draw_shape();
-        if shaping && !self.grants_read.replace(true) {
+        // Read once Coach's conversation is there, wide window or narrow: "Taking shape" and the
+        // approval cards both show what it holds.
+        if self.conv.borrow().setup.is_some() && !self.grants_read.replace(true) {
             self.read_grants();
         }
         if self.drawn.borrow().as_ref() == Some(&now) {
@@ -2072,6 +2129,39 @@ fn recipe_rows(page: &Rc<Page>, recipes: &tafs_core::recipes::Recipes, v: &gtk::
     }
 }
 
+/// `startSwitch` with New taf chosen, over a taf's page this person manages: "Improve {taf}"
+/// turns this new conversation into one on that taf (`improveTaf`).
+fn on_screen_switch(page: &Rc<Page>, id: &str, name: &str) -> gtk::Widget {
+    let w = &page.w;
+    let switch = gtk::Box::new(gtk::Orientation::Horizontal, 0);
+    switch.add_css_class("tafs-start-switch");
+    switch.set_halign(gtk::Align::Start);
+    switch.update_property(&[gtk::accessible::Property::Label(
+        &w.line("coach.what_conversation_about").unwrap_or_default(),
+    )]);
+    let new_taf = gtk::Button::with_label(&w.line("home.new_taf").unwrap_or_default());
+    new_taf.add_css_class("tafs-start-choice");
+    new_taf.add_css_class("selected");
+    switch.append(&new_taf);
+    let improve = gtk::Button::with_label(
+        &w.get("coach.improve_taf", &[("taf", name)])
+            .unwrap_or_default(),
+    );
+    improve.add_css_class("tafs-start-choice");
+    improve.set_widget_name("coach.start.improve");
+    {
+        let (p, id, name) = (Rc::downgrade(page), id.to_string(), name.to_string());
+        improve.connect_clicked(move |_| {
+            if let Some(p) = p.upgrade() {
+                p.conv.borrow_mut().improve(&id, &name);
+                p.draw();
+            }
+        });
+    }
+    switch.append(&improve);
+    switch.upcast()
+}
+
 fn draw_thread(page: &Rc<Page>, lines: &CoachLines, drawn: &Drawn) {
     let column = &page.column;
     if page.no_coach.get() {
@@ -2081,6 +2171,10 @@ fn draw_thread(page: &Rc<Page>, lines: &CoachLines, drawn: &Drawn) {
     if let Some((title, line)) = &lines.starts {
         let v = gtk::Box::new(gtk::Orientation::Vertical, 12);
         v.set_margin_top(16);
+        // `startSwitch` over a taf's page: New taf chosen, and the taf on screen offered.
+        if let Some((id, name)) = crate::coach_start::taf_on_screen() {
+            v.append(&on_screen_switch(page, &id, &name));
+        }
         // Board 7, Coach with no taf or one yet: room for more.
         if page.listed.len() <= 1 {
             v.append(&crate::illustrations::coach_first().leading());
@@ -2101,9 +2195,34 @@ fn draw_thread(page: &Rc<Page>, lines: &CoachLines, drawn: &Drawn) {
     }
     // Coach's answer streaming now: its work block, before the first item it recorded.
     let live_at = lines.live.as_ref().and_then(|(_, at)| *at);
+    // Text first, then its card (`textBeforeCards`): while an answer is still revealed, the cards
+    // after it wait, until the owner writes again.
+    let mut holding = false;
     for (i, line) in lines.lines.iter().enumerate() {
         if let (Some((work, _)), true) = (&lines.live, live_at == Some(i)) {
             column.append(&crate::chat::live_work(work));
+        }
+        match line {
+            Line::Owner { .. } => holding = false,
+            Line::Card { .. } if holding => continue,
+            Line::Coach {
+                text: words,
+                id,
+                at,
+                ..
+            } if !page.stream_works.get() && *at > page.opened_at => {
+                let whole = words.chars().count();
+                // With animations off it shows whole at once, and holds nothing.
+                let animates =
+                    gtk::Settings::default().is_some_and(|s| s.is_gtk_enable_animations());
+                holding = animates
+                    && page
+                        .reveals
+                        .borrow()
+                        .get(id)
+                        .is_none_or(|s| s.get().is_none_or(|n| n < whole));
+            }
+            _ => {}
         }
         let row: gtk::Widget = match line {
             Line::Gap(at) => crate::chat::gap(at),
@@ -2131,8 +2250,38 @@ fn draw_thread(page: &Rc<Page>, lines: &CoachLines, drawn: &Drawn) {
                 work,
                 text: words,
                 report,
+                id,
+                at,
             } => {
-                let v = crate::chat::answer(work.as_ref(), words);
+                // An answer that came with no stream after the page opened: revealed letter by
+                // letter, once (`RevealingBubble`); every other as it is.
+                let revealing = !page.stream_works.get() && *at > page.opened_at;
+                let v = if revealing {
+                    let shown = page
+                        .reveals
+                        .borrow_mut()
+                        .entry(id.clone())
+                        .or_default()
+                        .clone();
+                    let v = gtk::Box::new(gtk::Orientation::Vertical, 6);
+                    if let Some(work) = work {
+                        v.append(&crate::chat::work_summary(work));
+                    }
+                    // Whole, the cards it held are drawn.
+                    let p = Rc::downgrade(page);
+                    v.append(&crate::chat::revealed_answer_words(
+                        words,
+                        &shown,
+                        Rc::new(move || {
+                            if let Some(p) = p.upgrade() {
+                                p.draw();
+                            }
+                        }),
+                    ));
+                    v
+                } else {
+                    crate::chat::answer(work.as_ref(), words)
+                };
                 // Its menu: Report this answer, where it can be reported.
                 if let Some(r) = report {
                     page.reportable(&v, r);
@@ -2648,18 +2797,20 @@ fn card_view(page: &Rc<Page>, card_ref: &str, card: &Card) -> gtk::Widget {
         }
         Card::Questions { .. } => questions_card(page, card_ref, card),
         Card::Approval(a) => approval(page, a),
-        Card::SignIn(s) => sign_in(s),
+        Card::SignIn(s) => sign_in(page, s),
         Card::Result(r) => result(page, r, open),
         Card::Drive {
             eyebrow: e,
             task,
             note,
             gate,
+            not_now,
         } => {
             let p = card_panel(Tone::Amber);
             p.append(&eyebrow_in(e, Tone::Amber));
             p.append(&text(task, 20, 700, &["tafs-ink"]));
             p.append(&text(note, 14, 400, &["tafs-soft"]));
+            p.append(&refuse_button(page, not_now));
             if let Some(g) = gate {
                 p.append(&crate::approval::not_ready(g));
             }
@@ -2670,7 +2821,65 @@ fn card_view(page: &Rc<Page>, card_ref: &str, card: &Card) -> gtk::Widget {
             p.append(&text(t, 15, 600, &["tafs-ink"]));
             p.upcast()
         }
+        Card::Knob(k) => knob_card(page, k),
     }
+}
+
+/// `KnobDraftCard`: whose dial it is, then its rings in tafs cloud's words, each connection's
+/// apart, under the ring's name in its colour; Change, which goes back to the message box, and
+/// the gate's line where Confirm would be; or that it's live, replaced, or still being read.
+fn knob_card(page: &Rc<Page>, k: &tafs_core::coach_lines::KnobLines) -> gtk::Widget {
+    use tafs_core::coach_lines::KnobBody;
+    let p = panel(false);
+    if let Some(e) = &k.eyebrow {
+        p.append(&eyebrow_in(e, Tone::Dim));
+    }
+    match &k.body {
+        KnobBody::Live(l) => p.append(&text(l, 14, 400, &["tafs-ok"])),
+        KnobBody::Replaced(l) => p.append(&text(l, 14, 400, &["tafs-dim"])),
+        KnobBody::Reading => {
+            let s = gtk::Spinner::new();
+            s.start();
+            s.set_halign(gtk::Align::Center);
+            p.append(&s);
+        }
+        KnobBody::Draft { groups, words } => {
+            for (name, rings) in groups {
+                let g = gtk::Box::new(gtk::Orientation::Vertical, 6);
+                if let Some(n) = name {
+                    g.append(&text(n, 14, 600, &["tafs-ink"]));
+                }
+                for (ring, lines) in rings {
+                    let r = gtk::Box::new(gtk::Orientation::Vertical, 2);
+                    r.append(&text(ring, 11, 600, &["tafs-amber-text"]));
+                    for l in lines {
+                        r.append(&text(l, 14, 400, &["tafs-ink"]));
+                    }
+                    g.append(&r);
+                }
+                p.append(&g);
+            }
+            for l in words {
+                p.append(&text(l, 15, 400, &["tafs-ink"]));
+            }
+        }
+    }
+    if let Some(change) = &k.change {
+        let b = outline(change);
+        b.set_halign(gtk::Align::Start);
+        let page = page.clone();
+        b.connect_clicked(move |_| {
+            page.composer.view.grab_focus();
+        });
+        p.append(&b);
+    }
+    if let Some(g) = &k.gate {
+        p.append(&crate::approval::not_ready(g));
+    }
+    if let Some(o) = &k.one_confirmation {
+        p.append(&text(o, 12, 400, &["tafs-dim"]));
+    }
+    p.upcast()
 }
 
 /// tafs cloud's `wider` line, above where the buttons go (`WiderLine`): 14 medium, in the amber.
@@ -2861,6 +3070,18 @@ fn approval(page: &Rc<Page>, a: &ApprovalLines) -> gtk::Widget {
     if let Some(t) = &a.text {
         p.append(&text(t, 15, 400, &["tafs-ink"]));
     }
+    // planque's grant, once read: connected or signed in, in one line; else its request.
+    if let Some(c) = &a.connected {
+        let h = gtk::Box::new(gtk::Orientation::Horizontal, 6);
+        let m = symbol("emblem-ok-symbolic", 14);
+        m.add_css_class("tafs-ok");
+        h.append(&m);
+        h.append(&text(c, 14, 600, &["tafs-ok"]));
+        p.append(&h);
+    }
+    if let Some(r) = &a.request {
+        p.append(&request_shown(page, r));
+    }
     if let Some(d) = &a.draft {
         p.append(&draft_shown(page, d));
     }
@@ -2875,6 +3096,9 @@ fn approval(page: &Rc<Page>, a: &ApprovalLines) -> gtk::Widget {
     }
     if let Some(f) = &a.failed {
         p.append(&text(f, 14, 400, &["tafs-no"]));
+    }
+    if let Some(d) = &a.decline {
+        p.append(&refuse_button(page, d));
     }
     if let Some(g) = &a.gate {
         p.append(&crate::approval::not_ready(g));
@@ -2908,9 +3132,59 @@ fn approval(page: &Rc<Page>, a: &ApprovalLines) -> gtk::Widget {
     stack.upcast()
 }
 
+/// An approval's request as planque has it: its words, its exact terms under Details (folded,
+/// selectable), KIFF's words for its profile, and the digest line when it doesn't match.
+fn request_shown(page: &Rc<Page>, r: &tafs_core::coach_lines::RequestShown) -> gtk::Widget {
+    let v = gtk::Box::new(gtk::Orientation::Vertical, 8);
+    v.append(&text(&r.text, 15, 400, &["tafs-ink"]));
+    if !r.terms.is_empty() {
+        let terms = gtk::Label::new(Some(&r.terms.join("\n")));
+        terms.set_xalign(0.0);
+        terms.set_wrap(true);
+        terms.set_selectable(true);
+        terms.add_css_class("monospace");
+        terms.add_css_class("tafs-dim");
+        let e = gtk::Expander::new(Some(&r.details));
+        e.set_child(Some(&terms));
+        v.append(&e);
+    }
+    if let Some(profile) = &r.profile {
+        let read = match &page.source {
+            CoachSource::Cloud {
+                kept, languages, ..
+            } => Some((kept.token.clone(), languages.clone())),
+            _ => None,
+        };
+        v.append(&crate::connections::profile_words_panel(
+            page.w.clone(),
+            read,
+            profile,
+        ));
+    }
+    if let Some(m) = &r.mismatch {
+        v.append(&text(m, 13, 400, &["tafs-no"]));
+    }
+    v.upcast()
+}
+
+/// A card's refusal (Decline, Not now): an outline button that answers the card as data, as the
+/// iPad's sits outside `ApprovalGate`. It grants nothing.
+fn refuse_button(page: &Rc<Page>, r: &tafs_core::coach_lines::Refuse) -> gtk::Button {
+    let b = outline(&r.words);
+    b.set_halign(gtk::Align::Start);
+    b.set_widget_name(&format!("card.refuse.{}", r.id));
+    let (p, r) = (Rc::downgrade(page), r.clone());
+    b.connect_clicked(move |_| {
+        if let Some(p) = p.upgrade() {
+            p.answer(&r.id, r.kind, r.answer);
+        }
+    });
+    b
+}
+
 /// A vendor's sign-in, read only: its words, the wider line, and why this computer can't do it
 /// in its button's place.
-fn sign_in(s: &SignInLines) -> gtk::Widget {
+fn sign_in(page: &Rc<Page>, s: &SignInLines) -> gtk::Widget {
     let p = card_panel(s.stroke);
     p.append(&eyebrow_in(&s.eyebrow, s.eyebrow_tone));
     p.append(&text(&s.title, 20, 700, &["tafs-ink"]));
@@ -2920,6 +3194,9 @@ fn sign_in(s: &SignInLines) -> gtk::Widget {
     p.append(&text(&s.note, 14, 400, &["tafs-soft"]));
     if let Some(w) = &s.wider {
         p.append(&wider_line(w));
+    }
+    if let Some(n) = &s.not_now {
+        p.append(&refuse_button(page, n));
     }
     if let Some(g) = &s.gate {
         p.append(&crate::approval::not_ready(g));
