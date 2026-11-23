@@ -219,11 +219,16 @@ pub fn held(w: &WordBook, e: &CardException, taf: &str) -> Result<HeldCall, Word
 }
 
 /// A held call's `browser` block asks for a fill in the person's Chrome: a sealed fill (a saved
-/// password or username) or a plain one. Either needs the phone's release beside the answer.
+/// password or username) or a plain one. Either needs the phone's release beside the answer. A
+/// block that isn't one this app can read counts too: never allowed here on a guess.
 pub fn needs_release(browser: &Value) -> bool {
-    ["sealed_fill", "fill"]
-        .iter()
-        .any(|k| browser.get(k).is_some_and(|v| !v.is_null()))
+    match browser {
+        Value::Null => false,
+        Value::Object(o) => ["sealed_fill", "fill"]
+            .iter()
+            .any(|k| o.get(*k).is_some_and(|v| !v.is_null())),
+        _ => true,
+    }
 }
 
 /// `name`: its tool's title as KIFF gives it, else the action in words.

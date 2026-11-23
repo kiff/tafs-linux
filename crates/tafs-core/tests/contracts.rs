@@ -1108,7 +1108,8 @@ fn a_fill_in_chrome_is_never_answered_with_this_computers_key() {
             "can_approve_once":true{browser}}}]}}"#
         )
     };
-    // planque's sealed fill, a plain fill, a Chrome step with neither, and none at all.
+    // planque's sealed fill, a plain fill, a Chrome step with neither, a block that doesn't read,
+    // and none at all.
     for (browser, release) in [
         (
             r#","browser":{"sealed_fill":{"chrome_id":"chr_1","origin":"https://shop.example"}}"#,
@@ -1116,6 +1117,10 @@ fn a_fill_in_chrome_is_never_answered_with_this_computers_key() {
         ),
         (r#","browser":{"fill":{"field_ref":"f1"}}"#, true),
         (r#","browser":{"step":"s1","sealed_fill":null}"#, false),
+        // A block this app can't read counts as a fill: never allowed here on a guess.
+        (r#","browser":"sealed""#, true),
+        (r#","browser":[1]"#, true),
+        (r#","browser":null"#, false),
         ("", false),
     ] {
         let calls = read_held(call(browser).as_bytes()).expect("read");
