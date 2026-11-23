@@ -74,6 +74,84 @@ impl AskCoachCard {
     }
 }
 
+/// The loop card (`TafsCloud.LoopCard`, docs/chat.md): kiff/agents' `confirm` with id
+/// `tafs-loop-N` and `loop: {tool, pages}`, shown when a run read page after page of one list.
+/// Its title, line and answers are tafs cloud's words ("Still reading", Read on, Stop here); the
+/// app keeps the answers' values (`tafs_loop_continue`, `tafs_loop_summarise`) and sends the one
+/// tapped. The run waits on it in the taf's own chat.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LoopCard {
+    pub id: String,
+    pub at: DateTime<Utc>,
+    pub session: String,
+    pub title: String,
+    pub text: String,
+    pub options: Vec<crate::coach::Choice>,
+    /// tafs cloud's words for how it was answered, once it was (blank when it sends none); none
+    /// while it waits.
+    pub answered: Option<String>,
+}
+
+impl LoopCard {
+    /// `LoopCard.Lenient`: a `confirm` that carries `loop`, with an id `tafs-loop-…` and at least
+    /// one option with a label and a value, else none. One the app can't read is none too,
+    /// never the thread with it.
+    fn read(v: &Value) -> Option<LoopCard> {
+        let shown = object(v).ok()?;
+        let at = date(shown, "at").ok()?;
+        let session = text_if(shown, "session").ok()?;
+        let c = object(field(shown, "component")?).ok()?;
+        let id = text(c, "id").ok()?;
+        if text(c, "type").ok()? != "confirm"
+            || !c.get("loop").is_some_and(Value::is_object)
+            || !id.starts_with("tafs-loop-")
+        {
+            return None;
+        }
+        let words = |k: &str| {
+            c.get(k)
+                .and_then(Value::as_str)
+                .map(str::to_string)
+                .unwrap_or_default()
+        };
+        let options: Vec<crate::coach::Choice> = c
+            .get("options")
+            .and_then(Value::as_array)
+            .map(|a| {
+                a.iter()
+                    .filter_map(|o| {
+                        let label = o.get("label")?.as_str()?.trim();
+                        let value = o.get("value")?.as_str()?;
+                        (!label.is_empty() && !value.is_empty()).then(|| crate::coach::Choice {
+                            value: value.to_string(),
+                            label: label.to_string(),
+                        })
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        if options.is_empty() {
+            return None;
+        }
+        let answered = shown.get("answer").filter(|a| a.is_object()).map(|a| {
+            a.get("words")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .trim()
+                .to_string()
+        });
+        Some(LoopCard {
+            id,
+            at,
+            session: session.unwrap_or_default(),
+            title: words("title"),
+            text: words("text"),
+            options,
+            answered,
+        })
+    }
+}
+
 /// A taf's thread, oldest first (`TafsCloud.Thread`), and the session it's at work in now.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct TafThread {
@@ -85,8 +163,10 @@ pub struct TafThread {
     pub steering: Option<Steering>,
     /// The latest run stopped without finishing, with no words for it.
     pub capped: Option<Capped>,
-    /// The taf's `ask_coach` cards: the only cards of a taf's own thread the iPad draws.
+    /// The taf's `ask_coach` cards.
     pub ask_coach: Vec<AskCoachCard>,
+    /// The loop cards a run waits on in this chat ("Still reading"), as the thread has them.
+    pub loop_cards: Vec<LoopCard>,
 }
 
 impl TafThread {
@@ -115,11 +195,9 @@ impl TafThread {
                 stop: text(c, "stop").ok()?,
             })
         };
-        let ask_coach = array_if(r, "components", |c| Ok(AskCoachCard::read(c)))?
-            .unwrap_or_default()
-            .into_iter()
-            .flatten()
-            .collect();
+        let components = array_if(r, "components", |c| Ok(c.clone()))?.unwrap_or_default();
+        let ask_coach = components.iter().filter_map(AskCoachCard::read).collect();
+        let loop_cards = components.iter().filter_map(LoopCard::read).collect();
         Ok(TafThread {
             messages,
             working_run: working.as_ref().and_then(|w| w.1.clone()),
@@ -128,6 +206,7 @@ impl TafThread {
             // Any stop tafs cloud names; `capped` carries the two caps alone, for older apps.
             capped: cap("stopped").or_else(|| cap("capped")),
             ask_coach,
+            loop_cards,
         })
     }
 }
@@ -175,6 +254,9 @@ pub struct TafChat {
     pub failed_why: Option<String>,
     /// The runs picked back up here, each once (`resumedRuns`).
     resumed: HashSet<String>,
+    /// Loop cards answered here, by id (`loopTaken`): answered at once, until the thread's words
+    /// for it come.
+    pub loop_taken: HashSet<String>,
     /// Each held call's card key by KIFF's decision id (`heldKeys`), once KIFF was read: a call
     /// held in a streamed answer stays placed after it's answered and no longer held.
     pub held_keys: HashMap<String, String>,
@@ -546,6 +628,48 @@ impl TafChat {
             }
             Event::Component | Event::Broken => Then::Draw,
         })
+    }
+
+    /// `answerLoopCard`: the owner's answer to a loop card, if it can go: the card waits, the
+    /// value is one of its answers, and it wasn't answered here already. Its answers go off at
+    /// once. The component's id, the body, and the card's title (else its line) for an error.
+    pub fn answer_loop(&mut self, id: &str, value: &str) -> Option<(String, Vec<u8>, String)> {
+        let card = self.thread.loop_cards.iter().find(|c| c.id == id)?;
+        if card.answered.is_some()
+            || !card.options.iter().any(|o| o.value == value)
+            || self.loop_taken.contains(id)
+        {
+            return None;
+        }
+        let body = crate::coach_send::answer_body(
+            &crate::coach_send::AnswerValue::Text(value.to_string()),
+            (!card.session.is_empty()).then_some(card.session.as_str()),
+        );
+        let what = if card.title.is_empty() {
+            card.text.clone()
+        } else {
+            card.title.clone()
+        };
+        self.loop_taken.insert(id.to_string());
+        self.error = None;
+        Some((id.to_string(), body, what))
+    }
+
+    /// tafs cloud took the loop card's answer: the taf is at work again, read as thinking until
+    /// its run is followed, and that run is followed again even if it was before the pause.
+    pub fn loop_answered(&mut self, run: &str, now: DateTime<Utc>) {
+        self.awaiting = Some(now);
+        self.ended = None;
+        self.resumed.remove(run);
+    }
+
+    /// The answer didn't go: the card's answers are back. `why` is said above the box, unless the
+    /// card no longer waits (409), when the thread is read again instead.
+    pub fn loop_not_taken(&mut self, id: &str, why: Option<String>) {
+        self.loop_taken.remove(id);
+        if let Some(why) = why {
+            self.error = Some(why);
+        }
     }
 
     /// `resumeChat`'s check: the run tafs cloud says is at work while nothing here follows it (the
@@ -925,6 +1049,8 @@ pub enum Item<'a> {
         at: DateTime<Utc>,
     },
     AskCoach(&'a AskCoachCard),
+    /// A run asking whether to read on (the loop card), at its time.
+    Loop(&'a LoopCard),
     /// What became of a held call, or a call the owner approved, from the Record (`outcome`): the
     /// same row as its card, by its key.
     Outcome(&'a crate::record::Entry),
@@ -946,6 +1072,7 @@ impl Item<'_> {
             Item::Message(m) => format!("m|{}", m.id()),
             Item::Held { key, .. } => format!("k|{key}"),
             Item::AskCoach(c) => format!("a|{}", c.id),
+            Item::Loop(c) => format!("l|{}", c.id),
             Item::Outcome(e) => format!("k|{}", e.id),
             Item::Knock(k) => format!("d|{}", k.id),
             Item::Streaming { id, .. } => id.clone(),
@@ -957,6 +1084,7 @@ impl Item<'_> {
             Item::Message(m) => m.at,
             Item::Held { at, .. } => *at,
             Item::AskCoach(c) => c.at,
+            Item::Loop(c) => c.at,
             // When the owner answered it: after the taf's "waiting for your approval" and before
             // what it did next. Without the answer's time, where its card was: when it was made.
             Item::Outcome(e) => e
@@ -1029,6 +1157,7 @@ pub fn items_with<'a>(
     let mut all: Vec<Item> = thread.messages.iter().map(Item::Message).collect();
     all.extend(held.iter().map(|(key, at)| Item::Held { key, at: *at }));
     all.extend(thread.ask_coach.iter().map(Item::AskCoach));
+    all.extend(thread.loop_cards.iter().map(Item::Loop));
     // A stable sort: by time, then the order they came in.
     all.sort_by_key(|i| i.at());
     if let Some(live) = live {
@@ -1066,6 +1195,7 @@ pub fn items_of<'a>(
     // A door's knocks sit at their own times, so a reply newer than a knock comes after it.
     all.extend(c.knocks.iter().map(Item::Knock));
     all.extend(c.thread.ask_coach.iter().map(Item::AskCoach));
+    all.extend(c.thread.loop_cards.iter().map(Item::Loop));
     // What became of its calls, done or not (kiff/tafs#115); those of the answer streaming now
     // are placed in it.
     let first = c.thread.messages.first().map(|m| m.at);
@@ -1278,6 +1408,16 @@ pub enum Line {
     Knock(crate::doors::Knock),
     /// A setting the taf hands to Coach, with Ask Coach where it's offered.
     AskCoach { text: String, ask: Option<String> },
+    /// The loop card ("Still reading"), in tafs cloud's words: its answers while it waits, else
+    /// how it was answered. `taken`: answered here, so its answers are off until the thread says.
+    Loop {
+        id: String,
+        title: String,
+        text: String,
+        options: Vec<crate::coach::Choice>,
+        answered: Option<String>,
+        taken: bool,
+    },
 }
 
 /// A message that didn't go through (`UnsentBubble`): the owner's words, dimmed, then why. A send
@@ -1578,6 +1718,14 @@ pub fn lines(
             Item::Held { key, .. } => Line::Held(key.to_string()),
             Item::Outcome(e) => Line::Outcome(outcome_line(w, e)?),
             Item::Knock(k) => Line::Knock((*k).clone()),
+            Item::Loop(card) => Line::Loop {
+                id: card.id.clone(),
+                title: card.title.clone(),
+                text: card.text.clone(),
+                options: card.options.clone(),
+                answered: card.answered.clone(),
+                taken: c.loop_taken.contains(&card.id),
+            },
             Item::AskCoach(card) => Line::AskCoach {
                 text: card.text.clone(),
                 ask: if whose.ask_coach {

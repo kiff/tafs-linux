@@ -21,8 +21,10 @@ and the person's live chat (`conversation`). It's decoded as the iPad's `thread(
 - `working` (`{session, run?}`) strictly when it's there.
 - `steering`, `stopped` and `capped` leniently: one it can't read is none. `stopped` names any stop;
   an older tafs cloud's `capped` stands in for it.
-- `components` must be a list; of its cards, only an `ask_coach` card with words is kept (`AskCoachCard`),
-  and one it can't read is left out. A taf's other cards aren't drawn in its chat, as on the iPad.
+- `components` must be a list. Of its cards, two are kept, and one it can't read is left out: an
+  `ask_coach` card with words (`AskCoachCard`), and the loop card (`LoopCard`): a `confirm` with
+  `loop`, an id `tafs-loop-…`, and at least one answer with both a label and a value. A taf's
+  other cards aren't drawn in its chat, as on the iPad.
 
 The thread is read when the Chat tab first shows. After that, plain reads are the fallback when
 nothing streams (`followChat`; kiff/tafs `docs/scale.md`, `tafs-core/src/follow.rs`). While the taf
@@ -150,7 +152,17 @@ In the iPad's order, in a column at most 720 wide:
     (`withheldUntilWords`);
   - **a setting it hands to Coach** (`AskCoachCardView`): its words, and Ask Coach for someone who
     may use Coach and manages the taf, which opens Coach on this taf with the card's words in the
-    box, nothing sent (`askCoachAbout`, [Coach on a taf](coach.md)).
+    box, nothing sent (`askCoachAbout`, [Coach on a taf](coach.md));
+  - **the loop card** (`LoopCardView`), at its time: a run that read page after page of one list
+    asks whether to read on. Its title ("Still reading"), its line and its answers (Read on, the
+    first one, primary; Stop here) are tafs cloud's words as sent. A tap sends the answer's value
+    (`tafs_loop_continue`, `tafs_loop_summarise`) once, to the taf's own route,
+    `POST /v1/tafs/{id}/components/{component}/answer` with the card's chat, unsigned as the session
+    (`answerLoopCard`). The card's answers go off at once. Taken, the taf reads as at work, the
+    thread is read again, and the run that waited is followed to its end, even if it was followed
+    before the pause. A card that no longer waits (409) is read again; anything else says "Still
+    reading didn't go through." with why above the box, and the answers come back. Once the
+    thread says it was answered, it shows tafs cloud's words for how, and no answers.
 - Then the messages not sent, the dots while the taf works, what was written to its run and not
   read yet, why the latest run stopped at a cap ("Rae stopped: this task would cost more than its
   limit…", on the amber at 10%, `capWords`: `cost_cap`, `turn_cap`, `max_token`, `refused`) once

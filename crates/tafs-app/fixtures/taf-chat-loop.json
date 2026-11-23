@@ -1,0 +1,206 @@
+{
+ "about": "Synthetic. taf-chat.json, then a run that read page after page of one list and waits on the loop card (\"Still reading\"), in tafs cloud's words.",
+ "answer": {
+  "messages": [
+   {
+    "id": "run4.in",
+    "at": "2026-11-16T08:00:00.000Z",
+    "from": "taf",
+    "kind": "kickoff",
+    "text": "Work the refund queue: every open refund request since your last run.",
+    "session": "sched_4"
+   },
+   {
+    "id": "run4.3",
+    "at": "2026-11-16T08:00:40.000Z",
+    "from": "taf",
+    "kind": "message",
+    "text": "Refunded **3 orders** under €50. Order 4410 is €150, so it waits for you.",
+    "session": "sched_4",
+    "delivered": "Sent to Google Sheets · Refunds 2026",
+    "counted": "From the Record — done: 3 · waiting for you: 1",
+    "work": {
+     "ms": 12400,
+     "steps": [
+      {
+       "tool": "memory"
+      },
+      {
+       "tool": "list_payments_k3f9"
+      },
+      {
+       "tool": "create_refund_k3f9",
+       "error": true
+      },
+      {
+       "tool": "create_refund_k3f9"
+      },
+      {
+       "tool": "kiff_pending"
+      }
+     ]
+    }
+   },
+   {
+    "id": "run5.in",
+    "at": "2026-11-16T09:12:00.000Z",
+    "from": "owner",
+    "kind": "message",
+    "text": "Why did 4410 wait?",
+    "session": "sesn_9"
+   },
+   {
+    "id": "run5.2",
+    "at": "2026-11-16T09:12:20.000Z",
+    "from": "taf",
+    "kind": "message",
+    "text": "Order 4410 is €150: over your Card's €50 for one refund, so KIFF held it for you to approve.",
+    "session": "sesn_9",
+    "work": {
+     "ms": 4200,
+     "steps": [
+      {
+       "tool": "memory"
+      },
+      {
+       "tool": "list_payments_k3f9"
+      }
+     ]
+    }
+   },
+   {
+    "id": "door1.in",
+    "at": "2026-11-16T09:40:00.000Z",
+    "from": "owner",
+    "kind": "message",
+    "text": "Please refund order 4415, it arrived broken.",
+    "session": "door_1",
+    "door": {
+     "app": "email",
+     "from": "ana@example.com",
+     "subject": "Order 4415"
+    }
+   },
+   {
+    "id": "door1.2",
+    "at": "2026-11-16T09:40:30.000Z",
+    "from": "taf",
+    "kind": "message",
+    "text": "Refunded order 4415, €32.",
+    "session": "door_1",
+    "door": {
+     "app": "email",
+     "reply": "sent"
+    }
+   },
+   {
+    "id": "run7.in",
+    "at": "2026-11-16T09:50:00.000Z",
+    "from": "owner",
+    "kind": "message",
+    "text": "Check the shipping label for 4410 in Shippo",
+    "session": "sesn_9",
+    "attachments": [
+     {
+      "id": "att_label",
+      "kind": "image",
+      "media_type": "image/jpeg",
+      "name": "label-4410.jpg",
+      "size": 182044
+     }
+    ]
+   },
+   {
+    "id": "run7.4",
+    "at": "2026-11-16T09:50:45.000Z",
+    "from": "taf",
+    "kind": "message",
+    "text": "I couldn't reach Shippo, so I didn't check the label.",
+    "session": "sesn_9",
+    "refused": {
+     "words": "Rae couldn't connect Shippo yet",
+     "why": "Why: managed sign-in isn't set up for this app",
+     "next": "Next: ask Coach to connect Shippo with its key instead, or to use another app."
+    }
+   },
+   {
+    "id": "run8.in",
+    "at": "2026-11-16T10:00:00.000Z",
+    "from": "owner",
+    "kind": "message",
+    "text": "List every refund over €50 this month",
+    "session": "sesn_9"
+   },
+   {
+    "id": "run8.1",
+    "at": "2026-11-16T10:00:20.000Z",
+    "from": "taf",
+    "kind": "message",
+    "text": "I'm going through this month's refunds in Stripe, page by page.",
+    "session": "sesn_9"
+   }
+  ],
+  "components": [
+   {
+    "at": "2026-11-16T09:12:21.000Z",
+    "session": "sesn_9",
+    "run": "run5",
+    "seq": 3,
+    "component": {
+     "type": "ask_coach",
+     "id": "raise-limit",
+     "text": "Raise Rae's limit for one refund to €200, so orders like 4410 go through without waiting."
+    }
+   },
+   {
+    "at": "2026-11-16T09:12:22.000Z",
+    "session": "sesn_9",
+    "run": "run5",
+    "seq": 4,
+    "component": {
+     "type": "confirm",
+     "id": "not-drawn",
+     "text": "A taf's other cards aren't drawn in its chat."
+    }
+   },
+   {
+    "at": "2026-11-16T10:00:40.000Z",
+    "session": "sesn_9",
+    "run": "run8",
+    "seq": 5,
+    "component": {
+     "type": "confirm",
+     "id": "tafs-loop-1",
+     "loop": {
+      "tool": "stripe_list_refunds",
+      "pages": 5
+     },
+     "title": "Still reading",
+     "text": "Rae has read 5 pages of Stripe's refunds. Read on, or stop here and answer from what it has?",
+     "options": [
+      {
+       "label": "Read on",
+       "value": "tafs_loop_continue"
+      },
+      {
+       "label": "Stop here",
+       "value": "tafs_loop_summarise"
+      }
+     ]
+    }
+   }
+  ],
+  "steering": {
+   "run": "run7",
+   "status": "CANCELLED",
+   "untaken": [],
+   "not_sent": [
+    {
+     "text": "And skip 4412 too",
+     "at": "2026-11-16T09:50:20.000Z",
+     "why": "You stopped it before it read this."
+    }
+   ]
+  }
+ }
+}

@@ -1939,3 +1939,112 @@ fn an_approval_after_its_run_ended_says_nothing_ran_and_offers_retry() {
     assert!(c.ended.is_none());
     assert_eq!(c.error.as_deref(), Some(words));
 }
+
+/// A loop card as tafs cloud lists it in a thread's `components`.
+fn loop_card(id: &str, at_: &str, answer: &str) -> String {
+    format!(
+        r#"{{"at":"{at_}","session":"s1","component":{{"type":"confirm","id":"{id}","loop":{{"tool":"wiki_list","pages":4}},"title":"Still reading","text":"Rae has read 4 pages of the same list.","options":[{{"label":"Read on","value":"tafs_loop_continue"}},{{"label":"Stop here","value":"tafs_loop_summarise"}},{{"label":" ","value":"x"}}]}}{answer}}}"#
+    )
+}
+
+#[test]
+fn a_loop_card_reads_as_the_ipads_and_nothing_else_does() {
+    let m = taf("Reading.", "2026-11-23T09:00:00Z", "s1");
+    let t = thread(&format!(
+        r#"{{"messages":[{m}],"components":[{},{},{},{},{}]}}"#,
+        loop_card("tafs-loop-1", "2026-11-23T09:00:05Z", ""),
+        // Answered: tafs cloud's words for how.
+        loop_card(
+            "tafs-loop-2",
+            "2026-11-23T09:01:00Z",
+            r#","answer":{"state":"answered","words":"You chose Read on"}"#
+        ),
+        // Not a loop card: another id, or a confirm with no `loop`.
+        loop_card("tafs-other", "2026-11-23T09:00:05Z", ""),
+        r#"{"at":"2026-11-23T09:00:05Z","component":{"type":"confirm","id":"tafs-loop-3","options":[{"label":"Go","value":"go"}]}}"#,
+        // No answer with both a label and a value: none.
+        r#"{"at":"2026-11-23T09:00:05Z","component":{"type":"confirm","id":"tafs-loop-4","loop":{},"options":[{"label":"","value":"go"}]}}"#,
+    ))
+    .unwrap();
+    assert_eq!(t.loop_cards.len(), 2);
+    let c = &t.loop_cards[0];
+    assert_eq!(c.id, "tafs-loop-1");
+    assert_eq!(c.session, "s1");
+    assert_eq!(c.title, "Still reading");
+    // The blank answer is left out; the two keep tafs cloud's words and values.
+    assert_eq!(
+        c.options
+            .iter()
+            .map(|o| (o.label.as_str(), o.value.as_str()))
+            .collect::<Vec<_>>(),
+        [
+            ("Read on", "tafs_loop_continue"),
+            ("Stop here", "tafs_loop_summarise")
+        ]
+    );
+    assert_eq!(c.answered, None);
+    assert_eq!(
+        t.loop_cards[1].answered.as_deref(),
+        Some("You chose Read on")
+    );
+    // The ask_coach read is untouched by them.
+    assert!(t.ask_coach.is_empty());
+}
+
+#[test]
+fn a_loop_card_sits_at_its_time_and_is_answered_once() {
+    let w = en();
+    let m = taf("Reading.", "2026-11-23T09:00:00Z", "s1");
+    let later = taf("Done.", "2026-11-23T09:05:00Z", "s1");
+    let mut c = TafChat::new("taf-1");
+    c.took(
+        &w,
+        thread(&format!(
+            r#"{{"messages":[{m},{later}],"components":[{}]}}"#,
+            loop_card("tafs-loop-1", "2026-11-23T09:00:05Z", "")
+        ))
+        .unwrap(),
+        at("2026-11-23T09:06:00Z"),
+    );
+    let whose = Whose {
+        name: Some("Rae"),
+        ask_coach: false,
+    };
+    let drawn = |c: &TafChat| {
+        lines(&w, c, &whose, &[], at("2026-11-23T09:06:00Z"))
+            .unwrap()
+            .lines
+            .into_iter()
+            .filter(|l| !matches!(l, Line::Gap(_)))
+            .collect::<Vec<_>>()
+    };
+    let l = drawn(&c);
+    // Between the words before it and after it.
+    assert!(
+        matches!(&l[1], Line::Loop { id, taken: false, answered: None, .. } if id == "tafs-loop-1")
+    );
+    // A value it doesn't offer, or a card it doesn't have: nothing goes.
+    assert!(c.answer_loop("tafs-loop-1", "x").is_none());
+    assert!(c.answer_loop("tafs-loop-9", "tafs_loop_continue").is_none());
+    let (id, body, what) = c.answer_loop("tafs-loop-1", "tafs_loop_continue").unwrap();
+    assert_eq!(id, "tafs-loop-1");
+    assert_eq!(what, "Still reading");
+    assert_eq!(
+        serde_json::from_slice::<Value>(&body).unwrap(),
+        serde_json::json!({"answer": "tafs_loop_continue", "session": "s1"})
+    );
+    // Taken: its answers are off, and a second tap sends nothing.
+    assert!(matches!(&drawn(&c)[1], Line::Loop { taken: true, .. }));
+    assert!(c
+        .answer_loop("tafs-loop-1", "tafs_loop_summarise")
+        .is_none());
+    // It didn't go: the answers are back, with why.
+    c.loop_not_taken("tafs-loop-1", Some("Couldn't send".into()));
+    assert!(matches!(&drawn(&c)[1], Line::Loop { taken: false, .. }));
+    assert_eq!(c.error.as_deref(), Some("Couldn't send"));
+    // It went: the taf is at work again, and its run is followed again.
+    c.answer_loop("tafs-loop-1", "tafs_loop_continue").unwrap();
+    assert_eq!(c.error, None);
+    c.loop_answered("run7", at("2026-11-23T09:06:01Z"));
+    assert_eq!(c.awaiting, Some(at("2026-11-23T09:06:01Z")));
+}
