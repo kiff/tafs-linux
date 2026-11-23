@@ -776,6 +776,8 @@ pub struct HeldFace {
     pub amount: Option<String>,
     pub reason: String,
     pub approvable_once: bool,
+    /// The hold's `accounting_version`, for Approve once with a security key.
+    pub accounting_version: Option<i64>,
 }
 
 /// The face's tint.

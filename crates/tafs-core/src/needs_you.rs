@@ -70,6 +70,11 @@ pub struct CardLines {
     pub sentence: String,
     /// It may be approved once (`approvableOnce`): the taf's dial shows it on its face.
     pub approvable_once: bool,
+    /// The hold's `accounting_version`: what a signed answer names (`kiff.answer.v1`).
+    pub accounting_version: Option<i64>,
+    /// Extra room may be given (`NeedsYouView`'s over-total branch): a call over a total kept
+    /// across calls, for someone who may answer and manages Cards (`canManageCards`).
+    pub extra_room: bool,
     /// KIFF's decision id (`kiffID`): a streamed answer names the call it held by it.
     pub kiff_id: Option<String>,
     /// Its key in its taf's chat (`heldKey`): its Record line's id, so the card and what became
@@ -197,6 +202,7 @@ pub fn lines(
     held: &[HeldCall],
     tafs: &[Holder],
     may_answer: bool,
+    manages_cards: bool,
     now: DateTime<Local>,
 ) -> Result<NeedsYouLines, WordsError> {
     let mut cards = Vec::new();
@@ -250,6 +256,8 @@ pub fn lines(
             .join(", ");
         cards.push(CardLines {
             approvable_once: call.approvable_once,
+            accounting_version: call.accounting_version,
+            extra_room: may_answer && manages_cards && !call.approvable_once,
             kiff_id: call.kiff_id.clone(),
             record: crate::record::held_key(
                 call.proposal_id.as_deref(),

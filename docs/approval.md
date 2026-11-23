@@ -221,12 +221,29 @@ on KIFF's side of it (kiff/cloud#96), and is on (`passkey::ENABLED`).
 **Approving** (`key_approval.rs`, from `approval::refuse`): signed in with such a session, a tap
 that would sign asks the key instead, for the acts whose whole request this app writes
 (`Act::request`, the iPad's `KIFFClient` bodies: groups and their members, signing a device out,
-the time zone, sharing, resuming, discarding a setup, removing a taf, trials).
+the time zone, sharing, resuming, discarding a setup, removing a taf, trials, and an API door's
+reopening, a key's revoking and the door's removal, at tafs cloud, whose `doorSigned` takes the
+passkey header as the device's; then the doors are read again). **An API door's New key stays on
+the phone** (the PM's 00:19): its answer is the key, shown once, which this computer can't keep
+from a screen recording or a clipboard manager's history.
 - The request is the message a device key would sign (`kiff.request.v1`: tenant, method, path
   with its query, the body's hash, `signed_at`), its hash the challenge.
 - The PIN sheet asks the key once. Its answer is checked (`passkey::header`'s refusals), and the
-  request goes with `KIFF-Passkey-Assertion`, to KIFF, or to tafs cloud for its own signed routes
-  (`kiff::send_with_key`).
+  request goes with `KIFF-Passkey-Assertion`, to KIFF, or to tafs cloud for what it takes signed
+  (`Act::at_cloud`). `kiff::send_with_key` sends only the act's own request, byte for byte, and a
+  call to KIFF only where KIFF takes it signed.
+- **Approve once on a held call** (as the Mac's tafs-macos#162): its answer is signed, not its
+  request. The key approves KIFF's `kiff.answer.v1` message (tenant, hold, `approve-once`, an empty
+  next step and note, the hold's `accounting_version`, `signed_at`), and the assertion goes in the
+  answer's body (`{"signature":{"signed_at", "passkey":{…}}}`, `passkey::answer_body`), to
+  `POST /v1/me/card-exceptions/{id}/approve-once`, with no `KIFF-Passkey-Assertion` header
+  (KIFF's `checkPasskeyAnswer`). It's offered on the taf's dial and on Needs you's card, where
+  "Answer in KIFF" stays as the other way. A hold whose accounting version wasn't read can't be
+  signed here: the phone.
+- **Extra room** (`change-card`, the iPad's over-total branch): on a call over a total the Card
+  keeps across calls, where Approve once can't pass, someone who manages Cards gives this call
+  extra room until that total resets, signed the same way (`kiff.answer.v1` with `change-card`,
+  `POST …/card-exceptions/{id}/change-card`), with the iPad's over-total line for managers.
 - **Removing a taf for good** goes in the iPad's order (`AppModel.removeTaf`): the key approves,
   then its Cards are revoked at KIFF with the session, one plain call each, then tafs cloud's
   `DELETE` goes with the approval. What didn't go is said in the app's words: Cards KIFF didn't
@@ -234,7 +251,9 @@ the time zone, sharing, resuming, discarding a setup, removing a taf, trials).
   answer (`removal::cloud_did_not_answer`).
 - **The sheet names the act** in its lead ("This needs your security key: {act}. Plug it in,
   then touch it and enter its PIN."), `{act}` being the iPad's own Face ID reason for it
-  (`approval::refuse_as`, `people::prompt`, `Act::own_prompt`).
+  (`approval::refuse_as`, `people::prompt`, `Act::own_prompt`). A held call's Approve once and
+  Extra room name the call, as the iPad's `AppModel.answer` does ("Answer {summary}",
+  `needs_you.prompt.answer`), on Needs you's card and on the dial's face.
 - Once sent, the sheet closes, whatever comes back. A refusal shows KIFF's own line where the
   act's line is. A lost answer shows the network's line, and the sheet offers no second PIN try:
   the act may already have reached KIFF, and a new assertion would send it again (a group made

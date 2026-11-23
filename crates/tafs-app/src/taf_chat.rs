@@ -83,6 +83,8 @@ pub struct HeldReread {
     pub color: i64,
     /// May answer held calls (`canAnswerHolds`).
     pub may_answer: bool,
+    /// Manages Cards (`canManageCards`): Extra room on a call over a total.
+    pub manages_cards: bool,
 }
 
 impl ChatTaf {
@@ -903,6 +905,7 @@ impl Page {
             &calls,
             &holders,
             r.may_answer,
+            r.manages_cards,
             chrono::Local::now(),
         ) {
             *self.held.borrow_mut() = l.cards;

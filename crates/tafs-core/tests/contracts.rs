@@ -208,6 +208,7 @@ fn a_held_call_from_kiff_reads_as_the_ipad_shows_it() {
         std::slice::from_ref(&call),
         &rae,
         true,
+        true,
         call.expires_at - chrono::Duration::seconds(577),
     )
     .unwrap();
@@ -220,8 +221,40 @@ fn a_held_call_from_kiff_reads_as_the_ipad_shows_it() {
         }
         other => panic!("{other:?}"),
     }
+    // Approve once passes it, so no Extra room; the hold's version is kept to sign.
+    assert!(n.cards[0].approvable_once && !n.cards[0].extra_room);
+    assert_eq!(n.cards[0].accounting_version, Some(3));
+    // Over a total the Card keeps across calls: Extra room, only for someone who may answer and
+    // manages Cards.
+    let mut over = call.clone();
+    over.approvable_once = false;
+    let at = call.expires_at - chrono::Duration::seconds(60);
+    let room = |may_answer, manages| {
+        lines(
+            &w,
+            std::slice::from_ref(&over),
+            &rae,
+            may_answer,
+            manages,
+            at,
+        )
+        .unwrap()
+        .cards[0]
+            .extra_room
+    };
+    assert!(room(true, true));
+    assert!(!room(true, false));
+    assert!(!room(false, true));
     // Lapsed: words, not buttons that can't work.
-    let late = lines(&w, std::slice::from_ref(&call), &rae, true, call.expires_at).unwrap();
+    let late = lines(
+        &w,
+        std::slice::from_ref(&call),
+        &rae,
+        true,
+        true,
+        call.expires_at,
+    )
+    .unwrap();
     assert!(matches!(late.cards[0].answers, Answers::Expired(_)));
     assert_eq!(late.cards[0].remaining, "expired");
     // A held call missing a field the iPad requires fails the read.

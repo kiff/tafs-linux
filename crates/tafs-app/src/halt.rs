@@ -277,8 +277,9 @@ pub fn page(w: Rc<WordBook>, source: Rc<HaltSource>, whose: Whose) -> gtk::Widge
                     // Halt again: a part that didn't take it the first time is asked again.
                     body.append(&halt_button(again));
                 }
-                // Resuming is confirmed and signed by the device: its tap says this computer
-                // can't approve, under it, and nothing is sent.
+                // Resuming is confirmed and signed by the device: with a security key, the key
+                // approves it, then the halt and Home are read again (`refresh()`); without one,
+                // its tap says this computer can't approve, under it, and nothing is sent.
                 Action::Resume { button, .. } => {
                     let b = outline(button);
                     b.set_widget_name("halt.resume");
@@ -292,13 +293,22 @@ pub fn page(w: Rc<WordBook>, source: Rc<HaltSource>, whose: Whose) -> gtk::Widge
                         .as_ref()
                         .and_then(|n| w.get("taf.halt.resume_prompt", &[("taf", n)]).ok());
                     let (w, slot2) = (w.clone(), slot.clone());
+                    let reread: Rc<dyn Fn()> = {
+                        let poll = poll.clone();
+                        Rc::new(move || {
+                            poll();
+                            crate::shell::reread_home();
+                        })
+                    };
                     b.connect_clicked(move |_| {
-                        crate::approval::refuse_as(
+                        crate::approval::refuse_then(
                             &w,
                             tafs_core::sidebar::Mode::Kiff,
                             &act,
                             what.clone(),
+                            vec![],
                             &slot2,
+                            Some(reread.clone()),
                         )
                     });
                     body.append(&b);

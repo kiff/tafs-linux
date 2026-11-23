@@ -253,7 +253,7 @@ struct Options {
 }
 
 const USAGE: &str = "tafs [dev.kiff.tafs:/oauth?…] [--lang <a language tafs speaks: en, de, fr, ar, ja, zh-Hant, pt-BR…>] [--theme light|dark] [--sample] [--signed-in] [--view-only [--paired]]
-     [--home contract.json] [--usage answers.json] [--people answers.json] [--files files-list.json] [--chromes answer.json] [--connect answers.json] [--knob answer.json] [--setup answer.json] [--taf-activity answer.json] [--unproven answers.json] [--recipes answers.json] [--gallery answers.json] [--halt answer.json] [--record-search answers.json] [--access answer.json] [--receipts answer.json] [--activity answer.json] [--calls answer.json] [--receipt answer.json] [--work answer.json] [--doors answer.json] [--account-reads answers.json] [--me answer.json] [--attach files.json] [--held answers.json] [--versions answer.json [--trial answer.json]] [--memory answer.json] [--runs answer.json] [--request answer.json] [--balance answer.json] [--coach answer.json] [--coach-chats answer.json] [--watch-days answers.json] [--coach-drafts answers.json] [--chat answer.json [--report] [--chat-stream events.txt [--pin-check]]] [--brief answer.json] [--mission-log answer.json] [--coach-setup answer.json] [--coach-stream events.txt] [--unreachable network|error] [--new-version vX.Y.Z] [--app-event item.json] [--size WxH] [--page welcome|sign-in|pair|recipe:<id>|gallery|new-taf|halt-all|halt:<id>|halt-resume:<id>|record-search:<q>|record-export|receipt:<proposal id>|run:<taf id>|pin-sheet|share:<key>|share-step2:<key>|coach|coach-tools|coach-full|coach-read-back|coach-hand:<id>|coach-improve:<key>|overview|overview-label:<id>|needs-you|discard-setup|needs-you-set-all-aside|needs-you-dismiss|needs-you-hold:<id>|versions:<key>|trial:<key>|brief-answer:<decision id>|mission-log:<mission id>|record|calendar|calendar-week|usage|usage-ask|usage-decline|connect-apps|connect-app|connect-connection|connect-remove|connect-which-taf|connect-approve|account|kiff-account|time-zone|time-zone-use|alerts|devices|devices-sign-out|people|people-rename|people-add|taf|taf-card|taf-setup|taf-setup:<id>|starts:<id>|results:<id>|doors:<id>[:<door>]|taf-receipt:<key>:<entry>|files|files-file|files-taf:<id>|chrome|taf-report:<key>:<entry>|consent|connected|sign-in-code] [--screenshot out.png]";
+     [--home contract.json] [--usage answers.json] [--people answers.json] [--files files-list.json] [--chromes answer.json] [--connect answers.json] [--knob answer.json] [--setup answer.json] [--taf-activity answer.json] [--unproven answers.json] [--recipes answers.json] [--gallery answers.json] [--halt answer.json] [--record-search answers.json] [--access answer.json] [--receipts answer.json] [--activity answer.json] [--calls answer.json] [--receipt answer.json] [--work answer.json] [--doors answer.json] [--account-reads answers.json] [--me answer.json] [--attach files.json] [--held answers.json] [--versions answer.json [--trial answer.json]] [--memory answer.json] [--runs answer.json] [--request answer.json] [--balance answer.json] [--coach answer.json] [--coach-chats answer.json] [--watch-days answers.json] [--coach-drafts answers.json] [--chat answer.json [--report] [--chat-stream events.txt [--pin-check]]] [--brief answer.json] [--mission-log answer.json] [--coach-setup answer.json] [--coach-stream events.txt] [--unreachable network|error] [--new-version vX.Y.Z] [--app-event item.json] [--size WxH] [--page welcome|sign-in|pair|recipe:<id>|gallery|new-taf|halt-all|halt:<id>|halt-resume:<id>|record-search:<q>|record-export|receipt:<proposal id>|run:<taf id>|pin-sheet|share:<key>|share-step2:<key>|coach|coach-tools|coach-full|coach-read-back|coach-hand:<id>|coach-improve:<key>|overview|overview-label:<id>|needs-you|needs-you-key|needs-you-key-room|discard-setup|needs-you-set-all-aside|needs-you-dismiss|needs-you-hold:<id>|versions:<key>|trial:<key>|brief-answer:<decision id>|mission-log:<mission id>|record|calendar|calendar-week|usage|usage-ask|usage-decline|connect-apps|connect-app|connect-connection|connect-remove|connect-which-taf|connect-approve|account|kiff-account|time-zone|time-zone-use|alerts|devices|devices-sign-out|people|people-rename|people-add|taf|taf-card|taf-setup|taf-setup:<id>|starts:<id>|results:<id>|doors:<id>[:<door>]|taf-receipt:<key>:<entry>|files|files-file|files-taf:<id>|chrome|taf-report:<key>:<entry>|consent|connected|sign-in-code] [--screenshot out.png]";
 
 fn options() -> Result<Options, String> {
     let mut o = Options::default();
@@ -419,7 +419,13 @@ fn options_link() -> Option<String> {
 /// The page a screenshot or `--page` opens beside the sidebar.
 fn selection_of(page: Option<&str>) -> Selection {
     match page {
-        Some("needs-you" | "needs-you-set-all-aside" | "needs-you-dismiss") => Selection::NeedsYou,
+        Some(
+            "needs-you"
+            | "needs-you-key"
+            | "needs-you-key-room"
+            | "needs-you-set-all-aside"
+            | "needs-you-dismiss",
+        ) => Selection::NeedsYou,
         Some(other) if other.starts_with("brief-answer:") => Selection::NeedsYou,
         Some(other) if other.starts_with("needs-you-hold:") => Selection::NeedsYou,
         Some(other) if other.starts_with("versions:") => {
@@ -811,6 +817,9 @@ fn activate(app: &adw::Application, o: &Options) {
         Some(p) if p.starts_with("halt-resume:") => halt::RESUME.with(|r| r.set(true)),
         Some("discard-setup") => shell::DISCARD.with(|d| d.set(true)),
         Some("needs-you-set-all-aside") => needs_you::OPEN.with(|a| a.set(Some("set-all-aside"))),
+        // As a computer paired with a security key sees a held call: Approve once on it. Nothing
+        // is signed in the screenshot: pressing it would still need that session.
+        Some("needs-you-key" | "needs-you-key-room") => needs_you::KEY_SHOWN.with(|k| k.set(true)),
         Some("needs-you-dismiss") => needs_you::OPEN.with(|a| a.set(Some("dismiss"))),
         Some("coach-tools") => coach::OPEN_TOOLS.with(|t| t.set(true)),
         Some("coach-full") => coach_mode::START_FULL.with(|f| f.set(true)),
@@ -1541,7 +1550,7 @@ impl App {
         mode: Mode,
         model: &SidebarModel,
         cloud: Option<&Cloud>,
-        may_answer: bool,
+        (may_answer, manages_cards): (bool, bool),
         at: chrono::DateTime<chrono::Local>,
         signed_out: Rc<dyn Fn()>,
     ) -> Vec<taf::TafPage> {
@@ -1564,7 +1573,7 @@ impl App {
                 .filter(|c| c.taf == key)
                 .cloned()
                 .collect();
-            tafs_core::needs_you::lines(w, &calls, &holders, may_answer, at)
+            tafs_core::needs_you::lines(w, &calls, &holders, may_answer, manages_cards, at)
                 .map(|l| l.cards)
                 .unwrap_or_default()
         };
@@ -1823,6 +1832,7 @@ impl App {
                             initial: tafs_core::sidebar::initial(&t.name),
                             color: t.color_index,
                             may_answer,
+                            manages_cards,
                         }),
                         initial: tafs_core::sidebar::initial(&t.name),
                         cloud_id: t.cloud.then(|| t.key.clone()),
@@ -2430,8 +2440,16 @@ impl App {
             })
             .collect();
         let may_answer = account.as_ref().is_none_or(|a| a.allows("holds.answer"));
-        let needs_you = tafs_core::needs_you::lines(words, &model.held, &holders, may_answer, at)
-            .unwrap_or_else(|e| fail(e));
+        let manages_cards = account.as_ref().is_none_or(|a| a.allows("cards.manage"));
+        let needs_you = tafs_core::needs_you::lines(
+            words,
+            &model.held,
+            &holders,
+            may_answer,
+            manages_cards,
+            at,
+        )
+        .unwrap_or_else(|e| fail(e));
         // Home's steps and Coach's waits, signed in.
         let needs_you = match &cloud {
             Some(c) => tafs_core::needs_you::with_unproven(
@@ -2529,8 +2547,14 @@ impl App {
             })),
             _ => None,
         };
-        let tafs =
-            Rc::new(self.taf_pages(mode, &model, cloud.as_deref(), may_answer, at, signed_out));
+        let tafs = Rc::new(self.taf_pages(
+            mode,
+            &model,
+            cloud.as_deref(),
+            (may_answer, manages_cards),
+            at,
+            signed_out,
+        ));
         // Your brief, signed in with KIFF once tafs cloud sends one: read again for a label at
         // tafs cloud as the session, or a screenshot's from `--brief`, never sent.
         let brief = match (

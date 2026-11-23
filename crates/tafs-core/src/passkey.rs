@@ -59,6 +59,57 @@ pub fn client_data_json(message: &[u8]) -> Vec<u8> {
     .into_bytes()
 }
 
+/// KIFF's signed answer to a held call (`kiff.answer.v1`, `auth.Answer.Message`), one field per
+/// line: the tenant, the hold, the answer, its next step and its note's hash (none here: Approve
+/// once has neither), the hold's accounting version, `signed_at`.
+pub fn answer_v1(
+    tenant: &str,
+    hold: &str,
+    answer: &str,
+    accounting_version: i64,
+    signed_at: &str,
+) -> Vec<u8> {
+    [
+        "kiff.answer.v1",
+        tenant,
+        hold,
+        answer,
+        "",
+        "",
+        &accounting_version.to_string(),
+        signed_at,
+    ]
+    .join("\n")
+    .into_bytes()
+}
+
+/// The answer's body, the assertion in it rather than in a header (`answerSignature.passkey`):
+/// `{"signature":{"signed_at":…,"passkey":{credential_id, client_data_json, authenticator_data,
+/// signature}}}`, each base64url with no padding. Refused, never built, when KIFF would refuse it.
+pub fn answer_body(
+    signed_at: &str,
+    asked: &[u8],
+    client_data: &[u8],
+    a: &Assertion,
+) -> Result<Vec<u8>, Refusal> {
+    if let Some(r) = refusal(&a.authenticator_data, asked, &a.credential_id) {
+        return Err(r);
+    }
+    let b = |v: &[u8]| URL_SAFE_NO_PAD.encode(v);
+    Ok(serde_json::to_vec(&serde_json::json!({
+        "signature": {
+            "signed_at": signed_at,
+            "passkey": {
+                "credential_id": b(&a.credential_id),
+                "client_data_json": b(client_data),
+                "authenticator_data": b(&a.authenticator_data),
+                "signature": b(&a.signature),
+            }
+        }
+    }))
+    .unwrap_or_default())
+}
+
 /// A credential id as a session keeps it (base64url, no padding), as bytes.
 pub fn credential_id(kept: &str) -> Option<Vec<u8>> {
     URL_SAFE_NO_PAD.decode(kept).ok().filter(|c| !c.is_empty())
@@ -247,6 +298,50 @@ mod tests {
             String::from_utf8(m).unwrap(),
             "kiff.request.v1\nt_acme\nPOST\n/v1/coach/drive\nfea4f2ebc2091cd2cbf48e1cc3b6285603bcc194cddea23f5737dfdc2a78414f\n2026-11-06T00:30:00Z"
         );
+    }
+
+    #[test]
+    fn an_answer_is_kiffs_message_and_its_body_carries_the_assertion() {
+        // KIFF's `auth.Answer.Message`: the iPad's vector for a refusal is
+        // "kiff.answer.v1\nt1\nce_1\nreject\nreturn first\n\n2\n…"; Approve once has no next
+        // step and no note.
+        let m = answer_v1(
+            "t_01",
+            "ce_1",
+            "approve-once",
+            4,
+            "2026-11-22T22:00:00.000Z",
+        );
+        assert_eq!(
+            String::from_utf8(m.clone()).unwrap(),
+            "kiff.answer.v1\nt_01\nce_1\napprove-once\n\n\n4\n2026-11-22T22:00:00.000Z"
+        );
+        let key = SigningKey::from_slice(&[9u8; 32]).unwrap();
+        let credential = b"this-computer-security-key";
+        let client = client_data_json(&m);
+        let a = authenticate(&key, RP_ID, UP | UV, credential, &client);
+        let body = answer_body("2026-11-22T22:00:00.000Z", credential, &client, &a).unwrap();
+        let v: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        // `answerSignature`: signed_at, and the assertion under `passkey`; no `value`.
+        assert_eq!(v["signature"]["signed_at"], "2026-11-22T22:00:00.000Z");
+        assert!(v["signature"].get("value").is_none());
+        let p = &v["signature"]["passkey"];
+        let field = |k: &str| URL_SAFE_NO_PAD.decode(p[k].as_str().unwrap()).unwrap();
+        assert_eq!(field("credential_id"), credential);
+        assert_eq!(field("client_data_json"), client);
+        // The challenge is base64url(sha256(the answer's message)), as KIFF checks it.
+        assert!(String::from_utf8(client.clone())
+            .unwrap()
+            .contains(&URL_SAFE_NO_PAD.encode(Sha256::digest(&m))));
+        // The assertion verifies over authData ‖ sha256(clientData).
+        let mut signed = field("authenticator_data");
+        signed.extend_from_slice(&Sha256::digest(&client));
+        let sig = p256::ecdsa::DerSignature::from_bytes(field("signature").as_slice()).unwrap();
+        assert!(VerifyingKey::from(&key).verify(&signed, &sig).is_ok());
+        // What KIFF would refuse is never built: a synced key, or another credential.
+        let synced = authenticate(&key, RP_ID, UP | UV | BE | BS, credential, &client);
+        assert!(answer_body("t", credential, &client, &synced).is_err());
+        assert!(answer_body("t", b"another", &client, &a).is_err());
     }
 
     #[test]

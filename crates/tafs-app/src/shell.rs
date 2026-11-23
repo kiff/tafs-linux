@@ -1239,8 +1239,9 @@ thread_local! {
 }
 
 /// Discard's ask (`DiscardSettingUpButton`'s confirmation): tafs cloud's title (else the button's
-/// words), its words, its yes (red) and its no (else Cancel). Yes would sign: this computer says
-/// it can't approve, in `slot`.
+/// words), its words, its yes (red) and its no (else Cancel). Yes is approved with this computer's
+/// security key where it has one, and Home is read again once it went, so the row goes; else this
+/// computer says it can't approve, in `slot`.
 fn ask_discard(
     w: &WordBook,
     discard: &tafs_core::sidebar::Discard,
@@ -1273,12 +1274,14 @@ fn ask_discard(
     let (w, act, slot) = (w.clone(), discard.act(), slot.clone());
     ask.connect_response(None, move |_, answer| {
         if let (true, Some(act)) = (answer == "yes", &act) {
-            crate::approval::refuse_as(
+            crate::approval::refuse_then(
                 &w,
                 tafs_core::sidebar::Mode::Kiff,
                 act,
                 what.clone(),
+                vec![],
                 &slot,
+                Some(Rc::new(reread_home)),
             );
         }
     });

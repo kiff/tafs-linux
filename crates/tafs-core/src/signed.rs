@@ -254,7 +254,17 @@ pub enum Act {
     /// `answerYourStep`: Done or Skip it on a step a taf handed its owner.
     AnswerStep { handoff: String },
     /// `approveOnce`: a held call approved once, from the dial's face.
-    ApproveOnce { call: String },
+    ApproveOnce {
+        call: String,
+        /// The hold's `accounting_version`, which the signed answer names (`kiff.answer.v1`).
+        accounting_version: Option<i64>,
+    },
+    /// `changeCard`: Extra room on a call over a total the Card keeps across calls, for this call
+    /// until that total resets, signed as an answer (`change-card`).
+    ExtraRoom {
+        call: String,
+        accounting_version: Option<i64>,
+    },
     /// `dismissCardUnit`: a Card unit request dismissed, signed like a refusal (`reject`).
     DismissCardUnit { exception: String },
     /// `approveKnobEvent`: an app event's subscription at planque, signed by the device.
@@ -339,6 +349,11 @@ impl Act {
                 }
                 serde_json::to_vec(&m).ok()?
             }
+            // An `api` door's, the iPad's exact bytes (`TafsCloud.reopenBody`; a DELETE's empty
+            // body). New key stays on the phone: its answer is the key, shown once, which this
+            // computer can't keep from a screen recording or a clipboard's history (the PM's 00:19).
+            Act::ReopenDoor { .. } => br#"{"open":true}"#.to_vec(),
+            Act::RevokeDoorKey { .. } | Act::RemoveApiDoor { .. } => Vec::new(),
             Act::DeleteGroup { .. }
             | Act::RemoveGroupMember { .. }
             | Act::SignOutDevice { .. }
@@ -416,7 +431,11 @@ impl Act {
                 "POST",
                 format!("/v1/home/setting-up/{}/discard", escaped(agent)),
             ),
-            Act::ApproveOnce { call } => (
+            Act::ExtraRoom { call, .. } => (
+                "POST",
+                format!("/v1/me/card-exceptions/{}/change-card", escaped(call)),
+            ),
+            Act::ApproveOnce { call, .. } => (
                 "POST",
                 format!("/v1/me/card-exceptions/{}/approve-once", escaped(call)),
             ),
@@ -473,6 +492,34 @@ impl Act {
     /// cloud takes another door's open, keys and removal unsigned at the same paths, so the path
     /// can't tell: the doors screen refuses these before any call (`doors::api::only_signed`).
     pub fn at_api_door(&self) -> bool {
+        self.api_door_matches()
+    }
+
+    /// A held call's answer that a security key signs in its body (`kiff.answer.v1`, KIFF's
+    /// `checkPasskeyAnswer`): the hold, the answer and the accounting version it names. Approve
+    /// once and Extra room (`change-card`) only, and only when the hold's accounting version was
+    /// read.
+    pub fn answer(&self) -> Option<(&str, &'static str, i64)> {
+        match self {
+            Act::ApproveOnce {
+                call,
+                accounting_version: Some(v),
+            } => Some((call.as_str(), "approve-once", *v)),
+            Act::ExtraRoom {
+                call,
+                accounting_version: Some(v),
+            } => Some((call.as_str(), "change-card", *v)),
+            _ => None,
+        }
+    }
+
+    /// Whether the call goes to tafs cloud, not KIFF: what the device signs there (`at_device`),
+    /// and an `api` door's signed changes.
+    pub fn at_cloud(&self) -> bool {
+        self.at_device() || self.at_api_door()
+    }
+
+    fn api_door_matches(&self) -> bool {
         matches!(
             self,
             Act::ReopenDoor { .. }
@@ -619,7 +666,14 @@ mod tests {
             Act::AnswerStep {
                 handoff: "h1".into(),
             },
-            Act::ApproveOnce { call: "ce1".into() },
+            Act::ApproveOnce {
+                call: "ce1".into(),
+                accounting_version: Some(3),
+            },
+            Act::ExtraRoom {
+                call: "ce3".into(),
+                accounting_version: Some(2),
+            },
             Act::DismissCardUnit {
                 exception: "ce2".into(),
             },
@@ -709,9 +763,18 @@ mod tests {
                 continue;
             }
             if act.at_api_door() {
-                // An `api` door's: refused before any call, whatever the path (`doors::api`).
+                // An `api` door's: never sent unsigned, whatever the path (`doors::api`); with the
+                // security key, the iPad's exact request, at tafs cloud. New key only on the phone.
                 assert!(path.starts_with("/v1/tafs/t1/doors/d1"), "{act:?}");
-                assert!(act.request().is_none(), "{act:?}");
+                assert!(act.at_cloud(), "{act:?}");
+                match act {
+                    Act::NewDoorKey { .. } => assert!(act.request().is_none()),
+                    Act::ReopenDoor { .. } => assert_eq!(
+                        act.request(),
+                        Some(("PATCH", path.clone(), br#"{"open":true}"#.to_vec()))
+                    ),
+                    _ => assert_eq!(act.request(), Some((method, path.clone(), vec![]))),
+                }
                 continue;
             }
             if act.sends_nothing() {
@@ -911,7 +974,12 @@ mod tests {
         );
         // Not this way: planque's, an answer signed in its body, Make live, Raise the limit.
         assert!(Act::Disconnect { grant: "g".into() }.request().is_none());
-        assert!(Act::ApproveOnce { call: "c".into() }.request().is_none());
+        assert!(Act::ApproveOnce {
+            call: "c".into(),
+            accounting_version: Some(1),
+        }
+        .request()
+        .is_none());
         assert!(Act::MakeLive {
             taf: "t".into(),
             version: 2
@@ -930,6 +998,39 @@ mod tests {
         ] {
             let (m, p, _) = act.request().unwrap();
             assert!(signed(m, &p) || signed_at_cloud(m, &p), "{m} {p}");
+        }
+    }
+
+    #[test]
+    fn only_approve_once_with_its_accounting_version_is_an_answer() {
+        let once = Act::ApproveOnce {
+            call: "ce_1".into(),
+            accounting_version: Some(4),
+        };
+        assert_eq!(once.answer(), Some(("ce_1", "approve-once", 4)));
+        assert_eq!(
+            once.route(),
+            ("POST", "/v1/me/card-exceptions/ce_1/approve-once".into())
+        );
+        // Without the hold's version there's nothing to sign: the phone.
+        let unread = Act::ApproveOnce {
+            call: "ce_1".into(),
+            accounting_version: None,
+        };
+        assert_eq!(unread.answer(), None);
+        let room = Act::ExtraRoom {
+            call: "ce_2".into(),
+            accounting_version: Some(5),
+        };
+        assert_eq!(room.answer(), Some(("ce_2", "change-card", 5)));
+        assert_eq!(
+            room.route(),
+            ("POST", "/v1/me/card-exceptions/ce_2/change-card".into())
+        );
+        for act in acts() {
+            if !matches!(act, Act::ApproveOnce { .. } | Act::ExtraRoom { .. }) {
+                assert_eq!(act.answer(), None, "{act:?}");
+            }
         }
     }
 }

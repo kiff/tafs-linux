@@ -32,7 +32,7 @@ pub fn can_approve(kept: Option<&KeptSession>, act: &Act) -> bool {
     passkey::ENABLED
         && kept
             .is_some_and(|k| k.approval_mode == ApprovalMode::Passkey && k.security_key.is_some())
-        && act.request().is_some()
+        && (act.request().is_some() || act.answer().is_some())
 }
 
 /// Asks the key to approve `act` over `parent`, and sends it. `done` hears once: `Ok` once KIFF
@@ -52,12 +52,21 @@ pub fn approve(
     revoke_first: Vec<String>,
     done: Approved,
 ) {
-    let (Some((method, path, body)), Some(credential)) = (
-        act.request(),
-        kept.security_key
-            .as_deref()
-            .and_then(passkey::credential_id),
-    ) else {
+    // A request signed in its header, or a held call's answer signed in its body.
+    let signs = match (act.request(), act.answer()) {
+        (Some((method, path, body)), _) => Signs::Request { method, path, body },
+        (None, Some((hold, answer, version))) => Signs::Answer {
+            hold: hold.to_string(),
+            answer,
+            version,
+        },
+        (None, None) => return,
+    };
+    let Some(credential) = kept
+        .security_key
+        .as_deref()
+        .and_then(passkey::credential_id)
+    else {
         return;
     };
     let tenant = kept.tenant.clone().unwrap_or_default();
@@ -66,6 +75,7 @@ pub fn approve(
     // KIFF's answer when it refused what the key approved: said once the sheet closes.
     let refused: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
     let removing = matches!(act, Act::RemoveTaf { .. });
+    let act_sent = act.clone();
     let attempt: crate::pin_sheet::Attempt = {
         let (open, refused, w2) = (open.clone(), refused.clone(), (*w).clone());
         Arc::new(move |pin| {
@@ -73,7 +83,16 @@ pub fn approve(
                 .lock()
                 .unwrap_or_else(|e| e.into_inner())
                 .next(chrono::Utc::now());
-            let message = passkey::request_v1(&tenant, method, &path, &body, &signed_at);
+            let message = match &signs {
+                Signs::Request { method, path, body } => {
+                    passkey::request_v1(&tenant, method, path, body, &signed_at)
+                }
+                Signs::Answer {
+                    hold,
+                    answer,
+                    version,
+                } => passkey::answer_v1(&tenant, hold, answer, *version, &signed_at),
+            };
             let client_data = passkey::client_data_json(&message);
             let ask = AssertionAsk::new(&passkey::client_data_hash(&client_data), &credential)?;
             let answer = open.get_assertion(&ask, Some(pin))?;
@@ -82,9 +101,18 @@ pub fn approve(
                 authenticator_data: answer.authenticator_data,
                 signature: answer.signature,
             };
-            // What KIFF would refuse is never sent.
-            let header = passkey::header(&signed_at, &credential, &client_data, &assertion, None)
-                .map_err(|_| KeyError::Unreadable)?;
+            // What KIFF would refuse is never sent: the assertion in the request's header, or in
+            // the answer's body.
+            let signed = match &signs {
+                Signs::Request { .. } => {
+                    passkey::header(&signed_at, &credential, &client_data, &assertion, None)
+                }
+                Signs::Answer { .. } => {
+                    passkey::answer_body(&signed_at, &credential, &client_data, &assertion)
+                        .map(|b| String::from_utf8(b).unwrap_or_default())
+                }
+            }
+            .map_err(|_| KeyError::Unreadable)?;
             // Its Cards first, as the iPad's removal: approved, then revoked, then sent.
             let cards_left = revoke_first
                 .iter()
@@ -93,19 +121,25 @@ pub fn approve(
             // From here the act may have reached KIFF: whatever comes back, the sheet closes with
             // KIFF's line (or the network's), and never offers a try that would send it again.
             // `Ok`: it went, with a removal's line when a part didn't; `Err`: why it didn't.
-            let sent: Result<Option<String>, String> =
-                match crate::kiff::send_with_key(&token, &languages, method, &path, &body, &header)
-                {
-                    Ok(a) if (200..300).contains(&a.status) => Ok(removing
-                        .then(|| tafs_core::removal::read(&a.body))
-                        .flatten()
-                        .and_then(|r| tafs_core::removal::after(&w2, cards_left, &r).ok())
-                        .flatten()),
-                    Ok(a) => Err(tafs_core::signin::refusal(&a, Some(&w2))
-                        .words(&w2)
-                        .unwrap_or_default()),
-                    Err(e) => Err(e.words(&w2).unwrap_or_default()),
-                };
+            let answered = match &signs {
+                Signs::Request { method, path, body } => crate::kiff::send_with_key(
+                    &token, &languages, &act_sent, method, path, body, &signed,
+                ),
+                Signs::Answer { .. } => {
+                    crate::kiff::send_answer(&token, &languages, &act_sent, signed.as_bytes())
+                }
+            };
+            let sent: Result<Option<String>, String> = match answered {
+                Ok(a) if (200..300).contains(&a.status) => Ok(removing
+                    .then(|| tafs_core::removal::read(&a.body))
+                    .flatten()
+                    .and_then(|r| tafs_core::removal::after(&w2, cards_left, &r).ok())
+                    .flatten()),
+                Ok(a) => Err(tafs_core::signin::refusal(&a, Some(&w2))
+                    .words(&w2)
+                    .unwrap_or_default()),
+                Err(e) => Err(e.words(&w2).unwrap_or_default()),
+            };
             let line = match sent {
                 Ok(None) => return Ok(()),
                 Ok(Some(not_finished)) => Some(not_finished),
@@ -139,6 +173,21 @@ pub fn approve(
         })
     };
     crate::pin_sheet::present(w, parent, what, attempt, read_tries, stop, sheet_done);
+}
+
+/// What the key signs: a request, its assertion in a header (`kiff.request.v1`); or a held call's
+/// answer, its assertion in the body (`kiff.answer.v1`).
+enum Signs {
+    Request {
+        method: &'static str,
+        path: String,
+        body: Vec<u8>,
+    },
+    Answer {
+        hold: String,
+        answer: &'static str,
+        version: i64,
+    },
 }
 
 /// Revokes one Card at KIFF as the session (`kiff.revoke(cardID:)`): true once KIFF took it.
@@ -208,7 +257,26 @@ mod tests {
         // Not one whose whole request this app doesn't write.
         assert!(!can_approve(
             Some(&keyed),
-            &Act::ApproveOnce { call: "c".into() }
+            &Act::ApproveOnce {
+                call: "c".into(),
+                accounting_version: None,
+            }
+        ));
+        // A held call's answer with its accounting version is signed here: Approve once and
+        // Extra room alike.
+        assert!(can_approve(
+            Some(&keyed),
+            &Act::ApproveOnce {
+                call: "c".into(),
+                accounting_version: Some(7),
+            }
+        ));
+        assert!(can_approve(
+            Some(&keyed),
+            &Act::ExtraRoom {
+                call: "c".into(),
+                accounting_version: Some(7),
+            }
         ));
         // A view-only session, or a passkey one with no key registered here, can't.
         let view = tafs_core::pairing::kept(&token, &key, 0);

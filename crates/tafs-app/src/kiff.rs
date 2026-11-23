@@ -364,22 +364,59 @@ pub fn kiff_send(
 /// act's whole request (`Act::request`) with its `KIFF-Passkey-Assertion` header, which covers
 /// exactly these bytes. tafs cloud's own signed routes (`signed_at_cloud`) go there; the rest to
 /// KIFF. Switched off with `passkey::ENABLED`: nothing calls it until KIFF takes the key.
+/// A held call's answer signed by this computer's security key, the assertion in its body
+/// (`answerSignature.passkey`): POSTed to the act's own route at KIFF, and only for an act that is
+/// such an answer (`Act::answer`).
+pub fn send_answer(
+    token: &str,
+    languages: &[&str],
+    act: &tafs_core::signed::Act,
+    body: &[u8],
+) -> Result<Answer, KiffError> {
+    let (method, path) = act.route();
+    if act.answer().is_none() || method != "POST" || !tafs_core::signed::signed(method, &path) {
+        return Err(KiffError::Unreadable);
+    }
+    let url = format!("{KIFF_API}{path}");
+    if !may_send_to(&url) {
+        return Err(KiffError::Unreadable);
+    }
+    Kiff::read(
+        agent()
+            .request(method, &url)
+            .set("Accept", "application/json")
+            .set("Accept-Language", &accept_language(languages))
+            .set("Authorization", &format!("Bearer {token}"))
+            .set("Content-Type", "application/json")
+            .send_bytes(body),
+    )
+}
+
 pub fn send_with_key(
     token: &str,
     languages: &[&str],
+    act: &tafs_core::signed::Act,
     method: &str,
     path: &str,
     body: &[u8],
     assertion: &str,
 ) -> Result<Answer, KiffError> {
-    if !tafs_core::signed::signed(method, path) && !tafs_core::signed::signed_at_cloud(method, path)
+    // Only the act's own request, to where it's taken: tafs cloud for what the device signs there
+    // and an `api` door's changes, else KIFF, and only a call KIFF takes signed.
+    if act
+        .request()
+        .as_ref()
+        .map(|(m, p, b)| (*m, p.as_str(), b.as_slice()))
+        != Some((method, path, body))
     {
         return Err(KiffError::Unreadable);
     }
-    let base = if tafs_core::signed::signed_at_cloud(method, path) {
+    let base = if act.at_cloud() {
         tafs_core::home::TAFS_CLOUD
-    } else {
+    } else if tafs_core::signed::signed(method, path) {
         KIFF_API
+    } else {
+        return Err(KiffError::Unreadable);
     };
     let url = format!("{base}{path}");
     if !may_send_to(&url) {
@@ -772,6 +809,62 @@ mod tests {
         read_stream(bytes, &tx);
         drop(tx);
         std::iter::from_fn(|| rx.try_recv().ok()).collect()
+    }
+
+    #[test]
+    fn the_key_sends_only_the_acts_own_request() {
+        use tafs_core::signed::Act;
+        let act = Act::RevokeDoorKey {
+            taf: "t1".into(),
+            door: "d1".into(),
+            key: "k1".into(),
+        };
+        let (m, p, b) = act.request().unwrap();
+        // Another method, path or body is refused before anything is sent.
+        for (method, path, body) in [
+            ("POST", p.as_str(), b.as_slice()),
+            (m, "/v1/tafs/t1/doors/d1", b.as_slice()),
+            (m, p.as_str(), b"{}".as_slice()),
+        ] {
+            assert!(matches!(
+                send_with_key("tok", &["en"], &act, method, path, body, "x"),
+                Err(KiffError::Unreadable)
+            ));
+        }
+        // Only a held call's answer goes as an answer.
+        assert!(matches!(
+            send_answer("tok", &["en"], &act, b"{}"),
+            Err(KiffError::Unreadable)
+        ));
+        assert!(matches!(
+            send_answer(
+                "tok",
+                &["en"],
+                &Act::ApproveOnce {
+                    call: "c".into(),
+                    accounting_version: None
+                },
+                b"{}"
+            ),
+            Err(KiffError::Unreadable)
+        ));
+        // New key has no request here: nothing can be sent for it.
+        let new_key = Act::NewDoorKey {
+            taf: "t1".into(),
+            door: "d1".into(),
+        };
+        assert!(matches!(
+            send_with_key(
+                "tok",
+                &["en"],
+                &new_key,
+                "POST",
+                "/v1/tafs/t1/doors/d1/keys",
+                b"{}",
+                "x"
+            ),
+            Err(KiffError::Unreadable)
+        ));
     }
 
     #[test]

@@ -376,13 +376,16 @@ fn ask_remove(
     );
     ask.connect_response(None, move |_, r| {
         if r == "remove" {
-            crate::approval::refuse_with(
+            // Once it went with the security key, Home is read again, so the taf leaves the
+            // sidebar as on the iPad.
+            crate::approval::refuse_then(
                 &w,
                 tafs_core::sidebar::Mode::Kiff,
                 &tafs_core::signed::Act::RemoveTaf { taf: id.clone() },
                 what.clone(),
                 cards.clone(),
                 &slot,
+                Some(std::rc::Rc::new(crate::shell::reread_home)),
             );
         }
     });
