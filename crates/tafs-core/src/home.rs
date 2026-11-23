@@ -1064,6 +1064,104 @@ pub fn long_date(language: &str, day: chrono::NaiveDate) -> String {
     }
 }
 
+/// What Home's sidebar lists, from what was read (`listedTafs`, `byRecent`, `waitingOnOwner`):
+/// each taf's row and whether it's relevant now, in the sidebar's order; the held calls on their
+/// tafs; the Overview's tafs in the same order; the tafs shared with this person; other agents.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Lists {
+    pub tafs: Vec<(TafRow, bool)>,
+    pub held: Vec<crate::held::HeldCall>,
+    pub overview: Vec<OverviewTaf>,
+    pub shared: std::collections::BTreeSet<String>,
+    pub others: Vec<TafRow>,
+}
+
+/// Home's lists. `exceptions`: KIFF's held calls; `grants`: planque's connections as read (none
+/// when they couldn't be); `activity`: KIFF's activity; `access`: this person's access by KIFF
+/// agent; `chat_latest`: a taf's newest chat message kept here, by its key.
+#[allow(clippy::too_many_arguments)]
+pub fn lists(
+    w: &WordBook,
+    h: &Home,
+    exceptions: &[crate::held::CardException],
+    grants: &[crate::connections::Grant],
+    activity: &[crate::record::ActivityCall],
+    access: &BTreeMap<String, crate::access::Access>,
+    chat_latest: &dyn Fn(&str) -> Option<DateTime<Utc>>,
+    at: DateTime<Local>,
+) -> Result<Lists, WordsError> {
+    let tafs: Vec<Taf> = h.tafs.iter().map(|t| taf(w, t)).collect::<Result<_, _>>()?;
+    // Each held call on its taf, by the KIFF agent it's held for.
+    let mut held = Vec::new();
+    for e in exceptions {
+        let key = tafs
+            .iter()
+            .find(|t| t.agent == e.subject)
+            .map(|t| t.key.clone())
+            .unwrap_or_else(|| format!("agent:{}", e.subject));
+        held.push(crate::held::held(w, e, &key)?);
+    }
+    // `signedOut`: a connection its vendor signed out, for the taf it was made for.
+    let signed_out = |t: &Taf| {
+        grants
+            .iter()
+            .find(|g| g.request.agent == t.agent && g.needs_reconnect())
+    };
+    // `waitingOnOwner`: a call held for an answer, or a connection to sign in to again.
+    let holds = |t: &Taf| held.iter().any(|c| c.taf == t.key);
+    let waits = |t: &Taf| holds(t) || signed_out(t).is_some();
+    // Its newest call in the Record, by its KIFF agent, or its chat's newest message as kept here
+    // (`byRecent`: "the latest message in its chat").
+    let latest = |t: &Taf| {
+        activity
+            .iter()
+            .filter(|c| c.actor_id.as_deref() == Some(t.agent.as_str()))
+            .map(|c| c.created_at)
+            .chain(chat_latest(&t.key))
+            .max()
+    };
+    let ordered = crate::sidebar::by_recent(&tafs, waits, latest);
+    let rows = ordered
+        .iter()
+        .map(|t| {
+            let mut r = row(t);
+            // Its line says so first, in planque's words, in the amber.
+            if let Some(g) = signed_out(t) {
+                r.now = crate::connections::signed_out_words(w, g);
+                r.tone = Tone::Amber;
+            }
+            // Its open trial, under it, for whoever manages it: its sheet is reached from the
+            // taf's Versions, which only they see.
+            if access.get(&t.agent).is_some_and(|a| a.manage) {
+                r.trial = trial_row(w, t).ok().flatten().map(Box::new);
+            }
+            // Relevance is the held calls' and tafs cloud's, as the iPad's `relevantNow`.
+            (r, relevant(t, holds(t), at))
+        })
+        .collect();
+    let overview = ordered.iter().map(|t| overview_taf(t)).collect();
+    // `sharedWithMe`: KIFF's answer says use without manage; no answer yet is not "shared".
+    let shared = tafs
+        .iter()
+        .filter(|t| access.get(&t.agent).is_some_and(|a| !a.manage))
+        .map(|t| t.key.clone())
+        .collect();
+    // Agents made through KIFF's API, not run by tafs: their Cards, apart (`otherAgents`).
+    let others = h
+        .other_agents()
+        .iter()
+        .filter_map(|o| taf(w, o).ok())
+        .map(|t| row(&t))
+        .collect();
+    Ok(Lists {
+        tafs: rows,
+        held,
+        overview,
+        shared,
+        others,
+    })
+}
+
 #[cfg(test)]
 mod finish_tests {
     use super::*;
@@ -1119,5 +1217,176 @@ mod finish_tests {
         }));
         assert_eq!(s.finish, None);
         assert_eq!(s.chat.map(|c| c.taf), Some("c".to_string()));
+    }
+}
+
+#[cfg(test)]
+mod lists_tests {
+    use super::*;
+
+    fn en() -> WordBook {
+        WordBook::load(&WordBook::default_root(), "en").unwrap()
+    }
+
+    fn contract(path: &str) -> Value {
+        let v: Value = serde_json::from_slice(
+            &std::fs::read(concat!(env!("CARGO_MANIFEST_DIR"), "/../../").to_string() + path)
+                .unwrap(),
+        )
+        .unwrap();
+        v.get("answer").cloned().unwrap_or(v)
+    }
+
+    /// The contract's Home with three tafs made from its one: A, B and C, by KIFF agents a, b, c,
+    /// none relevant by tafs cloud's word (so the app's own rule decides) and nothing run lately.
+    fn home() -> Home {
+        let mut h = contract("shared/contracts/home.json");
+        let base = h["tafs"][0].clone();
+        let one = |id: &str, name: &str, agent: &str| {
+            let mut t = base.clone();
+            t["id"] = id.into();
+            t["name"] = name.into();
+            t["kiff_agent"] = agent.into();
+            let o = t.as_object_mut().unwrap();
+            o.remove("relevant_now");
+            o.insert("last_run".into(), Value::Null);
+            o.insert("last_change".into(), Value::Null);
+            t
+        };
+        h["tafs"] = serde_json::json!([
+            one("t-a", "A", "a"),
+            one("t-b", "B", "b"),
+            one("t-c", "C", "c")
+        ]);
+        Home::read(&serde_json::to_vec(&h).unwrap()).unwrap()
+    }
+
+    /// KIFF's held calls as the fixture has them, its first held for `agent`: the file's own
+    /// text, with its subject and times filled, and only the first call kept.
+    fn held_for(agent: &str) -> Vec<crate::held::CardException> {
+        let body = std::fs::read_to_string(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../tafs-app/fixtures/held-kiff.json"
+        ))
+        .unwrap()
+        .replacen(
+            "\"subject\": \"rae\"",
+            &format!("\"subject\": \"{agent}\""),
+            1,
+        )
+        // A template, as tools/screenshots.sh fills it: held a moment ago, lapsing later.
+        .replace("__HELD_AT__", "2026-11-23T09:00:00Z")
+        .replace("__EXPIRES__", "2099-01-01T00:00:00Z");
+        let mut calls = crate::held::read_held(body.as_bytes()).unwrap();
+        calls.truncate(1);
+        assert_eq!(calls[0].subject, agent);
+        calls
+    }
+
+    fn signed_out(agent: &str) -> Vec<crate::connections::Grant> {
+        crate::connections::Grant::read_list(
+            serde_json::json!([{"id": "g1", "status": "needs_reconnect", "text": "t", "digest": "d",
+                "status_words": "Signed out by Gmail · sign in again", "events": [],
+                "request": {"server": "s", "agent": agent, "tools": [{"tool": "fetch"}]}}])
+            .to_string()
+            .as_bytes(),
+        )
+        .unwrap()
+    }
+
+    fn names(l: &Lists) -> Vec<&str> {
+        l.tafs.iter().map(|(r, _)| r.name.as_str()).collect()
+    }
+
+    #[test]
+    fn home_lists_a_held_call_or_a_signed_out_connection_first() {
+        let w = en();
+        let none = |_: &str| None;
+        let at = Local::now();
+        // Nothing waits: tafs cloud's order.
+        let l = lists(&w, &home(), &[], &[], &[], &BTreeMap::new(), &none, at).unwrap();
+        assert_eq!(names(&l), ["A", "B", "C"]);
+        assert!(l.tafs.iter().all(|(_, relevant)| !relevant));
+        // C has a held call, B a connection its vendor signed out: both first, in tafs cloud's
+        // order between them.
+        let l = lists(
+            &w,
+            &home(),
+            &held_for("c"),
+            &signed_out("b"),
+            &[],
+            &BTreeMap::new(),
+            &none,
+            at,
+        )
+        .unwrap();
+        assert_eq!(names(&l), ["B", "C", "A"]);
+        assert_eq!(
+            l.overview
+                .iter()
+                .map(|o| o.name.as_str())
+                .collect::<Vec<_>>(),
+            ["B", "C", "A"]
+        );
+        // B's line says so in planque's words, in the amber.
+        let (b, b_relevant) = &l.tafs[0];
+        assert_eq!(b.now, "Signed out by Gmail · sign in again");
+        assert_eq!(b.tone, Tone::Amber);
+        // Relevance stays the held calls': C is, B isn't.
+        assert!(!b_relevant);
+        assert!(l.tafs[1].1);
+        // The held call is on C, by its key.
+        assert_eq!(l.held.len(), 1);
+        assert_eq!(l.held[0].taf, "t-c");
+        // Held for an agent Home doesn't list: kept, by its agent.
+        let l = lists(
+            &w,
+            &home(),
+            &held_for("zz"),
+            &[],
+            &[],
+            &BTreeMap::new(),
+            &none,
+            at,
+        )
+        .unwrap();
+        assert_eq!(l.held[0].taf, "agent:zz");
+        assert_eq!(names(&l), ["A", "B", "C"]);
+    }
+
+    #[test]
+    fn home_lists_the_newest_used_first_and_who_shares() {
+        let w = en();
+        let at = Local::now();
+        // C's chat has its newest message: C first among those that don't wait.
+        let latest = |key: &str| (key == "t-c").then(Utc::now);
+        let l = lists(&w, &home(), &[], &[], &[], &BTreeMap::new(), &latest, at).unwrap();
+        assert_eq!(names(&l), ["C", "A", "B"]);
+        // Use without manage is shared; manage isn't; no answer isn't either.
+        let mut access = BTreeMap::new();
+        access.insert(
+            "a".to_string(),
+            crate::access::Access {
+                use_: true,
+                oversee: false,
+                manage: false,
+                groups: None,
+            },
+        );
+        access.insert(
+            "b".to_string(),
+            crate::access::Access {
+                use_: true,
+                oversee: true,
+                manage: true,
+                groups: None,
+            },
+        );
+        let none = |_: &str| None;
+        let l = lists(&w, &home(), &[], &[], &[], &access, &none, at).unwrap();
+        assert_eq!(
+            l.shared.iter().map(String::as_str).collect::<Vec<_>>(),
+            ["t-a"]
+        );
     }
 }
