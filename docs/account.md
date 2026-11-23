@@ -118,6 +118,17 @@ What differs:
 - **Under Account in the sidebar** is the account's name (`accountLabel`), as the iPad's; its
   email is on Account itself, in Signed in as.
 
+## Sign-in
+
+Account › Sign-in (`CodeSignInRow`, tafs#1711; `crates/tafs-app/src/code_sign_in.rs`, `tafs-core/src/code_sign_in.rs`),
+signed in with KIFF, between the AI-data consent and the time zone: "Sign in with a code sent by email", On or Off, and
+what it means. Read from KIFF when Account opens (`GET /v1/me/sign-in`, `{email_code, available}`), as the session;
+drawn once read, the section left out when it can't be. **Turn off** goes from here (`PUT /v1/me/sign-in
+{"email_code": false}`, unsigned). **Turn on** needs a recent sign-in, which this computer's session never passes, so it
+opens KIFF's own page (`https://app.kiff.dev/dashboard/sign-in`) in the browser, says so under the button, and the
+setting is read again when this window is in front again. Where KIFF can't send codes, it says so. KIFF emails the
+person about either change. `--page account-sign-in` scrolls Account to it for the screenshot.
+
 ## Time zone
 
 Account › Time zone (`TimeZonePicker`, `crates/tafs-app/src/zones.rs`, `tafs-core/src/zones.rs`),

@@ -1,29 +1,33 @@
 {
+ "suggestions": {
   "suggestions": {
-    "suggestions": {
-      "show": true,
-      "words": "A new Coach conversation offers a few things to start with."
-    }
-  },
-  "consent": {
-    "consent": {
-      "given": true,
-      "at": "2026-11-13T09:00:00.000Z",
-      "version": "1",
-      "words": {
-        "title": "Your data and the AI",
-        "lines": [
-          "tafs uses Anthropic's Claude AI for Coach and your tafs.",
-          "What's sent to it: what you write to Coach and your tafs, the files you attach, what your connected apps return to a taf while it works, and what's on your screen while Coach helps you in the app.",
-          "What's never sent: the passwords and keys your connected apps use, or your fingerprint.",
-          "Anthropic uses it to answer and keeps it up to 30 days.",
-          "Nothing is sent until you allow it. You can withdraw in Account."
-        ],
-        "allow": "Allow",
-        "not_now": "Not now",
-        "withdraw": "Withdraw",
-        "given": "AI use: allowed"
-      }
-    }
+   "show": true,
+   "words": "A new Coach conversation offers a few things to start with."
   }
+ },
+ "consent": {
+  "consent": {
+   "given": true,
+   "at": "2026-11-13T09:00:00.000Z",
+   "version": "1",
+   "words": {
+    "title": "Your data and the AI",
+    "lines": [
+     "tafs uses Anthropic's Claude AI for Coach and your tafs.",
+     "What's sent to it: what you write to Coach and your tafs, the files you attach, what your connected apps return to a taf while it works, and what's on your screen while Coach helps you in the app.",
+     "What's never sent: the passwords and keys your connected apps use, or your fingerprint.",
+     "Anthropic uses it to answer and keeps it up to 30 days.",
+     "Nothing is sent until you allow it. You can withdraw in Account."
+    ],
+    "allow": "Allow",
+    "not_now": "Not now",
+    "withdraw": "Withdraw",
+    "given": "AI use: allowed"
+   }
+  }
+ },
+ "sign_in": {
+  "email_code": false,
+  "available": true
+ }
 }

@@ -161,9 +161,17 @@ fn sheet(w: Rc<WordBook>, source: ShotSource, step: String, parent: &gtk::Button
     dialog.present(Some(parent));
     let body = body.downgrade();
     glib::spawn_future_local(async move {
-        let read = gio::spawn_blocking(move || source.shot(&step))
-            .await
-            .unwrap_or(Read::Failed);
+        // Read and decoded off the main loop, so a large picture never holds the window.
+        let (read, decoded) = gio::spawn_blocking(move || {
+            let read = source.shot(&step);
+            let decoded = match &read {
+                Read::Shown(shot) => chrome_shots::pixels(shot),
+                _ => None,
+            };
+            (read, decoded)
+        })
+        .await
+        .unwrap_or((Read::Failed, None));
         let Some(body) = body.upgrade() else { return };
         while let Some(c) = body.first_child() {
             body.remove(&c);
@@ -177,7 +185,7 @@ fn sheet(w: Rc<WordBook>, source: ShotSource, step: String, parent: &gtk::Button
             )
         };
         match read {
-            Read::Shown(shot) => match chrome_shots::pixels(&shot) {
+            Read::Shown(shot) => match decoded {
                 Some((width, height, rgba)) => {
                     let bytes = glib::Bytes::from_owned(rgba);
                     let texture = gdk::MemoryTexture::new(

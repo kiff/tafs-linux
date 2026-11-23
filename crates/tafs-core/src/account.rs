@@ -265,6 +265,8 @@ pub enum Slot {
     Consent,
     /// Export my chats (`ExportChatsSection`), with what it exports under it.
     Export,
+    /// Sign-in's email-code setting (`CodeSignInRow`), as KIFF keeps it.
+    SignInCode,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -396,6 +398,14 @@ pub fn lines(
         sections.push(Section {
             slot: Some(Slot::Consent),
             header: None,
+            rows: vec![],
+        });
+    }
+    // Sign in with a code sent by email (`CodeSignInRow`): read from KIFF when Account opens.
+    if kiff {
+        sections.push(Section {
+            slot: Some(Slot::SignInCode),
+            header: Some(l("settings.sign_in_code.title")?),
             rows: vec![],
         });
     }

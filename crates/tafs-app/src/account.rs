@@ -105,6 +105,12 @@ pub fn page(a: &AccountLines, actions: &Actions) -> gtk::Widget {
                     into,
                     shown,
                 ),
+                Slot::SignInCode => crate::code_sign_in::row(
+                    actions.words.clone(),
+                    reads.source.clone(),
+                    into,
+                    shown,
+                ),
                 Slot::Export => {}
             }
             continue;
@@ -172,7 +178,7 @@ pub fn page(a: &AccountLines, actions: &Actions) -> gtk::Widget {
     overlay.upcast()
 }
 
-fn line(label: &str, value: Option<&str>, chevron: bool) -> gtk::Box {
+pub fn line(label: &str, value: Option<&str>, chevron: bool) -> gtk::Box {
     let b = gtk::Box::new(gtk::Orientation::Horizontal, 12);
     let l = text(label, 17, 400, &["tafs-ink"]);
     l.set_hexpand(true);
