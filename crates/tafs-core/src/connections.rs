@@ -636,6 +636,21 @@ pub fn last_failure(
     })
 }
 
+/// `signedOutWords`: a connection its vendor signed out, in planque's words, else the app's.
+pub fn signed_out_words(w: &WordBook, g: &Grant) -> String {
+    match g
+        .status_words
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        Some(words) => words.to_string(),
+        None => w
+            .line("connect.status.signed_out_plain")
+            .unwrap_or_default(),
+    }
+}
+
 /// `ConnectApprovalSheet.host(of:)`: the host a key is used with, without its scheme or path;
 /// the server as written when it has none.
 pub fn host(server: &str) -> String {
@@ -1341,5 +1356,20 @@ mod tests {
             Some("Last failed: Other's · timed out")
         );
         assert_eq!(last_failure(&w, &g, &record[2..], None).unwrap(), None);
+    }
+
+    #[test]
+    fn a_connection_its_vendor_signed_out_says_so_in_planques_words() {
+        let w = words("en");
+        let g = grant(serde_json::json!({"status": "needs_reconnect",
+            "status_words": "Signed out by Gmail · sign in again"}));
+        assert!(g.needs_reconnect());
+        assert_eq!(
+            signed_out_words(&w, &g),
+            "Signed out by Gmail · sign in again"
+        );
+        // planque gave none, or a blank: the app's own.
+        let g = grant(serde_json::json!({"status": "needs_reconnect", "status_words": "  "}));
+        assert_eq!(signed_out_words(&w, &g), "Signed out · sign in again");
     }
 }

@@ -84,6 +84,8 @@ use tafs_core::words::{WordBook, SHIPPED};
 struct Cloud {
     home: Home,
     held: Vec<CardException>,
+    /// The account's connections from planque, as this computer read them.
+    grants: Vec<tafs_core::connections::Grant>,
     /// The KIFF account (`GET /v1/me`), once read.
     account: Option<Account>,
     /// KIFF's activity, for the Record.
@@ -923,6 +925,8 @@ fn activate(app: &adw::Application, o: &Options) {
         Some(home) => Rc::new(Cloud {
             home,
             held: held_file(o.held.as_deref()),
+            // A screenshot reads no connection from planque.
+            grants: vec![],
             account: o.me.as_deref().map(|path| {
                 std::fs::read(path)
                     .ok()
@@ -1479,10 +1483,10 @@ impl App {
     fn read_account(self: &Rc<Self>, kept: KeptSession, view_only: bool) {
         let generation = self.account_reads.get() + 1;
         self.account_reads.set(generation);
-        let (me, languages, token) = (self.clone(), self.languages.clone(), kept.token.clone());
+        let (me, languages, reading) = (self.clone(), self.languages.clone(), kept.clone());
         let words: WordBook = (*self.words).clone();
         glib::spawn_future_local(async move {
-            let read = gio::spawn_blocking(move || read_cloud(&token, &languages, &words))
+            let read = gio::spawn_blocking(move || read_cloud(&reading, &languages, &words))
                 .await
                 .unwrap_or(Read::Unreachable(tafs_core::sidebar::Unreachable::Error));
             me.home_pulling.set(false);
@@ -2268,16 +2272,7 @@ impl App {
                 None,
             ),
             (_, Some(c)) => {
-                let (model, mut tafs) = home_model(
-                    words,
-                    &c.home,
-                    &c.held,
-                    &c.activity,
-                    &c.access,
-                    c.balance.as_ref(),
-                    at,
-                )
-                .unwrap_or_else(|e| fail(e));
+                let (model, mut tafs) = home_model(words, c, at).unwrap_or_else(|e| fail(e));
                 // Who uses each taf this person manages, and each tafs cloud taf's last run.
                 for o in tafs.iter_mut() {
                     let agent = c
@@ -2422,10 +2417,10 @@ impl App {
         let generation = self.account_reads.get();
         let reread = self.home_rereads.get() + 1;
         self.home_rereads.set(reread);
-        let (me, languages, token) = (self.clone(), self.languages.clone(), kept.token.clone());
+        let (me, languages, reading) = (self.clone(), self.languages.clone(), kept.clone());
         let words: WordBook = (*self.words).clone();
         glib::spawn_future_local(async move {
-            let read = gio::spawn_blocking(move || read_cloud(&token, &languages, &words))
+            let read = gio::spawn_blocking(move || read_cloud(&reading, &languages, &words))
                 .await
                 .unwrap_or(Read::Unreachable(tafs_core::sidebar::Unreachable::Error));
             me.home_pulling.set(false);
@@ -3182,7 +3177,8 @@ fn read_contract(path: &str) -> Option<Home> {
 /// (`listedTafs`, `byRecent`); Your tafs those relevant now, and tafs cloud's count of what waits.
 /// Everything the window reads at tafs cloud and KIFF as the session (`refresh`): Home, KIFF's held
 /// calls and activity, the account, and the rest the screens draw. Blocking: off the main loop.
-fn read_cloud(token: &str, languages: &[&'static str], words: &WordBook) -> Read {
+fn read_cloud(kept: &KeptSession, languages: &[&'static str], words: &WordBook) -> Read {
+    let token = kept.token.as_str();
     let signed_out = |a: &tafs_core::signin::Answer| a.status == 401;
     let me = kiff::me(token, languages).ok();
     let home = kiff::home(token, languages);
@@ -3285,7 +3281,18 @@ fn read_cloud(token: &str, languages: &[&'static str], words: &WordBook) -> Read
     } else {
         None
     };
+    // The account's connections (`refreshConnections`), read with this computer's device key on
+    // planque's safe route: a taf whose connection its vendor signed out waits on the owner. One
+    // that can't be read gives none, and the rest still is.
+    let grants = coach::this_device(kept, languages)
+        .and_then(|device| {
+            kiff::planque_safe(kept, &device, languages, tafs_core::planque::Safe::Grants).ok()
+        })
+        .filter(|a| (200..300).contains(&a.status))
+        .and_then(|a| tafs_core::connections::Grant::read_all(&a.body))
+        .unwrap_or_default();
     Read::Cloud(Box::new(Cloud {
+        grants,
         coach_setup,
         brief,
         balance,
@@ -3306,13 +3313,17 @@ fn read_cloud(token: &str, languages: &[&'static str], words: &WordBook) -> Read
 
 fn home_model(
     w: &WordBook,
-    h: &Home,
-    exceptions: &[CardException],
-    activity: &[tafs_core::record::ActivityCall],
-    access: &std::collections::BTreeMap<String, tafs_core::access::Access>,
-    balance: Option<&tafs_core::usage::Balance>,
+    c: &Cloud,
     at: chrono::DateTime<chrono::Local>,
 ) -> Result<(SidebarModel, Vec<tafs_core::overview::OverviewTaf>), tafs_core::words::WordsError> {
+    let (h, exceptions, grants, activity, access, balance) = (
+        &c.home,
+        &c.held,
+        &c.grants,
+        &c.activity,
+        &c.access,
+        c.balance.as_ref(),
+    );
     let tafs: Vec<tafs_core::home::Taf> = h
         .tafs
         .iter()
@@ -3328,7 +3339,15 @@ fn home_model(
             .unwrap_or_else(|| format!("agent:{}", e.subject));
         held.push(tafs_core::held::held(w, e, &key)?);
     }
-    let waits = |t: &tafs_core::home::Taf| held.iter().any(|c| c.taf == t.key);
+    // `signedOut`: a connection its vendor signed out, for the taf it was made for.
+    let signed_out = |t: &tafs_core::home::Taf| {
+        grants
+            .iter()
+            .find(|g| g.request.agent == t.agent && g.needs_reconnect())
+    };
+    // `waitingOnOwner`: a call held for an answer, or a connection to sign in to again.
+    let holds = |t: &tafs_core::home::Taf| held.iter().any(|c| c.taf == t.key);
+    let waits = |t: &tafs_core::home::Taf| holds(t) || signed_out(t).is_some();
     // Its newest call in the Record, by its KIFF agent, or its chat's newest message as kept here
     // (`byRecent`: "the latest message in its chat").
     let latest = |t: &tafs_core::home::Taf| {
@@ -3344,6 +3363,11 @@ fn home_model(
         .iter()
         .map(|t| {
             let mut row = tafs_core::home::row(t);
+            // Its line says so first, in planque's words, in the amber.
+            if let Some(g) = signed_out(t) {
+                row.now = tafs_core::connections::signed_out_words(w, g);
+                row.tone = tafs_core::sidebar::Tone::Amber;
+            }
             // Its open trial, under it, for whoever manages it: its sheet is reached from the
             // taf's Versions, which only they see.
             if access.get(&t.agent).is_some_and(|a| a.manage) {
@@ -3352,7 +3376,7 @@ fn home_model(
                     .flatten()
                     .map(Box::new);
             }
-            (row, tafs_core::home::relevant(t, waits(t), at))
+            (row, tafs_core::home::relevant(t, holds(t), at))
         })
         .collect();
     let overview = ordered

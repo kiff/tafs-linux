@@ -109,7 +109,10 @@ draws the sidebar and the Overview again from it (`TafsCloud.home`). The read is
   currency and decimals, in the app's language (`Money.figure`), and a bare number saying it has
   no currency; else the Card merged from its lines, from an older tafs cloud.
 - **Your tafs:** those relevant now (a call of its waits, or it ran or changed in the last 24
-  hours). With tafs but none relevant now, there's no Your tafs: they're all on the Overview.
+  hours). A taf waiting on the owner comes first (`waitingOnOwner`): a call held for an answer, or a
+  connection its vendor signed out (`signedOut`, from planque's grants as this computer reads them
+  with Home, on planque's safe route with the device key), whose line then says so in planque's
+  words, in the amber ("Signed out · sign in again" when planque gives none). With tafs but none relevant now, there's no Your tafs: they're all on the Overview.
 - **Needs you's count** is tafs cloud's, and so are its words.
 - **Last result:** the first line of its last run's report (`GET /v1/tafs/{id}/runs`, then the
   latest run with a session, `GET /v1/tafs/{id}/runs/{session}`), else that run's error, else
@@ -217,8 +220,5 @@ crates/tafs-app/fixtures/balance-home-line.json`, synthetic) is CI's `sidebar-pl
 
 ## Not yet
 
-- **Its order, in part:** a connection its vendor signed out doesn't count as waiting yet (planque's
-  grants aren't read).
-- **Held calls, steps and knocks** from KIFF: until they're read, Your tafs is what ran or changed.
-- **The account's name** under Account, and its zone for times: from KIFF's account read.
+Nothing: every branch is drawn and acts.
 
