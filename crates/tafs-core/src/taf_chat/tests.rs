@@ -648,31 +648,29 @@ fn the_wait_ends_with_an_answer_work_or_two_minutes() {
 }
 
 #[test]
-fn reads_follow_each_message_thirty_times() {
+fn reads_follow_the_owners_last_message_while_the_taf_owes_an_answer() {
     let mut c = chat_of(&format!(
         r#"{{"messages":[{}]}}"#,
         owner("Hi", "2026-11-16T09:00:00Z", "s")
     ));
-    let mut p = Polls::default();
     assert!(c.awaiting_reply());
-    for _ in 0..POLL_BUDGET {
-        assert!(p.read_now(&c));
-    }
-    assert!(!p.read_now(&c));
-    // Another message: thirty more.
+    let first = c.to_follow();
+    assert!(first.is_some());
+    // Another message: that one is followed, its window from the start (`follow`'s tests).
     c.thread.messages.push(mine_like("again"));
-    assert!(p.read_now(&c));
+    assert!(c.to_follow().is_some() && c.to_follow() != first);
+    assert_eq!(polls().step_now(), crate::follow::CHAT[0]);
     // Answered and idle: no reads.
     let c = chat_of(&format!(
         r#"{{"messages":[{},{}]}}"#,
         owner("Hi", "2026-11-16T09:00:00Z", "s"),
         taf("Hello", "2026-11-16T09:00:03Z", "s")
     ));
-    assert!(!Polls::default().read_now(&c));
+    assert_eq!(c.to_follow(), None);
     // Nothing of the owner's to follow: no reads, as the iPad's.
     let c = chat_of(r#"{"messages":[],"working":{"session":"s","run":"r"}}"#);
     assert!(c.thinking());
-    assert!(!Polls::default().read_now(&c));
+    assert_eq!(c.to_follow(), None);
 }
 
 #[test]

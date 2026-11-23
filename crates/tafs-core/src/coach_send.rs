@@ -658,13 +658,6 @@ impl QuestionSelection {
 
 // MARK: The conversation, as the app holds it.
 
-/// How often the thread is read again while Coach is open (`setupPollInterval`), every second
-/// while it works (`setupWorkingPollInterval`), and how many reads after the owner last wrote
-/// (`setupPollBudget`: five minutes).
-pub const POLL: std::time::Duration = std::time::Duration::from_secs(3);
-pub const WORKING_POLL: std::time::Duration = std::time::Duration::from_secs(1);
-pub const POLL_BUDGET: u32 = 100;
-
 /// How the last run ended, when the owner should know (`RunEnd`): they stopped it, or it stopped
 /// part way, with the message that started it to send again.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1536,42 +1529,24 @@ fn steering_key(s: &Steering, m: &SteeringMessage) -> String {
     digest.iter().map(|b| format!("{b:02x}")).collect()
 }
 
-/// `followSetup`'s reads: every second while Coach works, else every three, up to the budget
-/// after the owner last wrote.
-#[derive(Debug, Clone, Default)]
-pub struct Polls {
-    last_owner: Option<String>,
-    polls: u32,
+/// `followSetup`'s reads, when nothing streams: the fallback's waits (`follow::COACH`, never
+/// every second), for five minutes after the owner last wrote.
+pub type Polls = crate::follow::Follow<SetupThread>;
+
+/// Coach's thread's reads, from their first wait.
+pub fn polls() -> Polls {
+    crate::follow::Follow::new(&crate::follow::COACH, crate::follow::COACH_WINDOW)
 }
 
-impl Polls {
-    /// How long to wait before the next look.
-    pub fn interval(c: &Conversation) -> std::time::Duration {
-        if c.thinking() {
-            WORKING_POLL
-        } else {
-            POLL
-        }
-    }
-
-    /// Whether to read the thread again now.
-    pub fn read_now(&mut self, c: &Conversation) -> bool {
-        let mine = c
-            .thread
+impl Conversation {
+    /// The owner's last message, by id: the reads' window starts again at each.
+    pub fn last_owner(&self) -> Option<String> {
+        self.thread
             .messages
             .iter()
             .rev()
             .find(|m| m.from == From::Owner)
-            .map(ChatMessage::id);
-        if mine != self.last_owner {
-            self.last_owner = mine;
-            self.polls = 0;
-        }
-        if self.polls >= POLL_BUDGET {
-            return false;
-        }
-        self.polls += 1;
-        true
+            .map(ChatMessage::id)
     }
 }
 
@@ -2200,21 +2175,17 @@ mod tests {
     }
 
     #[test]
-    fn reads_go_on_for_the_budget_after_the_owner_last_wrote() {
+    fn reads_follow_the_owners_last_message_and_never_every_second() {
         let mut c = conversation();
-        let mut p = Polls::default();
-        assert_eq!(Polls::interval(&c), POLL);
-        for _ in 0..POLL_BUDGET {
-            assert!(p.read_now(&c));
-        }
-        assert!(!p.read_now(&c));
+        let before = c.last_owner();
         let now = at("2026-10-16T13:00:00Z");
         let Submit::Send(_) = c.submit("Again", now) else {
             panic!()
         };
-        assert!(p.read_now(&c));
+        assert!(c.last_owner().is_some() && c.last_owner() != before);
+        // Working or not, the first wait is 3 s, then longer while nothing changes.
         c.awaiting = Some(now);
-        assert_eq!(Polls::interval(&c), WORKING_POLL);
+        assert_eq!(polls().step_now(), std::time::Duration::from_secs(3));
     }
 
     #[test]

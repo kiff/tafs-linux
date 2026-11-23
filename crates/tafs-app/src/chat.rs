@@ -166,6 +166,24 @@ pub fn pin_check(jump: std::rc::Rc<Jump>, events: Vec<tafs_core::stream::Event>,
 }
 
 /// A stream's events from a file of `event:` and `data:` lines.
+/// Whether the person can see `widget`'s window: shown, and neither minimised nor suspended (a
+/// hidden workspace, a locked screen). A thread's reads wait while it isn't (docs/scale.md).
+pub fn seen(widget: &gtk::Widget) -> bool {
+    let Some(native) = widget.native() else {
+        return false;
+    };
+    if !native.is_visible() {
+        return false;
+    }
+    native
+        .surface()
+        .and_then(|s| s.downcast::<gtk::gdk::Toplevel>().ok())
+        .is_none_or(|t| {
+            !t.state()
+                .intersects(gtk::gdk::ToplevelState::MINIMIZED | gtk::gdk::ToplevelState::SUSPENDED)
+        })
+}
+
 pub fn events_from(path: &std::path::Path) -> Vec<tafs_core::stream::Event> {
     let Ok(lines) = std::fs::read_to_string(path) else {
         eprintln!("{} isn't a stream's events", path.display());

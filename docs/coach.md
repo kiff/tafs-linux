@@ -78,9 +78,13 @@ out, as every other read does.
 - **Reporting Coach's answer:** an answer of Coach's with tafs cloud's id has Report this answer in
   its menu (a right click or a long press), which sends `POST /v1/tafs/{setup}/messages/{id}/report`
   with the answer's chat, as a taf's answer does ([chat.md](chat.md#reporting-an-answer)).
-- **Reading again** (`followSetup`): while the page is open, every second while Coach works, else
-  every three, for 100 reads after the owner last wrote; one read at a time, and none once the page
-  is closed.
+- **Reading again** (`followSetup`): the fallback when nothing streams (kiff/tafs
+  `docs/scale.md`, `tafs-core/src/follow.rs`). While the page is open and no answer streams, the
+  thread is read 3 s after the owner last wrote, then further apart while it doesn't change (6,
+  10, 15, then 30 s; back to 3 s once it does), each wait a random ±20%, for five minutes after
+  the owner last wrote. Never every second. Nothing is read while the window is minimised or
+  suspended, and it's read at once when it's seen again. One read at a time, and none once the
+  page is closed.
 - **The answer as it's written** (`openStream`, `followSetupStream`): a message goes to Coach
   streamed, `POST /v1/tafs/{setup}/messages/stream` as the session, unsigned. It goes to tafs
   cloud's stream host (`TafsCloud.defaultStreamURL`, the function itself, as a run streams for
@@ -96,7 +100,7 @@ out, as every other read does.
   is read and the live words start again; after a pause the steps start again. At its end the
   thread is read, then the live answer goes. A run that ended with `ERROR` shows "It stopped part
   way…" with Retry, which sends its message again (`retrySetupRun`); one cancelled shows Stopped.
-  A stream that drops leaves Coach at work, and the reads every second show the rest. A new or
+  A stream that drops leaves Coach at work, and the reads show the rest. A new or
   another conversation, or leaving the page, stops following it (the run goes on at tafs cloud).
   Not ported: the reveal of an answer letter by letter, which the iPad does only with no stream,
   and Home's read at the stream's end (Linux reads Home when it opens).

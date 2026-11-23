@@ -135,11 +135,6 @@ impl TafThread {
 /// The stops of the run's own that end it with no words (`capStops`).
 pub const CAP_STOPS: [&str; 4] = ["cost_cap", "turn_cap", "max_token", "refused"];
 
-/// How often the thread is read again while the taf owes an answer (`chatPollInterval`), and how
-/// many times for one unanswered message (`chatPollBudget`: two minutes).
-pub const POLL: std::time::Duration = std::time::Duration::from_secs(4);
-pub const POLL_BUDGET: u32 = 30;
-
 /// How long a held call's card waits in the chat for the taf's words that explain it
 /// (`heldWaitsForWords`).
 pub const HELD_WAITS_FOR_WORDS: i64 = 45;
@@ -816,7 +811,17 @@ impl TafChat {
         self.awaiting_reply() || self.thinking()
     }
 
-    /// The owner's last message, by id: each one is followed for at most `POLL_BUDGET` reads.
+    /// The owner's message the reads follow now: none while the taf owes nothing, or while
+    /// there's nothing of the owner's (as the iPad's).
+    pub fn to_follow(&self) -> Option<String> {
+        if self.follows() {
+            self.last_owner()
+        } else {
+            None
+        }
+    }
+
+    /// The owner's last message, by id: each one is followed for `follow::CHAT_WINDOW`.
     pub fn last_owner(&self) -> Option<String> {
         self.thread
             .messages
@@ -827,33 +832,13 @@ impl TafChat {
     }
 }
 
-/// `followChat`'s reads: every 4 s while the taf owes an answer or works, at most 30 for each
-/// message of the owner's.
-#[derive(Debug, Clone, Default)]
-pub struct Polls {
-    waiting_for: Option<String>,
-    polls: u32,
-}
+/// `followChat`'s reads, when nothing streams: the fallback's waits (`follow::CHAT`), for two
+/// minutes after each message of the owner's.
+pub type Polls = crate::follow::Follow<TafThread>;
 
-impl Polls {
-    /// Whether to read the thread again now.
-    pub fn read_now(&mut self, c: &TafChat) -> bool {
-        if !c.follows() {
-            return false;
-        }
-        let Some(last) = c.last_owner() else {
-            return false;
-        };
-        if self.waiting_for.as_ref() != Some(&last) {
-            self.waiting_for = Some(last);
-            self.polls = 0;
-        }
-        if self.polls >= POLL_BUDGET {
-            return false;
-        }
-        self.polls += 1;
-        true
-    }
+/// A taf's chat's reads, from their first wait.
+pub fn polls() -> Polls {
+    crate::follow::Follow::new(&crate::follow::CHAT, crate::follow::CHAT_WINDOW)
 }
 
 // MARK: The thread in one order.
