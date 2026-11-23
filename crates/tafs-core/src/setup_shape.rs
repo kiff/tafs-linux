@@ -112,9 +112,9 @@ pub fn waiting(c: &Conversation) -> Option<&ShownComponent> {
             return false;
         }
         match card.kind {
-            Kind::Approval => card_state(t, card) == CardState::NeedsYou,
+            Kind::Approval => card_state(t, card, None) == CardState::NeedsYou,
             Kind::SignIn => {
-                card_state(t, card) == CardState::NeedsYou && !wrote_since(t, shown.first_at)
+                card_state(t, card, None) == CardState::NeedsYou && !wrote_since(t, shown.first_at)
             }
             _ => t.answer_to(&card.id).is_none() && !wrote_since(t, shown.first_at),
         }
@@ -267,7 +267,7 @@ impl SetupShape {
                             StepState::Skipped
                         }
                     } else {
-                        match card_state(thread, card) {
+                        match card_state(thread, card, None) {
                             CardState::Done => StepState::Done,
                             CardState::Declined => StepState::Skipped,
                             CardState::Failed(_) => StepState::Failed,

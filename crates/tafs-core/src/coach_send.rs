@@ -748,6 +748,8 @@ pub struct Conversation {
     pub drafts: HashMap<String, crate::drafts::AgentDraft>,
     /// Why KIFF's draft wasn't read, by id, until a read gives it (`setupDraftErrors`).
     pub draft_errors: HashMap<String, String>,
+    /// planque's grants as this computer read them (`AppModel.grants`): None until read.
+    pub grants: Option<Vec<crate::connections::Grant>>,
     /// The taf this new conversation improves, until its first message has gone
     /// (`setupImproving`).
     pub improving: Option<Improving>,

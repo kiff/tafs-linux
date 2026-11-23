@@ -677,7 +677,22 @@ pub(crate) fn approval_sheet(ctx: &Ctx, start: &ConnectStart, over: &gtk::Widget
 /// verbatim and what KIFF can't check in amber; "Reading KIFF's words…" until they're read from
 /// KIFF as the session (`loadProfileWords`), and why when they can't be, or don't check.
 fn profile_words(ctx: &Ctx, profile: &serde_json::Value) -> gtk::Widget {
-    let w = ctx.w.clone();
+    let read = match &ctx.source {
+        crate::connect::ConnectSource::Cloud {
+            kept, languages, ..
+        } => Some((kept.token.clone(), languages.clone())),
+        _ => None,
+    };
+    profile_words_panel(ctx.w.clone(), read, profile)
+}
+
+/// `ProfileWordsView`, read as the session `read` names (none in a screenshot: it stays reading),
+/// shared by Connect apps' approval and Coach's card.
+pub(crate) fn profile_words_panel(
+    w: Rc<tafs_core::words::WordBook>,
+    read: Option<(String, Vec<&'static str>)>,
+    profile: &serde_json::Value,
+) -> gtk::Widget {
     let panel = crate::widgets::panel(false);
     panel.append(&crate::widgets::eyebrow(
         &w.line("coach.kiff_counts_way").unwrap_or_default(),
@@ -691,13 +706,10 @@ fn profile_words(ctx: &Ctx, profile: &serde_json::Value) -> gtk::Widget {
         &["tafs-dim"],
     ));
     panel.append(&lines);
-    let crate::connect::ConnectSource::Cloud {
-        kept, languages, ..
-    } = &ctx.source
-    else {
+    let Some((token, languages)) = read else {
         return panel.upcast();
     };
-    let (token, languages, profile) = (kept.token.clone(), languages.clone(), profile.clone());
+    let profile = profile.clone();
     gtk::glib::spawn_future_local(async move {
         let words = (*w).clone();
         let read = gtk::gio::spawn_blocking(move || {

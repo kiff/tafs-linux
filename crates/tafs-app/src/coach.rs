@@ -2861,6 +2861,18 @@ fn approval(page: &Rc<Page>, a: &ApprovalLines) -> gtk::Widget {
     if let Some(t) = &a.text {
         p.append(&text(t, 15, 400, &["tafs-ink"]));
     }
+    // planque's grant, once read: connected or signed in, in one line; else its request.
+    if let Some(c) = &a.connected {
+        let h = gtk::Box::new(gtk::Orientation::Horizontal, 6);
+        let m = symbol("emblem-ok-symbolic", 14);
+        m.add_css_class("tafs-ok");
+        h.append(&m);
+        h.append(&text(c, 14, 600, &["tafs-ok"]));
+        p.append(&h);
+    }
+    if let Some(r) = &a.request {
+        p.append(&request_shown(page, r));
+    }
     if let Some(d) = &a.draft {
         p.append(&draft_shown(page, d));
     }
@@ -2906,6 +2918,41 @@ fn approval(page: &Rc<Page>, a: &ApprovalLines) -> gtk::Widget {
         fold.connect_clicked(move |_| stack.set_visible_child_name("line"));
     }
     stack.upcast()
+}
+
+/// An approval's request as planque has it: its words, its exact terms under Details (folded,
+/// selectable), KIFF's words for its profile, and the digest line when it doesn't match.
+fn request_shown(page: &Rc<Page>, r: &tafs_core::coach_lines::RequestShown) -> gtk::Widget {
+    let v = gtk::Box::new(gtk::Orientation::Vertical, 8);
+    v.append(&text(&r.text, 15, 400, &["tafs-ink"]));
+    if !r.terms.is_empty() {
+        let terms = gtk::Label::new(Some(&r.terms.join("\n")));
+        terms.set_xalign(0.0);
+        terms.set_wrap(true);
+        terms.set_selectable(true);
+        terms.add_css_class("monospace");
+        terms.add_css_class("tafs-dim");
+        let e = gtk::Expander::new(Some(&r.details));
+        e.set_child(Some(&terms));
+        v.append(&e);
+    }
+    if let Some(profile) = &r.profile {
+        let read = match &page.source {
+            CoachSource::Cloud {
+                kept, languages, ..
+            } => Some((kept.token.clone(), languages.clone())),
+            _ => None,
+        };
+        v.append(&crate::connections::profile_words_panel(
+            page.w.clone(),
+            read,
+            profile,
+        ));
+    }
+    if let Some(m) = &r.mismatch {
+        v.append(&text(m, 13, 400, &["tafs-no"]));
+    }
+    v.upcast()
 }
 
 /// A vendor's sign-in, read only: its words, the wider line, and why this computer can't do it

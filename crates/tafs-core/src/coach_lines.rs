@@ -149,6 +149,26 @@ pub struct ApprovalLines {
     pub draft: Option<DraftShown>,
     /// What was approved, under the folded line: the signed Card's lines, as KIFF has them.
     pub signed_lines: Vec<String>,
+    /// planque's grant connected, or signed in and reading what the vendor offers: its one line,
+    /// in place of the request.
+    pub connected: Option<String>,
+    /// planque's request, while it waits: its words, its terms and KIFF's words for its profile.
+    pub request: Option<Box<RequestShown>>,
+}
+
+/// An approval's request as planque has it (`SetupApproval`'s grant): what the owner reads before
+/// approving.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RequestShown {
+    /// planque's words for it, in the owner's language.
+    pub text: String,
+    /// The exact terms, folded under Details.
+    pub terms: Vec<String>,
+    pub details: String,
+    /// The connection's profile, whose words KIFF gives (`ProfileWordsView`).
+    pub profile: Option<serde_json::Value>,
+    /// Its digest isn't what it covers: it can't be approved.
+    pub mismatch: Option<String>,
 }
 
 /// The taf's Card on an approval (`SetupApproval`): KIFF's draft as it reads, or why it isn't
@@ -178,6 +198,8 @@ pub enum DraftShown {
 pub struct Drafts<'a> {
     pub read: &'a HashMap<String, AgentDraft>,
     pub errors: &'a HashMap<String, String>,
+    /// planque's grants, once read (`AppModel.grants`): None until then.
+    pub grants: Option<&'a [crate::connections::Grant]>,
 }
 
 impl<'a> Drafts<'a> {
@@ -251,7 +273,7 @@ pub enum Card {
         talking: String,
         show_again: String,
     },
-    Approval(ApprovalLines),
+    Approval(Box<ApprovalLines>),
     SignIn(SignInLines),
     Result(ResultLines),
     /// Coach asks to drive the app (`DriveCard`), never on this computer.
@@ -518,8 +540,8 @@ pub struct Listed {
     pub name: String,
 }
 
-/// Where an approval or a sign-in stands (`AppModel.CardState`), from the thread alone: this
-/// computer reads no grant from planque.
+/// Where an approval or a sign-in stands (`AppModel.CardState`), from the thread and, once read,
+/// planque's grants (`grants`: None until read).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CardState {
     NeedsYou,
@@ -528,10 +550,23 @@ pub enum CardState {
     Failed(Option<String>),
 }
 
-/// `setupCardState`, without planque's grant.
-pub fn card_state(thread: &SetupThread, c: &Component) -> CardState {
+/// `setupCardState`: the card's answer first; then planque's grant, failed or disconnected in
+/// planque's words for it (never its `reason`), or, for a sign-in, connected or listed.
+pub fn card_state(
+    thread: &SetupThread,
+    c: &Component,
+    grants: Option<&[crate::connections::Grant]>,
+) -> CardState {
+    let grant = grants.and_then(|gs| {
+        c.grant
+            .as_deref()
+            .and_then(|id| gs.iter().find(|g| g.id == id))
+    });
+    let broken = grant.is_some_and(|g| g.status == "failed" || g.status == "disconnected");
     let answer = thread.answer_to(&c.id);
+    // `approvalFinished`: by its answer alone, unless planque failed the grant since.
     if c.kind == Kind::Approval
+        && !broken
         && answer.as_ref().is_some_and(|a| {
             !a.failed()
                 && (a.text.starts_with("approved") || a.text.starts_with("already approved"))
@@ -547,8 +582,13 @@ pub fn card_state(thread: &SetupThread, c: &Component) -> CardState {
             return CardState::Failed(a.why());
         }
     }
-    if c.kind == Kind::SignIn && answer.is_some() {
+    if c.kind == Kind::SignIn
+        && (answer.is_some() || grant.is_some_and(|g| g.connected() || g.listed()))
+    {
         return CardState::Done;
+    }
+    if broken {
+        return CardState::Failed(grant.and_then(|g| nonblank(g.status_words.as_deref())));
     }
     CardState::NeedsYou
 }
@@ -944,7 +984,7 @@ fn approval_lines(
     mode: Mode,
     drafts: Drafts,
 ) -> Result<ApprovalLines, WordsError> {
-    let state = card_state(thread, c);
+    let state = card_state(thread, c, drafts.grants);
     let draft = drafts.of(c);
     // The draft whose Card this card's approval signed: KIFF took the signature, and it holds
     // tools (`signedCard`).
@@ -952,8 +992,14 @@ fn approval_lines(
     let replaced = thread.replaced(&c.id);
     let answer = thread.answer_to(&c.id);
     let title = nonblank(c.title.as_deref());
-    let vendor = match &c.service {
-        Some(s) => vendor_words(s),
+    // planque's grant for the card, once read: it names the vendor first.
+    let grant = drafts.grants.and_then(|gs| {
+        c.grant
+            .as_deref()
+            .and_then(|id| gs.iter().find(|g| g.id == id))
+    });
+    let vendor = match grant.map(|g| g.vendor().to_string()).or(c.service.clone()) {
+        Some(s) => vendor_words(&s),
         None => w.line("coach.the_vendor")?,
     };
     let folded = if replaced {
@@ -1016,6 +1062,8 @@ fn approval_lines(
             )?
         } else if declined {
             w.get("coach.answer.declined_title", &[("title", &vendor)])?
+        } else if grant.is_some_and(|g| g.connected()) {
+            w.get("coach.answer.approved_connected", &[("vendor", &vendor)])?
         } else {
             w.get("coach.approved_signed", &[("vendor", &vendor)])?
         };
@@ -1044,9 +1092,10 @@ fn approval_lines(
         .as_ref()
         .and_then(|x| x.done_words())
         .map(str::to_string);
-    // `cardNextWords`: only on a card with no draft, and not when its mark says the Card is
-    // signed now or the connection is already done.
-    let card_next = if c.draft.is_none()
+    // `cardNextWords`: only with the card's grant read, on a card with no draft, and not when its
+    // mark says the Card is signed now or the connection is already done.
+    let card_next = if grant.is_some()
+        && c.draft.is_none()
         && c.signs.as_ref().and_then(|s| s.card) != Some(true)
         && done.is_none()
     {
@@ -1089,7 +1138,44 @@ fn approval_lines(
         (CardState::Done, Some(d)) => d.lines(w)?,
         _ => vec![],
     };
+    // With the grant read: connected (contract 5), or signed in and reading what the vendor
+    // offers, said in one line; else the request as planque has it. tafs cloud's line that the
+    // connection is done comes first.
+    let (connected, request) = match grant {
+        Some(_) if done.is_some() => (None, None),
+        Some(g) if g.connected() => (
+            Some(w.get(
+                "coach.connected_keys_kept_sealed",
+                &[("vendor", g.vendor())],
+            )?),
+            None,
+        ),
+        Some(g) if g.listed() => (
+            Some(w.get(
+                "coach.signed_reading_what_offers",
+                &[("vendor", g.vendor())],
+            )?),
+            None,
+        ),
+        Some(g) => (
+            None,
+            Some(Box::new(RequestShown {
+                text: g.text.clone(),
+                terms: g.terms.clone().unwrap_or_default(),
+                details: w.line("common.details")?,
+                profile: g.profile.clone(),
+                mismatch: if g.digest_matches {
+                    None
+                } else {
+                    Some(w.line("connect.request_does_not_match_what")?)
+                },
+            })),
+        ),
+        None => (None, None),
+    };
     Ok(ApprovalLines {
+        connected,
+        request: request.clone(),
         draft: draft_shown,
         signed_lines,
         fold: if folded.is_some() {
@@ -1110,7 +1196,7 @@ fn approval_lines(
             }
         },
         title: if done.is_some() { None } else { title },
-        text: if done.is_some() {
+        text: if done.is_some() || grant.is_some() {
             None
         } else {
             nonblank(c.text.as_deref())
@@ -1138,6 +1224,7 @@ fn sign_in(
     thread: &SetupThread,
     c: &Component,
     mode: Mode,
+    drafts: Drafts,
 ) -> Result<Card, WordsError> {
     // The app by name: the card's service; "the vendor" only when it names none.
     let app = nonblank(c.service.as_deref());
@@ -1145,7 +1232,7 @@ fn sign_in(
         Some(a) => a.clone(),
         None => w.line("coach.the_vendor")?,
     };
-    let state = card_state(thread, c);
+    let state = card_state(thread, c, drafts.grants);
     Ok(match state {
         CardState::Done => Card::Outcome(Outcome {
             text: w.get("coach.answer.signed_in_at", &[("vendor", &vendor)])?,
@@ -1426,8 +1513,8 @@ fn card(
                 },
             }
         }
-        Kind::Approval => Card::Approval(approval_lines(w, thread, c, mode, drafts)?),
-        Kind::SignIn => sign_in(w, thread, c, mode)?,
+        Kind::Approval => Card::Approval(Box::new(approval_lines(w, thread, c, mode, drafts)?)),
+        Kind::SignIn => sign_in(w, thread, c, mode, drafts)?,
         Kind::Result => result(w, thread, shown, listed)?,
         Kind::Drive => {
             let task = match (&c.text, &c.title) {
@@ -1545,6 +1632,7 @@ pub fn lines(
             drafts: Drafts {
                 read: &HashMap::new(),
                 errors: &HashMap::new(),
+                grants: None,
             },
             live: None,
             streaming: false,
@@ -1574,6 +1662,7 @@ pub fn conversation_lines(
             drafts: Drafts {
                 read: &c.drafts,
                 errors: &c.draft_errors,
+                grants: c.grants.as_deref(),
             },
             live: c.live.as_ref().map(|l| (l, &c.live_before)),
             streaming: !c.live_text().is_empty(),
@@ -2120,7 +2209,7 @@ mod tests {
                 Line::Card {
                     card: Card::Approval(a),
                     ..
-                } => Some(a),
+                } => Some(*a),
                 _ => None,
             })
             .unwrap()
@@ -2550,5 +2639,87 @@ mod tests {
         assert_eq!(healed("Refunded **$20*"), "Refunded **$20**");
         // An italic closed inside an open bold keeps its star.
         assert_eq!(healed("**x *a*"), "**x *a***");
+    }
+
+    /// A thread with one approval of grant `g1` (no draft), answered with `answer` or waiting.
+    fn grant_thread(answer: Option<&str>) -> crate::coach_send::Conversation {
+        let mut card = json!({
+            "at": "2026-10-16T12:00:25.000Z", "session": "sess1", "run": "run2", "seq": 6,
+            "component": {"type": "approval", "id": "card", "grant": "g1", "service": "gmail",
+                          "text": "Coach's own words.", "waits": "owner",
+                          "signs": {"card": false, "words": "Then its Card."}},
+            "key": "sess1#card"
+        });
+        if let Some(a) = answer {
+            card["answer"] =
+                json!({"state": "answered", "words": a, "at": "2026-10-16T12:00:40.000Z"});
+        }
+        let mut c = crate::coach_send::Conversation::default();
+        c.took(read(&json!({"messages": [], "components": [card]})), now());
+        c
+    }
+
+    fn grant(status: &str, extra: Value) -> crate::connections::Grant {
+        let mut g = json!({"id": "g1", "status": status, "text": "Read and send your mail.",
+            "digest": "d", "vendor": "Gmail", "terms": ["mail.read", "mail.send"],
+            "request": {"server": "https://mail.example", "agent": "a1", "tools": [{"tool": "fetch"}]},
+            "events": []});
+        for (k, v) in extra.as_object().unwrap() {
+            g[k] = v.clone();
+        }
+        crate::connections::Grant::read_list(json!([g]).to_string().as_bytes())
+            .unwrap()
+            .remove(0)
+    }
+
+    #[test]
+    fn an_approval_shows_planques_grant_once_read() {
+        let mut c = grant_thread(None);
+        // Not read: the card's own words, and no Card-next line without a grant.
+        let a = approval_of(&c);
+        assert_eq!(a.text.as_deref(), Some("Coach's own words."));
+        assert_eq!((a.request, a.connected, a.card_next), (None, None, None));
+        // Read and waiting: planque's words, its terms under Details, the digest line.
+        c.grants = Some(vec![grant("pending", json!({}))]);
+        let a = approval_of(&c);
+        assert_eq!(a.text, None);
+        let r = a.request.unwrap();
+        assert_eq!(r.text, "Read and send your mail.");
+        assert_eq!(r.terms, ["mail.read", "mail.send"]);
+        assert_eq!(
+            r.mismatch.as_deref(),
+            Some("This request doesn't match what it shows, so it can't be approved.")
+        );
+        assert_eq!(a.card_next.as_deref(), Some("Then its Card."));
+        assert!(a.gate.is_some());
+        // Connected: its one line.
+        c.grants = Some(vec![grant("connected", json!({}))]);
+        let a = approval_of(&c);
+        assert_eq!(a.connected.as_deref(), Some("Gmail is connected"));
+        assert_eq!(a.request, None);
+        // planque failed it: the card says so in planque's words, never its reason.
+        c.grants = Some(vec![grant(
+            "failed",
+            json!({"status_words": "Gmail refused the sign-in.", "reason": "invalid_grant"}),
+        )]);
+        let a = approval_of(&c);
+        let failed = a.failed.unwrap();
+        assert!(failed.contains("Gmail refused the sign-in."), "{failed}");
+        assert!(!failed.contains("invalid_grant"), "{failed}");
+        // Approved, and connected: said so.
+        let mut c = grant_thread(Some("approved"));
+        c.grants = Some(vec![grant("connected", json!({}))]);
+        let a = approval_of(&c);
+        assert_eq!(a.folded.unwrap().text, "Approved · Gmail is connected");
+        // Approved, then failed at planque: not done.
+        c.grants = Some(vec![grant("disconnected", json!({}))]);
+        assert_eq!(
+            card_state(
+                &c.thread,
+                &c.thread.components[0].component,
+                c.grants.as_deref()
+            ),
+            CardState::Failed(None)
+        );
     }
 }
