@@ -65,6 +65,13 @@ thread_local! {
     /// What the owner is typing to Coach, not sent yet (`setupDraft`): kept while the app runs, so
     /// leaving Coach and coming back keeps it. Signing out forgets it.
     static DRAFT: RefCell<String> = const { RefCell::new(String::new()) };
+    /// tafs cloud's recipes as the account's read had them (`model.recipes`), for the empty chat.
+    static RECIPES: RefCell<Option<Rc<tafs_core::recipes::Recipes>>> = const { RefCell::new(None) };
+}
+
+/// The recipes Coach's empty chat lists, from the account's read; none, none listed.
+pub fn set_recipes(recipes: Option<tafs_core::recipes::Recipes>) {
+    RECIPES.with(|r| *r.borrow_mut() = recipes.map(Rc::new));
 }
 
 /// Words put in Coach's box before it opens (`setupDraft = …; coachOpen = true`): the brief's
@@ -2001,6 +2008,39 @@ fn improving(page: &Rc<Page>, i: &tafs_core::coach_lines::ImproveLines) -> gtk::
     v.upcast()
 }
 
+/// The recipes on Coach's empty chat (`recipeRow`): each category's title, then each recipe's name
+/// (`lead`) and line, as a raised row; a tap puts its words in the message box.
+fn recipe_rows(page: &Rc<Page>, recipes: &tafs_core::recipes::Recipes, v: &gtk::Box) {
+    let hint = page
+        .w
+        .line("coach.puts_words_message_box")
+        .unwrap_or_default();
+    for (category, list) in recipes.by_category() {
+        let head = text(&category.title.to_uppercase(), 12, 600, &["tafs-dim"]);
+        head.set_margin_top(6);
+        head.set_accessible_role(gtk::AccessibleRole::Heading);
+        v.append(&head);
+        for recipe in list {
+            let b = gtk::Button::new();
+            b.add_css_class("tafs-recipe-row");
+            let inner = gtk::Box::new(gtk::Orientation::Vertical, 2);
+            inner.append(&text(recipe.lead(), 15, 600, &["tafs-ink"]));
+            if !recipe.line.is_empty() {
+                inner.append(&text(&recipe.line, 13, 400, &["tafs-soft"]));
+            }
+            b.set_child(Some(&inner));
+            b.update_property(&[gtk::accessible::Property::Description(&hint)]);
+            let (p, say) = (Rc::downgrade(page), recipe.say.clone());
+            b.connect_clicked(move |_| {
+                if let Some(p) = p.upgrade() {
+                    p.set_draft(&say);
+                }
+            });
+            v.append(&b);
+        }
+    }
+}
+
 fn draw_thread(page: &Rc<Page>, lines: &CoachLines, drawn: &Drawn) {
     let column = &page.column;
     if page.no_coach.get() {
@@ -2016,6 +2056,13 @@ fn draw_thread(page: &Rc<Page>, lines: &CoachLines, drawn: &Drawn) {
         }
         v.append(&text(title, 26, 700, &["tafs-ink"]));
         v.append(&text(line, 15, 400, &["tafs-soft"]));
+        // tafs cloud's recipes, by category (kiff/tafs#476): a tap puts the words in the box,
+        // to edit and send; it never sends. Not on a conversation that improves a taf.
+        if lines.improve.is_none() {
+            if let Some(recipes) = RECIPES.with(|r| r.borrow().clone()) {
+                recipe_rows(page, &recipes, &v);
+            }
+        }
         column.append(&v);
     }
     if let Some(i) = &lines.improve {

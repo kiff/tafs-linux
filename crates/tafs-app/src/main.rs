@@ -2732,6 +2732,11 @@ impl App {
                 })
                 .unwrap_or_default(),
         );
+        // Coach's empty chat lists the recipes the account's read had (`model.recipes`).
+        crate::coach::set_recipes(match (mode, cloud.as_deref()) {
+            (Mode::Kiff, Some(c)) => c.recipes.clone(),
+            _ => None,
+        });
         let screens = shell::Screens {
             set_aside,
             share,
