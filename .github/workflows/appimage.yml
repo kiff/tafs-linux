@@ -36,15 +36,6 @@ jobs:
         with:
           # The token isn't written into .git/config, where the build's code could read it.
           persist-credentials: false
-      - name: The version is the app's own, so it says which it is
-        env:
-          VERSION: ${{ inputs.version }}
-        run: |
-          app=$(sed -n 's/^version = "\(.*\)"$/\1/p' Cargo.toml | head -1)
-          if [ "v$app" != "$VERSION" ]; then
-            echo "Cargo.toml says v$app, not $VERSION: bump it in a PR first." >&2
-            exit 1
-          fi
       - name: GTK 4, libadwaita, and the icon theme to bundle
         run: sudo apt-get update -qq && sudo apt-get install -y -qq libgtk-4-dev libadwaita-1-dev adwaita-icon-theme shared-mime-info file patchelf
       - name: Rust
@@ -100,6 +91,15 @@ jobs:
         with:
           # The token isn't written into .git/config, where the build's code could read it.
           persist-credentials: false
+      - name: The version is the app's own, so it says which it is
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          app=$(sed -n 's/^version = "\(.*\)"$/\1/p' Cargo.toml | head -1)
+          if [ "v$app" != "$VERSION" ]; then
+            echo "Cargo.toml says v$app, not $VERSION: bump it in a PR first." >&2
+            exit 1
+          fi
       - name: GTK 4, libadwaita, and the icon theme to bundle
         run: sudo apt-get update -qq && sudo apt-get install -y -qq libgtk-4-dev libadwaita-1-dev adwaita-icon-theme shared-mime-info file patchelf
       - name: Rust
