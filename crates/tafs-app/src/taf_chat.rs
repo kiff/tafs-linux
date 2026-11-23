@@ -107,6 +107,16 @@ impl ChatTaf {
     }
 }
 
+/// When a taf's chat, as kept while the app runs, last had a message: Home's order counts it as
+/// the taf being used (`byRecent`'s `chats`). None for a chat not opened since the app started.
+pub fn last_message_at(key: &str) -> Option<chrono::DateTime<chrono::Utc>> {
+    CHATS.with(|c| {
+        c.borrow()
+            .get(key)
+            .and_then(|chat| chat.borrow().thread.messages.iter().map(|m| m.at).max())
+    })
+}
+
 thread_local! {
     /// Each sample taf the owner paused (true) or told to carry on (false) in its chat, by its
     /// key: kept while the app runs, as the sample keeps no chats either.

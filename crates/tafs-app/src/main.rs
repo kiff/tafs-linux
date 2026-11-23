@@ -3283,12 +3283,14 @@ fn home_model(
         held.push(tafs_core::held::held(w, e, &key)?);
     }
     let waits = |t: &tafs_core::home::Taf| held.iter().any(|c| c.taf == t.key);
-    // Its newest call in the Record, by its KIFF agent.
+    // Its newest call in the Record, by its KIFF agent, or its chat's newest message as kept here
+    // (`byRecent`: "the latest message in its chat").
     let latest = |t: &tafs_core::home::Taf| {
         activity
             .iter()
             .filter(|c| c.actor_id.as_deref() == Some(t.agent.as_str()))
             .map(|c| c.created_at)
+            .chain(taf_chat::last_message_at(&t.key))
             .max()
     };
     let ordered = tafs_core::sidebar::by_recent(&tafs, waits, latest);
