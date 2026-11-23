@@ -46,6 +46,8 @@ pub struct TafPage {
     pub issued_by: String,
     /// Opens on the Card tab (`-screen card`).
     pub opens_on_card: bool,
+    /// The sample's page in a screenshot opens on Activity, as the iPad's `-screen taf` does.
+    pub opens_on_activity: bool,
     /// Opens on the Setup tab (`--page taf-setup:<id>`).
     pub opens_on_setup: bool,
     /// Its doors open over the page (`DoorsView`, `--page doors:<id>`), or one door's screen
@@ -193,9 +195,17 @@ pub fn page(
     }
 
     // Chat, Activity, Card, Setup, as the system's segmented control. Chat is a tafs cloud taf's,
-    // signed in with KIFF, and the page opens on it (the sample's chat is there, dimmed); Setup too
-    // (the sample's isn't ported).
-    let has_chat = !t.sample && t.cloud_id.is_some() && !t.chat.is_none();
+    // signed in with KIFF, or the sample's (`canChat`), and the page opens on it; Setup is a tafs
+    // cloud taf's (the sample's isn't ported).
+    let sample_chat = matches!(t.chat, crate::taf_chat::ChatSource::Sample { .. });
+    let has_chat =
+        (t.sample && sample_chat) || (!t.sample && t.cloud_id.is_some() && !t.chat.is_none());
+    // The chat's id: tafs cloud's, or the sample taf's key.
+    let chat_id = match (&t.cloud_id, t.sample) {
+        (Some(id), _) => Some(id.clone()),
+        (None, true) => Some(t.key.clone()),
+        (None, false) => None,
+    };
     let has_setup = !t.sample
         && t.cloud_id.is_some()
         && !matches!(t.setup, crate::setup_pane::SetupSource::None);
@@ -550,7 +560,7 @@ pub fn page(
         });
     }
     // Chat: read when it's first shown, and kept while the app runs.
-    if let (true, Some(id)) = (has_chat, &t.cloud_id) {
+    if let (true, Some(id)) = (has_chat, &chat_id) {
         let holder = gtk::Box::new(gtk::Orientation::Vertical, 0);
         holder.set_vexpand(true);
         panes.add_named(&holder, Some("chat"));
@@ -654,7 +664,7 @@ pub fn page(
         setup_tab.set_active(true);
     } else if t.opens_on_card {
         card_tab.set_active(true);
-    } else if has_chat {
+    } else if has_chat && !t.opens_on_activity {
         // The iPad opens a taf's page on its chat.
         chat_tab.set_active(true);
     } else {

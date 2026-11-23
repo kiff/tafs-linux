@@ -40,7 +40,16 @@ pub enum ChatSource {
         /// A stream's events (`--chat-stream`): an answer as it streams, after the thread.
         stream: Option<std::path::PathBuf>,
     },
-    /// No chat here: the sample's, and a taf tafs cloud doesn't run.
+    /// The sample's chat (`sampleReply`): nothing is read or sent. `now_line`: what the taf is
+    /// doing, for its hello; `done`, its Record lines' titles, newest first; `waiting`, its calls
+    /// waiting on the owner; `beat_ms`, half of how long it takes to answer (0: at once).
+    Sample {
+        now_line: String,
+        done: Vec<String>,
+        waiting: usize,
+        beat_ms: u64,
+    },
+    /// No chat here: a taf tafs cloud doesn't run.
     None,
 }
 
@@ -99,6 +108,9 @@ impl ChatTaf {
 }
 
 thread_local! {
+    /// Each sample taf the owner paused (true) or told to carry on (false) in its chat, by its
+    /// key: kept while the app runs, as the sample keeps no chats either.
+    static SAMPLE_PAUSED: RefCell<HashMap<String, bool>> = RefCell::new(HashMap::new());
     /// Each taf's chat as the app holds it (`chats`, `chatStates`), by its id at tafs cloud: kept
     /// while the app runs, so its page drawn again keeps what was sent and not sent.
     static CHATS: RefCell<HashMap<String, Rc<RefCell<TafChat>>>> = RefCell::new(HashMap::new());
@@ -124,8 +136,14 @@ pub fn run_ended_after_approval(taf: &str, words: &str) {
     }
 }
 
+/// A sample taf as its chat left it: paused (true), told to carry on (false), or as it was.
+pub fn sample_paused(key: &str) -> Option<bool> {
+    SAMPLE_PAUSED.with(|s| s.borrow().get(key).copied())
+}
+
 /// Signed out: nothing written for the last account stays.
 pub fn forget() {
+    SAMPLE_PAUSED.with(|s| s.borrow_mut().clear());
     CHATS.with(|c| c.borrow_mut().clear());
     DRAFTS.with(|d| d.borrow_mut().clear());
     OPEN.with(|o| o.borrow_mut().clear());
@@ -210,7 +228,10 @@ pub fn pane(w: Rc<WordBook>, taf: ChatTaf, source: ChatSource) -> gtk::Widget {
         },
     );
     attach.place(&composer);
-    attach.button.set_visible(!source.is_none() && !taf.trial);
+    // No files in the sample's chat (`filesTarget` is the session's).
+    attach.button.set_visible(
+        !source.is_none() && !taf.trial && !matches!(source, ChatSource::Sample { .. }),
+    );
 
     let chat = CHATS.with(|c| {
         c.borrow_mut()
@@ -363,6 +384,37 @@ pub fn pane(w: Rc<WordBook>, taf: ChatTaf, source: ChatSource) -> gtk::Widget {
                 p.follow_chat().await;
             });
         }
+        // The sample's: its hello, and Support replies' question answered, once.
+        ChatSource::Sample {
+            now_line,
+            done,
+            waiting,
+            ..
+        } => {
+            if !page.chat.borrow().loaded {
+                if let Ok(o) = tafs_core::sample_chat::opening(
+                    &page.w,
+                    &page.taf.id,
+                    &page.taf.name,
+                    &now_line,
+                    &done,
+                    waiting,
+                    chrono::Utc::now(),
+                ) {
+                    page.chat.borrow_mut().sample_seed(o);
+                }
+            }
+            page.draw();
+            // Kept while it's open, as a read's loop keeps a signed-in chat: nothing else holds
+            // it, and its box and answers need it.
+            let p = page.clone();
+            glib::spawn_future_local(async move {
+                glib::timeout_future(std::time::Duration::from_secs(1)).await;
+                while p.open() {
+                    glib::timeout_future(std::time::Duration::from_secs(1)).await;
+                }
+            });
+        }
         ChatSource::None => page.draw(),
     }
     root.upcast()
@@ -427,7 +479,66 @@ impl Page {
     }
 
     fn sends(&self) -> bool {
-        matches!(self.source, ChatSource::Cloud { .. })
+        matches!(
+            self.source,
+            ChatSource::Cloud { .. } | ChatSource::Sample { .. }
+        )
+    }
+
+    /// The sample's answer (`deliverChatOnce`'s sample branch, kiff/tafs#285): worked out as
+    /// it's sent, so a pause takes effect at once; then written as a run would stream it, what
+    /// it's thinking, its notes read, its words; then kept, with what it worked on. Left mid-way
+    /// (the chat closed), it's given up and the message stays.
+    async fn sample_reply(self: &Rc<Self>, d: Delivery) {
+        let ChatSource::Sample {
+            done,
+            waiting,
+            beat_ms,
+            ..
+        } = self.source.clone()
+        else {
+            return;
+        };
+        let Ok((answer, effect)) = tafs_core::sample_chat::reply(&self.w, &d.text, &done, waiting)
+        else {
+            self.chat.borrow_mut().sample_gone();
+            return;
+        };
+        let paused = match effect {
+            tafs_core::sample_chat::Effect::Pause => Some(true),
+            tafs_core::sample_chat::Effect::Resume => {
+                sample_paused(&self.taf.id).filter(|p| *p).map(|_| false)
+            }
+            tafs_core::sample_chat::Effect::None => None,
+        };
+        if let Some(p) = paused {
+            SAMPLE_PAUSED.with(|s| s.borrow_mut().insert(self.taf.id.clone(), p));
+            // The sidebar's row says so at once.
+            crate::shell::reread_home();
+        }
+        let started = std::time::Instant::now();
+        self.chat.borrow_mut().sample_live(chrono::Utc::now());
+        self.draw();
+        let script = tafs_core::sample_chat::script(&self.w, &answer, beat_ms).unwrap_or_default();
+        let mut f = taf_chat::Following::default();
+        for (ms, e) in &script {
+            glib::timeout_future(std::time::Duration::from_millis(*ms)).await;
+            if !self.open() {
+                self.chat.borrow_mut().sample_gone();
+                return;
+            }
+            let _ = self
+                .chat
+                .borrow_mut()
+                .stream_event(&self.w, e, None, &mut f);
+            self.draw();
+        }
+        let work = (beat_ms > 0)
+            .then(|| tafs_core::sample_chat::work(started.elapsed().as_millis() as i64));
+        self.chat
+            .borrow_mut()
+            .sample_answered(&d, &answer, work, chrono::Utc::now());
+        self.draw();
     }
 
     /// `loadChat`: the thread from tafs cloud, with what was sent from here that it doesn't have.
@@ -639,6 +750,10 @@ impl Page {
                 self.follow.set(true);
                 self.draw();
                 let p = self.clone();
+                if matches!(self.source, ChatSource::Sample { .. }) {
+                    glib::spawn_future_local(async move { p.sample_reply(d).await });
+                    return;
+                }
                 glib::spawn_future_local(async move {
                     if !p.deliver(d).await {
                         back(&p);
@@ -1286,7 +1401,9 @@ impl Page {
 
     /// The box's placeholder and button: Stop while the taf works and nothing is written.
     fn composer_state(&self) {
-        let thinking = self.chat.borrow().thinking();
+        // The sample's taf is never at work on its chat: no Stop, no steering.
+        let thinking =
+            self.chat.borrow().thinking() && !matches!(self.source, ChatSource::Sample { .. });
         if let Ok(k) = taf_chat::composer(&self.w, Some(&self.taf.name), thinking) {
             let (ready, held) = self.attach.send_state(&k.send, thinking);
             self.composer.show_with(
