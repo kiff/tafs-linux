@@ -154,6 +154,8 @@ pub struct ApprovalLines {
     pub connected: Option<String>,
     /// planque's request, while it waits: its words, its terms and KIFF's words for its profile.
     pub request: Option<Box<RequestShown>>,
+    /// Decline, beside where Approve would be, while the card asks.
+    pub decline: Option<Refuse>,
 }
 
 /// An approval's request as planque has it (`SetupApproval`'s grant): what the owner reads before
@@ -222,6 +224,19 @@ pub struct SignInLines {
     pub note: String,
     pub wider: Option<String>,
     pub gate: Option<NotReady>,
+    /// Not now, in tafs cloud's words where it gives some.
+    pub not_now: Option<Refuse>,
+}
+
+/// A card's refusal, answered here as data (`answerCard`): the card's id, the button's words, and
+/// the answer it sends ("declined", "not now"). It grants nothing, as on the iPad, where it sits
+/// outside `ApprovalGate`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Refuse {
+    pub kind: Kind,
+    pub id: String,
+    pub words: String,
+    pub answer: &'static str,
 }
 
 /// A result: a new taf handed over, or an improvement's new version.
@@ -286,6 +301,8 @@ pub enum Card {
         task: String,
         note: String,
         gate: Option<NotReady>,
+        /// Not now, which declines the drive.
+        not_now: Refuse,
     },
     /// A dial card: its title alone, until it's ported.
     Title(String),
@@ -310,6 +327,9 @@ pub enum Line {
         work: Option<WorkLines>,
         text: String,
         report: Option<crate::report::Reported>,
+        /// Its id and time: an answer that came with no stream is revealed once, as it arrives.
+        id: String,
+        at: DateTime<Utc>,
     },
     Card {
         card_ref: String,
@@ -1178,6 +1198,16 @@ fn approval_lines(
         None => (None, None),
     };
     Ok(ApprovalLines {
+        decline: if asks {
+            Some(Refuse {
+                kind: Kind::Approval,
+                id: c.id.clone(),
+                words: w.line("coach.approval.decline")?,
+                answer: "declined",
+            })
+        } else {
+            None
+        },
         connected,
         request: request.clone(),
         draft: draft_shown,
@@ -1279,6 +1309,15 @@ fn sign_in(
                 },
                 wider: c.wider_words().map(str::to_string),
                 gate: gate(w, mode)?,
+                not_now: Some(Refuse {
+                    kind: Kind::SignIn,
+                    id: c.id.clone(),
+                    words: match nonblank(c.no.as_deref()) {
+                        Some(no) => no,
+                        None => w.line("common.not_now")?,
+                    },
+                    answer: "not now",
+                }),
             })
         }
     })
@@ -1545,6 +1584,12 @@ fn card(
                     task,
                     note: w.line("drive.card_note_scrolls_pauses")?,
                     gate: gate(w, mode)?,
+                    not_now: Refuse {
+                        kind: Kind::Drive,
+                        id: c.id.clone(),
+                        words: w.line("common.not_now")?,
+                        answer: "declined",
+                    },
                 },
             }
         }
@@ -2016,6 +2061,8 @@ fn message(w: &WordBook, thread: &SetupThread, m: &ChatMessage) -> Result<Line, 
                 .transpose()?,
             text: m.text.clone(),
             report: crate::report::reportable(m),
+            id: m.id(),
+            at: m.at,
         },
     })
 }

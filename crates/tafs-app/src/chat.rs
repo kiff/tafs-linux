@@ -553,6 +553,51 @@ pub fn steady_answer_words(words: &str, shown: &Shown) -> gtk::Label {
     l
 }
 
+/// `RevealingBubble`'s words: an answer that came with no stream, shown letter by letter as it
+/// arrives, about 400 characters a second and two seconds at most, from where `shown` stands (kept
+/// across redraws); what it's in the middle of closed on the way. With animations off, at once.
+/// `whole` hears once it has all been shown by this reveal.
+pub fn revealed_answer_words(
+    words: &str,
+    shown: &Shown,
+    whole: std::rc::Rc<dyn Fn()>,
+) -> gtk::Label {
+    let l = answer_words("");
+    let target = words.chars().count();
+    let animates = gtk::Settings::default().is_some_and(|s| s.is_gtk_enable_animations());
+    if !animates || shown.get().is_some_and(|n| n >= target) {
+        shown.set(Some(target));
+        l.set_markup(&tafs_core::coach_lines::markup(
+            &tafs_core::coach_lines::healed(words),
+        ));
+        return l;
+    }
+    let step = 8.max(target / 120);
+    let at = shown.get().unwrap_or(0).min(target);
+    shown.set(Some(at));
+    l.set_markup(&tafs_core::coach_lines::markup(
+        &tafs_core::coach_lines::healed_prefix(words, at),
+    ));
+    let (weak, shown, words) = (l.downgrade(), shown.clone(), words.to_string());
+    glib::timeout_add_local(std::time::Duration::from_millis(16), move || {
+        let Some(l) = weak.upgrade() else {
+            return glib::ControlFlow::Break;
+        };
+        let at = target.min(shown.get().unwrap_or(0) + step);
+        shown.set(Some(at));
+        l.set_markup(&tafs_core::coach_lines::markup(
+            &tafs_core::coach_lines::healed_prefix(&words, at),
+        ));
+        if at >= target {
+            whole();
+            glib::ControlFlow::Break
+        } else {
+            glib::ControlFlow::Continue
+        }
+    });
+    l
+}
+
 /// The dots where the agent's words will be (`TypingBubble`, full width).
 pub fn dots(answering: &str) -> gtk::Box {
     let dots = gtk::Box::new(gtk::Orientation::Horizontal, 5);

@@ -283,12 +283,27 @@ panel beside any conversation tafs cloud has for it.
 
 ## The phone's, never this computer's
 
-Approve, Decline, a sign-in's button and Not now, and a drive's buttons. This computer is
-view-only: those cards keep the can't-approve line where their buttons go. Decline and Not now
-are unsigned on the iPad, but they stay with the phone too, so the whole card is answered in one
-place. `coach_send::answer_value` takes only a confirm's choice and a questions card's answers.
-For an approval, a sign-in or a drive it gives none, whatever the text, so nothing here can build
-"approved" or "signed in" by mistake. A test holds it to that.
+Approve, a sign-in's button, and a drive's Approve are the phone's. Approving a card ends in tafs
+cloud's report signed by the device behind Face ID, and its other steps grant access (planque's
+approve, tools and Cards together), which a computer never does (the PM's 19:52 (b), with qa-kiff:
+a security-key report for a `cards`-only ask is a design question first). Signing in at a vendor
+grants access, and a drive runs on the phone for KIFF's critical key. Those cards keep the
+can't-approve line where those buttons go.
+
+Their refusals are answered here, as on the iPad, where they sit outside `ApprovalGate`: Decline
+on an approval, Not now on a sign-in (in tafs cloud's words when it gives some) and Not now on a
+drive (which declines it), each `answerCard` as data, unsigned. `coach_send::answer_value` builds
+only those for these cards: "declined" for an approval or a drive, "not now" for a sign-in, and
+nothing else whatever the text, so nothing here can build "approved" or "signed in". A test
+holds it to that.
+
+## An answer with no stream
+
+When a message couldn't stream (the stream didn't open, so it was sent plainly), Coach's answer
+that comes after the page opened is revealed letter by letter as it arrives (`RevealingBubble`):
+about 400 characters a second, two seconds at most, from where it stood across redraws, with what
+it's in the middle of closed on the way. The cards that come with it wait until it's whole
+(`textBeforeCards`). With animations off it shows at once and holds nothing.
 
 ## A dial card
 
@@ -304,7 +319,6 @@ replaced this one." once another is newer.
 
 - No mic: a Linux desktop has no on-device speech recognition, as in a taf's chat.
 - What the iPad reads beside the thread: planque's grant (its words, terms and profile).
-- Revealing an answer with no stream.
 - A refused connection's lines are decoded but not drawn: the iPad's Coach doesn't draw them.
 
 ## Screenshots

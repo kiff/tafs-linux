@@ -95,6 +95,12 @@ enum Fail {
 struct Page {
     /// How much of the answer streaming now shows (`SteadyMarkdown`).
     live_shown: crate::chat::Shown,
+    /// When the page opened: Coach's answers after it, with no stream, are revealed as they come.
+    opened_at: chrono::DateTime<chrono::Utc>,
+    /// Whether the last send streamed (`setupStreamWorks`): false once a stream couldn't open.
+    stream_works: Cell<bool>,
+    /// How far each answer being revealed shows, by its id (`revealed` once whole).
+    reveals: RefCell<HashMap<String, crate::chat::Shown>>,
     w: Rc<WordBook>,
     source: CoachSource,
     listed: Rc<Vec<Listed>>,
@@ -292,6 +298,9 @@ pub fn page(
 
     let page = Rc::new(Page {
         live_shown: crate::chat::Shown::default(),
+        opened_at: chrono::Utc::now(),
+        stream_works: Cell::new(true),
+        reveals: RefCell::new(HashMap::new()),
         w,
         source,
         listed,
@@ -1080,6 +1089,7 @@ impl Page {
         } else {
             match self.open_stream(&setup, body.clone()).await {
                 Streamed::Opened(events) => {
+                    self.stream_works.set(true);
                     if self.conv.borrow().generation != d.generation {
                         return false;
                     }
@@ -1093,7 +1103,11 @@ impl Page {
                     return true;
                 }
                 Streamed::Refused(a) => Some(Ok(a)),
-                Streamed::Plain => self.post(path, body).await,
+                Streamed::Plain => {
+                    // No stream: the answer, once read, is revealed as it arrives.
+                    self.stream_works.set(false);
+                    self.post(path, body).await
+                }
             }
         };
         if improving.is_some()
@@ -2176,9 +2190,34 @@ fn draw_thread(page: &Rc<Page>, lines: &CoachLines, drawn: &Drawn) {
     }
     // Coach's answer streaming now: its work block, before the first item it recorded.
     let live_at = lines.live.as_ref().and_then(|(_, at)| *at);
+    // Text first, then its card (`textBeforeCards`): while an answer is still revealed, the cards
+    // after it wait, until the owner writes again.
+    let mut holding = false;
     for (i, line) in lines.lines.iter().enumerate() {
         if let (Some((work, _)), true) = (&lines.live, live_at == Some(i)) {
             column.append(&crate::chat::live_work(work));
+        }
+        match line {
+            Line::Owner { .. } => holding = false,
+            Line::Card { .. } if holding => continue,
+            Line::Coach {
+                text: words,
+                id,
+                at,
+                ..
+            } if !page.stream_works.get() && *at > page.opened_at => {
+                let whole = words.chars().count();
+                // With animations off it shows whole at once, and holds nothing.
+                let animates =
+                    gtk::Settings::default().is_some_and(|s| s.is_gtk_enable_animations());
+                holding = animates
+                    && page
+                        .reveals
+                        .borrow()
+                        .get(id)
+                        .is_none_or(|s| s.get().is_none_or(|n| n < whole));
+            }
+            _ => {}
         }
         let row: gtk::Widget = match line {
             Line::Gap(at) => crate::chat::gap(at),
@@ -2206,8 +2245,38 @@ fn draw_thread(page: &Rc<Page>, lines: &CoachLines, drawn: &Drawn) {
                 work,
                 text: words,
                 report,
+                id,
+                at,
             } => {
-                let v = crate::chat::answer(work.as_ref(), words);
+                // An answer that came with no stream after the page opened: revealed letter by
+                // letter, once (`RevealingBubble`); every other as it is.
+                let revealing = !page.stream_works.get() && *at > page.opened_at;
+                let v = if revealing {
+                    let shown = page
+                        .reveals
+                        .borrow_mut()
+                        .entry(id.clone())
+                        .or_default()
+                        .clone();
+                    let v = gtk::Box::new(gtk::Orientation::Vertical, 6);
+                    if let Some(work) = work {
+                        v.append(&crate::chat::work_summary(work));
+                    }
+                    // Whole, the cards it held are drawn.
+                    let p = Rc::downgrade(page);
+                    v.append(&crate::chat::revealed_answer_words(
+                        words,
+                        &shown,
+                        Rc::new(move || {
+                            if let Some(p) = p.upgrade() {
+                                p.draw();
+                            }
+                        }),
+                    ));
+                    v
+                } else {
+                    crate::chat::answer(work.as_ref(), words)
+                };
                 // Its menu: Report this answer, where it can be reported.
                 if let Some(r) = report {
                     page.reportable(&v, r);
@@ -2723,18 +2792,20 @@ fn card_view(page: &Rc<Page>, card_ref: &str, card: &Card) -> gtk::Widget {
         }
         Card::Questions { .. } => questions_card(page, card_ref, card),
         Card::Approval(a) => approval(page, a),
-        Card::SignIn(s) => sign_in(s),
+        Card::SignIn(s) => sign_in(page, s),
         Card::Result(r) => result(page, r, open),
         Card::Drive {
             eyebrow: e,
             task,
             note,
             gate,
+            not_now,
         } => {
             let p = card_panel(Tone::Amber);
             p.append(&eyebrow_in(e, Tone::Amber));
             p.append(&text(task, 20, 700, &["tafs-ink"]));
             p.append(&text(note, 14, 400, &["tafs-soft"]));
+            p.append(&refuse_button(page, not_now));
             if let Some(g) = gate {
                 p.append(&crate::approval::not_ready(g));
             }
@@ -3021,6 +3092,9 @@ fn approval(page: &Rc<Page>, a: &ApprovalLines) -> gtk::Widget {
     if let Some(f) = &a.failed {
         p.append(&text(f, 14, 400, &["tafs-no"]));
     }
+    if let Some(d) = &a.decline {
+        p.append(&refuse_button(page, d));
+    }
     if let Some(g) = &a.gate {
         p.append(&crate::approval::not_ready(g));
     }
@@ -3088,9 +3162,24 @@ fn request_shown(page: &Rc<Page>, r: &tafs_core::coach_lines::RequestShown) -> g
     v.upcast()
 }
 
+/// A card's refusal (Decline, Not now): an outline button that answers the card as data, as the
+/// iPad's sits outside `ApprovalGate`. It grants nothing.
+fn refuse_button(page: &Rc<Page>, r: &tafs_core::coach_lines::Refuse) -> gtk::Button {
+    let b = outline(&r.words);
+    b.set_halign(gtk::Align::Start);
+    b.set_widget_name(&format!("card.refuse.{}", r.id));
+    let (p, r) = (Rc::downgrade(page), r.clone());
+    b.connect_clicked(move |_| {
+        if let Some(p) = p.upgrade() {
+            p.answer(&r.id, r.kind, r.answer);
+        }
+    });
+    b
+}
+
 /// A vendor's sign-in, read only: its words, the wider line, and why this computer can't do it
 /// in its button's place.
-fn sign_in(s: &SignInLines) -> gtk::Widget {
+fn sign_in(page: &Rc<Page>, s: &SignInLines) -> gtk::Widget {
     let p = card_panel(s.stroke);
     p.append(&eyebrow_in(&s.eyebrow, s.eyebrow_tone));
     p.append(&text(&s.title, 20, 700, &["tafs-ink"]));
@@ -3100,6 +3189,9 @@ fn sign_in(s: &SignInLines) -> gtk::Widget {
     p.append(&text(&s.note, 14, 400, &["tafs-soft"]));
     if let Some(w) = &s.wider {
         p.append(&wider_line(w));
+    }
+    if let Some(n) = &s.not_now {
+        p.append(&refuse_button(page, n));
     }
     if let Some(g) = &s.gate {
         p.append(&crate::approval::not_ready(g));
