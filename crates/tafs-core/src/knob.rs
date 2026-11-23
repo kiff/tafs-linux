@@ -746,6 +746,18 @@ pub mod nav {
         turn + d
     }
 
+    /// `labelFlip`: a stop's label turns with its ring, and in the lower half it turns half a turn
+    /// more, so it never reads upside down. `angle` is where the stop is on screen, in degrees,
+    /// 0 at the top, clockwise.
+    pub fn label_flip(angle: f64) -> f64 {
+        let at = angle.rem_euclid(360.0);
+        if at > 90.0 && at < 270.0 {
+            180.0
+        } else {
+            0.0
+        }
+    }
+
     /// `labelWidth`: the chord inside a stop's share of its ring, leaving a gap between
     /// neighbours.
     pub fn label_width(radius: f64, stops: usize, maximum: f64, gap: f64) -> f64 {

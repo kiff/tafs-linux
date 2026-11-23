@@ -206,9 +206,11 @@ under it, as on the iPad's Doors tab:
   a knock waits, grey while resting, dashed while closed) and its light; the pointer at the chosen
   ring's top stop, or at the rim; the face with its kicker, its big word (the stop's state, its
   size, its label; the call's amount; else the taf's why) and its hint. Choosing a stop turns its
-  ring the short way to bring it to the top (`nearestTurn`) and dims the other rings; a door's
-  stop on When picks that door for the panels below. The rings are shapes; the stops' labels are
-  buttons over them, upright (the iPad turns each with its ring).
+  ring the short way to bring it to the top (`nearestTurn`), springing there as the iPad's ring
+  does (at once with the desktop's animations off), and dims the other rings; a door's stop on
+  When picks that door for the panels below. The rings are shapes; the stops' labels are buttons
+  over them, each turned with its ring and half a turn more in the lower half, so none reads
+  upside down (`labelFlip`).
 - **The face pressed:** a held call that may be approved once (signed: the can't-approve line);
   Coach for an "Add a door" stop; else, for whoever manages the taf, the chosen stop's act as the
   session: a door opened or closed (`PATCH …/doors/{door}`), a run started (`POST …/run`), a
