@@ -150,7 +150,7 @@ The iPad's hold notification (`HoldNotification.swift`: `words`, `fill`, `time`)
 once the hold is gone (`PushDelegate`'s `removeAlerts(forHold:)`), are ported to
 `tafs-core/src/hold_alert.rs` and `main.rs` › `watch_holds`. The iPad gets tafs cloud's push and
 fills it in from KIFF. A computer gets no push, so while tafs runs signed in with KIFF it reads
-KIFF's held calls (`GET /v1/me/card-exceptions?status=held`) once a minute, as Windows does
+KIFF's held calls (`GET /v1/me/card-exceptions?status=held`) about once a minute (±20%, so computers don't read in step), as Windows does
 (tafs-windows#69):
 
 - **What's notified:** each call held since the last read, as a desktop notification

@@ -35,7 +35,7 @@ From the top:
   (`UnreachableLine`): an amber dot, "Can't reach KIFF" (the network) or "Couldn't load from
   KIFF" (an error answer), with " · trying again" while the app tries again by itself, and
   **Status**, which opens KIFF's status page (status.kiff.dev, served apart from KIFF). The app
-  reads Home again 2, 10, 30, 60 and 120 seconds after a failure (`retryWaits`), then stops; the
+  reads Home again 2, 10, 30, 60 and 120 seconds (each ±20%) after a failure (`retryWaits`), then stops; the
   line goes once a read goes through, and the screen that was open stays open. Then the plan's
   line, then Coach, the ink button (light in dark, with the dark ground's
   colour on it), 44 high, corners of 14, with the sparkle, for a signed-in account that may use
