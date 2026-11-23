@@ -150,21 +150,25 @@ pub mod api {
         // The path alone, set on tafs cloud's own address: whatever it holds stays in the path,
         // never the host (parity-steward's note on #90: "foo:x@evil.example/…" has a path with no
         // leading "/", which pasted after the host would have made evil.example the host).
+        // The example is a shell line a developer pastes, so the path keeps only unreserved
+        // characters (letters, digits, "/", "_", ".", "~", "-"); any other path is tafs cloud's
+        // address alone, and a query or fragment never goes with it.
         let on_cloud = |path: &str| {
-            let mut base = url::Url::parse(crate::home::TAFS_CLOUD).expect("tafs cloud's address");
-            base.set_path(path);
-            base.to_string()
+            let base = url::Url::parse(crate::home::TAFS_CLOUD).expect("tafs cloud's address");
+            let mut at = base.clone();
+            at.set_path(path);
+            let plain = at.path().starts_with('/')
+                && at
+                    .path()
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || "/_.~-".contains(c));
+            if plain {
+                at.to_string()
+            } else {
+                base.to_string()
+            }
         };
         match url::Url::parse(&door.address) {
-            Ok(u)
-                if u.scheme() == "https"
-                    && u.host_str() == Some(crate::session::TAFS_CLOUD_HOST)
-                    && u.port().is_none()
-                    && u.username().is_empty()
-                    && u.password().is_none() =>
-            {
-                u.to_string()
-            }
             Ok(u) => on_cloud(u.path()),
             Err(_) => on_cloud(door.address.trim()),
         }
@@ -235,10 +239,11 @@ pub mod api {
     }
 
     /// An example request. It reads the key from the caller's own secret, `$TAFS_API_KEY`: the key
-    /// is never written in it.
+    /// is never written in it. The endpoint is single-quoted, so the line stays inert whatever it
+    /// holds.
     pub fn example(endpoint: &str) -> String {
         format!(
-            "curl -X POST {endpoint} \\\n  -H \"Authorization: Bearer $TAFS_API_KEY\" \\\n  -H \"Idempotency-Key: <your request id>\" \\\n  -H \"Content-Type: application/json\" \\\n  -d '{{\"input\": {{}}}}'"
+            "curl -X POST '{endpoint}' \\\n  -H \"Authorization: Bearer $TAFS_API_KEY\" \\\n  -H \"Idempotency-Key: <your request id>\" \\\n  -H \"Content-Type: application/json\" \\\n  -d '{{\"input\": {{}}}}'"
         )
     }
 }
@@ -1340,21 +1345,40 @@ mod tests {
             ),
             ("v1/x", "https://cloud.tafs.kiff.dev/v1/x"),
             // A scheme with no host of its own: its path stays a path (parity-steward's note).
-            (
-                "foo:x@evil.example/v1/x",
-                "https://cloud.tafs.kiff.dev/x@evil.example/v1/x",
-            ),
-            (
-                "mailto:a@evil.example",
-                "https://cloud.tafs.kiff.dev/a@evil.example",
-            ),
+            // A path with anything but unreserved characters: tafs cloud's address alone.
+            ("foo:x@evil.example/v1/x", "https://cloud.tafs.kiff.dev/"),
+            ("mailto:a@evil.example", "https://cloud.tafs.kiff.dev/"),
             (
                 "//evil.example/v1/x",
                 "https://cloud.tafs.kiff.dev//evil.example/v1/x",
             ),
+            ("@evil.example/x", "https://cloud.tafs.kiff.dev/"),
+            // Nothing a shell would act on stays in it, on tafs cloud's host or not.
             (
-                "@evil.example/x",
-                "https://cloud.tafs.kiff.dev/@evil.example/x",
+                "https://cloud.tafs.kiff.dev/v1/x$(id)",
+                "https://cloud.tafs.kiff.dev/",
+            ),
+            (
+                "https://cloud.tafs.kiff.dev/v1/x;id",
+                "https://cloud.tafs.kiff.dev/",
+            ),
+            (
+                "https://cloud.tafs.kiff.dev/v1/x&id",
+                "https://cloud.tafs.kiff.dev/",
+            ),
+            (
+                "https://cloud.tafs.kiff.dev/v1/x'id'",
+                "https://cloud.tafs.kiff.dev/",
+            ),
+            (
+                "https://cloud.tafs.kiff.dev/v1/x`id`",
+                "https://cloud.tafs.kiff.dev/",
+            ),
+            ("/v1/x$IFS!*+,=", "https://cloud.tafs.kiff.dev/"),
+            // A query or a fragment never goes with the path.
+            (
+                "https://cloud.tafs.kiff.dev/v1/doors/api/d/requests?x=$(id)#y",
+                "https://cloud.tafs.kiff.dev/v1/doors/api/d/requests",
             ),
         ] {
             d.address = address.into();
@@ -1430,7 +1454,7 @@ mod tests {
         assert_eq!(api::name(&k), "…AbCd");
         assert_eq!(api::when("en", k.made_at.as_deref()), None);
         let ex = api::example("https://x/y");
-        assert!(ex.starts_with("curl -X POST https://x/y \\\n"));
+        assert!(ex.starts_with("curl -X POST 'https://x/y' \\\n"));
         assert!(ex.contains("$TAFS_API_KEY") && !ex.contains("key_"));
     }
 
