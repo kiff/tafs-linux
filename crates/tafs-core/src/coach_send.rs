@@ -750,6 +750,8 @@ pub struct Conversation {
     pub draft_errors: HashMap<String, String>,
     /// planque's grants as this computer read them (`AppModel.grants`): None until read.
     pub grants: Option<Vec<crate::connections::Grant>>,
+    /// Each dial card's taf's dial as tafs cloud read it, by tafs cloud's id (`knobs`).
+    pub knobs: HashMap<String, crate::knob::Knob>,
     /// The taf this new conversation improves, until its first message has gone
     /// (`setupImproving`).
     pub improving: Option<Improving>,
@@ -878,6 +880,39 @@ impl Conversation {
             out.push(d.clone());
         }
         out
+    }
+
+    /// The tafs whose dial a dial card waits on (`KnobDraftCard`'s `loadKnob`): each card's taf
+    /// whose dial isn't read, or was read before the card's version.
+    pub fn knobs_to_read(&self) -> Vec<String> {
+        let mut out: Vec<String> = Vec::new();
+        for c in &self.thread.components {
+            let c = &c.component;
+            if c.kind != Kind::Knob {
+                continue;
+            }
+            let Some(id) = c.taf_id.as_deref().filter(|i| !i.is_empty()) else {
+                continue;
+            };
+            let read = self.knobs.get(id).is_some_and(|k| {
+                let newest = k
+                    .draft
+                    .as_ref()
+                    .map(|d| d.version)
+                    .max(k.version)
+                    .unwrap_or(0);
+                c.version.is_none_or(|v| newest >= v)
+            });
+            if !read && !out.iter().any(|o| o == id) {
+                out.push(id.to_string());
+            }
+        }
+        out
+    }
+
+    /// `loadKnob`'s answer for a dial card's taf.
+    pub fn took_knob(&mut self, taf: &str, knob: crate::knob::Knob) {
+        self.knobs.insert(taf.to_string(), knob);
     }
 
     /// `readCardDraft`'s answer: the draft, kept and its error gone; or KIFF's reason, kept for

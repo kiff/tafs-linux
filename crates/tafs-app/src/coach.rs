@@ -646,6 +646,44 @@ impl Page {
             self.read_drafts(wanted).await;
             self.draw();
         }
+        // What a dial card shows: its taf's dial, read again once the card's version is newer.
+        let knobs = self.conv.borrow().knobs_to_read();
+        if !knobs.is_empty() {
+            self.read_knobs(knobs).await;
+            self.draw();
+        }
+    }
+
+    /// `loadKnob` for each dial card's taf, as the session; one that can't be read stays reading.
+    async fn read_knobs(self: &Rc<Self>, ids: Vec<String>) {
+        let CoachSource::Cloud {
+            kept, languages, ..
+        } = self.source.clone()
+        else {
+            return;
+        };
+        for id in ids {
+            let (token, languages, path) = (
+                kept.token.clone(),
+                languages.clone(),
+                tafs_core::knob::path(&id, None),
+            );
+            let read = gtk::gio::spawn_blocking(move || {
+                crate::kiff::cloud(&token, &languages, &path)
+                    .ok()
+                    .filter(|a| (200..300).contains(&a.status))
+                    .and_then(|a| tafs_core::knob::read(&a.body))
+            })
+            .await
+            .ok()
+            .flatten();
+            if !self.open() {
+                return;
+            }
+            if let Some(k) = read {
+                self.conv.borrow_mut().took_knob(&id, k);
+            }
+        }
     }
 
     /// A screenshot's stream, from its file: each line read as the stream's are, taken as
@@ -2670,7 +2708,65 @@ fn card_view(page: &Rc<Page>, card_ref: &str, card: &Card) -> gtk::Widget {
             p.append(&text(t, 15, 600, &["tafs-ink"]));
             p.upcast()
         }
+        Card::Knob(k) => knob_card(page, k),
     }
+}
+
+/// `KnobDraftCard`: whose dial it is, then its rings in tafs cloud's words, each connection's
+/// apart, under the ring's name in its colour; Change, which goes back to the message box, and
+/// the gate's line where Confirm would be; or that it's live, replaced, or still being read.
+fn knob_card(page: &Rc<Page>, k: &tafs_core::coach_lines::KnobLines) -> gtk::Widget {
+    use tafs_core::coach_lines::KnobBody;
+    let p = panel(false);
+    if let Some(e) = &k.eyebrow {
+        p.append(&eyebrow_in(e, Tone::Dim));
+    }
+    match &k.body {
+        KnobBody::Live(l) => p.append(&text(l, 14, 400, &["tafs-ok"])),
+        KnobBody::Replaced(l) => p.append(&text(l, 14, 400, &["tafs-dim"])),
+        KnobBody::Reading => {
+            let s = gtk::Spinner::new();
+            s.start();
+            s.set_halign(gtk::Align::Center);
+            p.append(&s);
+        }
+        KnobBody::Draft { groups, words } => {
+            for (name, rings) in groups {
+                let g = gtk::Box::new(gtk::Orientation::Vertical, 6);
+                if let Some(n) = name {
+                    g.append(&text(n, 14, 600, &["tafs-ink"]));
+                }
+                for (ring, lines) in rings {
+                    let r = gtk::Box::new(gtk::Orientation::Vertical, 2);
+                    r.append(&text(ring, 11, 600, &["tafs-amber-text"]));
+                    for l in lines {
+                        r.append(&text(l, 14, 400, &["tafs-ink"]));
+                    }
+                    g.append(&r);
+                }
+                p.append(&g);
+            }
+            for l in words {
+                p.append(&text(l, 15, 400, &["tafs-ink"]));
+            }
+        }
+    }
+    if let Some(change) = &k.change {
+        let b = outline(change);
+        b.set_halign(gtk::Align::Start);
+        let page = page.clone();
+        b.connect_clicked(move |_| {
+            page.composer.view.grab_focus();
+        });
+        p.append(&b);
+    }
+    if let Some(g) = &k.gate {
+        p.append(&crate::approval::not_ready(g));
+    }
+    if let Some(o) = &k.one_confirmation {
+        p.append(&text(o, 12, 400, &["tafs-dim"]));
+    }
+    p.upcast()
 }
 
 /// tafs cloud's `wider` line, above where the buttons go (`WiderLine`): 14 medium, in the amber.

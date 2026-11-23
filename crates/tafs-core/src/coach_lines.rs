@@ -200,6 +200,8 @@ pub struct Drafts<'a> {
     pub errors: &'a HashMap<String, String>,
     /// planque's grants, once read (`AppModel.grants`): None until then.
     pub grants: Option<&'a [crate::connections::Grant]>,
+    /// Each dial card's taf's dial, by tafs cloud's id, as read.
+    pub knobs: Option<&'a HashMap<String, crate::knob::Knob>>,
 }
 
 impl<'a> Drafts<'a> {
@@ -245,6 +247,8 @@ pub struct ResultLines {
 /// A card, by its kind.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Card {
+    /// Coach's dial card (`KnobDraftCard`).
+    Knob(KnobLines),
     Notice {
         title: Option<String>,
         text: String,
@@ -1544,11 +1548,127 @@ fn card(
                 },
             }
         }
-        Kind::Knob => match nonblank(c.title.as_deref()).or(nonblank(c.text.as_deref())) {
-            Some(t) => Card::Title(t),
-            None => return Ok(None),
+        Kind::Knob => match knob_card(w, c, listed, mode, drafts)? {
+            Some(k) => Card::Knob(k),
+            None => match nonblank(c.title.as_deref()).or(nonblank(c.text.as_deref())) {
+                Some(t) => Card::Title(t),
+                None => return Ok(None),
+            },
         },
     }))
+}
+
+/// Coach's dial card (`KnobDraftCard`): "{taf} will work like this", then the dial version
+/// Coach drafted, ring by ring in tafs cloud's words, each connection's apart; "This dial is
+/// live." once it is; "A newer dial replaced this one." once another is newer; reading until
+/// its taf's dial is read.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct KnobLines {
+    pub eyebrow: Option<String>,
+    pub body: KnobBody,
+    /// Change, which goes back to Coach, and why this computer can't confirm in Confirm's
+    /// place (making a dial version live is the device's, checked before it goes).
+    pub change: Option<String>,
+    pub gate: Option<NotReady>,
+    pub one_confirmation: Option<String>,
+}
+
+/// A ring's name and its lines.
+pub type Ring = (String, Vec<String>);
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum KnobBody {
+    Live(String),
+    /// Each connection's rings under its name (none for a draft without groups), or the
+    /// draft's own words when it has no ring.
+    Draft {
+        groups: Vec<(Option<String>, Vec<Ring>)>,
+        words: Vec<String>,
+    },
+    Replaced(String),
+    Reading,
+}
+
+/// A draft's rings, as the iPad orders them: When, What, Where, each only with lines.
+fn rings(
+    w: &WordBook,
+    wakes: &[String],
+    what: &[String],
+    results: &[String],
+) -> Result<Vec<Ring>, WordsError> {
+    [
+        ("knob.ring.when", wakes),
+        ("knob.ring.what", what),
+        ("knob.ring.where", results),
+    ]
+    .into_iter()
+    .filter(|(_, l)| !l.is_empty())
+    .map(|(k, l)| Ok((w.line(k)?, l.to_vec())))
+    .collect()
+}
+
+/// A dial card's lines, once tafs cloud's id names its taf; none without one (its title stands).
+fn knob_card(
+    w: &WordBook,
+    c: &Component,
+    listed: &[Listed],
+    mode: Mode,
+    drafts: Drafts,
+) -> Result<Option<KnobLines>, WordsError> {
+    let Some(id) = c.taf_id.as_deref().filter(|i| !i.is_empty()) else {
+        return Ok(None);
+    };
+    let eyebrow = match listed.iter().find(|l| l.key == id) {
+        Some(l) => Some(format!("{}{}", l.name, w.line("coach.will_work_like")?)),
+        None => None,
+    };
+    let knob = drafts.knobs.and_then(|k| k.get(id));
+    let live = knob.and_then(|k| k.version);
+    let draft = knob.and_then(|k| k.draft.as_ref());
+    let mut lines = KnobLines {
+        eyebrow,
+        body: KnobBody::Reading,
+        change: None,
+        gate: None,
+        one_confirmation: None,
+    };
+    lines.body = match (c.version, live, draft) {
+        (Some(v), Some(l), _) if l >= v => KnobBody::Live(w.line("knob.live")?),
+        (v, _, Some(d)) if v == Some(d.version) => {
+            let groups = if !d.groups.is_empty() {
+                d.groups
+                    .iter()
+                    .map(|g| {
+                        Ok((
+                            Some(g.name.clone()),
+                            rings(w, &g.wakes, &g.what, &g.results)?,
+                        ))
+                    })
+                    .collect::<Result<_, WordsError>>()?
+            } else {
+                let r = rings(w, &d.wakes, &d.what, &d.results)?;
+                if r.is_empty() {
+                    vec![]
+                } else {
+                    vec![(None, r)]
+                }
+            };
+            lines.change = Some(w.line("knob.change")?);
+            lines.gate = gate(w, mode)?;
+            lines.one_confirmation = Some(w.line("knob.one_confirmation")?);
+            KnobBody::Draft {
+                words: if groups.is_empty() {
+                    d.words.clone()
+                } else {
+                    vec![]
+                },
+                groups,
+            }
+        }
+        _ if knob.is_some() => KnobBody::Replaced(w.line("knob.replaced")?),
+        _ => KnobBody::Reading,
+    };
+    Ok(Some(lines))
 }
 
 /// `DriveRecapCard`: "What I did", the task, each step with what it touched, then why it ended:
@@ -1633,6 +1753,7 @@ pub fn lines(
                 read: &HashMap::new(),
                 errors: &HashMap::new(),
                 grants: None,
+                knobs: None,
             },
             live: None,
             streaming: false,
@@ -1663,6 +1784,7 @@ pub fn conversation_lines(
                 read: &c.drafts,
                 errors: &c.draft_errors,
                 grants: c.grants.as_deref(),
+                knobs: Some(&c.knobs),
             },
             live: c.live.as_ref().map(|l| (l, &c.live_before)),
             streaming: !c.live_text().is_empty(),
@@ -2720,6 +2842,85 @@ mod tests {
                 c.grants.as_deref()
             ),
             CardState::Failed(None)
+        );
+    }
+
+    #[test]
+    fn a_dial_card_shows_its_draft_ring_by_ring() {
+        let card = json!({
+            "at": "2026-10-16T12:00:25.000Z", "session": "sess1", "run": "run2", "seq": 6,
+            "component": {"type": "knob", "id": "k1", "title": "Refunds' dial",
+                          "taf_id": "taf-1", "version": 8},
+            "key": "sess1#k1"
+        });
+        let mut c = crate::coach_send::Conversation::default();
+        c.took(read(&json!({"messages": [], "components": [card]})), now());
+        let listed = [Listed {
+            agent: "a1".into(),
+            key: "taf-1".into(),
+            name: "Refunds".into(),
+        }];
+        let knob_of = |c: &crate::coach_send::Conversation| {
+            conversation_lines(&book(), c, &listed, Mode::Kiff, now())
+                .unwrap()
+                .lines
+                .into_iter()
+                .find_map(|l| match l {
+                    Line::Card {
+                        card: Card::Knob(k),
+                        ..
+                    } => Some(k),
+                    _ => None,
+                })
+                .unwrap()
+        };
+        // Not read: reading, and its taf's dial is asked for.
+        assert_eq!(c.knobs_to_read(), ["taf-1"]);
+        let k = knob_of(&c);
+        assert_eq!(k.eyebrow.as_deref(), Some("Refunds will work like this"));
+        assert_eq!(k.body, KnobBody::Reading);
+        let mut dial: serde_json::Value = serde_json::from_slice(
+            &std::fs::read(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../tafs-app/fixtures/taf-knob-dial.json"
+            ))
+            .unwrap(),
+        )
+        .unwrap();
+        // Its draft: the rings in tafs cloud's words, Change and the gate where Confirm goes.
+        dial["draft"] = json!({"version": 8, "wakes": ["Every morning"], "what": [], "results": ["To Slack"]});
+        let knob = crate::knob::read(&serde_json::to_vec(&dial).unwrap()).unwrap();
+        c.took_knob("taf-1", knob.clone());
+        assert!(c.knobs_to_read().is_empty());
+        let k = knob_of(&c);
+        assert_eq!(
+            k.body,
+            KnobBody::Draft {
+                groups: vec![(
+                    None,
+                    vec![
+                        ("When".into(), vec!["Every morning".into()]),
+                        ("Where".into(), vec!["To Slack".into()])
+                    ]
+                )],
+                words: vec![],
+            }
+        );
+        assert_eq!(k.change.as_deref(), Some("Change"));
+        assert!(k.gate.is_some(), "Confirm is the device's");
+        // Live since: said so, and nothing to confirm.
+        dial["version"] = json!(8);
+        c.took_knob("taf-1", crate::knob::read(&serde_json::to_vec(&dial).unwrap()).unwrap());
+        let k = knob_of(&c);
+        assert_eq!(k.body, KnobBody::Live("This dial is live.".into()));
+        assert_eq!((k.change, k.gate), (None, None));
+        // Another draft since: replaced.
+        dial["version"] = json!(7);
+        dial["draft"]["version"] = json!(9);
+        c.took_knob("taf-1", crate::knob::read(&serde_json::to_vec(&dial).unwrap()).unwrap());
+        assert_eq!(
+            knob_of(&c).body,
+            KnobBody::Replaced("A newer dial replaced this one.".into())
         );
     }
 }

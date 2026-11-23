@@ -288,13 +288,23 @@ place. `coach_send::answer_value` takes only a confirm's choice and a questions 
 For an approval, a sign-in or a drive it gives none, whatever the text, so nothing here can build
 "approved" or "signed in" by mistake. A test holds it to that.
 
+## A dial card
+
+`KnobDraftCard`: "{taf} will work like this", then the dial version Coach drafted, read from tafs
+cloud with the taf's dial (`GET …/knob`, as the session, again once the card's version is newer):
+each connection's rings apart under its name, When, What and Where in tafs cloud's words, or the
+draft's own words when it has no ring. Change goes back to the message box. Confirm makes that
+version live, which the device checks before it goes, so the gate's line stands in its place,
+with "One confirmation sets all three rings." "This dial is live." once it is, and "A newer dial
+replaced this one." once another is newer.
+
 ## Not yet
 
 - `startSwitch`'s offer of the taf on screen (`tafOnScreen`): the switch shows only while Coach is
   on a taf.
 - No mic: a Linux desktop has no on-device speech recognition, as in a taf's chat.
 - What the iPad reads beside the thread: planque's grant (its words, terms and profile).
-- Revealing an answer with no stream, and a dial card (`KnobDraftCard`).
+- Revealing an answer with no stream.
 - A refused connection's lines are decoded but not drawn: the iPad's Coach doesn't draw them.
 
 ## Screenshots
