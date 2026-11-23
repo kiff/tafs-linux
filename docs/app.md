@@ -139,7 +139,7 @@ is out (`tafs_core::update`, `src/update.rs`).
 - **Offline, refused or rate-limited:** no line, no message; the next check tries again. A line
   already shown stays until a later check finds a newer release.
 - **Privacy:** the request carries no token, cookie or account, nothing about the user or this
-  computer, only the app's own User-Agent with its version (`tafs-linux/1.0.1`). GitHub sees the
+  computer, only the app's own User-Agent with its version (`tafs-linux/1.1.0`). GitHub sees the
   computer's IP address, as with any visit to github.com.
 
 ## The AppImage
