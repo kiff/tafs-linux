@@ -170,8 +170,11 @@ building those two from source on 22.04, or shipping a Flatpak.
   then attaches it with its `SHA256SUMS` to a **draft** release, its only copy. Publishing it is
   the owner's yes, never the workflow's.
 - Before a draft is published, `.github/workflows/verify-release.yml`, run by hand with its tag,
-  downloads the draft's own AppImage and `SHA256SUMS`, checks one against the other, and starts
-  that file on a clean Ubuntu 24.04. Its three screenshots are the run's only artifact. Nothing
+  downloads the draft's own AppImage, `SHA256SUMS` and `SHA256SUMS.asc`, checks that the
+  signature is a good one by the release key (`tools/verify-signature.sh --require`: only
+  `packaging/tafs-release-key.asc`, by its pinned fingerprint; another key, a bad signature or
+  none fails), checks the AppImage against `SHA256SUMS`, and starts that file on a clean
+  Ubuntu 24.04. Its three screenshots are the run's only artifact. Nothing
   is created, edited or published. It takes `tools/check-appimage.sh` from the branch it's run
   on (main), so a draft is checked with today's check, not the one it was built with.
 
@@ -222,4 +225,8 @@ gpg --verify SHA256SUMS.asc SHA256SUMS && sha256sum -c SHA256SUMS
 - **While the environment holds no key, the draft goes out unsigned** and the step says so
   (v1.0.1's first draft did).
 - A pull request that changes the packaging runs the same step with a throwaway key made in the
-  job, so the signing is known to work before the real key exists.
+  job, so the signing is known to work before the real key exists. Then `tools/verify-signature.sh`
+  must refuse that signature, since it's another key's, and must take the latest published
+  release's own `SHA256SUMS.asc` (only those two small files are downloaded).
+- **The download page's text** for kiff.dev is drafted in [download-page.md](download-page.md),
+  from these facts; it changes when they do.

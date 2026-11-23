@@ -1,7 +1,8 @@
 name: Verify a draft release
 
-# Run by hand with a draft's tag, before it's published: its own AppImage, checked against its
-# SHA256SUMS, then started on a clean Ubuntu 24.04 by tools/check-appimage.sh, which fails on a
+# Run by hand with a draft's tag, before it's published: its SHA256SUMS, checked as signed by the
+# release key (tools/verify-signature.sh), then its own AppImage checked against it, then started
+# on a clean Ubuntu 24.04 by tools/check-appimage.sh, which fails on a
 # library missing, an image loader that can't find its own, or an icon GTK can't load. Its three
 # screenshots (the first screen, the sign-in, the sample signed in) are kept as the run's
 # artifact; the AppImage isn't, since this repository is public.
@@ -31,7 +32,7 @@ jobs:
             echo "The version is v and three numbers, as v1.0.0: not '$VERSION'." >&2
             exit 1
           fi
-      - name: The draft's AppImage and SHA256SUMS, checked
+      - name: The draft's AppImage, SHA256SUMS and its signature, downloaded
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ inputs.version }}
@@ -46,19 +47,23 @@ jobs:
           gh api "repos/$GITHUB_REPOSITORY/releases/$id/assets" --jq '.[] | "\(.id) \(.name)"' |
             while read -r asset name; do
               case "$name" in
-                tafs-*-x86_64.AppImage | SHA256SUMS)
+                tafs-*-x86_64.AppImage | SHA256SUMS | SHA256SUMS.asc)
                   gh api -H "Accept: application/octet-stream" \
                     "repos/$GITHUB_REPOSITORY/releases/assets/$asset" > "release/$name" ;;
               esac
             done
-          cd release
-          ls -l
-          sha256sum -c SHA256SUMS
+          ls -l release
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
-          # Only for tools/check-appimage.sh: the token isn't written into .git/config.
+          # Only for the release key and the checks: the token isn't written into .git/config.
           persist-credentials: false
           path: src
+      - name: SHA256SUMS signed by the release key, then the AppImage against it
+        # Only packaging/tafs-release-key.asc, by its pinned fingerprint: another key, a bad
+        # signature or none at all fails, so no draft is published unsigned by mistake.
+        run: |
+          src/tools/verify-signature.sh release --require
+          cd release && sha256sum -c SHA256SUMS
       - name: On a clean Ubuntu 24.04, its screens with every icon, with GL and with no GL ES
         run: |
           docker run --rm -v "$PWD:/w" -w /w ubuntu:24.04 \
