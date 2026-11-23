@@ -340,6 +340,10 @@ pub struct HomeTaf {
     /// Its doors, for its avatar's rim and Needs you's knocks; absent when it has none.
     #[serde(default)]
     pub doors: Option<Vec<DoorLight>>,
+    /// The rim round its avatar while a door is open (`avatar_rim`, `rim::read`); another shape
+    /// is none.
+    #[serde(default)]
+    pub avatar_rim: Value,
     /// Where tafs cloud delivers its results itself (`door_reply`, `app`, `owner_email`), live.
     #[serde(default)]
     pub results: Option<Vec<Value>>,
@@ -508,6 +512,7 @@ impl SettingUp {
             now: self.finish.clone().unwrap_or_default(),
             badge: None,
             tone: Tone::Amber,
+            rim: None,
         }
     }
 }
@@ -670,6 +675,8 @@ pub struct Taf {
     pub knocked: bool,
     /// Its labels by id (`CloudTaf.labels`).
     pub labels: Vec<String>,
+    /// The rim round its avatar while a door is open (`DoorRim`).
+    pub rim: Option<crate::rim::Rim>,
 }
 
 fn window(w: &WordBook, raw: &str, words: Option<&WindowWords>) -> Result<Window, WordsError> {
@@ -737,6 +744,7 @@ pub fn taf(w: &WordBook, h: &HomeTaf) -> Result<Taf, WordsError> {
         relevant_now: h.relevant_now,
         knocks: h.doors.iter().flatten().map(|d| d.knocks).sum(),
         knocked: h.doors.iter().flatten().any(|d| d.knocks > 0),
+        rim: crate::rim::read(&h.avatar_rim),
         cloud: h.id.is_some(),
         state: crate::taf_page::TafState::from_cloud(&h.state, h.unscheduled == Some(true)),
         attention: Work::read(&h.work).is_some_and(|w| w.attention && !w.line.trim().is_empty()),
@@ -854,6 +862,7 @@ pub fn row(t: &Taf) -> TafRow {
         color_index: t.color_index,
         now: t.health_now.clone().unwrap_or_else(|| t.now.clone()),
         badge: None,
+        rim: t.rim,
         tone: match (&t.health_now, t.failing) {
             (None, _) => Tone::Dim,
             (Some(_), true) => Tone::No,
@@ -883,6 +892,7 @@ pub fn relevant(t: &Taf, held: bool, now: DateTime<Local>) -> bool {
 /// The Overview's line for a taf from Home.
 pub fn overview_taf(t: &Taf) -> OverviewTaf {
     OverviewTaf {
+        rim: t.rim,
         key: t.key.clone(),
         name: t.name.clone(),
         initial: initial(&t.name),

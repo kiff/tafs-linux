@@ -19,6 +19,17 @@ pub struct Chrome {
     pub browser: Option<String>,
     pub os: Option<String>,
     pub paired_at: Option<DateTime<Utc>>,
+    /// The sites of its live connections, each once, in planque's order ("Your Chrome" 3 and 4):
+    /// planque decides which are live (asked for or approved, not ended or failed), never this app.
+    /// None from a planque that doesn't list them.
+    pub sites: Vec<String>,
+}
+
+/// A connection a Chrome runs, as planque lists it (`connections`).
+#[derive(Deserialize)]
+struct Connection {
+    #[serde(default)]
+    sites: Option<Vec<String>>,
 }
 
 #[derive(Deserialize)]
@@ -31,6 +42,8 @@ struct Read {
     os: Option<String>,
     #[serde(default)]
     paired_at: Option<String>,
+    #[serde(default)]
+    connections: Option<Vec<Connection>>,
 }
 
 /// What planque's list answered.
@@ -64,6 +77,20 @@ pub fn listed(status: u16, body: &[u8]) -> Option<Listed> {
                             .paired_at
                             .and_then(|t| DateTime::parse_from_rfc3339(&t).ok())
                             .map(|t| t.with_timezone(&Utc)),
+                        sites: {
+                            let mut seen: Vec<String> = Vec::new();
+                            for s in r
+                                .connections
+                                .into_iter()
+                                .flatten()
+                                .flat_map(|c| c.sites.unwrap_or_default())
+                            {
+                                if !s.trim().is_empty() && !seen.contains(&s) {
+                                    seen.push(s);
+                                }
+                            }
+                            seen
+                        },
                     })
                     .collect(),
             ))
@@ -110,6 +137,26 @@ pub fn remove_question(w: &WordBook, c: &Chrome) -> Result<String, WordsError> {
     w.get("chrome.remove_named", &[("name", &c.name)])
 }
 
+/// What it's used for, under its name ("Your Chrome" 4): "Used for wikipedia.org, shop.example";
+/// none when it runs no connection.
+pub fn used_for(w: &WordBook, c: &Chrome) -> Result<Option<String>, WordsError> {
+    if c.sites.is_empty() {
+        return Ok(None);
+    }
+    w.get("chrome.used_for", &[("sites", &c.sites.join(", "))])
+        .map(Some)
+}
+
+/// What Unpair ends, in its question ("Your Chrome" 3): the connections that use it, which come
+/// back only by connecting them again; none when it runs no connection.
+pub fn unpair_ends(w: &WordBook, c: &Chrome) -> Result<Option<String>, WordsError> {
+    if c.sites.is_empty() {
+        return Ok(None);
+    }
+    w.get("chrome.unpair_ends", &[("sites", &c.sites.join(", "))])
+        .map(Some)
+}
+
 /// Why the list couldn't be read.
 pub fn not_loaded(w: &WordBook, why: &str) -> Result<String, WordsError> {
     w.get("chrome.not_loaded", &[("why", why)])
@@ -118,6 +165,33 @@ pub fn not_loaded(w: &WordBook, why: &str) -> Result<String, WordsError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn each_chrome_says_what_it_is_used_for_and_what_unpair_ends() {
+        let Some(Listed::Chromes(c)) = listed(
+            200,
+            br#"{"chromes":[{"chrome_id":"chr_1","name":"Work","connections":[{"grant":"g1","name":"Rae","sites":["wikipedia.org","shop.example"]},{"grant":"g2","name":"Bo","sites":["wikipedia.org"]},{"grant":"g3","name":"Al","sites":null}]},{"chrome_id":"chr_2","name":"Home","connections":[]},{"chrome_id":"chr_3","name":"Old"}]}"#,
+        ) else {
+            panic!("a list");
+        };
+        // Each site once, in planque's order.
+        assert_eq!(c[0].sites, ["wikipedia.org", "shop.example"]);
+        let w = WordBook::load(&WordBook::default_root(), "en").unwrap();
+        assert_eq!(
+            used_for(&w, &c[0]).unwrap().as_deref(),
+            Some("Used for wikipedia.org, shop.example")
+        );
+        assert_eq!(
+            unpair_ends(&w, &c[0]).unwrap().as_deref(),
+            Some("Unpairing ends the connections that use it: wikipedia.org, shop.example. They come back only when you connect them again.")
+        );
+        // None live, or a planque that doesn't list them: nothing said.
+        for chrome in &c[1..] {
+            assert!(chrome.sites.is_empty());
+            assert_eq!(used_for(&w, chrome).unwrap(), None);
+            assert_eq!(unpair_ends(&w, chrome).unwrap(), None);
+        }
+    }
 
     #[test]
     fn the_list_reads_and_a_403_or_404_hides_it() {

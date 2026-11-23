@@ -926,7 +926,12 @@ fn sidebar(
     // A taf's row (`tafLinks`, `tafRow`): its avatar, name and what it's doing, opening its page.
     let taf_row = |taf: &tafs_core::sidebar::TafRow| {
         let b = gtk::Box::new(gtk::Orientation::Horizontal, 12);
-        b.append(&avatar(&taf.initial, taf.color_index, 34));
+        b.append(&crate::widgets::taf_avatar(
+            &taf.initial,
+            taf.color_index,
+            34,
+            taf.rim,
+        ));
         let v = gtk::Box::new(gtk::Orientation::Vertical, 2);
         v.set_hexpand(true);
         v.set_valign(gtk::Align::Center);

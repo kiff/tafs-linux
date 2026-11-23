@@ -88,6 +88,8 @@ pub struct TafRow {
     pub badge: Option<String>,
     /// The line's colour: dim for what it's doing, amber or red for what went wrong.
     pub tone: Tone,
+    /// The rim round its avatar while a door is open (`DoorRim`).
+    pub rim: Option<crate::rim::Rim>,
 }
 
 /// A row's line colour (`tafRow`): dim, the amber as text, or red when it's failing.
@@ -542,6 +544,7 @@ mod tests {
             now: "Working".into(),
             badge: None,
             tone: Tone::default(),
+            rim: None,
         }
     }
 

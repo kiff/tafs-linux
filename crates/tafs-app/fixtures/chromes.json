@@ -7,14 +7,32 @@
     "name": "Work laptop",
     "browser": "Chrome 157",
     "os": "Windows",
-    "paired_at": "2026-11-22T16:30:00Z"
+    "paired_at": "2026-11-22T16:30:00Z",
+    "connections": [
+     {
+      "grant": "grt_01",
+      "name": "Rae",
+      "sites": [
+       "wikipedia.org",
+       "shop.example"
+      ]
+     },
+     {
+      "grant": "grt_02",
+      "name": "Bo",
+      "sites": [
+       "wikipedia.org"
+      ]
+     }
+    ]
    },
    {
     "chrome_id": "chr_02",
     "name": "Studio iMac",
     "browser": "Chrome 157",
     "os": "macOS",
-    "paired_at": "2026-11-21T09:05:00Z"
+    "paired_at": "2026-11-21T09:05:00Z",
+    "connections": []
    }
   ]
  }

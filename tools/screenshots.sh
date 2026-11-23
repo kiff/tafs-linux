@@ -20,7 +20,11 @@ sed -e "s/__HELD_AT__/$(date -u -d '-30 sec' +%FT%TZ)/" -e "s/__EXPIRES__/$(date
 # The same hold, over a total the Card keeps across calls: Approve once can't pass it, Extra room can.
 held_total=$(mktemp)
 sed -e 's/"can_approve_once": true/"can_approve_once": false/' "$held" > "$held_total"
-for screen in welcome welcome-ticked welcome-terms-changed cards-1 cards-2 cards-3 how-it-works sign-in sign-in-code sign-in-narrow pair connected overview overview-home overview-empty first-home overview-unread needs-you needs-you-kiff needs-you-key needs-you-key-room needs-you-empty needs-you-waits needs-you-set-all-aside needs-you-dismiss needs-you-hold needs-you-happened record taf taf-card taf-sample-chat taf-home taf-home-card taf-card-lines taf-work taf-work-manage taf-next taf-receipt-report taf-receipt-shot taf-report taf-card-manage taf-run taf-knocks doors doors-door doors-api doors-api-new-key doors-api-instructions taf-dial taf-setup-apps taf-starts taf-results taf-setup taf-units usage usage-kiff usage-kiff-member usage-ask usage-decline connect-apps connect-apps-narrow connect-app connect-connection connect-remove connect-kiff connect-which-taf connect-approve devices devices-sign-out people people-rename people-add files files-file chrome share share-step2 kiff-account account-kiff account-sign-in consent time-zone time-zone-use language alerts calendar calendar-week calendar-compact account sidebar-sample sidebar-others sidebar-setting-up discard-setup sidebar-unreachable sidebar-new-version sidebar-plan view-only view-only-paired recipes recipe-sheet gallery-strip gallery new-taf coach-hand halt-all halt-all-halted halt-one halt-resume record-search record-export record-receipt record-on delete-account pin-sheet pin-sheet-add app-event coach coach-attach coach-wider coach-stream coach-stream-healed coach-asks coach-read-back coach-improve coach-improve-files coach-chats coach-watch coach-watch-day coach-empty coach-start coach-draft coach-draft-refused coach-tools coach-full coach-drive taf-chat taf-chat-outcomes taf-chat-knocks taf-chat-attach taf-versions taf-versions-try taf-versions-trial taf-trial taf-chat-working taf-chat-stream taf-report brief brief-answer brief-clear overview-labels overview-label mission-log; do
+# Home with a door open and a knock waiting: the rim round the taf's avatar (`avatar_rim`, `DoorRim`).
+home_rim=$(mktemp)
+sed -e '0,/"color": 0,/s//"color": 0, "avatar_rim": {"visible": true, "tint": "knock", "length": 0.34},/' \
+  shared/contracts/home.json > "$home_rim"
+for screen in welcome welcome-ticked welcome-terms-changed cards-1 cards-2 cards-3 how-it-works sign-in sign-in-code sign-in-narrow pair connected overview overview-home overview-rim overview-empty first-home overview-unread needs-you needs-you-kiff needs-you-key needs-you-key-room needs-you-empty needs-you-waits needs-you-set-all-aside needs-you-dismiss needs-you-hold needs-you-happened record taf taf-card taf-sample-chat taf-home taf-home-card taf-card-lines taf-work taf-work-manage taf-next taf-receipt-report taf-receipt-shot taf-report taf-card-manage taf-run taf-knocks doors doors-door doors-api doors-api-new-key doors-api-instructions taf-dial taf-setup-apps taf-starts taf-results taf-setup taf-units usage usage-kiff usage-kiff-member usage-ask usage-decline connect-apps connect-apps-narrow connect-app connect-connection connect-remove connect-kiff connect-which-taf connect-approve devices devices-sign-out people people-rename people-add files files-file chrome chrome-unpair share share-step2 kiff-account account-kiff account-sign-in consent time-zone time-zone-use language alerts calendar calendar-week calendar-compact account sidebar-sample sidebar-others sidebar-setting-up discard-setup sidebar-unreachable sidebar-new-version sidebar-plan view-only view-only-paired recipes recipe-sheet gallery-strip gallery new-taf coach-hand halt-all halt-all-halted halt-one halt-resume record-search record-export record-receipt record-on delete-account pin-sheet pin-sheet-add app-event coach coach-attach coach-wider coach-stream coach-stream-healed coach-asks coach-read-back coach-improve coach-improve-files coach-chats coach-watch coach-watch-day coach-empty coach-start coach-draft coach-draft-refused coach-tools coach-full coach-drive taf-chat taf-chat-outcomes taf-chat-knocks taf-chat-attach taf-versions taf-versions-try taf-versions-trial taf-trial taf-chat-working taf-chat-stream taf-head taf-folded taf-report brief brief-answer brief-clear overview-labels overview-label mission-log; do
   case $screen in
     welcome) opts=(--page welcome) ;;
     # The welcome's tick (K5): ticked, Continue on; and as KIFF leaves it when the terms changed.
@@ -38,6 +42,8 @@ for screen in welcome welcome-ticked welcome-terms-changed cards-1 cards-2 cards
     pair) opts=(--page pair) ;;
     overview) opts=(--sample --signed-in) ;;
     overview-home) opts=(--home shared/contracts/home.json) ;;
+    # A taf with a door open and a knock waiting: the amber rim round its avatar, here and in the sidebar.
+    overview-rim) opts=(--home "$home_rim") ;;
     # No taf and no recipes listed: the Overview's "No tafs yet", under board 2.
     overview-empty) opts=(--home crates/tafs-app/fixtures/home-empty.json) ;;
     # The first Home: no taf, for someone who may use Coach (Ask Coach, How tafs works).
@@ -81,9 +87,12 @@ for screen in welcome welcome-ticked welcome-terms-changed cards-1 cards-2 cards
     people) opts=(--home shared/contracts/home.json --people crates/tafs-app/fixtures/people-kiff.json --page people) ;;
     # Files from tafs cloud's contracts: the account's, and its first file open.
     files) opts=(--home shared/contracts/home.json --files shared/contracts/files-list.json --page files) ;;
-    files-file) opts=(--home shared/contracts/home.json --files shared/contracts/files-list.json --page files-file) ;;
+    # A narrow window: the list alone, and a file's sheet over it. On a wide one (`files`), the file is beside the list.
+    files-file) opts=(--size 900x900 --home shared/contracts/home.json --files shared/contracts/files-list.json --page files-file) ;;
     # Account › Chrome: the Chromes planque lists (a fixture), Unpair, and Pair a Chrome (the phone's).
     chrome) opts=(--home shared/contracts/home.json --chromes crates/tafs-app/fixtures/chromes.json --page chrome) ;;
+    # Unpair's question for a Chrome with connections: the sites it ends ("Your Chrome" 3).
+    chrome-unpair) opts=(--home shared/contracts/home.json --chromes crates/tafs-app/fixtures/chromes.json --page chrome-unpair) ;;
     # Renaming a group with Save tapped: this computer can't approve, and sends nothing.
     people-rename) opts=(--home shared/contracts/home.json --people crates/tafs-app/fixtures/people-kiff.json --page people-rename) ;;
     people-add) opts=(--home shared/contracts/home.json --people crates/tafs-app/fixtures/people-kiff.json --page people-add) ;;
@@ -162,6 +171,10 @@ for screen in welcome welcome-ticked welcome-terms-changed cards-1 cards-2 cards
     # A door's knocks in its chat, at their times (`KnockCard`), from the doors' fixture.
     taf-chat-knocks) opts=(--home shared/contracts/home.json --access crates/tafs-app/fixtures/access-manage.json --doors crates/tafs-app/fixtures/taf-doors.json --chat crates/tafs-app/fixtures/taf-chat.json --page taf:taf-aaaa0000000000000000) ;;
     taf-chat-working) opts=(--home shared/contracts/home.json --chat crates/tafs-app/fixtures/taf-chat-working.json --page taf:taf-aaaa0000000000000000) ;;
+    # A taf's page in a window taller than wide: under its name, its versions and the Card bar;
+    # and as after scrolling its chat down, both folded away (the iPad's `folded`).
+    taf-head) opts=(--size 1032x1376 --home shared/contracts/home.json --access crates/tafs-app/fixtures/access-manage.json --chat crates/tafs-app/fixtures/taf-chat.json --versions crates/tafs-app/fixtures/versions.json --page taf:taf-aaaa0000000000000000) ;;
+    taf-folded) opts=(--size 1032x1376 --home shared/contracts/home.json --access crates/tafs-app/fixtures/access-manage.json --chat crates/tafs-app/fixtures/taf-chat.json --versions crates/tafs-app/fixtures/versions.json --page taf-folded:taf-aaaa0000000000000000) ;;
     taf-chat-stream) opts=(--home shared/contracts/home.json --access crates/tafs-app/fixtures/access-manage.json --chat crates/tafs-app/fixtures/taf-chat.json --chat-stream crates/tafs-app/fixtures/taf-chat-stream.txt --page taf:taf-aaaa0000000000000000) ;;
     # Report this answer, open over the chat's last answer: its Send sends nothing.
     taf-report) opts=(--home shared/contracts/home.json --chat crates/tafs-app/fixtures/taf-chat.json --report --page taf:taf-aaaa0000000000000000) ;;

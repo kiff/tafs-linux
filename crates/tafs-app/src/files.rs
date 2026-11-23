@@ -174,6 +174,53 @@ struct State {
     grouping: Grouping,
     /// A chip's taf, narrowing the account's files to one.
     chip: Option<String>,
+    /// A wide window (the iPad's `sizeClass == .regular`): the list 380 wide, the file beside it.
+    wide: bool,
+    /// The file picked on a wide window; the first shown when none is.
+    selected: Option<String>,
+}
+
+/// The least width of the page for the file beside the list: the list's 380 and as much again.
+const WIDE_FROM: f64 = 760.0;
+
+impl State {
+    /// The files shown: the taf's, or the chip's, or all.
+    fn mine(&self, taf: Option<&String>) -> Vec<DeliveredFile> {
+        let Some(Ok(all)) = &self.files else {
+            return vec![];
+        };
+        all.iter()
+            .filter(|f| taf.or(self.chip.as_ref()).is_none_or(|t| &f.taf == t))
+            .cloned()
+            .collect()
+    }
+
+    fn groups(&self, mine: &[DeliveredFile]) -> Vec<files::Group> {
+        match self.grouping {
+            Grouping::All => files::by_day(mine),
+            Grouping::ByTaf => files::by_taf(mine),
+            Grouping::ByRun => files::by_run(mine),
+        }
+    }
+
+    /// What's beside the list on a wide window (`selected ?? shown.first`): the file picked while
+    /// it's still there, else the first shown.
+    fn beside(&self, taf: Option<&String>) -> Option<DeliveredFile> {
+        let Some(Ok(all)) = &self.files else {
+            return None;
+        };
+        let picked = self
+            .selected
+            .as_ref()
+            .and_then(|id| all.iter().find(|f| &f.id == id));
+        picked.cloned().or_else(|| {
+            let mine = self.mine(taf);
+            self.groups(&mine)
+                .first()
+                .and_then(|g| g.files.first())
+                .cloned()
+        })
+    }
 }
 
 /// The file's type, as a small badge: its own extension, never an icon that says more than it knows.
@@ -232,7 +279,26 @@ pub fn page(w: Rc<WordBook>, source: FilesSource, taf: Option<String>) -> gtk::W
     scroller.set_hscrollbar_policy(gtk::PolicyType::Never);
     scroller.set_vexpand(true);
     scroller.set_child(Some(&column));
-    crate::widgets::ground(&scroller);
+    // On a wide window, the file beside the list (`FilesView`'s `HStack`: the list 380 wide, a
+    // divider, the file).
+    let beside = gtk::Box::new(gtk::Orientation::Vertical, 0);
+    beside.set_margin_start(16);
+    beside.set_margin_end(16);
+    beside.set_margin_top(16);
+    beside.set_margin_bottom(16);
+    let beside_scroller = gtk::ScrolledWindow::new();
+    beside_scroller.set_hscrollbar_policy(gtk::PolicyType::Never);
+    beside_scroller.set_hexpand(true);
+    beside_scroller.set_child(Some(&beside));
+    beside_scroller.set_widget_name("files.beside");
+    let divider = gtk::Separator::new(gtk::Orientation::Vertical);
+    let row_box = gtk::Box::new(gtk::Orientation::Horizontal, 0);
+    row_box.append(&scroller);
+    row_box.append(&divider);
+    row_box.append(&beside_scroller);
+    crate::widgets::ground(&row_box);
+    // Which file is beside the list now, so it's drawn again only when that changes.
+    let beside_id: Rc<RefCell<Option<String>>> = Rc::new(RefCell::new(None));
 
     let state = Rc::new(RefCell::new(State {
         files: None,
@@ -242,6 +308,8 @@ pub fn page(w: Rc<WordBook>, source: FilesSource, taf: Option<String>) -> gtk::W
             Grouping::All
         },
         chip: None,
+        wide: true,
+        selected: None,
     }));
     let draw: Rc<RefCell<Option<Redraw>>> = Rc::new(RefCell::new(None));
     let redraw: Rc<dyn Fn()> = {
@@ -278,6 +346,13 @@ pub fn page(w: Rc<WordBook>, source: FilesSource, taf: Option<String>) -> gtk::W
             load.clone(),
             taf.clone(),
         );
+        let (scroller, divider, beside_scroller, beside, beside_id) = (
+            scroller.clone(),
+            divider.clone(),
+            beside_scroller.clone(),
+            beside.clone(),
+            beside_id.clone(),
+        );
         Rc::new(move || {
             for b in [&controls, &list] {
                 while let Some(c) = b.first_child() {
@@ -285,6 +360,47 @@ pub fn page(w: Rc<WordBook>, source: FilesSource, taf: Option<String>) -> gtk::W
                 }
             }
             let l = |k: &str| w.line(k).unwrap_or_default();
+            // The list alone, or 380 wide with the file beside it.
+            let wide = state.borrow().wide;
+            scroller.set_hexpand(!wide);
+            scroller.set_size_request(if wide { 380 } else { -1 }, -1);
+            divider.set_visible(wide);
+            beside_scroller.set_visible(wide);
+            let shown = if wide {
+                state.borrow().beside(taf.as_ref())
+            } else {
+                None
+            };
+            let shown_id = shown.as_ref().map(|f| f.id.clone());
+            if wide && *beside_id.borrow() != shown_id {
+                *beside_id.borrow_mut() = shown_id.clone();
+                while let Some(c) = beside.first_child() {
+                    beside.remove(&c);
+                }
+                match shown {
+                    Some(f) => {
+                        // Deleted: nothing picked, and the list read again.
+                        let gone: Rc<dyn Fn()> = {
+                            let (state, load) = (state.clone(), load.clone());
+                            Rc::new(move || {
+                                state.borrow_mut().selected = None;
+                                load();
+                            })
+                        };
+                        let clamp = adw::Clamp::new();
+                        clamp.set_maximum_size(640);
+                        clamp.set_child(Some(&detail_column(w.clone(), source.clone(), f, gone)));
+                        beside.append(&clamp);
+                    }
+                    None => {
+                        let pick = text(&l("files.pick_one"), 14, 400, &["tafs-soft"]);
+                        pick.set_vexpand(true);
+                        pick.set_valign(gtk::Align::Center);
+                        pick.set_halign(gtk::Align::Center);
+                        beside.append(&pick);
+                    }
+                }
+            }
             let s = state.borrow();
             let all = match &s.files {
                 None => {
@@ -299,11 +415,7 @@ pub fn page(w: Rc<WordBook>, source: FilesSource, taf: Option<String>) -> gtk::W
                 }
                 Some(Ok(all)) => all,
             };
-            let mine: Vec<DeliveredFile> = all
-                .iter()
-                .filter(|f| taf.as_ref().or(s.chip.as_ref()).is_none_or(|t| &f.taf == t))
-                .cloned()
-                .collect();
+            let mine = s.mine(taf.as_ref());
             if mine.is_empty() && (taf.is_some() || all.is_empty()) {
                 list.append(&text(&l("files.empty"), 14, 400, &["tafs-soft"]));
                 return;
@@ -410,17 +522,34 @@ pub fn page(w: Rc<WordBook>, source: FilesSource, taf: Option<String>) -> gtk::W
                     b.add_css_class("tafs-plain");
                     b.set_child(Some(&row(&w, f, now)));
                     b.set_widget_name(&format!("files.file.{}", f.id));
-                    let (w, source, f, load) = (w.clone(), source.clone(), f.clone(), load.clone());
+                    if wide && shown_id.as_deref() == Some(f.id.as_str()) {
+                        b.add_css_class("tafs-file-picked");
+                    }
+                    let (w, source, f, load, state, redraw) = (
+                        w.clone(),
+                        source.clone(),
+                        f.clone(),
+                        load.clone(),
+                        state.clone(),
+                        redraw.clone(),
+                    );
+                    // Wide: the file beside the list. Narrow: its sheet.
                     b.connect_clicked(move |b| {
-                        detail(w.clone(), source.clone(), f.clone(), load.clone(), b)
+                        if state.borrow().wide {
+                            state.borrow_mut().selected = Some(f.id.clone());
+                            redraw();
+                        } else {
+                            detail(w.clone(), source.clone(), f.clone(), load.clone(), b)
+                        }
                     });
                     p.append(&b);
                 }
                 list.append(&p);
             }
             list.append(&text(&l("files.kept_line"), 12, 400, &["tafs-dim"]));
-            // `--page files-file`: the first file opens, for its screenshot.
-            if OPEN_FIRST.with(|o| o.replace(false)) {
+            // `--page files-file`: the first file opens, for its screenshot (beside the list
+            // already, on a wide window).
+            if !wide && OPEN_FIRST.with(|o| o.replace(false)) {
                 if let Some(f) = groups.first().and_then(|g| g.files.first()).cloned() {
                     let (w, source, load, list) =
                         (w.clone(), source.clone(), load.clone(), list.clone());
@@ -429,9 +558,30 @@ pub fn page(w: Rc<WordBook>, source: FilesSource, taf: Option<String>) -> gtk::W
             }
         })
     });
+    let bin = adw::BreakpointBin::new();
+    bin.set_size_request(320, 240);
+    bin.set_child(Some(&row_box));
+    let narrow = adw::Breakpoint::new(adw::BreakpointCondition::new_length(
+        adw::BreakpointConditionLengthType::MaxWidth,
+        WIDE_FROM,
+        adw::LengthUnit::Px,
+    ));
+    for (signal_wide, apply) in [(false, true), (true, false)] {
+        let (state, redraw) = (state.clone(), redraw.clone());
+        let set = move |_: &adw::Breakpoint| {
+            state.borrow_mut().wide = signal_wide;
+            redraw();
+        };
+        if apply {
+            narrow.connect_apply(set);
+        } else {
+            narrow.connect_unapply(set);
+        }
+    }
+    bin.add_breakpoint(narrow);
     redraw();
     load();
-    scroller.upcast()
+    bin.upcast()
 }
 
 thread_local! {
@@ -452,8 +602,8 @@ fn fact(name: &str, value: &str) -> gtk::Box {
     r
 }
 
-/// A file (`FileDetailView`): its start for a text type, Download, its facts, and Delete now behind a confirm.
-/// `deleted` reads the list again once tafs cloud deleted it.
+/// A file's sheet, over a narrow window's list: `deleted` reads the list again once tafs cloud
+/// deleted it, and the sheet closes.
 fn detail(
     w: Rc<WordBook>,
     source: FilesSource,
@@ -461,18 +611,43 @@ fn detail(
     deleted: Rc<dyn Fn()>,
     over: &impl IsA<gtk::Widget>,
 ) {
+    let s = crate::sheet::new(
+        &f.name,
+        &w.line("common.done").unwrap_or_default(),
+        None,
+        560,
+    );
+    let gone: Rc<dyn Fn()> = {
+        let dialog = s.dialog.clone();
+        Rc::new(move || {
+            dialog.close();
+            deleted();
+        })
+    };
+    s.column.append(&detail_column(w, source, f, gone));
+    s.dialog.present(Some(over));
+}
+
+/// A file (`FileDetailView`): its start for a text type, Download, its facts, and Delete now behind a confirm.
+/// `deleted` hears once tafs cloud deleted it. In a sheet on a narrow window, beside the list on a wide one.
+fn detail_column(
+    w: Rc<WordBook>,
+    source: FilesSource,
+    f: DeliveredFile,
+    deleted: Rc<dyn Fn()>,
+) -> gtk::Box {
     let l = |k: &str| w.line(k).unwrap_or_default();
     let lang = w.language().to_string();
-    let s = crate::sheet::new(&f.name, &l("common.done"), None, 560);
+    let column = gtk::Box::new(gtk::Orientation::Vertical, 12);
     let head = gtk::Box::new(gtk::Orientation::Horizontal, 12);
     head.append(&badge(&f.kind));
     let name = text(&f.name, 20, 700, &["tafs-ink"]);
     name.set_hexpand(true);
     head.append(&name);
-    s.column.append(&head);
+    column.append(&head);
     // Its start, drawn as plain text, never as Markdown or HTML; read only for a type tafs cloud gives one for.
     let start = gtk::Box::new(gtk::Orientation::Vertical, 6);
-    s.column.append(&start);
+    column.append(&start);
     if files::has_text_start(&f) {
         let spin = gtk::Spinner::new();
         spin.start();
@@ -582,9 +757,9 @@ fn detail(
             });
         });
     }
-    s.column.append(&download);
-    s.column.append(&note);
-    s.column.append(&failed);
+    column.append(&download);
+    column.append(&note);
+    column.append(&failed);
     let facts = panel(false);
     if !f.taf_name.is_empty() {
         facts.append(&fact(&l("files.made_by"), &f.taf_name));
@@ -612,17 +787,16 @@ fn detail(
         )
         .unwrap_or_default(),
     ));
-    s.column.append(&facts);
+    column.append(&facts);
     // Delete now, apart, behind a confirm that says it's gone for everyone, right away.
     let delete_now = outline(&l("files.delete_now"));
     delete_now.add_css_class("tafs-no");
     delete_now.set_margin_top(12);
     {
-        let (w, source, f, dialog, deleted, failed) = (
+        let (w, source, f, deleted, failed) = (
             w.clone(),
             source.clone(),
             f.clone(),
-            s.dialog.clone(),
             deleted.clone(),
             failed.clone(),
         );
@@ -640,11 +814,10 @@ fn detail(
             ask.set_response_appearance("delete", adw::ResponseAppearance::Destructive);
             ask.set_default_response(Some("cancel"));
             ask.set_close_response("cancel");
-            let (w, source, id, dialog, deleted, failed) = (
+            let (w, source, id, deleted, failed) = (
                 w.clone(),
                 source.clone(),
                 f.id.clone(),
-                dialog.clone(),
                 deleted.clone(),
                 failed.clone(),
             );
@@ -652,11 +825,10 @@ fn detail(
                 if r != "delete" {
                     return;
                 }
-                let (w, source, id, dialog, deleted, failed) = (
+                let (w, source, id, deleted, failed) = (
                     w.clone(),
                     source.clone(),
                     id.clone(),
-                    dialog.clone(),
                     deleted.clone(),
                     failed.clone(),
                 );
@@ -668,10 +840,7 @@ fn detail(
                         .unwrap_or(Err(offline));
                     // Gone from the list only once tafs cloud deleted it.
                     match gone {
-                        Ok(()) => {
-                            dialog.close();
-                            deleted();
-                        }
+                        Ok(()) => deleted(),
                         Err(why) => {
                             failed.set_label(&why);
                             failed.set_visible(true);
@@ -682,8 +851,8 @@ fn detail(
             ask.present(Some(b));
         });
     }
-    s.column.append(&delete_now);
-    s.dialog.present(Some(over));
+    column.append(&delete_now);
+    column
 }
 
 fn f_name_of(w: &WordBook) -> String {
@@ -729,4 +898,53 @@ pub fn taf_entry(
         }
     });
     b
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn state() -> State {
+        let v: serde_json::Value = serde_json::from_slice(
+            &std::fs::read(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../../shared/contracts/files-list.json"
+            ))
+            .expect("the files contract at the pin"),
+        )
+        .unwrap();
+        let (all, _) = files::read_page(&serde_json::to_vec(&v["answer"]).unwrap()).unwrap();
+        State {
+            files: Some(Ok(all)),
+            grouping: Grouping::All,
+            chip: None,
+            wide: true,
+            selected: None,
+        }
+    }
+
+    #[test]
+    fn beside_the_list_is_the_file_picked_else_the_first_shown() {
+        let mut s = state();
+        let mine = s.mine(None);
+        assert!(mine.len() > 1, "the contract has files to pick from");
+        let first = s.groups(&mine)[0].files[0].id.clone();
+        assert_eq!(s.beside(None).map(|f| f.id), Some(first.clone()));
+        // A file picked stays beside the list.
+        let other = mine.iter().find(|f| f.id != first).unwrap().id.clone();
+        s.selected = Some(other.clone());
+        assert_eq!(s.beside(None).map(|f| f.id), Some(other));
+        // Gone from the list (deleted): the first shown again.
+        s.selected = Some("fil_gone".into());
+        assert_eq!(s.beside(None).map(|f| f.id), Some(first));
+        // A taf's own files: its first.
+        let taf = mine.last().unwrap().taf.clone();
+        let theirs = s.beside(Some(&taf)).unwrap();
+        assert_eq!(theirs.taf, taf);
+        // Nothing read yet, or a failed read: nothing beside it ("Pick a file to see it here.").
+        s.files = None;
+        assert_eq!(s.beside(None), None);
+        s.files = Some(Err("offline".into()));
+        assert_eq!(s.beside(None), None);
+    }
 }

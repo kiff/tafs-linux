@@ -22,6 +22,8 @@ pub struct OverviewTaf {
     pub used_by: String,
     /// Its labels by id, as Home says (`labels(of:)`).
     pub labels: Vec<String>,
+    /// The rim round its avatar while a door is open (`DoorRim`).
+    pub rim: Option<crate::rim::Rim>,
 }
 
 /// What tafs cloud says of a taf's last run.
@@ -144,6 +146,8 @@ pub struct OverviewRow {
     /// Its labels by id, to filter by, and as its small grey chips: two, then "+N" (`TafLabels`).
     pub label_ids: Vec<String>,
     pub labels: Vec<String>,
+    /// The rim round its avatar while a door is open (`DoorRim`).
+    pub rim: Option<crate::rim::Rim>,
 }
 
 /// `OverviewView.showsRest`: Needs you counts more than the held calls listed here.
@@ -231,6 +235,7 @@ pub fn lines(
             accessible,
             label_ids: t.labels.clone(),
             labels: vec![],
+            rim: t.rim,
         });
     }
     Ok(OverviewLines {

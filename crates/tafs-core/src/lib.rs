@@ -59,6 +59,7 @@ pub mod record;
 pub mod record_search;
 pub mod removal;
 pub mod report;
+pub mod rim;
 pub mod runs;
 pub mod sample;
 pub mod sample_chat;

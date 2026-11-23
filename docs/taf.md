@@ -16,6 +16,11 @@ the page is `crates/tafs-app/src/taf.rs`.
   live, faded when revoked or not active) with the Card's mark, the Card's figure and words ("€1,960
   left today of €2,000", else its title), and under it its name, its environment when it isn't
   production, and how many Cards ("Refunds · Test · 3 Cards"); a chevron at its end.
+- **Folding** (`folded`): while the person scrolls the chat, the Card, Setup or the sample's
+  Activity down, the line under the name (its Files and versions) and the Card bar fold away, and
+  they come back on the way up (0.2 s; none with the desktop's animations off). Only the person's
+  own scrolling folds it: a wheel's notch, or 24 pixels of a touchpad or a finger, never the chat
+  following an answer. A tafs cloud taf's Activity doesn't, as on the iPad (`fold.rs`).
 - **Its held calls**, under NEEDS YOU in the amber, as Needs you's cards.
 - **The side column** (`sideColumn`), on Chat and Activity when the page is wider than tall and
   keeps 430 for the chat beside a 360-wide column: the held calls, CARDS (or CARD) with their stack,
@@ -484,4 +489,4 @@ nothing shows until they're read, or when they can't be. A 401 signs this comput
 - **On the Setup tab:** the sample's Setup (there, dimmed).
 - **In the trial's sheet:** its guide stays above the chat once messages are in (the iPad shows it
   before the first only), and the chat's box is under it, a scroll down.
-- Remove, and folding the head while scrolling.
+- Remove for good on a computer with no security key (the phone's).
