@@ -190,9 +190,9 @@ pub fn pane(w: Rc<WordBook>, taf: ChatTaf, source: ChatSource) -> gtk::Widget {
             .or_insert_with(|| Rc::new(RefCell::new(TafChat::new(&taf.id))))
             .clone()
     });
-    // What became of its calls, as the page had them; a chat kept from before keeps its own,
-    // read later (a trial's chat has none).
-    if chat.borrow().record.is_empty() && !taf.trial {
+    // What became of its calls, as the page had them: from the same read as its held cards, so a
+    // card answered since shows what became of it (a trial's chat has none).
+    if !taf.trial {
         chat.borrow_mut().record = taf.record.clone();
     }
     let page = Rc::new(Page {
@@ -394,6 +394,10 @@ impl Page {
         .await
         .unwrap_or_else(|_| Err(Some(String::new())));
         self.reading.set(false);
+        // A run seen at work here, over now: what it did reaches the record (`loadChat`'s
+        // `refresh`).
+        let run_over = matches!(&read, Ok(t) if t.working.is_none())
+            && self.chat.borrow().thread.working.is_some();
         match read {
             Err(None) => return self.signed_out(),
             Ok(t) => self.chat.borrow_mut().took(&self.w, t, chrono::Utc::now()),
@@ -407,6 +411,13 @@ impl Page {
         }
         if self.open() {
             self.draw();
+        }
+        if run_over {
+            crate::shell::reread_home();
+            self.reread_held().await;
+            if self.open() {
+                self.draw();
+            }
         }
     }
 
@@ -734,7 +745,10 @@ impl Page {
     /// them; then KIFF's activity, for what became of its calls. A read that fails changes
     /// nothing.
     async fn reread_held(self: &Rc<Self>) {
-        self.reread_calls().await;
+        // Signed out by the first read: the second isn't sent.
+        if self.reread_calls().await {
+            return;
+        }
         self.reread_record().await;
     }
 
@@ -777,8 +791,9 @@ impl Page {
         }
     }
 
-    /// KIFF's held calls read again, for this taf, and its cards as Needs you draws them.
-    async fn reread_calls(self: &Rc<Self>) {
+    /// KIFF's held calls read again, for this taf, and its cards as Needs you draws them. True
+    /// when KIFF said the session is over, and this computer was signed out.
+    async fn reread_calls(self: &Rc<Self>) -> bool {
         let (
             Some(r),
             ChatSource::Cloud {
@@ -788,23 +803,23 @@ impl Page {
             },
         ) = (self.taf.reread.clone(), &self.source)
         else {
-            return;
+            return false;
         };
         let (token, languages, signed_out) = (token.clone(), languages.clone(), signed_out.clone());
         let read = gtk::gio::spawn_blocking(move || crate::kiff::held(&token, &languages).ok())
             .await
             .ok()
             .flatten();
-        let Some(answer) = read else { return };
+        let Some(answer) = read else { return false };
         if answer.status == 401 {
             signed_out();
-            return;
+            return true;
         }
         let Some(exceptions) = (answer.status == 200)
             .then(|| tafs_core::held::read_held(&answer.body))
             .flatten()
         else {
-            return;
+            return false;
         };
         let calls: Vec<_> = exceptions
             .iter()
@@ -826,6 +841,7 @@ impl Page {
         ) {
             *self.held.borrow_mut() = l.cards;
         }
+        false
     }
 
     /// A screenshot's stream, from its file: each line read as the stream's are, taken as

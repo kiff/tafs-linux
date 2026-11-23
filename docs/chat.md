@@ -237,6 +237,7 @@ As the iPad's `streamingItems`, `anchorHeld` and `placed` (kiff/tafs#206):
 - **Answered,** its card becomes what became of it, in the same row (both are keyed by its Record
   line's id, `heldKey`: `recordID(proposalID ?? kiffID)`): in the answer where it was made while
   that answer streams, else by when it was answered.
+- The rules are `tafs-core/src/taf_chat.rs` › `items_of`, `placed`, `anchor_held`, with tests.
 
 ## What became of its calls
 
@@ -252,13 +253,13 @@ approved that wasn't done, is on its way, or whose outcome is unknown, as one li
 - It goes where it was answered (`answer.at`), between the taf asking and what it did next; with
   no answer's time, where its card was (`made_at`, else when KIFF recorded it), after the words
   that ask for it.
-- The page opens with the Record as Home read it; KIFF's activity is read again here, with its held
-  calls, when a call is held and when a stream ends. A read that fails changes nothing; a 401
+- The page opens with the Record as Home read it, with its held cards; KIFF's activity is read
+  again here, with its held calls, when a call is held, when a stream ends, and when a run seen at
+  work here is over (`loadChat`'s `refresh`). A read that fails changes nothing; a 401
   signs this computer out.
 - The rules are `tafs-core/src/taf_chat.rs` › `outcomes`, `outcome_line`, `call_amounts`,
   `items_of`, with tests. The screenshot is `taf-chat-outcomes` (`--activity
   crates/tafs-app/fixtures/taf-chat-activity.json`, synthetic).
-- The rules are `tafs-core/src/taf_chat.rs` › `items_of`, `placed`, `anchor_held`, with tests.
 
 ## Not yet
 
