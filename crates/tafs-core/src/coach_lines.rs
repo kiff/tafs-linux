@@ -2888,7 +2888,8 @@ mod tests {
         )
         .unwrap();
         // Its draft: the rings in tafs cloud's words, Change and the gate where Confirm goes.
-        dial["draft"] = json!({"version": 8, "wakes": ["Every morning"], "what": [], "results": ["To Slack"]});
+        dial["draft"] =
+            json!({"version": 8, "wakes": ["Every morning"], "what": [], "results": ["To Slack"]});
         let knob = crate::knob::read(&serde_json::to_vec(&dial).unwrap()).unwrap();
         c.took_knob("taf-1", knob.clone());
         assert!(c.knobs_to_read().is_empty());
@@ -2910,14 +2911,20 @@ mod tests {
         assert!(k.gate.is_some(), "Confirm is the device's");
         // Live since: said so, and nothing to confirm.
         dial["version"] = json!(8);
-        c.took_knob("taf-1", crate::knob::read(&serde_json::to_vec(&dial).unwrap()).unwrap());
+        c.took_knob(
+            "taf-1",
+            crate::knob::read(&serde_json::to_vec(&dial).unwrap()).unwrap(),
+        );
         let k = knob_of(&c);
         assert_eq!(k.body, KnobBody::Live("This dial is live.".into()));
         assert_eq!((k.change, k.gate), (None, None));
         // Another draft since: replaced.
         dial["version"] = json!(7);
         dial["draft"]["version"] = json!(9);
-        c.took_knob("taf-1", crate::knob::read(&serde_json::to_vec(&dial).unwrap()).unwrap());
+        c.took_knob(
+            "taf-1",
+            crate::knob::read(&serde_json::to_vec(&dial).unwrap()).unwrap(),
+        );
         assert_eq!(
             knob_of(&c).body,
             KnobBody::Replaced("A newer dial replaced this one.".into())

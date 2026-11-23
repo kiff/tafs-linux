@@ -304,6 +304,8 @@ pub fn build(
             *selection.borrow_mut() = Some(s.clone());
             mark_chosen(&rows, &list_now.borrow(), &icon_now.borrow(), &s);
             let title = title_of(&w, &lines, &model_tafs, &s);
+            // `tafOnScreen`: none, unless a taf's page this person manages is built below.
+            crate::coach_start::on_screen(None);
             let page = match s {
                 Selection::Overview => match &recipes {
                     Some(pane) => crate::recipes::page(pane.clone()),
@@ -474,6 +476,9 @@ pub fn build(
                 Selection::Taf(key) | Selection::Held { taf: key, .. } => {
                     match tafs.iter().find(|t| t.key == *key) {
                         Some(t) => {
+                            if let (true, false, Some(id)) = (t.manages, t.revoked, &t.cloud_id) {
+                                crate::coach_start::on_screen(Some((id.clone(), t.name.clone())));
+                            }
                             // Halting is a job of its own too: its row opens its screen, for a
                             // tafs cloud taf this person manages that isn't revoked.
                             let halt_row = match (&halt, &t.cloud_id) {

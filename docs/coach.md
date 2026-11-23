@@ -128,7 +128,9 @@ out, as every other read does.
   message with `coach.improve_no_files` under them, and the paperclip isn't offered meanwhile, as
   the iPad's `improvementHoldsFiles`), the dots from the send; then the conversation
   goes on in the chat tafs cloud answered with, as any other. A new conversation, or another
-  reopened, is on no taf. Empty, it says what it's about as a choice at its top (`startSwitch`: New
+  reopened, is on no taf. Opened over the page of a taf this person manages (`tafOnScreen`), an
+  empty new conversation offers it: the switch with New taf chosen and "Improve Rae", which turns
+  it into one on that taf. Empty, it says what it's about as a choice at its top (`startSwitch`: New
   taf starts a new conversation; "Improve Rae" is chosen), then "Improve Rae" and "Say what should
   change, or ask how it's going…", and three first messages that send as they are
   (`improveExamples`: How is it going?, Why was something refused or held?, It can't find the work
@@ -300,8 +302,6 @@ replaced this one." once another is newer.
 
 ## Not yet
 
-- `startSwitch`'s offer of the taf on screen (`tafOnScreen`): the switch shows only while Coach is
-  on a taf.
 - No mic: a Linux desktop has no on-device speech recognition, as in a taf's chat.
 - What the iPad reads beside the thread: planque's grant (its words, terms and profile).
 - Revealing an answer with no stream.

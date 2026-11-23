@@ -25,6 +25,9 @@ pub enum Start {
 thread_local! {
     /// What Coach opens on next; none, as it was (its newest chat).
     static START: RefCell<Option<Start>> = const { RefCell::new(None) };
+    /// The taf whose page is on screen, by its id at tafs cloud and its name, where this person
+    /// may improve it (`tafOnScreen`): Coach's new conversation offers it.
+    static ON_SCREEN: RefCell<Option<(String, String)>> = const { RefCell::new(None) };
     /// Coach opened beside the sidebar, afresh even when it's open already.
     static OPEN: RefCell<Option<Rc<dyn Fn()>>> = const { RefCell::new(None) };
 }
@@ -96,9 +99,20 @@ pub fn apply(conv: &mut Conversation) {
     }
 }
 
+/// `tafOnScreen`: the window says which taf's page it shows, or none.
+pub fn on_screen(taf: Option<(String, String)>) {
+    ON_SCREEN.with(|o| *o.borrow_mut() = taf);
+}
+
+/// The taf on screen, if any.
+pub fn taf_on_screen() -> Option<(String, String)> {
+    ON_SCREEN.with(|o| o.borrow().clone())
+}
+
 /// Signed out: nothing asked for the last account stays.
 pub fn forget() {
     START.with(|s| *s.borrow_mut() = None);
+    on_screen(None);
     set_opener(None);
 }
 

@@ -2110,6 +2110,39 @@ fn recipe_rows(page: &Rc<Page>, recipes: &tafs_core::recipes::Recipes, v: &gtk::
     }
 }
 
+/// `startSwitch` with New taf chosen, over a taf's page this person manages: "Improve {taf}"
+/// turns this new conversation into one on that taf (`improveTaf`).
+fn on_screen_switch(page: &Rc<Page>, id: &str, name: &str) -> gtk::Widget {
+    let w = &page.w;
+    let switch = gtk::Box::new(gtk::Orientation::Horizontal, 0);
+    switch.add_css_class("tafs-start-switch");
+    switch.set_halign(gtk::Align::Start);
+    switch.update_property(&[gtk::accessible::Property::Label(
+        &w.line("coach.what_conversation_about").unwrap_or_default(),
+    )]);
+    let new_taf = gtk::Button::with_label(&w.line("home.new_taf").unwrap_or_default());
+    new_taf.add_css_class("tafs-start-choice");
+    new_taf.add_css_class("selected");
+    switch.append(&new_taf);
+    let improve = gtk::Button::with_label(
+        &w.get("coach.improve_taf", &[("taf", name)])
+            .unwrap_or_default(),
+    );
+    improve.add_css_class("tafs-start-choice");
+    improve.set_widget_name("coach.start.improve");
+    {
+        let (p, id, name) = (Rc::downgrade(page), id.to_string(), name.to_string());
+        improve.connect_clicked(move |_| {
+            if let Some(p) = p.upgrade() {
+                p.conv.borrow_mut().improve(&id, &name);
+                p.draw();
+            }
+        });
+    }
+    switch.append(&improve);
+    switch.upcast()
+}
+
 fn draw_thread(page: &Rc<Page>, lines: &CoachLines, drawn: &Drawn) {
     let column = &page.column;
     if page.no_coach.get() {
@@ -2119,6 +2152,10 @@ fn draw_thread(page: &Rc<Page>, lines: &CoachLines, drawn: &Drawn) {
     if let Some((title, line)) = &lines.starts {
         let v = gtk::Box::new(gtk::Orientation::Vertical, 12);
         v.set_margin_top(16);
+        // `startSwitch` over a taf's page: New taf chosen, and the taf on screen offered.
+        if let Some((id, name)) = crate::coach_start::taf_on_screen() {
+            v.append(&on_screen_switch(page, &id, &name));
+        }
         // Board 7, Coach with no taf or one yet: room for more.
         if page.listed.len() <= 1 {
             v.append(&crate::illustrations::coach_first().leading());
