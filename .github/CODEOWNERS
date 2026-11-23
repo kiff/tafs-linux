@@ -16,6 +16,7 @@
 /crates/tafs-core/src/signin.rs @kiff-qa @agentgabo
 /crates/tafs-core/src/app_signin.rs @kiff-qa @agentgabo
 /crates/tafs-core/src/approval.rs @kiff-qa @agentgabo
+/crates/tafs-core/src/devices.rs @kiff-qa @agentgabo
 /crates/tafs-app/src/key_approval.rs @kiff-qa @agentgabo
 /crates/tafs-app/src/fido_key.rs @kiff-qa @agentgabo
 /crates/tafs-app/src/pin_sheet.rs @kiff-qa @agentgabo
@@ -26,6 +27,7 @@
 /crates/tafs-app/src/app_sign_in.rs @kiff-qa @agentgabo
 /crates/tafs-app/src/scheme.rs @kiff-qa @agentgabo
 /crates/tafs-app/src/approval.rs @kiff-qa @agentgabo
+/crates/tafs-app/src/devices.rs @kiff-qa @agentgabo
 /docs/keys.md @kiff-qa @agentgabo
 /docs/approval.md @kiff-qa @agentgabo
 /docs/pairing.md @kiff-qa @agentgabo
