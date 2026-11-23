@@ -79,8 +79,10 @@ sent with `error.sent_with_other_text`. The rules are `tafs-core/src/coach_send.
   line.
 - **What a run never read:** tafs cloud's `steering.not_sent`, and what a run that's over listed
   unread ("You stopped it before it read this.", "It wasn't read before the work ended."), each shown
-  once as Not sent. A Retry kept again still owes it. This computer keeps which were dealt with in
-  memory only, so a restart shows them again.
+  once as Not sent. A Retry kept again still owes it. One that Retry sent, Edit or Delete took
+  stays taken across launches (`settledKey`): its hash (the run, when it was written and its
+  words, SHA-256) is kept in the person's config folder, never its words, 500 at most, the oldest
+  dropped first. One only shown isn't kept, so a restart shows it again, as the iPad's.
 - **An owner's message's menu** (a right click or a long press): Send again, Edit and send, Copy.
   A message not sent has its own: Copy, and Delete, which takes it out of the thread unsent
   (`discardUnsentChat`).
@@ -329,9 +331,7 @@ branch), each sample taf's page has its Chat, and nothing is read or sent
 
 ## Not yet
 
-- `SteadyMarkdown`.
-- Keeping across launches
-  which unread rows were dealt with.
+Nothing: every branch is drawn and acts.
 
 ## Screenshots
 

@@ -621,6 +621,8 @@ fn a_message_that_goes_takes_a_too_fast_one_away() {
     c.steer_not_sent(&u.text, ("id", None), "again", None, false, now);
     c.retry_kept(left, &u);
     assert_eq!(c.unsent[0].settle, u.settle);
+    // Still owed: not remembered across launches.
+    assert!(c.taken.is_empty());
 }
 
 #[test]
@@ -2087,4 +2089,56 @@ fn a_connected_tool_is_said_by_its_connections_title_once_read() {
     };
     let lines = crate::coach_lines::taf_work_lines_titled(&w, &work, &titles).unwrap();
     assert!(format!("{lines:?}").contains("Reading List payments (charges)"));
+}
+
+#[test]
+fn an_unread_row_taken_here_stays_taken_across_launches() {
+    let json = std::str::from_utf8(&fixture("taf-chat.json"))
+        .unwrap()
+        .to_string();
+    let mut c = chat_of(&json);
+    let shown: Vec<_> = c
+        .unsent
+        .iter()
+        .filter(|u| u.settle.is_some())
+        .cloned()
+        .collect();
+    assert!(!shown.is_empty(), "the fixture has a run's unread message");
+    // Only shown: nothing kept, so a restart shows it again.
+    assert!(c.taken.is_empty());
+    assert_eq!(chat_of(&json).unsent.len(), c.unsent.len());
+    // Deleted: its hash is kept, never its text.
+    c.discard(shown[0].id);
+    let key = shown[0].settle.clone().unwrap();
+    assert_eq!(c.taken, std::slice::from_ref(&key));
+    assert!(!key.contains(&shown[0].text));
+    // The next launch remembers it: that row doesn't come back; the others do.
+    let mut again = TafChat::new("taf-1");
+    again.remember([key.clone()]);
+    let fresh = chat_of(&json);
+    again.took(&en(), fresh.thread.clone(), at("2026-11-16T10:05:00Z"));
+    assert!(again.unsent.iter().all(|u| u.settle.as_ref() != Some(&key)));
+    assert_eq!(again.unsent.len(), fresh.unsent.len() - 1);
+    // Retry that went through takes it too; one not taken at all goes back, unremembered.
+    let mut c = chat_of(&json);
+    let (i, u) = c.retry(shown[0].id).unwrap();
+    c.retry_back(i, u);
+    assert!(c.taken.is_empty());
+    let (_, u) = c.retry(shown[0].id).unwrap();
+    let left = c.unsent.len();
+    c.retry_kept(left, &u);
+    assert_eq!(c.taken, std::slice::from_ref(&key));
+    // Edit takes one too.
+    let mut c = chat_of(&json);
+    c.edit(shown[0].id).unwrap();
+    assert_eq!(c.taken, std::slice::from_ref(&key));
+    // At most 500 kept, the newest last, none twice.
+    let mut kept: Vec<String> = (0..SETTLED_KEPT).map(|i| i.to_string()).collect();
+    kept = keep_settled(kept, "new");
+    assert_eq!(kept.len(), SETTLED_KEPT);
+    assert_eq!(
+        (kept[0].as_str(), kept.last().unwrap().as_str()),
+        ("1", "new")
+    );
+    assert_eq!(keep_settled(vec!["a".into(), "b".into()], "a"), ["b", "a"]);
 }

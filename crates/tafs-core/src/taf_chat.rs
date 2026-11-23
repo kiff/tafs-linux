@@ -236,9 +236,13 @@ pub struct TafChat {
     next_unsent: u64,
     /// A Retry's id, for the send it starts.
     reuse_id: Option<String>,
-    /// The unread messages of runs dealt with here, by hash (in memory: this computer keeps no
-    /// list across launches).
+    /// The unread messages of runs shown here, by hash, while the page is open.
     settled: HashSet<String>,
+    /// Those Retry, Edit or Delete took, kept across launches (`remembered`, `settledKey`): their
+    /// hashes, never their text. Read when the chat opens (`remember`).
+    pub remembered: HashSet<String>,
+    /// Taken since the store last saved them (`rememberTaken`): the app keeps each, then clears.
+    pub taken: Vec<String>,
     pub ended: Option<Ended>,
     /// The session the owner stopped: over here at once, whatever tafs cloud still says.
     pub stopped: Option<String>,
@@ -284,6 +288,19 @@ pub struct Following {
 }
 
 /// A steered message's key: its run, time and words, hashed, never kept as words.
+/// The most hashes kept across launches (`settledKept`): older runs are no longer the latest, so
+/// theirs don't show.
+pub const SETTLED_KEPT: usize = 500;
+
+/// The kept hashes with `key` added last, the oldest dropped past `SETTLED_KEPT`.
+pub fn keep_settled(mut kept: Vec<String>, key: &str) -> Vec<String> {
+    kept.retain(|k| k != key);
+    kept.push(key.to_string());
+    let over = kept.len().saturating_sub(SETTLED_KEPT);
+    kept.drain(..over);
+    kept
+}
+
 fn steering_key(s: &Steering, m: &SteeringMessage) -> String {
     use sha2::{Digest, Sha256};
     let at = m.at.timestamp_millis() as f64 / 1000.0;
@@ -374,7 +391,8 @@ impl TafChat {
         }
         for (m, why) in fresh {
             let key = steering_key(&s, &m);
-            if self.settled.insert(key.clone()) {
+            // Shown once; and once taken, never again, whatever launch this is (`wasSettled`).
+            if !self.remembered.contains(&key) && self.settled.insert(key.clone()) {
                 self.keep_unsent(&m.text, &why, None, Some(key), false, now);
             }
         }
@@ -992,16 +1010,43 @@ impl TafChat {
                 last.settle = message.settle.clone();
             }
         }
+        // Gone through: taken for good. Kept again: still owed, so not remembered.
+        if !self
+            .unsent
+            .iter()
+            .any(|u| u.settle.is_some() && u.settle == message.settle)
+        {
+            self.took_unsent(message);
+        }
     }
 
     /// Delete (`discardUnsentChat`): out of the thread, not sent.
     pub fn discard(&mut self, id: u64) {
+        if let Some(m) = self.unsent.iter().find(|u| u.id == id).cloned() {
+            self.took_unsent(&m);
+        }
         self.unsent.retain(|u| u.id != id);
+    }
+
+    /// `rememberTaken`: a run's unread message taken by Retry, Edit or Delete is kept by its hash,
+    /// so a restart doesn't bring it back. One only shown isn't: a restart shows it again.
+    fn took_unsent(&mut self, m: &Unsent) {
+        if let Some(key) = &m.settle {
+            if self.remembered.insert(key.clone()) {
+                self.taken.push(key.clone());
+            }
+        }
+    }
+
+    /// What was kept across launches, once read: none of those shows again.
+    pub fn remember(&mut self, kept: impl IntoIterator<Item = String>) {
+        self.remembered.extend(kept);
     }
 
     /// Edit (`editUnsentChat`): out of the thread, its words back in the box.
     pub fn edit(&mut self, id: u64) -> Option<String> {
         let message = self.unsent.iter().find(|u| u.id == id)?.clone();
+        self.took_unsent(&message);
         self.unsent.retain(|u| u.id != id);
         Some(message.text)
     }
