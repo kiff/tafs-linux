@@ -3,7 +3,7 @@
 //! `planque::Safe`); no session token goes. Account's row shows only once the list reads: planque answers 404 while it
 //! doesn't offer Chromes and 403 for someone who may only view, and then there's no row, as the iPad's while `chromes`
 //! is nil. Pairing binds a phone's approval key the extension trusts afterwards, so it stays on the phone: Pair a Chrome
-//! says this computer can't, with "Approve on your phone instead" (the PM's 20:12).
+//! says this computer can't, with "Approve on your phone instead".
 //!
 //! Built to the "Your Chrome" contract (kiff/tafs `docs/chrome.md`, tafs#1744): unpairing a Chrome ends its
 //! connections at planque (planque#364), so none is left pointing at a Chrome that's gone. Each Chrome's connections,

@@ -107,7 +107,7 @@ it signed in with KIFF from a file of synthetic answers (`balance`, `credits`, `
 
 The iPad sells credit packs and Solo in its store, where tafs cloud's balance offers them
 (`buy`'s `packs` and `solo`), and approving a member's pack buys it there. kiff.dev sells
-neither, only Company. So a computer says where to buy (the PM's ruling A, `tafs-core/usage.rs` ›
+neither, only Company. So a computer says where to buy (`tafs-core/usage.rs` ›
 `buying`), signed in with KIFF:
 
 - **Under the balance**, where the iPad's Buy credits and Solo are: "Buy Solo or credits in the

@@ -875,7 +875,7 @@ pub fn long_date(language: &str, day: chrono::NaiveDate) -> String {
 /// in first.
 pub const TEAM_CHECKOUT: &str = "https://kiff.dev/dashboard/checkout";
 
-/// Where a computer buys (the PM's ruling A): Solo and credit packs only in the tafs app on the
+/// Where a computer buys: Solo and credit packs only in the tafs app on the
 /// phone, through its store, and Company on kiff.dev. kiff.dev sells neither Solo nor credit
 /// packs.
 #[derive(Debug, Clone, PartialEq, Eq)]

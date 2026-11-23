@@ -355,7 +355,7 @@ impl Act {
             }
             // An `api` door's, the iPad's exact bytes (`TafsCloud.reopenBody`; a DELETE's empty
             // body). New key stays on the phone: its answer is the key, shown once, which this
-            // computer can't keep from a screen recording or a clipboard's history (the PM's 00:19).
+            // computer can't keep from a screen recording or a clipboard's history.
             Act::ReopenDoor { .. } => br#"{"open":true}"#.to_vec(),
             Act::RevokeDoorKey { .. } | Act::RemoveApiDoor { .. } => Vec::new(),
             Act::DeleteGroup { .. }

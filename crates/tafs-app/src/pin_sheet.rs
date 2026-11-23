@@ -204,8 +204,8 @@ fn present_lines(
             message.set_label(&line);
             message.set_visible(true);
             if !again {
-                // A locked key can't approve: Cancel becomes "Approve on your phone instead"
-                // (the PM's 20:12); it closes the sheet, nothing approved here.
+                // A locked key can't approve: Cancel becomes "Approve on your phone instead", and
+                // it closes the sheet, with nothing approved here.
                 locked.set(true);
                 field.set_sensitive(false);
                 approve.set_sensitive(false);

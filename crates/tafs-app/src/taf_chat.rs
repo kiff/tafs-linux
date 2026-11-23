@@ -1819,7 +1819,7 @@ impl Page {
                         v.append(&run_line(d));
                     }
                     // Only the part being written now is paced and healed; a part finished before
-                    // a tool call is drawn as written, so its own "[1]" stays (parity-steward's note).
+                    // a tool call is drawn as written, so its own "[1]" stays.
                     let answer = if *streaming && pacing == Some(i) {
                         crate::chat::steady_answer_words(words, &self.live_shown)
                     } else {

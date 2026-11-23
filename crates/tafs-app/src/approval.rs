@@ -100,7 +100,8 @@ pub fn refuse_then(
     if mode == Mode::Kiff {
         let kept = crate::store::load(chrono::Utc::now().timestamp());
         // Approved with the key (the act's own request or answer), or, for Disconnect and Clear,
-        // the key's touch and PIN and then the device key at planque (the owner's 22 Nov rule).
+        // the key's touch and PIN and then the device key at planque (the owner's rule: never on the
+        // device key alone).
         let approves = crate::key_approval::can_approve(kept.as_ref(), act);
         let ends = crate::key_approval::can_end(kept.as_ref(), act);
         if let (true, Some(kept)) = (approves || ends, kept) {
@@ -153,7 +154,7 @@ pub fn refuse_then(
             slot.append(&not_ready(&n));
             // With the key on, signed in with KIFF: no key with this computer says what one is,
             // and wherever this computer can't approve (no key, or an act only the phone does),
-            // "Approve on your phone instead" (the PM's 20:12). Nothing is handed over: the act
+            // "Approve on your phone instead". Nothing is handed over: the act
             // is done again on the phone, and the button puts this away.
             if tafs_core::passkey::ENABLED && mode == Mode::Kiff {
                 let kept = crate::store::load(chrono::Utc::now().timestamp());

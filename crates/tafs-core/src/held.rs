@@ -473,7 +473,7 @@ pub fn ordinal(language: &str, n: i64) -> String {
             format!("{d}{suffix}")
         }
         // Where ICU falls back to English, each language's own, for the Card's lines, which are
-        // all about a call (legal-i18n's words). Mongolian: -р, the usual written ordinal.
+        // all about a call. Mongolian: -р, the usual written ordinal.
         "mn" => format!("{d}-р"),
         // Urdu: کال is feminine, so ویں after a number.
         "ur" => format!("{d}ویں"),
@@ -818,7 +818,7 @@ mod tests {
         );
         assert_eq!(ordinal("zh-Hant", 3), "第3");
         assert_eq!(ordinal("pt-BR", 3), "3º");
-        // Turkmen, Hindi and Urdu in their own words, for a call (legal-i18n's): ICU writes
+        // Turkmen, Hindi and Urdu in their own words, for a call: ICU writes
         // English's suffixes for Turkmen and Urdu, and Hindi's masculine forms.
         let some = |l: &str| {
             [1, 2, 3, 4, 6, 9, 10, 21]

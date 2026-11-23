@@ -2541,7 +2541,7 @@ mod tests {
         let full = "Refunded **$20** to `order 42`, see [the order](https://shop.test/42).";
         for n in 0..=full.chars().count() {
             let drawn = markup(&healed_prefix(full, n));
-            // No italic in it, so no star at all (dev-android's note on #90: "**$20*" drew a stray one).
+            // No italic in it, so no star at all ("**$20*" would draw a stray one).
             assert!(
                 !drawn.contains('*') && !drawn.contains('`') && !drawn.contains("]("),
                 "{n}: {drawn}"

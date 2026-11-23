@@ -194,7 +194,7 @@ no key is asked there, and nothing is signed.
 
 ## Registering the key at pairing, and approving with it
 
-The contract is the PM's decision (i) (kiff/work#17, 22 Nov): a computer whose device key is in
+The contract: a computer whose device key is in
 software pairs with `kind: "passkey"` and a **security key's credential**, and KIFF makes its
 session `approval_mode: "passkey"`. The device key still grants nothing: only a fresh assertion
 from that key approves, one request at a time, with presence and the PIN. Everything below waits
@@ -224,7 +224,7 @@ that would sign asks the key instead, for the acts whose whole request this app 
 the time zone, sharing, resuming, discarding a setup, removing a taf, going back from a trial, a trial's Card confirmed in KIFF to start trying it or to install it (`Act::ConfirmDraft`: KIFF's `POST /v1/me/agent-drafts/{id}/confirm` and nothing else, tafs cloud's own trial calls going as the session after it; [taf](taf.md#its-versions-and-its-trial)), and an API door's
 reopening, a key's revoking and the door's removal, at tafs cloud, whose `doorSigned` takes the
 passkey header as the device's; then the doors are read again). **An API door's New key stays on
-the phone** (the PM's 00:19): its answer is the key, shown once, which this computer can't keep
+the phone**: its answer is the key, shown once, which this computer can't keep
 from a screen recording or a clipboard manager's history.
 - The request is the message a device key would sign (`kiff.request.v1`: tenant, method, path
   with its query, the body's hash, `signed_at`), its hash the challenge.

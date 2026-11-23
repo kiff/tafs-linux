@@ -143,12 +143,12 @@ pub mod api {
     }
 
     /// A door's address on tafs cloud, whole.
-    /// Only ever on tafs cloud's own host, over HTTPS (agentgabo's note on #88): a whole address
+    /// Only ever on tafs cloud's own host, over HTTPS: a whole address
     /// elsewhere becomes its path on tafs cloud, so the example never sends a developer's key to
     /// another host.
     pub fn endpoint(door: &Door) -> String {
         // The path alone, set on tafs cloud's own address: whatever it holds stays in the path,
-        // never the host (parity-steward's note on #90: "foo:x@evil.example/…" has a path with no
+        // never the host ("foo:x@evil.example/…" has a path with no
         // leading "/", which pasted after the host would have made evil.example the host).
         // The example is a shell line a developer pastes, so the path keeps only unreserved
         // characters (letters, digits, "/", "_", ".", "~", "-"); any other path is tafs cloud's
@@ -1344,7 +1344,7 @@ mod tests {
                 "https://cloud.tafs.kiff.dev/v1/x",
             ),
             ("v1/x", "https://cloud.tafs.kiff.dev/v1/x"),
-            // A scheme with no host of its own: its path stays a path (parity-steward's note).
+            // A scheme with no host of its own: its path stays a path.
             // A path with anything but unreserved characters: tafs cloud's address alone.
             ("foo:x@evil.example/v1/x", "https://cloud.tafs.kiff.dev/"),
             ("mailto:a@evil.example", "https://cloud.tafs.kiff.dev/"),
