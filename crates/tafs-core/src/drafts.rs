@@ -35,13 +35,24 @@ pub struct PerAction {
     pub scale: Option<i64>,
 }
 
-/// `DraftCard.Grant`: one action, its title and its caps. Its other terms are read for their
-/// shape only: nothing here compares them.
+/// `DraftCard.Grant.Resources`: what a grant may act on, only these values of one parameter.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Resources {
+    pub parameter: String,
+    pub values: Option<Vec<String>>,
+}
+
+/// `DraftCard.Grant`: one action, its title and its caps; and its other terms, kept so a draft
+/// can be compared with the Card in force (`allow::matches`): its scope, the states it applies
+/// in, and the owner's other answers.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Grant {
     pub action: String,
     pub title: Option<String>,
     pub per_action_max: Option<Vec<PerAction>>,
+    pub resources: Option<Resources>,
+    pub entity_states: Option<Vec<String>>,
+    pub next_steps: Option<Vec<String>>,
 }
 
 /// `DraftCard.Aggregate`: a total over a window.
@@ -52,9 +63,13 @@ pub struct Aggregate {
     pub window: String,
     pub unit: Option<String>,
     pub scale: Option<i64>,
+    /// What the total counts (attempts or effects; KIFF's default when left out), and the
+    /// parameter it's kept for each value of, when it's per item.
+    pub measure: Option<String>,
+    pub per: Option<String>,
 }
 
-/// `DraftCard`, as far as its lines go.
+/// `DraftCard`: its lines, and every term `allow::matches` compares with the Card in force.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct DraftCard {
     pub grants: Option<Vec<Grant>>,
@@ -62,6 +77,23 @@ pub struct DraftCard {
     pub on_exceed: Option<String>,
     /// KIFF's own words for the Card (`lines`), shown as they come.
     pub kiff_lines: Option<Vec<String>>,
+    /// A revision draft's Card: the id of the Card in force it revises, and that Card's terms
+    /// now (`current`: only its terms are read there).
+    pub revises: Option<String>,
+    pub current: Option<Box<DraftCard>>,
+    /// KIFF says the Card it revises keeps its full terms.
+    pub unchanged: Option<bool>,
+    /// Who holds it, where it applies, and when it starts and ends, as KIFF writes them.
+    pub subject: Option<String>,
+    pub subjects: Option<Vec<String>>,
+    pub domain: Option<String>,
+    pub environment: Option<String>,
+    pub location: Option<String>,
+    pub valid_from: Option<String>,
+    pub valid_until: Option<String>,
+    /// A draft's alone: how long a hold waits, and a revocation.
+    pub hold_expiry: Option<String>,
+    pub revoked_at: Option<String>,
 }
 
 /// `AgentDraft`.
@@ -78,6 +110,10 @@ pub struct AgentDraft {
     pub no_tools: Option<bool>,
     /// The name it was submitted with, such as the taf's.
     pub label: Option<String>,
+    /// The Cards it retires, by id.
+    pub retires: Option<Vec<String>>,
+    /// The held call it was made from (`allow-draft`), when KIFF says.
+    pub from_hold: Option<String>,
 }
 
 fn money(minor: i64, unit: Option<&str>, scale: Option<i64>) -> Money {
@@ -111,65 +147,72 @@ fn per_action(v: &Value) -> Read<PerAction> {
 
 fn grant(v: &Value) -> Read<Grant> {
     let o = object(v)?;
-    // `resources`, `entity_states` and `next_steps` are read for their shape, as Swift does.
-    if let Some(r) = field(o, "resources") {
-        let r = object(r)?;
-        text(r, "parameter")?;
-        array_if(r, "values", strings)?;
-    }
-    array_if(o, "entity_states", strings)?;
-    array_if(o, "next_steps", strings)?;
+    let resources = match field(o, "resources") {
+        Some(r) => {
+            let r = object(r)?;
+            Some(Resources {
+                parameter: text(r, "parameter")?,
+                values: array_if(r, "values", strings)?,
+            })
+        }
+        None => None,
+    };
     Ok(Grant {
         action: text(o, "action")?,
         title: text_if(o, "title")?,
         per_action_max: array_if(o, "per_action_max", per_action)?,
+        resources,
+        entity_states: array_if(o, "entity_states", strings)?,
+        next_steps: array_if(o, "next_steps", strings)?,
     })
 }
 
 fn aggregate(v: &Value) -> Read<Aggregate> {
     let o = object(v)?;
-    text_if(o, "measure")?;
-    text_if(o, "per")?;
     Ok(Aggregate {
         quantity: text(o, "quantity")?,
         limit: int_of(field(o, "limit").ok_or(())?)?,
         window: text(o, "window")?,
         unit: text_if(o, "unit")?,
         scale: int_if(o, "scale")?,
+        measure: text_if(o, "measure")?,
+        per: text_if(o, "per")?,
     })
 }
 
-/// A Card's terms (`DraftCard.Terms`, and a `DraftCard`'s own): its grants, totals and words.
+/// A Card's terms (`DraftCard.Terms`, and a `DraftCard`'s own): its grants, totals, words, who
+/// holds it, where it applies and when.
 fn terms(o: &Map<String, Value>) -> Read<DraftCard> {
-    for key in [
-        "subject",
-        "domain",
-        "environment",
-        "location",
-        "valid_from",
-        "valid_until",
-    ] {
-        text_if(o, key)?;
-    }
-    array_if(o, "subjects", strings)?;
     Ok(DraftCard {
         grants: array_if(o, "grants", grant)?,
         aggregates: array_if(o, "aggregates", aggregate)?,
         on_exceed: text_if(o, "on_exceed")?,
         kiff_lines: array_if(o, "lines", strings)?,
+        subject: text_if(o, "subject")?,
+        subjects: array_if(o, "subjects", strings)?,
+        domain: text_if(o, "domain")?,
+        environment: text_if(o, "environment")?,
+        location: text_if(o, "location")?,
+        valid_from: text_if(o, "valid_from")?,
+        valid_until: text_if(o, "valid_until")?,
+        ..DraftCard::default()
     })
 }
 
 fn draft_card(v: &Value) -> Read<DraftCard> {
     let o = object(v)?;
-    text_if(o, "revises")?;
-    if let Some(c) = field(o, "current") {
-        terms(object(c)?)?;
-    }
-    bool_if(o, "unchanged")?;
-    text_if(o, "hold_expiry")?;
-    text_if(o, "revoked_at")?;
-    terms(o)
+    let current = match field(o, "current") {
+        Some(c) => Some(Box::new(terms(object(c)?)?)),
+        None => None,
+    };
+    Ok(DraftCard {
+        revises: text_if(o, "revises")?,
+        current,
+        unchanged: bool_if(o, "unchanged")?,
+        hold_expiry: text_if(o, "hold_expiry")?,
+        revoked_at: text_if(o, "revoked_at")?,
+        ..terms(o)?
+    })
 }
 
 impl AgentDraft {
@@ -183,16 +226,17 @@ impl AgentDraft {
         let o = object(v)?;
         text_if(o, "claim_secret")?;
         array_if(o, "card_ids", strings)?;
-        text_if(o, "from_hold")?;
-        array_if(o, "retires", |r| {
+        let from_hold = text_if(o, "from_hold")?;
+        let retires = array_if(o, "retires", |r| {
             let r = object(r)?;
-            text(r, "id")?;
             if let Some(c) = field(r, "current") {
                 terms(object(c)?)?;
             }
-            Ok(())
+            text(r, "id")
         })?;
         Ok(AgentDraft {
+            retires,
+            from_hold,
             id: text(o, "id")?,
             agent_id: text(o, "agent_id")?,
             status: text(o, "status")?,
