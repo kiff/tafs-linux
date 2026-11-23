@@ -617,8 +617,11 @@ pub(crate) fn approval_sheet(ctx: &Ctx, start: &ConnectStart, over: &gtk::Widget
         // does until its read comes.
         None => column.append(&text(&l("connect.reading_request"), 14, 400, &["tafs-dim"])),
         Some(g) => {
-            // The connection's own words from the connection server.
+            // The connection's own words from the connection server, and KIFF's for its profile.
             column.append(&text(&g.text, 15, 400, &["tafs-ink"]));
+            if let Some(profile) = &g.profile {
+                column.append(&profile_words(ctx, profile));
+            }
             if !g.digest_matches {
                 column.append(&text(
                     &l("connect.request_does_not_match_what"),
@@ -655,4 +658,56 @@ pub(crate) fn approval_sheet(ctx: &Ctx, start: &ConnectStart, over: &gtk::Widget
         }
     }
     sheet.dialog.present(Some(over));
+}
+
+/// `ProfileWordsView`: KIFF's words for a connection's profile, never folded away, each line
+/// verbatim and what KIFF can't check in amber; "Reading KIFF's words…" until they're read from
+/// KIFF as the session (`loadProfileWords`), and why when they can't be, or don't check.
+fn profile_words(ctx: &Ctx, profile: &serde_json::Value) -> gtk::Widget {
+    let w = ctx.w.clone();
+    let panel = crate::widgets::panel(false);
+    panel.append(&crate::widgets::eyebrow(
+        &w.line("coach.kiff_counts_way").unwrap_or_default(),
+        false,
+    ));
+    let lines = gtk::Box::new(gtk::Orientation::Vertical, 6);
+    lines.append(&text(
+        &w.line("coach.reading_kiff_words_short").unwrap_or_default(),
+        13,
+        400,
+        &["tafs-dim"],
+    ));
+    panel.append(&lines);
+    let crate::connect::ConnectSource::Cloud {
+        kept, languages, ..
+    } = &ctx.source
+    else {
+        return panel.upcast();
+    };
+    let (token, languages, profile) = (kept.token.clone(), languages.clone(), profile.clone());
+    gtk::glib::spawn_future_local(async move {
+        let words = (*w).clone();
+        let read = gtk::gio::spawn_blocking(move || {
+            crate::connect::read_profile_words(&words, &token, &languages, &profile)
+        })
+        .await
+        .unwrap_or_else(|_| Err(String::new()));
+        while let Some(c) = lines.first_child() {
+            lines.remove(&c);
+        }
+        match read {
+            Ok(words) => {
+                for line in &words.lines {
+                    let tone = if line.caution() {
+                        "tafs-amber-text"
+                    } else {
+                        "tafs-ink"
+                    };
+                    lines.append(&text(&line.text, 13, 400, &[tone]));
+                }
+            }
+            Err(why) => lines.append(&text(&why, 13, 400, &["tafs-no"])),
+        }
+    });
+    panel.upcast()
 }

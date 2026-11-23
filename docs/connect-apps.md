@@ -108,12 +108,27 @@ for a key where it goes ("The key goes from this phone…"), and in the approve 
 offers that the app knows (`known`), Remove in red asking once more in planque's words with what
 stops.
 
+**What else stops** (`alsoStops`): Remove access's question names the other tafs whose live Card
+draws on the connection's tools (a rule or a tool on one of its actions, from Home), as the iPad's
+`tafsUsing`.
+
+**A grant's digest** is checked as the iPad checks it (`digestCovers`): over the request as planque
+sent it (v1), or with the words and their language (`digest_v: 2`), in RFC 8785's canonical form
+(`tafs-core/jcs.rs`); a grant whose digest doesn't match says so on its approval.
+
+**KIFF's words for a connection's profile** (`ProfileWordsView`), on its approval: read from KIFF as
+the session (`POST /v1/profiles/words`, the profile's canonical form), shown only once both digests
+check, each line verbatim and what KIFF can't check in amber; "Reading KIFF's words…" until then,
+and why when they can't be read or don't check (`tafs-core/profile_words.rs`, with KIFF's five
+vectors).
+
 Removing access, cancelling, clearing and signing in again are planque's, signed behind Face ID
 (`signed::Act::Disconnect`, `ClearRemoved`, `SignInAgain`, `at_planque`). Each asks the iPad's
 question (`DisconnectWords`: naming the one taf it ends, what stops, and that a key is deleted
 from tafs or a sign-in revoked at the vendor), and the tap that would sign shows this computer
-can't approve, under the list or the row; nothing is sent, and this computer can't reach planque
-at all (`session::may_send_to`). The sample, which signs nothing, does nothing on that tap.
+can't approve, under the list or the row, unless this computer's security key approves the ones
+it may ([approval](approval.md)); the connections are then read again. The sample, which signs
+nothing, does nothing on that tap.
 
 The sample's screenshot draws the reference set's connections (the iPad's `Samples/grants.json`,
 kept as `crates/tafs-app/fixtures/grants.json`): Gmail for Support replies and for Lead
@@ -125,17 +140,10 @@ picked, with the can't-approve line; a fixture's read never sends.
 
 ## Not on Linux
 
-- **planque's read of the connections**: the iPad reads them only once set up with planque, a
-  signed act. So signed in with KIFF no connection is listed, and what needs one (Disconnect's question, Clear, Sign in again, a connection's
-  detail) is reached only in the sample's screenshot. tafs cloud's `removed_tafs` and
-  `misplaced` are read, and drawn where a connection is.
 - **Starting a connection** (`startConnect`): it exists only to be approved, which is done on the
   phone (above).
 - **Approving, giving a key, and the receipt**: signed. The key's sheet in tafs cloud's words
   (`ConnectionSheet`), pasting a key, the Card signed with it, its receipt with board 5 (an app
   connected) and its Remove access come only after a signature, so not here.
-- **KIFF's words for a connection's profile** (`ProfileWordsView`): read for a request this
-  computer never has.
-- **A connection's last failure** and **the other tafs whose Card uses it** (`lastFailure`,
-  `alsoStops`): they need the Record's and the Cards' actions by tool, which this computer doesn't
-  keep; the question names none.
+- **A connection's last failure** (`lastFailure`): it needs each Record line's action, which this
+  computer's Record doesn't keep yet.

@@ -255,6 +255,32 @@ pub(crate) fn read_connections(
     });
 }
 
+/// `loadProfileWords`: KIFF's words for a connection's profile, read as the session and checked
+/// against the profile shown (`tafs_core::profile_words::checked`); why not, in the iPad's words.
+pub(crate) fn read_profile_words(
+    w: &WordBook,
+    token: &str,
+    languages: &[&'static str],
+    profile: &serde_json::Value,
+) -> Result<tafs_core::profile_words::ProfileWords, String> {
+    use tafs_core::profile_words::{body, checked, Failure};
+    let not_read = |why: String| {
+        w.get("connect.profile_words_not_read", &[("why", &why)])
+            .unwrap_or(why)
+    };
+    let body = body(profile).ok_or_else(|| Failure::OtherProfile.words(w).unwrap_or_default())?;
+    let a = crate::kiff::profile_words(token, languages, body)
+        .map_err(|e| not_read(e.words(w).unwrap_or_default()))?;
+    if !(200..300).contains(&a.status) {
+        return Err(not_read(
+            tafs_core::signin::refusal(&a, Some(w))
+                .words(w)
+                .unwrap_or_default(),
+        ));
+    }
+    checked(&a.body, profile).map_err(|f| f.words(w).unwrap_or_default())
+}
+
 /// Reads a page from tafs cloud: why not, in the iPad's words, when it can't.
 fn read_page(
     w: &WordBook,
