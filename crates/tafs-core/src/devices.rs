@@ -215,6 +215,16 @@ impl Passkey {
         self.id.is_some() && self.device.is_none()
     }
 
+    /// The same passkey (`isSamePasskey`): by KIFF's id, or for a computer's own (no id) by its
+    /// computer; never by its name, so a name changed while the question is open still finds it.
+    pub fn is_same(&self, other: &Passkey) -> bool {
+        match (&self.id, &self.device) {
+            (Some(id), _) => other.id.as_deref() == Some(id),
+            (None, Some(d)) => other.id.is_none() && other.device.as_deref() == Some(d),
+            (None, None) => self == other,
+        }
+    }
+
     /// `passkeys()`'s answer: `passkeys`, none sent being none. A field present but not a string,
     /// or a list that isn't one, fails the read, as the iPad's decoder.
     pub fn read_all(body: &[u8]) -> Option<Vec<Passkey>> {
@@ -236,6 +246,61 @@ impl Passkey {
     }
 }
 
+/// `removesLastPasskey`: removing `passkey` leaves the account none that can approve.
+pub fn removes_last(passkey: &Passkey, among: &[Passkey]) -> bool {
+    !among.iter().any(|p| !p.is_same(passkey))
+}
+
+/// Whether a passkey's Remove is drawn (`DevicesView`: `removable`, under `canAddPasskey`): one of
+/// the person's own, for an owner or admin (`role`: KIFF's `member_role` for them), on a
+/// session this computer approves with its own security key (`approves`).
+pub fn may_remove(passkey: &Passkey, role: Option<&str>, approves: bool) -> bool {
+    passkey.removable() && approves && matches!(role, Some("owner" | "admin"))
+}
+
+/// The question before a passkey is removed (`DevicesView`'s confirmation): "Remove Rae's
+/// iPhone?", Remove in red and Cancel, saying so when it's the last that can approve.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RemoveQuestion {
+    pub title: String,
+    /// `passkey_remove_last`, when it's the last passkey that can approve.
+    pub message: Option<String>,
+    pub button: String,
+    pub cancel: String,
+    /// What the key signs once Remove is tapped (`removePasskey`).
+    pub act: crate::signed::Act,
+    /// The act as the key's sheet names it: "Remove the passkey Rae's iPhone from your account".
+    pub prompt: String,
+}
+
+/// None for a passkey that isn't the person's own (`removable`).
+pub fn remove_question(
+    w: &WordBook,
+    passkey: &Passkey,
+    among: &[Passkey],
+) -> Result<Option<RemoveQuestion>, WordsError> {
+    let Some(id) = passkey.id.clone().filter(|_| passkey.removable()) else {
+        return Ok(None);
+    };
+    // `passkeyName`: its name, else the iPad's word for an unnamed one.
+    let name = match &passkey.name {
+        Some(n) => n.clone(),
+        None => w.line("settings.devices.unnamed")?,
+    };
+    Ok(Some(RemoveQuestion {
+        title: w.get("settings.devices.passkey_remove_named", &[("name", &name)])?,
+        message: if removes_last(passkey, among) {
+            Some(w.line("settings.devices.passkey_remove_last")?)
+        } else {
+            None
+        },
+        button: w.line("settings.devices.passkey_remove")?,
+        cancel: w.line("common.cancel")?,
+        act: crate::signed::Act::RemovePasskey { passkey: id },
+        prompt: w.get("settings.devices.passkey_remove_prompt", &[("name", &name)])?,
+    }))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -253,6 +318,79 @@ mod tests {
         assert_eq!(Passkey::read_all(b"{}").unwrap(), vec![]);
         assert_eq!(Passkey::read_all(br#"{"passkeys":[{"name":3}]}"#), None);
         assert!(!crate::signed::signed("GET", PASSKEYS_PATH));
+    }
+
+    fn key(id: Option<&str>, name: Option<&str>, device: Option<&str>) -> Passkey {
+        Passkey {
+            id: id.map(Into::into),
+            name: name.map(Into::into),
+            device: device.map(Into::into),
+        }
+    }
+
+    #[test]
+    fn a_passkey_removed_as_the_ipad_removes_it() {
+        let w = WordBook::load(&WordBook::default_root(), "en").unwrap();
+        let rae = key(Some("pk_1"), Some("Rae's iPhone"), None);
+        let spare = key(Some("pk_2"), None, None);
+        let mac = key(None, Some("Rae's Mac"), Some("dev_mac"));
+        let all = [rae.clone(), spare.clone(), mac.clone()];
+
+        // The question, with the act it signs: a DELETE with no body at all.
+        let q = remove_question(&w, &rae, &all).unwrap().unwrap();
+        assert_eq!(q.title, "Remove Rae's iPhone?");
+        assert_eq!(q.message, None);
+        assert_eq!((q.button.as_str(), q.cancel.as_str()), ("Remove", "Cancel"));
+        assert_eq!(
+            q.prompt,
+            "Remove the passkey Rae's iPhone from your account"
+        );
+        assert_eq!(
+            q.act.request(),
+            Some(("DELETE", "/v1/me/passkeys/pk_1".to_string(), vec![]))
+        );
+        assert!(crate::signed::signed("DELETE", &q.act.route().1));
+        assert!(!q.act.sends_nothing() && !q.act.at_cloud());
+        // An unnamed one by the iPad's word for it, and an id escaped as a path part.
+        let odd = key(Some("pk/1 2"), None, None);
+        let q = remove_question(&w, &odd, &[odd.clone(), rae.clone()])
+            .unwrap()
+            .unwrap();
+        assert_eq!(q.title, "Remove A device?");
+        assert_eq!(q.act.route().1, "/v1/me/passkeys/pk%2F1%202");
+        // A computer's own goes with its computer, with an id or without: no question, and never
+        // Remove, so the key that signs (this computer's own) can't remove itself.
+        let mac_with_id = key(Some("pk_mac"), Some("Rae's Mac"), Some("dev_mac"));
+        for own in [&mac, &mac_with_id] {
+            assert_eq!(remove_question(&w, own, &all).unwrap(), None);
+            assert!(!may_remove(own, Some("owner"), true));
+        }
+
+        // The last that can approve says so, told apart by id, never by name.
+        assert!(!removes_last(&rae, &all));
+        assert!(removes_last(&rae, std::slice::from_ref(&rae)));
+        let renamed = key(Some("pk_1"), Some("Old name"), None);
+        assert!(removes_last(&renamed, std::slice::from_ref(&rae)));
+        assert!(!removes_last(
+            &rae,
+            &[key(Some("pk_9"), Some("Rae's iPhone"), None)]
+        ));
+        let q = remove_question(&w, &rae, std::slice::from_ref(&rae))
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            q.message.as_deref(),
+            Some("This is your only passkey that can approve. Without it, you need another device that can approve.")
+        );
+
+        // Drawn only for an owner or admin, on a session this computer approves.
+        assert!(may_remove(&rae, Some("owner"), true));
+        assert!(may_remove(&rae, Some("admin"), true));
+        for role in [Some("member"), Some("viewer"), Some(""), None] {
+            assert!(!may_remove(&rae, role, true), "{role:?}");
+        }
+        assert!(!may_remove(&rae, Some("owner"), false));
+        assert!(!may_remove(&mac, Some("owner"), true));
     }
 
     #[test]

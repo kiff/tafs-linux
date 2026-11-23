@@ -893,6 +893,7 @@ fn account_is_the_ipads_in_its_order() {
         time_zone: Some("Europe/Paris".into()),
         capabilities: None,
         approval_mode: Some("view".into()),
+        member_role: None,
     };
     let kiff = lines(
         &w,
@@ -1548,6 +1549,7 @@ fn people_lines_at_the_pin() {
         time_zone: None,
         capabilities: None,
         approval_mode: None,
+        member_role: None,
     };
     let group = |everyone| Group {
         id: "g".into(),
@@ -1591,6 +1593,7 @@ fn kiff_account_lines_at_the_pin() {
         time_zone: Some("Europe/Paris".into()),
         capabilities: None,
         approval_mode: None,
+        member_role: None,
     };
     let w = book("en");
     let lines = kiff_account_lines(&w, &account, "America/New_York").unwrap();

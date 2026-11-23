@@ -1,13 +1,17 @@
 //! Account › Devices (`DevicesView`): the devices signed in as this person, each with when it was
-//! last used, "This device" for this computer, and Sign out for the others. Signing another device
-//! out is an approval the iPad signs: Sign out asks its question, as the iPad's, and its Sign out
-//! says this computer can't approve, and sends nothing. The lines are `tafs-core/src/devices.rs`.
+//! last used, "This device" for this computer, and Sign out for the others; then the account's
+//! passkeys, each of the person's own with Remove for an owner or admin. Signing a device out and
+//! removing a passkey are approvals: each asks its question, as the iPad's, then this computer's
+//! security key approves it where the session approves with it, else this computer says it can't
+//! approve and sends nothing. The lines are `tafs-core/src/devices.rs`.
 
 use std::cell::RefCell;
 use std::rc::Rc;
 
 use adw::prelude::*;
-use tafs_core::devices::{last_used, sign_out_question, Device, Passkey, PASSKEYS_PATH};
+use tafs_core::devices::{
+    last_used, may_remove, remove_question, sign_out_question, Device, Passkey, PASSKEYS_PATH,
+};
 use tafs_core::sidebar::Mode;
 use tafs_core::words::WordBook;
 
@@ -34,6 +38,9 @@ thread_local! {
     pub static OPEN_SIGN_OUT: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
 }
 
+/// The passkeys' read, again: set once the source is known.
+type ReadAgain = Rc<RefCell<Option<Rc<dyn Fn()>>>>;
+
 #[derive(Default)]
 struct State {
     devices: Vec<Device>,
@@ -41,6 +48,13 @@ struct State {
     /// The account's passkeys, signed in with KIFF: none before they're read.
     passkeys: Option<Vec<Passkey>>,
     passkeys_error: Option<String>,
+    /// The person's role on the account (`member_role`): none read, none.
+    role: Option<String>,
+    /// This computer's security key approves for the session (`canAddPasskey`'s approval key).
+    approves: bool,
+    /// Each read of the passkeys takes the next number, and so does a removal: only the newest
+    /// read's list is kept, so one started before a Remove never brings the removed one back.
+    passkeys_read: u64,
 }
 
 pub fn page(w: Rc<WordBook>, source: DevicesSource, back: Rc<dyn Fn()>) -> gtk::Widget {
@@ -82,13 +96,19 @@ pub fn page(w: Rc<WordBook>, source: DevicesSource, back: Rc<dyn Fn()>) -> gtk::
     scroller.set_child(Some(&column));
 
     let state = Rc::new(RefCell::new(State::default()));
+    // Why a passkey wasn't removed (`passkeysError`), under Passkeys; and the read of the passkeys
+    // again once one was, set below with the source.
+    let key_refused = crate::approval::refusal_slot();
+    let read_passkeys: ReadAgain = Rc::new(RefCell::new(None));
     let draw: Rc<dyn Fn()> = {
-        let (w, list, state, refused, refused_panel) = (
+        let (w, list, state, refused, refused_panel, key_refused, read_passkeys) = (
             w.clone(),
             list.clone(),
             state.clone(),
             refused.clone(),
             refused_panel.clone(),
+            key_refused.clone(),
+            read_passkeys.clone(),
         );
         Rc::new(move || {
             while let Some(c) = list.first_child() {
@@ -175,8 +195,8 @@ pub fn page(w: Rc<WordBook>, source: DevicesSource, back: Rc<dyn Fn()>) -> gtk::
             note.set_margin_end(12);
             list.append(&note);
             // PASSKEYS (signed in with KIFF): each by its name, a computer's own saying it goes with
-            // its computer. Remove takes the approval key and Add is an iPhone's, so on a computer
-            // the iPad lists them only, as here.
+            // its computer. Remove, for an owner or admin, on the person's own: approved with this
+            // computer's security key. Add is an iPhone's.
             if s.passkeys.is_some() || s.passkeys_error.is_some() {
                 list.append(&crate::sheet::header(&l("settings.devices.passkeys_title")));
                 if let Some(why) = &s.passkeys_error {
@@ -184,6 +204,8 @@ pub fn page(w: Rc<WordBook>, source: DevicesSource, back: Rc<dyn Fn()>) -> gtk::
                     t.set_margin_start(12);
                     list.append(&t);
                 }
+                key_refused.set_margin_start(12);
+                list.append(&key_refused);
                 let keys = s.passkeys.as_deref().unwrap_or_default();
                 if !keys.is_empty() {
                     let group = gtk::Box::new(gtk::Orientation::Vertical, 0);
@@ -195,21 +217,54 @@ pub fn page(w: Rc<WordBook>, source: DevicesSource, back: Rc<dyn Fn()>) -> gtk::
                             line.add_css_class("tafs-line");
                             group.append(&line);
                         }
-                        let row = gtk::Box::new(gtk::Orientation::Vertical, 2);
+                        let row = gtk::Box::new(gtk::Orientation::Horizontal, 12);
                         row.set_margin_top(12);
                         row.set_margin_bottom(12);
+                        let words = gtk::Box::new(gtk::Orientation::Vertical, 2);
+                        words.set_hexpand(true);
                         let name = k
                             .name
                             .clone()
                             .unwrap_or_else(|| l("settings.devices.unnamed"));
-                        row.append(&one_line(&name, 15, 600, &["tafs-ink"]));
+                        words.append(&one_line(&name, 15, 600, &["tafs-ink"]));
                         if !k.removable() {
-                            row.append(&one_line(
+                            words.append(&one_line(
                                 &l("settings.devices.passkey_with_computer"),
                                 13,
                                 400,
                                 &["tafs-dim"],
                             ));
+                        }
+                        row.append(&words);
+                        let question = may_remove(k, s.role.as_deref(), s.approves)
+                            .then(|| remove_question(&w, k, keys).ok().flatten())
+                            .flatten();
+                        if let Some(q) = question {
+                            let remove = gtk::Button::with_label(&q.button);
+                            remove.add_css_class("tafs-text-button");
+                            remove.add_css_class("refuse");
+                            remove.set_valign(gtk::Align::Center);
+                            if let Some(id) = &k.id {
+                                remove.set_widget_name(&format!("devices.passkey.remove.{id}"));
+                            }
+                            let (w, state, key_refused, read_passkeys) = (
+                                w.clone(),
+                                state.clone(),
+                                key_refused.clone(),
+                                read_passkeys.clone(),
+                            );
+                            remove.connect_clicked(move |b| {
+                                remove_passkey(
+                                    &w,
+                                    mode,
+                                    &q,
+                                    b.upcast_ref(),
+                                    &key_refused,
+                                    state.clone(),
+                                    read_passkeys.borrow().clone(),
+                                )
+                            });
+                            row.append(&remove);
                         }
                         group.append(&row);
                     }
@@ -227,6 +282,13 @@ pub fn page(w: Rc<WordBook>, source: DevicesSource, back: Rc<dyn Fn()>) -> gtk::
         }
         DevicesSource::None => {}
         DevicesSource::Cloud { token, languages } => {
+            let again = (
+                (*w).clone(),
+                token.clone(),
+                languages.clone(),
+                state.clone(),
+                draw.clone(),
+            );
             let (words, token, languages) = ((*w).clone(), token.clone(), languages.clone());
             let (state, draw) = (state.clone(), draw.clone());
             gtk::glib::spawn_future_local(async move {
@@ -246,37 +308,33 @@ pub fn page(w: Rc<WordBook>, source: DevicesSource, back: Rc<dyn Fn()>) -> gtk::
                     let devices = Device::read_all(&a.body).ok_or_else(|| {
                         why(tafs_core::signin::plain_words(&words, 200).unwrap_or_default())
                     })?;
-                    // `refreshPasskeys`: the account's passkeys, read as the session; why not,
-                    // under their heading.
-                    let not_loaded = |why: String| {
-                        words
-                            .get("settings.devices.passkeys_not_loaded", &[("why", &why)])
-                            .unwrap_or(why)
-                    };
-                    let passkeys = match crate::kiff::kiff_get(&token, &languages, PASSKEYS_PATH) {
-                        Ok(a) if (200..300).contains(&a.status) => Passkey::read_all(&a.body)
-                            .ok_or_else(|| {
-                                not_loaded(
-                                    tafs_core::signin::plain_words(&words, 200).unwrap_or_default(),
-                                )
-                            }),
-                        Ok(a) => Err(not_loaded(
-                            tafs_core::signin::refusal(&a, Some(&words))
-                                .words(&words)
-                                .unwrap_or_default(),
-                        )),
-                        Err(e) => Err(not_loaded(e.words(&words).unwrap_or_default())),
-                    };
-                    Ok((devices, passkeys))
+                    let passkeys = passkeys_read(&token, &languages, &words);
+                    // The person's role on the account (`/v1/me`'s `member_role`); none read, no
+                    // Remove, as the iPad's `canAddPasskey` with no role.
+                    let role = crate::kiff::me(&token, &languages)
+                        .ok()
+                        .and_then(|a| tafs_core::account::Account::read(&a).ok())
+                        .and_then(|a| a.member_role);
+                    // The session approves with this computer's security key (`can_approve`).
+                    let kept = crate::store::load(chrono::Utc::now().timestamp());
+                    let approves = crate::key_approval::can_approve(
+                        kept.as_ref(),
+                        &tafs_core::signed::Act::RemovePasskey {
+                            passkey: String::new(),
+                        },
+                    );
+                    Ok((devices, passkeys, role, approves))
                 })
                 .await
                 .unwrap_or_else(|_| Err(String::new()));
                 {
                     let mut s = state.borrow_mut();
                     match read {
-                        Ok((d, passkeys)) => {
+                        Ok((d, passkeys, role, approves)) => {
                             s.devices = d;
                             s.error = None;
+                            s.role = role;
+                            s.approves = approves;
                             match passkeys {
                                 Ok(p) => {
                                     s.passkeys = Some(p);
@@ -290,6 +348,39 @@ pub fn page(w: Rc<WordBook>, source: DevicesSource, back: Rc<dyn Fn()>) -> gtk::
                 }
                 draw();
             });
+            // `refreshPasskeys`, once a passkey was removed: only the newest read's list is kept.
+            let (words, token, languages, state, draw) = again;
+            *read_passkeys.borrow_mut() = Some(Rc::new(move || {
+                let read = {
+                    let mut s = state.borrow_mut();
+                    s.passkeys_read += 1;
+                    s.passkeys_read
+                };
+                // What's known now (a removed one gone) shows at once, then the newest read.
+                draw();
+                let (words, token, languages) = (words.clone(), token.clone(), languages.clone());
+                let (state, draw) = (state.clone(), draw.clone());
+                gtk::glib::spawn_future_local(async move {
+                    let passkeys =
+                        gtk::gio::spawn_blocking(move || passkeys_read(&token, &languages, &words))
+                            .await;
+                    {
+                        let mut s = state.borrow_mut();
+                        if s.passkeys_read != read {
+                            return;
+                        }
+                        match passkeys {
+                            Ok(Ok(p)) => {
+                                s.passkeys = Some(p);
+                                s.passkeys_error = None;
+                            }
+                            Ok(Err(e)) => s.passkeys_error = Some(e),
+                            Err(_) => return,
+                        }
+                    }
+                    draw();
+                });
+            }));
         }
     }
     draw();
@@ -325,6 +416,112 @@ fn sign_out(
             crate::approval::refuse_as(&w, mode, &act, Some(prompt.clone()), &refused);
             refused_panel.set_visible(refused.get_visible());
         }
+    });
+    ask.present(Some(over));
+}
+
+/// `refreshPasskeys`: the account's passkeys, read as the session; why not, in the words shown
+/// under their heading. Blocking: off the main loop.
+fn passkeys_read(
+    token: &str,
+    languages: &[&str],
+    words: &WordBook,
+) -> Result<Vec<Passkey>, String> {
+    let not_loaded = |why: String| {
+        words
+            .get("settings.devices.passkeys_not_loaded", &[("why", &why)])
+            .unwrap_or(why)
+    };
+    match crate::kiff::kiff_get(token, languages, PASSKEYS_PATH) {
+        Ok(a) if (200..300).contains(&a.status) => Passkey::read_all(&a.body).ok_or_else(|| {
+            not_loaded(tafs_core::signin::plain_words(words, 200).unwrap_or_default())
+        }),
+        Ok(a) => Err(not_loaded(
+            tafs_core::signin::refusal(&a, Some(words))
+                .words(words)
+                .unwrap_or_default(),
+        )),
+        Err(e) => Err(not_loaded(e.words(words).unwrap_or_default())),
+    }
+}
+
+/// The question before a passkey is removed: "Remove Rae's iPhone?", saying so when it's the last
+/// that can approve, Remove in red, and Cancel. Its Remove asks this computer's security key, which
+/// sends exactly the passkey's DELETE; once KIFF took it, it leaves the list, and the list is read
+/// again, so a read already on its way can't bring it back. Why not, under Passkeys.
+fn remove_passkey(
+    w: &WordBook,
+    mode: Mode,
+    q: &tafs_core::devices::RemoveQuestion,
+    over: &gtk::Widget,
+    refused: &gtk::Box,
+    state: Rc<RefCell<State>>,
+    read_again: Option<Rc<dyn Fn()>>,
+) {
+    let ask = adw::AlertDialog::new(Some(&q.title), q.message.as_deref());
+    ask.add_response("cancel", &q.cancel);
+    ask.add_response("remove", &q.button);
+    ask.set_response_appearance("remove", adw::ResponseAppearance::Destructive);
+    ask.set_default_response(Some("cancel"));
+    ask.set_close_response("cancel");
+    let (w, act, prompt, refused) = (w.clone(), q.act.clone(), q.prompt.clone(), refused.clone());
+    ask.connect_response(None, move |_, response| {
+        if response != "remove" {
+            return;
+        }
+        let tafs_core::signed::Act::RemovePasskey { passkey } = &act else {
+            return;
+        };
+        // Only drawn where this computer's key approves; if that changed since, its words.
+        let kept = crate::store::load(chrono::Utc::now().timestamp())
+            .filter(|k| crate::key_approval::can_approve(Some(k), &act));
+        let Some(kept) = kept else {
+            crate::approval::refuse_as(&w, mode, &act, Some(prompt.clone()), &refused);
+            return;
+        };
+        let (passkey, state, read_again) = (passkey.clone(), state.clone(), read_again.clone());
+        let (slot, words, what) = (refused.clone(), w.clone(), prompt.clone());
+        while let Some(c) = slot.first_child() {
+            slot.remove(&c);
+        }
+        let done: crate::key_approval::Approved = Rc::new(move |outcome| match outcome {
+            // `didntGoThrough`: what, then why in the app's words; never KIFF's code.
+            Some(Err(why)) => {
+                let line = words
+                    .get("common.didnt_go_through", &[("what", &what), ("why", &why)])
+                    .unwrap_or(why);
+                slot.append(&text(&line, 13, 400, &["tafs-no"]));
+                slot.set_visible(true);
+            }
+            // KIFF took it: it leaves the list, and a read already on its way is dropped.
+            Some(Ok(())) => {
+                slot.set_visible(false);
+                {
+                    let mut s = state.borrow_mut();
+                    s.passkeys_read += 1;
+                    if let Some(keys) = &mut s.passkeys {
+                        keys.retain(|k| k.id.as_deref() != Some(passkey.as_str()));
+                    }
+                }
+                if let Some(read_again) = &read_again {
+                    read_again();
+                }
+            }
+            // The key's sheet closed: nothing was sent, and nothing is said.
+            None => slot.set_visible(false),
+        });
+        let languages =
+            tafs_core::language::screen_languages(&tafs_core::language::preferred_from_env());
+        crate::key_approval::approve(
+            Rc::new(w.clone()),
+            &refused,
+            kept,
+            languages,
+            &act,
+            Some(&prompt),
+            vec![],
+            done,
+        );
     });
     ask.present(Some(over));
 }
