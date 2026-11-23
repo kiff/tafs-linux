@@ -244,6 +244,17 @@ from a screen recording or a clipboard manager's history.
   keeps across calls, where Approve once can't pass, someone who manages Cards gives this call
   extra room until that total resets, signed the same way (`kiff.answer.v1` with `change-card`,
   `POST …/card-exceptions/{id}/change-card`), with the iPad's over-total line for managers.
+- **Then the run goes on** (`continueHeld`, kiff/tafs#206): once KIFF takes Approve once or Extra
+  room, from Needs you's card or the dial, `POST /v1/tafs/{id}/holds/{exception}/continue` goes to
+  tafs cloud as the session, so the run that paused on the call goes on now, not at kiff/agents'
+  next sweep. A 409 (`not_paused`) is the run already gone on, as KIFF's alert often makes it
+  first: nothing is said. When no run waits on the call any more, tafs cloud answers 404
+  `run_ended` with its words in the owner's language (kiff/tafs#1812): Needs you's card (or the
+  dial) shows them, and the taf's chat says them as a run that failed part-way does, with Retry on
+  the owner's last message (`runEndedAfterApproval`, `TafChat::run_ended_after_approval`).
+  Unreached, or refused otherwise, why is said, in tafs cloud's words or the app's: never
+  swallowed (`held::read_gone_on`, `needs_you::go_on`). A taf tafs cloud doesn't hold (KIFF's agent
+  alone) sends nothing.
 - **Removing a taf for good** goes in the iPad's order (`AppModel.removeTaf`): the key approves,
   then its Cards are revoked at KIFF with the session, one plain call each, then tafs cloud's
   `DELETE` goes with the approval. What didn't go is said in the app's words: Cards KIFF didn't

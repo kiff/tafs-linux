@@ -579,8 +579,14 @@ pub fn held_card(w: &Rc<WordBook>, c: &CardLines) -> gtk::Box {
                 let slot = crate::approval::refusal_slot();
                 let (w2, card, slot2, what) =
                     (w.clone(), p.downgrade(), slot.clone(), answering.clone());
+                let (taf, call, w3) = (
+                    c.taf.clone(),
+                    c.kiff_id.clone().unwrap_or_else(|| c.id.clone()),
+                    w.clone(),
+                );
                 b.connect_clicked(move |_| {
                     let card = card.clone();
+                    let (taf, call, w3) = (taf.clone(), call.clone(), w3.clone());
                     crate::approval::refuse_then(
                         &w2,
                         tafs_core::sidebar::Mode::Kiff,
@@ -592,6 +598,7 @@ pub fn held_card(w: &Rc<WordBook>, c: &CardLines) -> gtk::Box {
                             if let Some(card) = card.upgrade() {
                                 card.set_visible(false);
                             }
+                            go_on(&w3, &taf, &call, say_on_card(card.clone()));
                         })),
                     );
                 });
@@ -605,8 +612,14 @@ pub fn held_card(w: &Rc<WordBook>, c: &CardLines) -> gtk::Box {
                 let slot = crate::approval::refusal_slot();
                 let (w2, card, slot2, what) =
                     (w.clone(), p.downgrade(), slot.clone(), answering.clone());
+                let (taf, call, w3) = (
+                    c.taf.clone(),
+                    c.kiff_id.clone().unwrap_or_else(|| c.id.clone()),
+                    w.clone(),
+                );
                 b.connect_clicked(move |_| {
                     let card = card.clone();
+                    let (taf, call, w3) = (taf.clone(), call.clone(), w3.clone());
                     crate::approval::refuse_then(
                         &w2,
                         tafs_core::sidebar::Mode::Kiff,
@@ -618,6 +631,7 @@ pub fn held_card(w: &Rc<WordBook>, c: &CardLines) -> gtk::Box {
                             if let Some(card) = card.upgrade() {
                                 card.set_visible(false);
                             }
+                            go_on(&w3, &taf, &call, say_on_card(card.clone()));
                         })),
                     );
                 });
@@ -680,6 +694,66 @@ thread_local! {
     /// What a screenshot taps once Needs you is drawn: "Set all aside" (`set-all-aside`), or the
     /// first Card unit request's Dismiss (`dismiss`).
     pub static OPEN: std::cell::Cell<Option<&'static str>> = const { std::cell::Cell::new(None) };
+}
+
+/// The key's answer went (`continueHeld`, kiff/tafs#206): the run that paused on the call goes
+/// on now at tafs cloud, as the session, not at kiff/agents' next sweep. A 409 (`not_paused`) is
+/// the run already gone on, as KIFF's alert often makes it first: nothing is said. When no run
+/// waits on the call any more (kiff/tafs#1812), tafs cloud's words that nothing ran are said
+/// (`say`), and the taf's chat ends with them and Retry (`runEndedAfterApproval`). Unreached, or
+/// refused otherwise, why is said, in tafs cloud's words or the app's: never swallowed.
+pub(crate) fn go_on(w: &Rc<WordBook>, taf: &str, call: &str, say: Rc<dyn Fn(&str)>) {
+    use tafs_core::held::GoneOn;
+    let Some(path) = tafs_core::held::continue_path(taf, call) else {
+        return;
+    };
+    let Some(kept) = crate::store::load(chrono::Utc::now().timestamp()) else {
+        return;
+    };
+    let languages =
+        tafs_core::language::screen_languages(&tafs_core::language::preferred_from_env());
+    let (taf, words) = (taf.to_string(), (**w).clone());
+    glib::spawn_future_local(async move {
+        let said = gio::spawn_blocking(move || {
+            match crate::kiff::cloud_send(&kept.token, &languages, "POST", &path, None) {
+                Err(e) => Some((false, e.words(&words).unwrap_or_default())),
+                Ok(a) => match tafs_core::held::read_gone_on(a.status, &a.body) {
+                    GoneOn::Goes(_) | GoneOn::WentOn => None,
+                    GoneOn::RunEnded(said) => Some((true, said)),
+                    GoneOn::Refused => Some((
+                        false,
+                        tafs_core::signin::refusal(&a, Some(&words))
+                            .words(&words)
+                            .unwrap_or_default(),
+                    )),
+                },
+            }
+        })
+        .await
+        .ok()
+        .flatten();
+        let Some((ended, said)) = said.filter(|(_, s)| !s.trim().is_empty()) else {
+            return;
+        };
+        if ended {
+            crate::taf_chat::run_ended_after_approval(&taf, &said);
+        }
+        say(&said);
+    });
+}
+
+/// What `go_on` says on Needs you's card, which went once the key's answer went: drawn again in
+/// its place, with only that.
+fn say_on_card(card: glib::WeakRef<gtk::Box>) -> Rc<dyn Fn(&str)> {
+    Rc::new(move |said| {
+        if let Some(card) = card.upgrade() {
+            while let Some(child) = card.first_child() {
+                card.remove(&child);
+            }
+            card.append(&text(said, 14, 400, &["tafs-no"]));
+            card.set_visible(true);
+        }
+    })
 }
 
 /// Taps `b` once it's drawn, when a screenshot asked for `which`: the one on screen, since the

@@ -104,12 +104,31 @@ thread_local! {
     static CHATS: RefCell<HashMap<String, Rc<RefCell<TafChat>>>> = RefCell::new(HashMap::new());
     /// What the owner is typing to each taf, not sent yet.
     static DRAFTS: RefCell<HashMap<String, String>> = RefCell::new(HashMap::new());
+    /// Each taf's chat page while it's open, to draw again when something changes it from
+    /// elsewhere (an approval that landed after its run ended).
+    static OPEN: RefCell<HashMap<String, std::rc::Weak<Page>>> = RefCell::new(HashMap::new());
+}
+
+/// An approval given on a held card landed after its run had ended (`runEndedAfterApproval`):
+/// tafs cloud's words in the taf's chat, with Retry on the owner's last message, drawn again if
+/// it's open. A chat not opened yet reads its thread when it opens, as before.
+pub fn run_ended_after_approval(taf: &str, words: &str) {
+    let Some(chat) = CHATS.with(|c| c.borrow().get(taf).cloned()) else {
+        return;
+    };
+    if !chat.borrow_mut().run_ended_after_approval(words) {
+        return;
+    }
+    if let Some(page) = OPEN.with(|o| o.borrow().get(taf).and_then(|p| p.upgrade())) {
+        page.draw();
+    }
 }
 
 /// Signed out: nothing written for the last account stays.
 pub fn forget() {
     CHATS.with(|c| c.borrow_mut().clear());
     DRAFTS.with(|d| d.borrow_mut().clear());
+    OPEN.with(|o| o.borrow_mut().clear());
 }
 
 /// The pane and what it holds while it's open.
@@ -232,6 +251,11 @@ pub fn pane(w: Rc<WordBook>, taf: ChatTaf, source: ChatSource) -> gtk::Widget {
         attach,
     });
     wire_composer(&page);
+    OPEN.with(|o| {
+        let mut o = o.borrow_mut();
+        o.retain(|_, p| p.strong_count() > 0);
+        o.insert(page.taf.key(), Rc::downgrade(&page));
+    });
     // No doors offered (or a trial's chat): no knocks kept from an earlier read.
     if page.doors.is_none() {
         page.chat.borrow_mut().knocks.clear();

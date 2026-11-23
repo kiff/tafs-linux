@@ -566,9 +566,120 @@ pub fn remaining(
     w.get("needs_you.left", &[("time", &time)])
 }
 
+/// `continueHeld`'s path (kiff/tafs#206): the run that paused on a held call goes on now that
+/// it's answered, as the session. None for a taf tafs cloud doesn't hold (KIFF's agent alone,
+/// or one still being set up): no run of its waits there.
+pub fn continue_path(taf: &str, exception: &str) -> Option<String> {
+    if taf.is_empty()
+        || exception.is_empty()
+        || taf.starts_with("agent:")
+        || taf.starts_with("setting-up:")
+    {
+        return None;
+    }
+    Some(format!(
+        "/v1/tafs/{}/holds/{}/continue",
+        crate::access::escaped(taf),
+        crate::access::escaped(exception)
+    ))
+}
+
+/// What `continueHeld` answered.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum GoneOn {
+    /// The run goes on, or waits on another of its held calls (its status).
+    Goes(String),
+    /// 409 (`not_paused`): the run had already gone on, as KIFF's alert often makes it before
+    /// this lands. Nothing to say.
+    WentOn,
+    /// No run waited on the call any more (404 `run_ended`, kiff/tafs#1812): tafs cloud's words,
+    /// in the owner's language, that nothing ran.
+    RunEnded(String),
+    /// Refused otherwise (an older tafs cloud's bare 404 among them): why is said, in tafs
+    /// cloud's words or the app's.
+    Refused,
+}
+
+/// `continueHeld`'s answer, by its status and body.
+pub fn read_gone_on(status: u16, body: &[u8]) -> GoneOn {
+    #[derive(Deserialize, Default)]
+    struct Answer {
+        status: Option<String>,
+        code: Option<String>,
+        words: Option<String>,
+    }
+    let a = serde_json::from_slice::<Answer>(body).unwrap_or_default();
+    match status {
+        200..=299 => GoneOn::Goes(a.status.unwrap_or_default()),
+        409 => GoneOn::WentOn,
+        404 if a.code.as_deref() == Some("run_ended") => match a.words {
+            Some(w) if !w.trim().is_empty() => GoneOn::RunEnded(w.trim().to_string()),
+            _ => GoneOn::Refused,
+        },
+        _ => GoneOn::Refused,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn an_answered_call_goes_on_at_tafs_clouds_own_path() {
+        assert_eq!(
+            continue_path("depl_1", "ce_1").as_deref(),
+            Some("/v1/tafs/depl_1/holds/ce_1/continue")
+        );
+        assert_eq!(
+            continue_path("depl 1", "ce/1").as_deref(),
+            Some("/v1/tafs/depl%201/holds/ce%2F1/continue")
+        );
+        // KIFF's agent alone, or a taf still being set up: no run at tafs cloud waits there.
+        assert_eq!(continue_path("agent:ag_1", "ce_1"), None);
+        assert_eq!(continue_path("setting-up:Rae", "ce_1"), None);
+        assert_eq!(continue_path("depl_1", ""), None);
+        assert!(!crate::signed::signed_at_cloud(
+            "POST",
+            "/v1/tafs/depl_1/holds/ce_1/continue"
+        ));
+    }
+
+    #[test]
+    fn a_run_that_had_ended_says_nothing_ran_in_tafs_clouds_words() {
+        let ended = r#"{"error":"not_found","code":"run_ended","words":"Cette exécution était terminée, donc rien ne s'est passé. "}"#;
+        assert_eq!(
+            read_gone_on(404, ended.as_bytes()),
+            GoneOn::RunEnded("Cette exécution était terminée, donc rien ne s'est passé.".into())
+        );
+        assert_eq!(
+            read_gone_on(200, br#"{"run":"r1","status":"PAUSED"}"#),
+            GoneOn::Goes("PAUSED".into())
+        );
+        assert_eq!(
+            read_gone_on(200, br#"{"status":"waiting"}"#),
+            GoneOn::Goes("waiting".into())
+        );
+        // The run had already gone on, as KIFF's alert made it: nothing to say.
+        assert_eq!(
+            read_gone_on(409, br#"{"error":"not_paused"}"#),
+            GoneOn::WentOn
+        );
+        // Refused otherwise, an older tafs cloud's bare 404 and blank words among them: why is
+        // said, never swallowed.
+        assert_eq!(
+            read_gone_on(404, br#"{"error":"not_found"}"#),
+            GoneOn::Refused
+        );
+        assert_eq!(
+            read_gone_on(404, br#"{"code":"run_ended","words":"  "}"#),
+            GoneOn::Refused
+        );
+        assert_eq!(
+            read_gone_on(403, br#"{"error":"forbidden"}"#),
+            GoneOn::Refused
+        );
+        assert_eq!(read_gone_on(502, b"bad gateway"), GoneOn::Refused);
+    }
 
     #[test]
     fn tool_words_drop_prefixes() {
