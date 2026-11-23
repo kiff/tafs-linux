@@ -63,15 +63,21 @@ pub fn signed_in_as(account: &Account) -> Option<String> {
 
 /// The languages kiff.dev has tafs's Terms and Privacy policy in, besides English, at
 /// `kiff.dev/<lang>/tafs/terms` and `/<lang>/tafs/privacy`, by KIFF's code: Traditional Chinese
-/// is served under "zh", as pt-BR is under "pt" (`Legal.translated`). The English pages govern.
+/// is served under "zh" (`Legal.translated`). Brazilian Portuguese has its own pages, under the
+/// lower-case "pt-br" (`legal_code`). The English pages govern.
 pub const LEGAL_LANGUAGES: [&str; 38] = [
     "de", "es", "fr", "it", "nl", "pl", "pt", "ko", "ja", "et", "lt", "lv", "cs", "sk", "sl", "hu",
     "ro", "bg", "hr", "tr", "id", "vi", "th", "zh", "ar", "sr", "sq", "ka", "hy", "az", "bn", "he",
     "ca", "mk", "mn", "ne", "km", "lo",
 ];
 
-/// The code a legal page is served under, if kiff.dev has it in the app's language.
-fn legal_code(language: &str) -> Option<&str> {
+/// The code a legal page is served under, if kiff.dev has it in the app's language. pt-BR has its
+/// own pages at the lower-case `/pt-br/` (kiff.dev answers 404 for `/pt-BR/`); plain pt stays on
+/// `/pt/`.
+pub(crate) fn legal_code(language: &str) -> Option<&str> {
+    if language == "pt-BR" {
+        return Some("pt-br");
+    }
     let code = crate::language::kiff_code(language);
     LEGAL_LANGUAGES.contains(&code).then_some(code)
 }
