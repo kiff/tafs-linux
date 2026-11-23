@@ -41,7 +41,7 @@ mn, ne, km, lo) from tafs#1710. Greek waits until tafs ships it.
 - **Ordinals and currency symbols** (`held::ordinal`, `money::symbol`) are ICU's
   digits-ordinal rules and standard symbols, written out: ICU4X has neither.
 - **Terms and Privacy** open in the 38 languages kiff.dev serves them in, Traditional Chinese
-  under `/zh/` and pt-BR under `/pt/` (`Legal.translated`); any other opens the English page
+  under `/zh/`, and pt-BR has its own lower-case `/pt-br/` pages (plain pt stays on `/pt/`); any other opens the English page
   and says so.
 
 ## Right to left

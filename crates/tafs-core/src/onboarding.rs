@@ -118,13 +118,11 @@ pub fn first_home_lines(
 }
 
 /// KIFF's own Terms and Privacy, beside tafs's (`Legal.kiffPage`): in the app's language where
-/// kiff.dev serves it, else in English at the unprefixed path.
+/// kiff.dev serves it (pt-BR at its own `/pt-br/`), else in English at the unprefixed path.
 pub fn kiff_page(language: &str, name: &str) -> String {
-    let code = crate::language::kiff_code(language);
-    if crate::account::LEGAL_LANGUAGES.contains(&code) {
-        format!("https://kiff.dev/{code}/{name}")
-    } else {
-        format!("https://kiff.dev/{name}")
+    match crate::account::legal_code(language) {
+        Some(code) => format!("https://kiff.dev/{code}/{name}"),
+        None => format!("https://kiff.dev/{name}"),
     }
 }
 

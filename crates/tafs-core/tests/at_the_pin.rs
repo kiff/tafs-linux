@@ -1005,8 +1005,19 @@ fn the_legal_pages_open_in_the_apps_language() {
             w.line("settings.terms").unwrap()
         );
     }
-    // A variant's pages are its language's: pt-BR's are pt's, Traditional Chinese's are zh's.
-    assert_eq!(terms_url("pt-BR"), "https://kiff.dev/pt/tafs/terms");
+    // Brazilian Portuguese has its own pages, at the lower-case /pt-br/; plain pt stays on /pt/.
+    // Traditional Chinese's are zh's.
+    assert_eq!(terms_url("pt-BR"), "https://kiff.dev/pt-br/tafs/terms");
+    assert_eq!(privacy_url("pt-BR"), "https://kiff.dev/pt-br/tafs/privacy");
+    assert_eq!(terms_url("pt"), "https://kiff.dev/pt/tafs/terms");
+    assert_eq!(
+        tafs_core::onboarding::kiff_page("pt-BR", "privacy"),
+        "https://kiff.dev/pt-br/privacy"
+    );
+    assert_eq!(
+        tafs_core::onboarding::kiff_page("pt", "privacy"),
+        "https://kiff.dev/pt/privacy"
+    );
     assert_eq!(privacy_url("zh-Hant"), "https://kiff.dev/zh/tafs/privacy");
     assert_eq!(terms_url("ja"), "https://kiff.dev/ja/tafs/terms");
     // English, and any language kiff.dev lacks, open the English pages, saying so.
