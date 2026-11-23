@@ -15,14 +15,14 @@ NAMES = set("""
 be896ac583d76627 afb42e3f1a4bce7e d419916f176e52d3 bd184cdc7aea9ef8 ab63a9b276c86bec
 2ad06b22b301f873 3c00d0a9d4c2eb08 018a7f9527b114ab 94c6cdf43ac3f929 4a25962615e31ac6
 d184eb5cf606a3eb d1cac6ef5a9ddbd1 a74b534355e685fc ea0edce134693c74 cb722454717333e5
-0344d07edb285217
+6ce2da740ecd217f 0344d07edb285217
 """.split())
 # Reviewer logins: named only where GitHub reads them, in CODEOWNERS.
 LOGINS = set("53dd1be914bd441c f66e74c6b8883a1f 3726111e555e250c".split())
 MONTH = r"(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*"
 SAID = re.compile(
     r"kiff/work\b|\bthe PM\b|\bPM's\b|\(PM[ ,)]|\bPM [0-9]{1,2}:[0-9]{2}"
-    r"|\b(review|probe|ask|point|negatives|read) (on|of)\)"
+    r"|\b(review|probe|ask|point|negatives|read) (on|of)(?: #[0-9]+)?\)"
     rf"|\bowner(?:'s|,) [0-9]{{1,2}} {MONTH}\b"
 )
 WORD = re.compile(r"(?:^|(?<=[^\w-]))[a-z0-9]+(?:-[a-z0-9]+)*(?=[^\w-]|$)")
@@ -53,6 +53,7 @@ PLANTED = [  # (path, line, whether it must fail)
     ("a.md", "planted-laneway and replanted-lane are other words", False),
     (OWNERS, "* @planted-lane", False),
     ("a.md", "as the PM 20:12 said", True),
+    ("a.md", "(its read on #12)", True),
     (OWNERS, "# one of the two (the owner, 22 Nov)", True),
 ]
 wrong = [p for p in PLANTED if named(p[0], p[1]) != p[2]]
