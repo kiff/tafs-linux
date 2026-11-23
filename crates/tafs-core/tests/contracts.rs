@@ -1127,6 +1127,18 @@ fn a_fill_in_chrome_is_never_answered_with_this_computers_key() {
         let h = held(&w, &calls[0], "taf-rae").unwrap();
         assert_eq!(h.needs_release, release, "{browser}");
         assert_eq!(needs_release(&calls[0].browser), release);
+        // And at signing, whatever draws the button: no key answer for a fill.
+        use tafs_core::signed::Act;
+        let once = Act::ApproveOnce {
+            call: "exc_9".into(),
+            accounting_version: Some(3),
+        };
+        let room = Act::ExtraRoom {
+            call: "exc_9".into(),
+            accounting_version: Some(3),
+        };
+        assert_eq!(once.answer().is_none(), release, "{browser}");
+        assert_eq!(room.answer().is_none(), release, "{browser}");
         let tafs = [Holder {
             key: "taf-rae",
             name: "Rae",

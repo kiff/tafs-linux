@@ -508,8 +508,14 @@ impl Act {
     /// A held call's answer that a security key signs in its body (`kiff.answer.v1`, KIFF's
     /// `checkPasskeyAnswer`): the hold, the answer and the accounting version it names. Approve
     /// once and Extra room (`change-card`) only, and only when the hold's accounting version was
-    /// read.
+    /// read. Never for a call read as a fill in the person's Chrome (`held::release_needed`): only
+    /// the phone answers that one, with its release.
     pub fn answer(&self) -> Option<(&str, &'static str, i64)> {
+        if let Act::ApproveOnce { call, .. } | Act::ExtraRoom { call, .. } = self {
+            if crate::held::release_needed(call) {
+                return None;
+            }
+        }
         match self {
             Act::ApproveOnce {
                 call,

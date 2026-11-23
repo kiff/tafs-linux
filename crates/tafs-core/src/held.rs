@@ -214,8 +214,32 @@ pub fn held(w: &WordBook, e: &CardException, taf: &str) -> Result<HeldCall, Word
         details: details(e),
         taf_about: taf_words(e.taf_about.as_str(), 120),
         taf_reason: taf_words(e.taf_reason.as_str(), 280),
-        needs_release: needs_release(&e.browser),
+        needs_release: noted_release(&e.id, needs_release(&e.browser)),
     })
+}
+
+/// The held calls read as fills in the person's Chrome, by KIFF's id: `signed::Act::answer`
+/// refuses to sign Approve once or Extra room for one of them, whatever draws the button. Shared,
+/// since a read may run off the main loop.
+static RELEASE_NEEDED: std::sync::Mutex<std::collections::BTreeSet<String>> =
+    std::sync::Mutex::new(std::collections::BTreeSet::new());
+
+/// Notes whether the held call `id` needs the phone's release, and says so back.
+fn noted_release(id: &str, needs: bool) -> bool {
+    if let Ok(mut set) = RELEASE_NEEDED.lock() {
+        if needs {
+            set.insert(id.to_string());
+        } else {
+            set.remove(id);
+        }
+    }
+    needs
+}
+
+/// Whether the held call `id` was read as a fill in the person's Chrome. A poisoned record says
+/// yes: never signed here on a guess.
+pub fn release_needed(id: &str) -> bool {
+    RELEASE_NEEDED.lock().map_or(true, |set| set.contains(id))
 }
 
 /// A held call's `browser` block asks for a fill in the person's Chrome: a sealed fill (a saved
