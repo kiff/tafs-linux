@@ -111,14 +111,44 @@ fn checked(body: &[u8]) -> Option<Shot> {
 /// The picture as RGBA pixels, width and height: none when the WebP can't be decoded, so the sheet says the picture
 /// couldn't be loaded rather than showing nothing.
 pub fn pixels(shot: &Shot) -> Option<(u32, u32, Vec<u8>)> {
-    let img = image::load_from_memory_with_format(&shot.image, image::ImageFormat::WebP).ok()?;
-    let rgba = img.to_rgba8();
+    // At most 120 KB, but a WebP can still claim any size: a page's picture is never wider or
+    // taller than this, and decoding stops before it takes more memory (`image::Limits`).
+    let mut limits = image::Limits::default();
+    limits.max_image_width = Some(MAX_SIDE);
+    limits.max_image_height = Some(MAX_SIDE);
+    limits.max_alloc = Some(MAX_ALLOC);
+    let mut reader = image::ImageReader::with_format(
+        std::io::Cursor::new(&shot.image[..]),
+        image::ImageFormat::WebP,
+    );
+    reader.limits(limits);
+    let rgba = reader.decode().ok()?.to_rgba8();
     Some((rgba.width(), rgba.height(), rgba.into_raw()))
 }
+
+/// The widest or tallest picture shown, in pixels.
+pub const MAX_SIDE: u32 = 4096;
+/// The most memory one picture's decoding may take: 4096 × 4096 RGBA.
+pub const MAX_ALLOC: u64 = 64 * 1024 * 1024;
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_picture_wider_than_any_page_has_no_pixels() {
+        let mut out = std::io::Cursor::new(Vec::new());
+        image::RgbaImage::from_pixel(MAX_SIDE + 1, 1, image::Rgba([0, 0, 0, 255]))
+            .write_to(&mut out, image::ImageFormat::WebP)
+            .unwrap();
+        let shot = |image| Shot {
+            step: "s".into(),
+            taken_at: Utc::now(),
+            image,
+        };
+        assert_eq!(pixels(&shot(out.into_inner())), None);
+        assert!(pixels(&shot(webp())).is_some());
+    }
 
     /// A 1×1 lossless WebP.
     fn webp() -> Vec<u8> {
