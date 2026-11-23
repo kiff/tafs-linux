@@ -18,11 +18,13 @@ in kiff/agents and KIFF at once. It reads **Halted** only once all three parts h
 Until then it reads **Halting…**. While it's halting, the screen reads it again every 2 seconds,
 at most 60 times (`GET` the same path). A read that can't be read keeps what was there.
 
-**Resuming gives authority back**, so it's signed by the device (`tafs.resume.v1`). This
-computer's key is in software and signs nothing, so its button is there: "Resume Rae", or
-"Resume all your tafs" (the iPad's prompt words, as Linux has no biometry to name). Its tap says
-"This device can't approve. Approve on another device signed in to your account." under it, and
-nothing is sent (`signed::Act::Resume`, KIFF's `POST /v1/agents/{agent}/resume` or `/v1/resume`).
+**Resuming gives authority back**, so it's signed by the device (`tafs.resume.v1`). Its button is
+"Resume Rae", or "Resume all your tafs" (the iPad's prompt words, as Linux has no biometry to
+name). On a computer with a security key, its tap asks the key, which approves KIFF's own request
+(`signed::Act::Resume`, `POST /v1/agents/{agent}/resume` or `/v1/resume`; [approval](approval.md)),
+then the halt and Home are read again, as the iPad's `refresh()`.
+Without one, this computer's key is in software and signs nothing: its tap says "This device can't
+approve. Approve on another device signed in to your account." under it, and nothing is sent.
 A taf halted with the whole account has no button: it resumes with the account. CI's
 `halt-resume` taps it.
 
@@ -61,6 +63,6 @@ read is the file's, and **nothing is ever sent**. CI's `halt-all`, `halt-all-hal
 
 ## Not yet
 
-- **Resuming** from this computer: with passkey approvals.
+- **Resuming** on a computer with no security key: on another device.
 - The list read again after a halt (`refresh()`): the sidebar's row reads its new state at the
   next read of the account; the screen itself is current.
