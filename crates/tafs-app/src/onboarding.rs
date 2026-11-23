@@ -273,6 +273,12 @@ pub struct HelpReads {
     pub code: Option<crate::ai_consent::Source>,
 }
 
+/// The shell's planque source (this computer's kept session), for reads made outside Account:
+/// the tools' titles in a taf's chat. None before the shell, or signed out.
+pub fn chrome_source() -> Option<crate::chrome::ChromeSource> {
+    HELP_READS.with(|h| h.borrow().as_ref().map(|r| r.chrome.clone()))
+}
+
 /// The shell's sources, for How tafs works wherever it opens.
 pub fn help_reads(r: HelpReads) {
     HELP_READS.with(|h| *h.borrow_mut() = Some(r));

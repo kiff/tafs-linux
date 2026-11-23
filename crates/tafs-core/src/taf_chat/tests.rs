@@ -2048,3 +2048,43 @@ fn a_loop_card_sits_at_its_time_and_is_answered_once() {
     c.loop_answered("run7", at("2026-11-23T09:06:01Z"));
     assert_eq!(c.awaiting, Some(at("2026-11-23T09:06:01Z")));
 }
+
+#[test]
+fn a_connected_tool_is_said_by_its_connections_title_once_read() {
+    let w = en();
+    let mut titles = HashMap::new();
+    titles.insert(
+        "kiff__stripe_list_charges_ab12".to_string(),
+        "Reading List payments (charges)".to_string(),
+    );
+    // With its connection's title: the title, never its name in KIFF.
+    assert_eq!(
+        crate::coach_lines::taf_activity_words_titled(
+            &w,
+            "kiff__stripe_list_charges_ab12",
+            &titles
+        )
+        .unwrap(),
+        "Asking KIFF: Reading List payments (charges)…"
+    );
+    // A tool with no title, and the taf's own tools, keep their words.
+    assert_eq!(
+        crate::coach_lines::taf_activity_words_titled(&w, "kiff__stripe_refund", &titles).unwrap(),
+        crate::coach_lines::taf_activity_words(&w, "kiff__stripe_refund").unwrap()
+    );
+    assert_eq!(
+        crate::coach_lines::taf_activity_words_titled(&w, "memory", &titles).unwrap(),
+        w.line("taf.activity.reading_notes").unwrap()
+    );
+    // A taf's folded steps take the chat's titles.
+    let work = crate::coach::Work {
+        ms: 1200,
+        steps: vec![crate::coach::WorkStep {
+            tool: "kiff__stripe_list_charges_ab12".into(),
+            error: false,
+            not_made: false,
+        }],
+    };
+    let lines = crate::coach_lines::taf_work_lines_titled(&w, &work, &titles).unwrap();
+    assert!(format!("{lines:?}").contains("Reading List payments (charges)"));
+}

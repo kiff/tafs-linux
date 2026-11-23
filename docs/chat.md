@@ -138,8 +138,10 @@ In the iPad's order, in a column at most 720 wide:
     menu;
   - what the taf did before writing its words, folded under them as "Worked for 12 s ›"
     (`WorkSummary`, `WorkLog`), which opens its steps (`StepList`): each in the taf's words ("Reading
-    its notes", "Checking what waits for you", "Asking KIFF to run …", the tool's name in KIFF in
-    words, since this computer reads no connection's title for it from planque), tries of one step
+    its notes", "Checking what waits for you", and a connected tool by the title its connection
+    gives it, "Asking KIFF: Reading List payments (charges)…" (`toolTitle`, from planque's grants,
+    read once when the chat opens with this computer's device key, `chrome::tool_titles`), else
+    "Asking KIFF to run …" with the tool's name in KIFF in words), tries of one step
     after a failed one as one row ("2 tries"), a failed step left out once something worked, a step
     not made "not made · read first";
   - the taf's words full width, its Markdown as formatting, with tafs cloud's lines around them:

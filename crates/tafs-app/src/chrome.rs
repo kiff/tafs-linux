@@ -73,6 +73,21 @@ fn unpair(source: &ChromeSource, id: &str) -> bool {
         .is_ok_and(|a| (200..300).contains(&a.status))
 }
 
+/// Each connected tool's title, by its name in KIFF, from planque's grants (`toolTitle`), read
+/// with this computer's device key, as the Chromes are. None when it can't be read.
+pub fn tool_titles(source: &ChromeSource) -> std::collections::HashMap<String, String> {
+    let ChromeSource::Cloud { kept, languages } = source else {
+        return Default::default();
+    };
+    let Some(device) = crate::coach::this_device(kept, languages) else {
+        return Default::default();
+    };
+    match crate::kiff::planque_safe(kept, &device, languages, Safe::Grants) {
+        Ok(a) if (200..300).contains(&a.status) => tafs_core::planque::tool_titles(&a.body),
+        _ => Default::default(),
+    }
+}
+
 /// Whether planque offers Chrome to this person: its list read (How tafs works' Chrome section,
 /// the iPad's `model.chromes != nil`). A failed read is no.
 pub fn offered(w: &WordBook, source: &ChromeSource) -> bool {
