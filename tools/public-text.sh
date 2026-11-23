@@ -18,7 +18,7 @@ SAID = re.compile(
     r"kiff/work|\bthe PM\b|\bPM's\b|\(PM[ ,)]"
     rf"|\bowner(?:'s|,) [0-9]{{1,2}} {MONTH}\b"
 )
-WORD = re.compile(r"(?<![@\w-])[a-z0-9]+(?:-[a-z0-9]+)*(?![\w-])")
+WORD = re.compile(r"(?:^|(?<=[^@\w-]))[a-z0-9]+(?:-[a-z0-9]+)*(?=[^\w-]|$)")
 SELF, OWNERS = "tools/public-text.sh", ".github/CODEOWNERS"
 
 files = subprocess.run(["git", "ls-files", "-z"], capture_output=True, check=True).stdout
