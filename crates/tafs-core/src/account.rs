@@ -65,10 +65,10 @@ pub fn signed_in_as(account: &Account) -> Option<String> {
 /// `kiff.dev/<lang>/tafs/terms` and `/<lang>/tafs/privacy`, by KIFF's code: Traditional Chinese
 /// is served under "zh" (`Legal.translated`). Brazilian Portuguese has its own pages, under the
 /// lower-case "pt-br" (`legal_code`). The English pages govern.
-pub const LEGAL_LANGUAGES: [&str; 38] = [
+pub const LEGAL_LANGUAGES: [&str; 41] = [
     "de", "es", "fr", "it", "nl", "pl", "pt", "ko", "ja", "et", "lt", "lv", "cs", "sk", "sl", "hu",
     "ro", "bg", "hr", "tr", "id", "vi", "th", "zh", "ar", "sr", "sq", "ka", "hy", "az", "bn", "he",
-    "ca", "mk", "mn", "ne", "km", "lo",
+    "ca", "mk", "mn", "ne", "km", "lo", "tk", "hi", "ur",
 ];
 
 /// The code a legal page is served under, if kiff.dev has it in the app's language. pt-BR has its
@@ -154,6 +154,9 @@ pub fn language_name(language: &str) -> &'static str {
         "ne" => "नेपाली",
         "km" => "ខ្មែរ",
         "lo" => "ລາວ",
+        "tk" => "Türkmen dili",
+        "hi" => "हिन्दी",
+        "ur" => "اردو",
         "pt-BR" => "Português (Brasil)",
         _ => "English",
     }

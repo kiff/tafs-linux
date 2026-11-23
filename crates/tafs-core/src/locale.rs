@@ -279,6 +279,13 @@ mod tests {
         assert_eq!(plural_form("zh-Hant", 1), "other");
         assert_eq!(plural_form("vi", 1), "other");
         assert_eq!(plural_form("pt-BR", 0), "one");
+        // Turkmen and Urdu: one is "one"; Hindi: 0 and 1 are.
+        assert_eq!(plural_form("tk", 0), "other");
+        assert_eq!(plural_form("tk", 1), "one");
+        assert_eq!(plural_form("ur", 1), "one");
+        assert_eq!(plural_form("ur", 2), "other");
+        assert_eq!(plural_form("hi", 0), "one");
+        assert_eq!(plural_form("hi", 2), "other");
     }
 
     #[test]
@@ -290,11 +297,19 @@ mod tests {
         assert_eq!(number(25000, 0, "es"), "25.000");
         assert_eq!(number(123456789, 2, "ar"), "1,234,567.89");
         assert_eq!(relative("ja", 3, Unit::Hour, true), "3 時間前");
+        // Turkmen, Hindi and Urdu come with ICU4X's own data.
+        assert_eq!(list("tk", &abc), "A, B we C");
+        assert_eq!(list("ur", &abc), "A، B، اور C");
+        assert_eq!(number(12345678, 2, "hi"), "1,23,456.78");
+        assert_eq!(number(12345678, 2, "tk"), "123\u{a0}456,78");
+        assert_eq!(relative("tk", 3, Unit::Hour, true), "3 sagat öň");
+        assert_eq!(relative("ur", 2, Unit::Day, true), "2 دنوں پہلے");
     }
 
     #[test]
     fn direction() {
         assert!(right_to_left("ar"));
+        assert!(right_to_left("ur"));
         assert!(!right_to_left("zh-Hant"));
         assert_eq!(base("pt-BR"), "pt");
     }

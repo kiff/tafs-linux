@@ -472,8 +472,23 @@ pub fn ordinal(language: &str, n: i64) -> String {
             };
             format!("{d}{suffix}")
         }
-        // ICU's own data for these two: Mongolian takes the English "th" and Lao Thai's "ที่".
-        "mn" => format!("{d}th"),
+        // ICU's own data for these: Mongolian and Urdu take the English "th", and Lao Thai's "ที่".
+        "mn" | "ur" => format!("{d}th"),
+        // ICU's Turkmen, English as its fallback (as Mongolian): "rd" for CLDR's Turkmen ordinal
+        // "few" (n % 10 = 6 or 9, or n = 10), else "th".
+        "tk" => {
+            let few = matches!(n % 10, 6 | 9) || n == 10;
+            format!("{d}{}", if few { "rd" } else { "th" })
+        }
+        // ICU's Hindi: 1ला, 2रा, 3रा, 4था, 6ठा, every other वाँ; 0 has none.
+        "hi" => match n {
+            0 => d,
+            1 => format!("{d}ला"),
+            2 | 3 => format!("{d}रा"),
+            4 => format!("{d}था"),
+            6 => format!("{d}ठा"),
+            _ => format!("{d}वाँ"),
+        },
         "km" => format!("ទី{d}"),
         "az" => format!("{d}'inci"),
         // ICU's Bengali: English's suffixes by CLDR's Bengali ordinal classes.
@@ -798,6 +813,18 @@ mod tests {
         );
         assert_eq!(ordinal("zh-Hant", 3), "第3");
         assert_eq!(ordinal("pt-BR", 3), "3º");
+        // Turkmen, Hindi and Urdu, as ICU writes them (tafs-windows' tables agree).
+        let some = |l: &str| {
+            [1, 2, 4, 6, 9, 10, 21]
+                .iter()
+                .map(|n| ordinal(l, *n))
+                .collect::<Vec<_>>()
+                .join(" ")
+        };
+        assert_eq!(some("tk"), "1th 2th 4th 6rd 9rd 10rd 21th");
+        assert_eq!(some("hi"), "1ला 2रा 4था 6ठा 9वाँ 10वाँ 21वाँ");
+        assert_eq!(some("ur"), "1th 2th 4th 6th 9th 10th 21th");
+        assert_eq!(ordinal("hi", 0), "0");
         assert_eq!(ordinal("th", 3), "ที่\u{a0}3");
         assert_eq!(ordinal("ro", 3), "3a");
         assert_eq!(ordinal("ar", 3), "3");

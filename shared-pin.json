@@ -1,6 +1,6 @@
 {
   "repo": "kiff/tafs",
-  "commit": "fc9ed717b5d1dc74bcd06bdb59ec504871c1388e",
+  "commit": "0bce947a75c1c6e57b27c1a7ba66e0a09fa6777f",
   "paths": [
     "app/strings",
     "app/hosts.json",
