@@ -124,11 +124,30 @@ pub mod api {
     }
 
     /// A door's address on tafs cloud, whole.
+    /// Only ever on tafs cloud's own host, over HTTPS (agentgabo's note on #88): a whole address
+    /// elsewhere becomes its path on tafs cloud, so the example never sends a developer's key to
+    /// another host.
     pub fn endpoint(door: &Door) -> String {
-        if door.address.starts_with("https://") {
-            door.address.clone()
-        } else {
-            format!("{}{}", crate::home::TAFS_CLOUD, door.address)
+        // The path alone, set on tafs cloud's own address: whatever it holds stays in the path,
+        // never the host (parity-steward's note on #90: "foo:x@evil.example/…" has a path with no
+        // leading "/", which pasted after the host would have made evil.example the host).
+        let on_cloud = |path: &str| {
+            let mut base = url::Url::parse(crate::home::TAFS_CLOUD).expect("tafs cloud's address");
+            base.set_path(path);
+            base.to_string()
+        };
+        match url::Url::parse(&door.address) {
+            Ok(u)
+                if u.scheme() == "https"
+                    && u.host_str() == Some(crate::session::TAFS_CLOUD_HOST)
+                    && u.port().is_none()
+                    && u.username().is_empty()
+                    && u.password().is_none() =>
+            {
+                u.to_string()
+            }
+            Ok(u) => on_cloud(u.path()),
+            Err(_) => on_cloud(door.address.trim()),
         }
     }
 
@@ -1258,6 +1277,61 @@ mod tests {
             api::endpoint(door),
             "https://cloud.tafs.kiff.dev/v1/doors/api/door_ord7/requests"
         );
+        // A whole address is kept only on tafs cloud's own host; elsewhere, its path there.
+        let mut d = door.clone();
+        for (address, shown) in [
+            (
+                "https://cloud.tafs.kiff.dev/v1/doors/api/x/requests",
+                "https://cloud.tafs.kiff.dev/v1/doors/api/x/requests",
+            ),
+            (
+                "https://evil.example/v1/doors/api/x/requests",
+                "https://cloud.tafs.kiff.dev/v1/doors/api/x/requests",
+            ),
+            (
+                "http://cloud.tafs.kiff.dev/v1/x",
+                "https://cloud.tafs.kiff.dev/v1/x",
+            ),
+            (
+                "https://user@cloud.tafs.kiff.dev/v1/x",
+                "https://cloud.tafs.kiff.dev/v1/x",
+            ),
+            (
+                "https://cloud.tafs.kiff.dev:8443/v1/x",
+                "https://cloud.tafs.kiff.dev/v1/x",
+            ),
+            ("v1/x", "https://cloud.tafs.kiff.dev/v1/x"),
+            // A scheme with no host of its own: its path stays a path (parity-steward's note).
+            (
+                "foo:x@evil.example/v1/x",
+                "https://cloud.tafs.kiff.dev/x@evil.example/v1/x",
+            ),
+            (
+                "mailto:a@evil.example",
+                "https://cloud.tafs.kiff.dev/a@evil.example",
+            ),
+            (
+                "//evil.example/v1/x",
+                "https://cloud.tafs.kiff.dev//evil.example/v1/x",
+            ),
+            (
+                "@evil.example/x",
+                "https://cloud.tafs.kiff.dev/@evil.example/x",
+            ),
+        ] {
+            d.address = address.into();
+            let e = api::endpoint(&d);
+            assert_eq!(e, shown, "{address}");
+            // Whatever it was, the example's host is tafs cloud's, over HTTPS, with no port or user.
+            let u = url::Url::parse(&e).unwrap();
+            assert_eq!(u.scheme(), "https", "{address}");
+            assert_eq!(
+                u.host_str(),
+                Some(crate::session::TAFS_CLOUD_HOST),
+                "{address}"
+            );
+            assert!(u.port().is_none() && u.username().is_empty() && u.password().is_none());
+        }
         let w = words();
         let last = api::last_request(&w, door).unwrap().unwrap();
         assert!(

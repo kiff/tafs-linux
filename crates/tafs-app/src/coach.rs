@@ -86,6 +86,8 @@ enum Fail {
 
 /// The page and what it holds while it's open.
 struct Page {
+    /// How much of the answer streaming now shows (`SteadyMarkdown`).
+    live_shown: crate::chat::Shown,
     w: Rc<WordBook>,
     source: CoachSource,
     listed: Rc<Vec<Listed>>,
@@ -279,6 +281,7 @@ pub fn page(
     root.append(&body);
 
     let page = Rc::new(Page {
+        live_shown: crate::chat::Shown::default(),
         w,
         source,
         listed,
@@ -2120,10 +2123,15 @@ fn draw_thread(page: &Rc<Page>, lines: &CoachLines, drawn: &Drawn) {
             }
         }
     }
-    if let Some(words) = &lines.live_text {
-        let live = crate::chat::answer(None, words);
-        live.set_widget_name("live");
-        column.append(&live);
+    match &lines.live_text {
+        Some(words) => {
+            let live = gtk::Box::new(gtk::Orientation::Vertical, 6);
+            live.append(&crate::chat::steady_answer_words(words, &page.live_shown));
+            live.set_widget_name("live");
+            column.append(&live);
+        }
+        // Nothing streams: the next answer starts from its first words.
+        None => page.live_shown.set(None),
     }
     // How the last run ended: the owner stopped it, or it stopped part way, to try again.
     match &drawn.ended {

@@ -85,7 +85,12 @@ sent with `error.sent_with_other_text`. The rules are `tafs-core/src/coach_send.
   ([coach.md](coach.md)), and plainly when the stream can't open; a trial's chat sends plainly. While
   it streams, the taf's words show as they come, each part up to a tool call kept as it was
   written (once: words the thread already holds show there), with `LiveWork` just before the
-  first of them: the live line and the steps done. A message the run took, or a run that said
+  first of them: the live line and the steps done. The words being written now show at an even
+  pace, not in the bursts they arrive in, catching up within a few frames, and whatever they're in
+  the middle of is closed so no Markdown symbol shows on the way: an open bold or code, a link
+  whose address isn't in yet (its words). With animations off, all of it at once (`SteadyMarkdown`,
+  `chat::steady_answer_words`, `coach_lines::healed`; Coach's answer streams the same way). A
+  message the run took, or a run that said
   something, is read from the thread. At its end the thread is read, then the live answer goes.
   Stopped at its own cap, the chat says why. A run that ended with `ERROR` says what went through
   before it stopped (`failedWords`, in tafs cloud's words when it gave some), with Retry, which
