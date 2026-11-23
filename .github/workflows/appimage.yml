@@ -11,6 +11,7 @@ on:
       - tools/appimage.sh
       - tools/check-appimage.sh
       - tools/sign.sh
+      - tools/verify-signature.sh
       - packaging/**
       - .github/workflows/appimage.yml
   workflow_dispatch:
@@ -67,6 +68,23 @@ jobs:
           TAFS_SIGNING_KEY=$(gpg --batch --armor --export-secret-keys) TAFS_SIGNING_PASSPHRASE='' tools/sign.sh SHA256SUMS
           test -s SHA256SUMS.asc
           rm -rf "$GNUPGHOME"
+          unset GNUPGHOME
+      - name: The release check refuses that key and takes the release key's own signature
+        # tools/verify-signature.sh, as verify-release.yml runs it: the dry run's signature is by
+        # another key, so it must fail; the last published release's is the real key's, so it
+        # must pass. Only those two small files are downloaded.
+        run: |
+          mkdir dry && mv SHA256SUMS SHA256SUMS.asc dry/
+          if tools/verify-signature.sh dry --require; then
+            echo "A signature by another key passed." >&2
+            exit 1
+          fi
+          mkdir published
+          tag=$(curl -fsSL https://api.github.com/repos/kiff/tafs-linux/releases/latest | jq -r .tag_name)
+          for f in SHA256SUMS SHA256SUMS.asc; do
+            curl -fsSL -o "published/$f" "https://github.com/kiff/tafs-linux/releases/download/$tag/$f"
+          done
+          tools/verify-signature.sh published --require
 
   # Run by hand with a version: built, started, and attached to a draft release in the same job,
   # so the draft is its only copy. Never published from here.
