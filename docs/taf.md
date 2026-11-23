@@ -452,19 +452,32 @@ nothing shows until they're read, or when they can't be. A 401 signs this comput
 - **What's drawn up to the signature:**
   - Install this version, Finish: the switch the device begins and signs (`Act::MakeLive`); the tap
     shows the can't-approve line, and nothing is sent.
-  - Try it opens what trying it means ("While you try it" and its four lines), with Start trying
-    disabled and why (`ApprovalNotice`). Its Card isn't shown: tafs cloud makes it as a KIFF draft
-    (`POST /v1/tafs/{id}/versions/{n}/try`) only the phone confirms, so it isn't asked for.
+  - Try it opens what trying it means ("While you try it" and its four lines), then its Card, as
+    the owner reads it before approving (`trialCard`): tafs cloud prepares it as a KIFF draft
+    (`POST /v1/tafs/{id}/versions/{n}/try`, as the session) and KIFF's draft is read and drawn
+    under "Its Card"; one that can't be read says why. **With a security key**, Start trying
+    (`startTrying`) reads the draft again (changed since it was shown, it's drawn again with "What
+    you're asked to approve changed…", to read first), the key approves KIFF's
+    `POST /v1/me/agent-drafts/{id}/confirm` with `{"as":"trial","version":…}`, exactly the version
+    read (`Act::ConfirmDraft`, the sheet saying "Try version 3 of Rae, with its own Card"), and only
+    once KIFF's draft says `trying` does tafs cloud open the trial (`PUT /v1/tafs/{id}/trial`
+    `{n, draft}`, as the session), whose sheet opens. A KIFF that answers anything else starts no
+    trial, and says so. Without a key, Start trying stays disabled with why (`ApprovalNotice`).
 - **The trial** (`TrialScreen`), in a sheet named "Rae · v3": its bar on the amber (Trying version
   3, "not live"), Go back with its ask, whose yes shows the can't-approve line (the trial's KIFF
-  draft is ended with the device's key first, `Act::EndTrial`), Install disabled with why
-  (`Act::InstallTrial`); what the trial is, in tafs cloud's words (what's new, what to try it
+  draft is ended with the device's key first, `Act::EndTrial`); Install, **with a security key**:
+  asked first ("Install version 3?"), then KIFF's draft is read and, not confirmed live yet, the
+  key approves its confirm (`{"version":…}`, "Install version 3 of Rae, with its Card"), then
+  tafs cloud installs it as the session (`POST /v1/tafs/{id}/trial/install`), the version going
+  live and the trial ending; without a key, disabled with why; what the trial is, in tafs cloud's words (what's new, what to try it
   with, that the live taf keeps working, when it ends unused); and the trial's own chat
   (`/v1/tafs/{id}/trial/conversation`, `/v1/tafs/{id}/trial/messages`, the words alone, no
   files), kept apart from the taf's.
 - `--versions` (with `--trial`) reads them from files (synthetic: no contract at the pin);
-  `--page versions:<key>` or `trial:<key>` opens the sheet. CI's `taf-versions`,
-  `taf-versions-trial` and `taf-trial`.
+  `--page versions:<key>` or `trial:<key>` opens the sheet, and `try:<key>` the versions with the
+  first Try it open over them; `--trial-draft` gives KIFF's draft its Card is, from a file
+  (synthetic, `crates/tafs-app/fixtures/trial-draft.json`). CI's `taf-versions`,
+  `taf-versions-try`, `taf-versions-trial` and `taf-trial`.
 
 ## Not yet
 

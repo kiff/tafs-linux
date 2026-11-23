@@ -831,6 +831,43 @@ mod tests {
                 Err(KiffError::Unreadable)
             ));
         }
+        // A trial Card's confirm goes only as itself: no other draft's, no `/approve`, no
+        // planque path, no other body, and no confirm under any other act.
+        let confirm = Act::ConfirmDraft {
+            draft: "drf_1".into(),
+            version: "v3".into(),
+            trial: true,
+        };
+        let (cm, cp, cb) = confirm.request().unwrap();
+        assert_eq!(
+            (cm, cp.as_str()),
+            ("POST", "/v1/me/agent-drafts/drf_1/confirm")
+        );
+        for (method, path, body) in [
+            (cm, "/v1/me/agent-drafts/drf_2/confirm", cb.as_slice()),
+            (cm, "/v1/me/agent-drafts/drf_1/approve", cb.as_slice()),
+            (cm, "/v1/me/agent-drafts/drf_1/submit", cb.as_slice()),
+            (cm, "grants/g1/approve", cb.as_slice()),
+            (cm, "/v1/accounts/t1/grants/g1/approve", cb.as_slice()),
+            (cm, cp.as_str(), br#"{"version":"v3"}"#.as_slice()),
+            (
+                cm,
+                cp.as_str(),
+                br#"{"as":"trial","version":"v4"}"#.as_slice(),
+            ),
+        ] {
+            assert!(
+                matches!(
+                    send_with_key("tok", &["en"], &confirm, method, path, body, "x"),
+                    Err(KiffError::Unreadable)
+                ),
+                "{method} {path}"
+            );
+        }
+        assert!(matches!(
+            send_with_key("tok", &["en"], &act, cm, &cp, &cb, "x"),
+            Err(KiffError::Unreadable)
+        ));
         // Only a held call's answer goes as an answer.
         assert!(matches!(
             send_answer("tok", &["en"], &act, b"{}"),

@@ -114,6 +114,44 @@ pub fn trial_path(taf: &str) -> String {
     format!("/v1/tafs/{}/trial", escaped(taf))
 }
 
+/// `trialDraft`: the KIFF draft tafs cloud prepares as version n's trial Card, as the session.
+pub fn try_path(taf: &str, n: i64) -> String {
+    format!("/v1/tafs/{}/versions/{n}/try", escaped(taf))
+}
+
+/// `trialDraft`'s answer: the draft's id; none when it isn't one.
+pub fn read_try(body: &[u8]) -> Option<String> {
+    #[derive(Deserialize)]
+    struct Answer {
+        draft: String,
+    }
+    serde_json::from_slice::<Answer>(body)
+        .ok()
+        .map(|a| a.draft)
+        .filter(|d| !d.trim().is_empty())
+}
+
+/// `openTrial(_:version:draft:)`'s body: the version and the draft KIFF now has trying. tafs
+/// cloud opens the trial only once KIFF says so (409 before that).
+pub fn open_trial_body(n: i64, draft: &str) -> Vec<u8> {
+    serde_json::to_vec(&serde_json::json!({ "n": n, "draft": draft })).unwrap_or_default()
+}
+
+/// `openTrial`'s answer, `{"trial": …}`: the trial now open.
+pub fn read_opened(body: &[u8]) -> Option<OpenTrial> {
+    #[derive(Deserialize)]
+    struct Answer {
+        trial: OpenTrial,
+    }
+    serde_json::from_slice::<Answer>(body).ok().map(|a| a.trial)
+}
+
+/// `installTrial`: the version tried goes live and the trial ends, once KIFF has its draft
+/// confirmed live, as the session.
+pub fn install_path(taf: &str) -> String {
+    format!("/v1/tafs/{}/trial/install", escaped(taf))
+}
+
 /// The trial's chat, read as a taf's thread is.
 pub fn trial_conversation_path(taf: &str) -> String {
     format!("/v1/tafs/{}/trial/conversation", escaped(taf))
@@ -424,6 +462,33 @@ pub fn trial_lines(w: &WordBook, t: &OpenTrial, name: &str) -> Result<TrialLines
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_trial_is_tried_opened_and_installed_at_tafs_clouds_own_paths() {
+        assert_eq!(try_path("taf 1", 3), "/v1/tafs/taf%201/versions/3/try");
+        assert_eq!(read_try(br#"{"draft":"drf_9"}"#), Some("drf_9".into()));
+        assert_eq!(read_try(br#"{"draft":" "}"#), None);
+        assert_eq!(read_try(b"{}"), None);
+        assert_eq!(
+            open_trial_body(3, "drf_9"),
+            br#"{"draft":"drf_9","n":3}"#.to_vec()
+        );
+        let opened = read_opened(
+            br#"{"trial":{"id":"tr1","n":3,"draft":"drf_9","started":"2026-11-23T04:00:00Z","used":"2026-11-23T04:00:00Z"}}"#,
+        )
+        .unwrap();
+        assert_eq!((opened.n, opened.draft.as_str()), (3, "drf_9"));
+        assert_eq!(read_opened(b"{}"), None);
+        assert_eq!(install_path("t1"), "/v1/tafs/t1/trial/install");
+        // None of them is a route the device signs: tafs cloud checks KIFF's draft instead.
+        for (m, p) in [
+            ("POST", try_path("t1", 3)),
+            ("PUT", trial_path("t1")),
+            ("POST", install_path("t1")),
+        ] {
+            assert!(!crate::signed::signed_at_cloud(m, &p), "{m} {p}");
+        }
+    }
+
     use super::*;
 
     fn en() -> WordBook {

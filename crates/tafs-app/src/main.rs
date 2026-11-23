@@ -199,6 +199,8 @@ struct Options {
     /// A taf's versions and its open trial, as tafs cloud answers them, for the screenshots.
     versions: Option<String>,
     trial: Option<String>,
+    /// `--trial-draft`: KIFF's draft a trial's Card is, from a file, for the start sheet.
+    trial_draft: Option<String>,
     /// With `--home`: a taf's notes as tafs cloud answers `GET /v1/tafs/{id}/memory`, for See all.
     memory: Option<String>,
     /// With `--home`: a page of a taf's runs as tafs cloud answers `GET /v1/tafs/{id}/work/runs`.
@@ -292,6 +294,7 @@ fn options() -> Result<Options, String> {
             "--held" => o.held = Some(value()?),
             "--versions" => o.versions = Some(value()?),
             "--trial" => o.trial = Some(value()?),
+            "--trial-draft" => o.trial_draft = Some(value()?),
             "--memory" => o.memory = Some(value()?),
             "--runs" => o.runs = Some(value()?),
             "--balance" => o.balance = Some(value()?),
@@ -431,6 +434,7 @@ fn selection_of(page: Option<&str>) -> Selection {
         Some(other) if other.starts_with("versions:") => {
             Selection::Taf(other["versions:".len()..].into())
         }
+        Some(other) if other.starts_with("try:") => Selection::Taf(other["try:".len()..].into()),
         Some(other) if other.starts_with("trial:") => {
             Selection::Taf(other["trial:".len()..].into())
         }
@@ -782,7 +786,11 @@ fn activate(app: &adw::Application, o: &Options) {
         Some(p) if p.starts_with("trial:") => {
             versions::OPEN.with(|v| *v.borrow_mut() = Some("trial"))
         }
+        Some(p) if p.starts_with("try:") => versions::OPEN.with(|v| *v.borrow_mut() = Some("try")),
         _ => {}
+    }
+    if let Some(path) = &o.trial_draft {
+        versions::DRAFT.with(|d| *d.borrow_mut() = Some(path.into()));
     }
     // `--page needs-you-hold:<id>`: as a hold's notification opens it, that hold brought into view.
     if let Some(id) = o
