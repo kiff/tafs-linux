@@ -16,6 +16,22 @@ use crate::widgets::{icon_for, mascot, one_line, symbol, text};
 #[derive(Clone)]
 pub struct AlertsSource {
     pub kiff: Option<Option<bool>>,
+    /// This computer holds the session's device key (the iPad's `sessionHasKey`): a session
+    /// kept here. Needs you offers alerts only then.
+    pub device_key: bool,
+}
+
+impl AlertsSource {
+    /// Whether Needs you offers alerts now (`AlertsCard`): read at each drawing, so turning them
+    /// on in Account › Alerts takes the card away.
+    pub fn offers(&self) -> bool {
+        let shown = crate::needs_you::ALERTS_SHOWN.with(|s| s.get());
+        tafs_core::alerts::offers(
+            self.kiff,
+            self.device_key || shown,
+            crate::store::alerts_on() && !shown,
+        )
+    }
 }
 
 /// An alert as it shows (`LockScreenAlert`): the mascot, its title and line, and whether it

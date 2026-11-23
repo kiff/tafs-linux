@@ -22,6 +22,7 @@ pub fn page(
     n: &NeedsYouLines,
     open: Rc<dyn Fn(tafs_core::sidebar::Selection)>,
     aside: Option<Rc<SetAsideSource>>,
+    alerts: &crate::alerts::AlertsSource,
 ) -> gtk::Widget {
     let column = gtk::Box::new(gtk::Orientation::Vertical, 14);
     column.set_margin_start(16);
@@ -31,6 +32,13 @@ pub fn page(
     let title = text(&n.title, 34, 700, &["tafs-ink"]);
     title.set_width_chars(16);
     column.append(&title);
+    // While alerts are off here, for someone who answers the account's holds, the offer first,
+    // as the iPad's `AlertsCard`.
+    if alerts.offers() {
+        if let Ok(o) = tafs_core::alerts::offer(&w) {
+            column.append(&alerts_card(&o));
+        }
+    }
     // In the iPad's order: the steps the tafs handed the person, then Coach's chats waiting on them.
     for step in &n.steps {
         column.append(&step_card(&w, step, false));
@@ -97,6 +105,39 @@ pub fn page(
         scroll_to(&scroller, &column, card);
     }
     scroller.upcast()
+}
+
+thread_local! {
+    /// `--page needs-you-alerts`: drawn as a computer holding the session's device key, with
+    /// alerts off here, for the screenshot. Nothing is kept: the switch itself isn't touched.
+    pub static ALERTS_SHOWN: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// The offer of alerts (`AlertsCard`): "Know the moment a taf needs you", Account › Alerts' line,
+/// and Turn on alerts, which turns on Account › Alerts' own switch here. Linux asks no one first
+/// (a desktop's notifications need no permission), so the card goes at once.
+fn alerts_card(o: &tafs_core::alerts::Offer) -> gtk::Box {
+    let p = panel(false);
+    p.set_widget_name("needs-you.alerts");
+    p.append(&text(&o.title, 15, 600, &["tafs-ink"]));
+    p.append(&text(&o.line, 14, 400, &["tafs-soft"]));
+    let b = primary(&o.button);
+    b.set_widget_name("needs-you.alerts.turn-on");
+    let card = p.downgrade();
+    b.connect_clicked(move |_| {
+        if ALERTS_SHOWN.with(|s| s.get()) {
+            // The screenshot's card: nothing is kept.
+            return;
+        }
+        crate::store::set_alerts_on(true);
+        if let Some(card) = card.upgrade() {
+            if let Some(parent) = card.parent().and_downcast::<gtk::Box>() {
+                parent.remove(&card);
+            }
+        }
+    });
+    p.append(&b);
+    p
 }
 
 thread_local! {

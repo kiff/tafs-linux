@@ -301,3 +301,5 @@ Account › Alerts (`NotificationSettingsView`, `crates/tafs-app/src/alerts.rs`,
 - **Not on Linux:** What alerts you and the tafs that alert (a phone's push choices, read with
   its push token, which a computer hasn't; the iPad draws none of it without one), and Haptics.
 - **The sample** shows the two examples alone, as the iPad's.
+- **Offered on Needs you:** while the switch is off, Needs you offers alerts, and its Turn on
+  alerts turns this switch on ([Needs you](needs-you.md#alerts-offered)).
