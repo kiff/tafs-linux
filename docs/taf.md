@@ -164,9 +164,16 @@ sheet over the page.
   each answered with the door (`{"door"}`), which replaces the one shown; removing it
   (`DELETE …/doors/{door}`, answered `{"removed"}`), after its question. A change that fails says
   why in red and leaves the doors as they were.
-- **WhatsApp:** its signup comes back to the iPhone's own address, which this computer has none
-  of, so Add says "WhatsApp doors are added from tafs on an iPhone for now; once added, they show
-  here." and sends nothing.
+- **WhatsApp:** Add opens tafs cloud's signup page in the browser
+  (`/doors/whatsapp/connect?taf=…&state=…`), with this signup's own one-use `state` (32 random
+  bytes, base64url). The owner signs in with their business and picks the number; the page comes
+  back to `tafs://doors/whatsapp`, which this app handles beside `dev.kiff.tafs:` (the package's
+  `.desktop` and the AppImage's own entry). Any page could open that link, so the app takes only
+  the return carrying the `state` it sent, for that taf, within 15 minutes, once; any other is
+  dropped unread. With a code, the door is added as the session
+  (`POST /v1/tafs/{id}/doors {"app", "code", "phone_number_id", "waba_id"}`); without one, it says
+  "WhatsApp's signup didn't finish." A signup started again replaces the one before
+  (`tafs-core/whatsapp_signup.rs`).
 - **A Slack door's removal**, from one door's screen: planque's subscription is stopped first,
   signed by the device; this computer can't, so Remove's yes shows the can't-approve line and the
   door stays ([approval](approval.md)). Adding one through Slack's own sheet is Starts when's.

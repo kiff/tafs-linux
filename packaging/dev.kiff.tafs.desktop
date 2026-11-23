@@ -7,4 +7,4 @@ Icon=dev.kiff.tafs
 Terminal=false
 Categories=Office;Finance;
 StartupWMClass=dev.kiff.tafs
-MimeType=x-scheme-handler/dev.kiff.tafs;
+MimeType=x-scheme-handler/dev.kiff.tafs;x-scheme-handler/tafs;

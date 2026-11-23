@@ -360,6 +360,15 @@ pub fn kiff_send(
     )
 }
 
+/// KIFF's words for a connection's profile (`POST /v1/profiles/words`), as the session: the
+/// profile's canonical form is the body. It reads nothing of the account and changes nothing.
+pub fn profile_words(token: &str, languages: &[&str], body: Vec<u8>) -> Result<Answer, KiffError> {
+    let call =
+        tafs_core::signed::Unsigned::new("POST", tafs_core::profile_words::PATH.into(), body)
+            .ok_or(KiffError::Unreadable)?;
+    kiff_send(token, languages, &call)
+}
+
 /// A call KIFF or tafs cloud takes only signed, approved by this computer's security key: the
 /// act's whole request (`Act::request`) with its `KIFF-Passkey-Assertion` header, which covers
 /// exactly these bytes. tafs cloud's own signed routes (`signed_at_cloud`) go there; the rest to
