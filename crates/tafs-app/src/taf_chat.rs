@@ -122,12 +122,34 @@ pub fn sample_paused_now(key: &str) -> bool {
     sample_paused(key) == Some(true)
 }
 
+/// What hears a sample taf's pause: true while it's still there to hear it.
+type PauseSeen = Box<dyn Fn() -> bool>;
+
+/// `seen` hears each pause or resume of a sample taf, until it answers false.
+pub fn on_sample_pause_seen(seen: impl Fn() -> bool + 'static) {
+    SAMPLE_PAUSE_SEEN.with(|s| s.borrow_mut().push(Box::new(seen)));
+}
+
+/// A sample taf paused or set back to work (its chat, its Setup): its page's state draws it again
+/// at once; one that answers false is gone and is dropped.
+fn sample_pause_seen() {
+    let seen = SAMPLE_PAUSE_SEEN.with(|s| std::mem::take(&mut *s.borrow_mut()));
+    let kept: Vec<PauseSeen> = seen.into_iter().filter(|f| f()).collect();
+    SAMPLE_PAUSE_SEEN.with(|s| {
+        let mut s = s.borrow_mut();
+        let added = std::mem::take(&mut *s);
+        *s = kept;
+        s.extend(added);
+    });
+}
+
 /// `togglePause` on a sample taf from its Setup: paused, or back to work. The sidebar's row says
 /// so at once, as a pause from its chat does (`shell::reread_home`).
 pub fn toggle_sample_pause(key: &str) -> bool {
     let paused = !sample_paused_now(key);
     SAMPLE_PAUSED.with(|s| s.borrow_mut().insert(key.to_string(), paused));
     crate::shell::reread_home();
+    sample_pause_seen();
     paused
 }
 
@@ -135,6 +157,9 @@ thread_local! {
     /// Each sample taf the owner paused (true) or told to carry on (false) in its chat, by its
     /// key: kept while the app runs, as the sample keeps no chats either.
     static SAMPLE_PAUSED: RefCell<HashMap<String, bool>> = RefCell::new(HashMap::new());
+    /// What else shows a sample taf's pause (its page's state chip), each kept while it's there:
+    /// one that answers false is gone and is dropped.
+    static SAMPLE_PAUSE_SEEN: RefCell<Vec<PauseSeen>> = RefCell::default();
     /// Each taf's chat as the app holds it (`chats`, `chatStates`), by its id at tafs cloud: kept
     /// while the app runs, so its page drawn again keeps what was sent and not sent.
     static CHATS: RefCell<HashMap<String, Rc<RefCell<TafChat>>>> = RefCell::new(HashMap::new());
@@ -168,6 +193,7 @@ pub fn sample_paused(key: &str) -> Option<bool> {
 /// Signed out: nothing written for the last account stays.
 pub fn forget() {
     SAMPLE_PAUSED.with(|s| s.borrow_mut().clear());
+    SAMPLE_PAUSE_SEEN.with(|s| s.borrow_mut().clear());
     CHATS.with(|c| c.borrow_mut().clear());
     DRAFTS.with(|d| d.borrow_mut().clear());
     OPEN.with(|o| o.borrow_mut().clear());
@@ -559,8 +585,9 @@ impl Page {
         };
         if let Some(p) = paused {
             SAMPLE_PAUSED.with(|s| s.borrow_mut().insert(self.taf.id.clone(), p));
-            // The sidebar's row says so at once.
+            // The sidebar's row and the taf's page say so at once.
             crate::shell::reread_home();
+            sample_pause_seen();
         }
         let started = std::time::Instant::now();
         self.chat.borrow_mut().sample_live(chrono::Utc::now());

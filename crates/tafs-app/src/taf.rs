@@ -161,15 +161,46 @@ pub fn page(
     name.set_hexpand(true);
     head.append(&name);
     if shows_chip(t.state, t.attention) {
-        let chip = gtk::Label::new(Some(&t.state.label(&w).unwrap_or_default()));
+        let chip = gtk::Label::new(None);
         chip.add_css_class("tafs-state-chip");
-        chip.add_css_class(match t.state.tone() {
-            ChipTone::Ok => "ok",
-            ChipTone::Amber => "amber",
-            ChipTone::No => "no",
-            ChipTone::Soft => "soft",
-        });
         chip.set_valign(gtk::Align::Center);
+        let draw_chip = {
+            let w = w.clone();
+            move |chip: &gtk::Label, state: TafState| {
+                chip.set_label(&state.label(&w).unwrap_or_default());
+                for tone in ["ok", "amber", "no", "soft"] {
+                    chip.remove_css_class(tone);
+                }
+                chip.add_css_class(match state.tone() {
+                    ChipTone::Ok => "ok",
+                    ChipTone::Amber => "amber",
+                    ChipTone::No => "no",
+                    ChipTone::Soft => "soft",
+                });
+            }
+        };
+        draw_chip(&chip, t.state);
+        // A sample taf paused or set back to work (its chat, its Setup): the chip says so at once.
+        if t.sample {
+            let (weak, key) = (chip.downgrade(), t.key.clone());
+            let unpaused = if t.held.is_empty() {
+                TafState::Working
+            } else {
+                TafState::Waiting
+            };
+            crate::taf_chat::on_sample_pause_seen(move || {
+                let Some(chip) = weak.upgrade() else {
+                    return false;
+                };
+                let state = if crate::taf_chat::sample_paused_now(&key) {
+                    TafState::Paused
+                } else {
+                    unpaused
+                };
+                draw_chip(&chip, state);
+                true
+            });
+        }
         head.append(&chip);
     }
     outer.append(&head);

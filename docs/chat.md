@@ -307,8 +307,9 @@ branch), each sample taf's page has its Chat, and nothing is read or sent
   thinking, its notes read (`memory`), then its words, a twelfth of a beat each; then it's kept
   with what it worked on ("Worked for 2 s"). A second message while it writes stays in the box.
   There are no files, no Stop and no steering in the sample, as on the iPad.
-- **Paused or carrying on** shows at once on the sidebar's row ("Paused by you", "Back to work");
-  the taf's page shows its state when it's opened again.
+- **Paused or carrying on**, from the chat or from its Setup's Pause and Resume, shows at once on
+  the sidebar's row ("Paused by you", "Back to work") and on the taf's page, whose state chip
+  hears it (`taf_chat::on_sample_pause_seen`). The Overview already open shows it once drawn again.
 - `--page taf-sample-chat` opens Support replies on its chat, CI's `taf-sample-chat`; a
   screenshot answers at once. `--page taf` stays on Activity, as the iPad's `-screen taf`.
 
