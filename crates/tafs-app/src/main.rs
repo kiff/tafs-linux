@@ -3,6 +3,7 @@
 mod account;
 mod ai_consent;
 mod alerts;
+mod allow_sheet;
 mod app_event_sheet;
 mod app_sign_in;
 mod approval;
@@ -1613,6 +1614,10 @@ impl App {
         signed_out: Rc<dyn Fn()>,
     ) -> Vec<taf::TafPage> {
         let w = &self.words;
+        // "Allow this from now on" is live where KIFF names `holds.allow` for the account.
+        let allow_live = cloud
+            .and_then(|c| c.account.as_ref())
+            .is_some_and(|a| tafs_core::allow::is_live(a.capabilities.as_deref()));
         let holders: Vec<tafs_core::needs_you::Holder> = model
             .tafs
             .iter()
@@ -1637,9 +1642,17 @@ impl App {
                 .filter(|c| c.taf == key)
                 .cloned()
                 .collect();
-            tafs_core::needs_you::lines(w, &calls, &holders, may_answer, manages_cards, at)
-                .map(|l| l.cards)
-                .unwrap_or_default()
+            tafs_core::needs_you::lines(
+                w,
+                &calls,
+                &holders,
+                may_answer,
+                manages_cards,
+                allow_live,
+                at,
+            )
+            .map(|l| l.cards)
+            .unwrap_or_default()
         };
         // Where a tafs cloud taf's Activity is read: tafs cloud as the session, else the contract
         // beside `--home`'s.
@@ -1919,6 +1932,7 @@ impl App {
                             color: t.color_index,
                             may_answer,
                             manages_cards,
+                            allow_live,
                         }),
                         initial: tafs_core::sidebar::initial(&t.name),
                         cloud_id: t.cloud.then(|| t.key.clone()),
@@ -2547,12 +2561,16 @@ impl App {
             .collect();
         let may_answer = account.as_ref().is_none_or(|a| a.allows("holds.answer"));
         let manages_cards = account.as_ref().is_none_or(|a| a.allows("cards.manage"));
+        let allow_live = account
+            .as_ref()
+            .is_some_and(|a| tafs_core::allow::is_live(a.capabilities.as_deref()));
         let needs_you = tafs_core::needs_you::lines(
             words,
             &model.held,
             &holders,
             may_answer,
             manages_cards,
+            allow_live,
             at,
         )
         .unwrap_or_else(|e| fail(e));

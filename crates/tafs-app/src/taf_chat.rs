@@ -94,6 +94,8 @@ pub struct HeldReread {
     pub may_answer: bool,
     /// Manages Cards (`canManageCards`): Extra room on a call over a total.
     pub manages_cards: bool,
+    /// KIFF names `holds.allow`: "Allow this from now on" is live.
+    pub allow_live: bool,
 }
 
 impl ChatTaf {
@@ -1153,6 +1155,7 @@ impl Page {
             &holders,
             r.may_answer,
             r.manages_cards,
+            r.allow_live,
             chrono::Local::now(),
         ) {
             *self.held.borrow_mut() = l.cards;

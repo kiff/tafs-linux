@@ -56,6 +56,12 @@ pub fn offers(
     kiff && is_live(capabilities) && manages_cards(capabilities) && cloud_taf && allowable(call)
 }
 
+/// `cloudTaf(for:) != nil`: a held call's taf key is tafs cloud's taf id, not an agent tafs cloud
+/// doesn't list (`agent:`) nor a taf still being set up (`setting-up:`).
+pub fn cloud_taf(key: &str) -> bool {
+    !key.is_empty() && !key.starts_with("agent:") && !key.starts_with("setting-up:")
+}
+
 /// tafs cloud's offer route for a held call of taf `taf` (tafs cloud's id).
 pub fn offer_path(taf: &str, exception: &str) -> String {
     format!(

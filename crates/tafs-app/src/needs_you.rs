@@ -679,6 +679,56 @@ pub fn held_card(w: &Rc<WordBook>, c: &CardLines) -> gtk::Box {
                 p.append(&b);
                 p.append(&slot);
             }
+            // A third answer, for someone who manages Cards: change the Card so calls like this
+            // go on their own (`offersAllow`), approved with this computer's security key. Shown
+            // from the held call itself; the sheet asks tafs cloud for its offer on the tap.
+            let allow_act = tafs_core::signed::Act::AllowFromNowOn {
+                draft: String::new(),
+                version: String::new(),
+                hold: None,
+            };
+            if c.allow && crate::key_approval::can_approve(kept.as_ref(), &allow_act) {
+                if let (Some(kept), Some(exception)) = (kept.clone(), c.kiff_id.clone()) {
+                    let b = crate::widgets::outline(
+                        &w.line("needs_you.allow_from_now_on").unwrap_or_default(),
+                    );
+                    b.set_widget_name("held.allow");
+                    let target = crate::allow_sheet::Target {
+                        taf: c.taf.clone(),
+                        exception: exception.clone(),
+                        agent: c.agent.clone(),
+                        action: c.action.clone(),
+                        accounting_version: c.accounting_version,
+                    };
+                    let (w2, card, taf) = (w.clone(), p.downgrade(), c.taf.clone());
+                    b.connect_clicked(move |b| {
+                        let (w3, card, taf, exception) =
+                            (w2.clone(), card.clone(), taf.clone(), exception.clone());
+                        // With "Let this one go out too" on, the call went with the Card: its card
+                        // goes, and the run that paused on it goes on, as after Approve once.
+                        let done: crate::allow_sheet::Done = Rc::new(move |sent| {
+                            if !sent {
+                                return;
+                            }
+                            if let Some(card) = card.upgrade() {
+                                card.set_visible(false);
+                            }
+                            go_on(&w3, &taf, &exception, say_on_card(card.clone()));
+                        });
+                        crate::allow_sheet::open(
+                            w2.clone(),
+                            b,
+                            kept.token.clone(),
+                            tafs_core::language::screen_languages(
+                                &tafs_core::language::preferred_from_env(),
+                            ),
+                            target.clone(),
+                            done,
+                        );
+                    });
+                    p.append(&b);
+                }
+            }
             // A fill in the person's Chrome: the phone answers it, with its release.
             if c.needs_release {
                 p.append(&text(

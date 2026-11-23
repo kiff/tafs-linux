@@ -54,12 +54,59 @@ An amber-edged panel (`Panel(stroke: amber 40%)`):
     you approve." and "Someone who approves on this account answers this. Their answer shows here."
   - **A call from KIFF:** "Nothing is sent until you approve.", the iPad's line for answering in
     KIFF, and **Answer in KIFF**, which opens the call's page (`https://app.kiff.dev/needs-you/<id>?lang=…`).
-    The iPad answers a call from KIFF on the device only with the session's key (`canAnswer`), and
-    its third answer, Allow this from now on, comes with them. A session with no key, as this
-    computer's, gets the line and Answer in KIFF alone, so neither is drawn here.
-    `--held` reads KIFF's held calls beside `--home`; CI's `needs-you-kiff` draws one.
+    With this computer's security key, Approve once and Extra room go from here, and so does the
+    third answer, **Allow this from now on** (below). A session with no key gets the line and
+    Answer in KIFF alone. `--held` reads KIFF's held calls beside `--home`; CI's `needs-you-kiff`
+    draws one.
   - **The sample's:** "Nothing is sent until you approve.", Approve once (when approving once can
     pass it, else why not), its next steps and Refuse.
+
+## Allow this from now on
+
+The iPad's `AllowSheetView` and `HoldAllow` (kiff/tafs `docs/allow-from-now-on.md`): a held call's
+third answer changes the taf's Card, as narrowly as it can, so calls like it go on their own.
+
+- **When it's offered**, decided from the held call alone, with no request (`allow::offers`):
+  - KIFF names `holds.allow` among the account's capabilities (a missing list shows no button);
+  - the person manages Cards;
+  - the call's taf is tafs cloud's;
+  - the hold is from KIFF, isn't a sign-in fill nor Coach's install, and every breach is one a
+    Card change lifts (`per_action_exceeded`, `limit_reached`, `resource_not_on_card`);
+  - this computer's security key approves for the session. Its button, an outline, follows
+    Approve once.
+- **The tap** opens the sheet and asks tafs cloud for the offer now, as the session
+  (`POST /v1/tafs/{id}/holds/{exception}/allow`, `{}`). Its answer is read as strictly as the
+  iPad's decoder. A `none` shows tafs cloud's words, with nothing to sign.
+- **This computer reads KIFF's draft itself** (`GET /v1/me/agent-drafts/{id}`, as the session) and
+  checks it's exactly what was offered (`allow::matches`, the iPad's `HoldAllow.matches`). The
+  draft must:
+  - be for the call's agent, and from this hold when it says;
+  - retire no Card and add none;
+  - change only the Cards the offer names, each once, and each must read as that Card in force
+    with the one offered change made (`applied`: a per-call cap on the held action, a total or a
+    count in its unit and window, or one value added to the held action's scope);
+  - leave every other term as in force: actions, caps, scopes, states, next steps, totals with
+    their measure and per-item parameter, what happens past a limit, holders, domain, environment,
+    location and validity. A time is compared as the instant it names. A Card KIFF marks
+    unchanged must read as in force.
+
+  Anything else shows "This change isn't what was offered.", and there's no Approve.
+- **The sheet:** its title; tafs cloud's change, before and → after; KIFF's own lines for each
+  Card that changes; what it would have done; **Let this one go out too** (on by default), and
+  with it off, that the call still waits for its own answer; **Round up to {amount}** when the
+  offer names one, which asks tafs cloud for the rounded draft and checks it the same way (the
+  app never rounds); then **Approve**.
+- **One approval with the security key** (`Act::AllowFromNowOn`): KIFF's
+  `POST /v1/me/agent-drafts/{id}/confirm` at the version read, with
+  `{"hold": {"id", "accounting_version"}}` when the switch is on, so KIFF lets the call go under
+  the same signature. KIFF takes a passkey's assertion as critical, as a Card change that widens
+  needs. Without the hold's accounting version, nothing is signed ("KIFF doesn't take your answer
+  to this one."). Its key sheet says "Change the Card so requests like this go on their own".
+- **After:** the sheet closes. With the call sent too, its card goes and the run that paused on
+  it goes on (`continueHeld`), as after Approve once. With the switch off, the card stays for its
+  own answer.
+- **Where:** `tafs-core/src/allow.rs` (the rule, the offer, `matches`), `drafts.rs` (the draft's
+  full terms), `signed.rs`, and `crates/tafs-app/src/allow_sheet.rs`.
 
 ## KIFF's held calls
 
@@ -198,6 +245,6 @@ is clicked, not every minute.
 
 - **Signed answers:** a held call's answers, a step's Done and Skip it, and dismissing a Card unit
   request are signed, so their tap says this computer can't approve, and nothing is sent. With a
-  security key, Approve once and Extra room on a held call go from here; the rest stay refused
+  security key, Approve once, Extra room and Allow this from now on go from here; the rest stay refused
   whatever the key ([approval](approval.md)). The sample's answers come with the sample's Card
   checks: until then they're dimmed.
