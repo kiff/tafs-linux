@@ -172,10 +172,7 @@ pub fn signed_at_cloud(method: &str, path: &str) -> bool {
     }
     matches!(
         (method, &p[4..]),
-        ("DELETE", [])
-            | ("POST", ["versions", _, "switch" | "live"])
-            | ("PUT", ["trial"])
-            | ("POST", ["trial", "install"])
+        ("DELETE", []) | ("POST", ["versions", _, "switch" | "live"])
     )
 }
 
@@ -242,10 +239,17 @@ pub enum Act {
     /// `resumeHalt`: a halted taf resumed, or every taf with no agent, confirmed by the device
     /// (`tafs.resume.v1`) and signed.
     Resume { agent: Option<String> },
-    /// `startTrying`: a version's trial opened on the KIFF draft the phone confirmed.
-    StartTrial { taf: String },
-    /// `installTrial`: the version tried made live, once the phone confirmed its draft.
-    InstallTrial { taf: String },
+    /// `confirmDraftAsTrial` and `confirmDraft` for a trial (`startTrying`, `installTrial`): a
+    /// version's trial Card confirmed in KIFF as a trial (`trial`), or the same draft confirmed
+    /// live to install it, exactly the draft version the owner read. KIFF's
+    /// `POST /v1/me/agent-drafts/{id}/confirm`, one of its approval routes; on Linux the security
+    /// key approves it. tafs cloud's own calls around it (`try`, `PUT …/trial`, `install`) go as
+    /// the session: tafs cloud checks KIFF's draft before it opens or installs anything.
+    ConfirmDraft {
+        draft: String,
+        version: String,
+        trial: bool,
+    },
     /// `goBackFromTrial`: the trial's KIFF draft ended with the setup signer, then the trial.
     EndTrial { draft: String },
     /// `discardSettingUp`: a taf being set up discarded, its Cards revoked and tafs cloud's
@@ -361,9 +365,15 @@ impl Act {
             | Act::Resume { .. }
             | Act::DiscardSettingUp { .. }
             | Act::RemoveTaf { .. }
-            | Act::StartTrial { .. }
-            | Act::InstallTrial { .. }
             | Act::EndTrial { .. } => empty(),
+            // `confirmDraftAsTrial`'s and `confirmDraft`'s bodies: the draft version read, and
+            // `as: trial` to start trying it.
+            Act::ConfirmDraft { version, trial, .. } => serde_json::to_vec(&if *trial {
+                serde_json::json!({ "as": "trial", "version": version })
+            } else {
+                serde_json::json!({ "version": version })
+            })
+            .ok()?,
             _ => return None,
         };
         let (method, path) = self.route();
@@ -419,10 +429,10 @@ impl Act {
                     None => "/v1/resume".into(),
                 },
             ),
-            Act::StartTrial { taf } => ("PUT", format!("/v1/tafs/{}/trial", escaped(taf))),
-            Act::InstallTrial { taf } => {
-                ("POST", format!("/v1/tafs/{}/trial/install", escaped(taf)))
-            }
+            Act::ConfirmDraft { draft, .. } => (
+                "POST",
+                format!("/v1/me/agent-drafts/{}/confirm", escaped(draft)),
+            ),
             Act::EndTrial { draft } => (
                 "DELETE",
                 format!("/v1/me/agent-drafts/{}/trial", escaped(draft)),
@@ -534,11 +544,7 @@ impl Act {
     pub fn at_device(&self) -> bool {
         matches!(
             self,
-            Act::MakeLive { .. }
-                | Act::RemoveTaf { .. }
-                | Act::DiscardSettingUp { .. }
-                | Act::StartTrial { .. }
-                | Act::InstallTrial { .. }
+            Act::MakeLive { .. } | Act::RemoveTaf { .. } | Act::DiscardSettingUp { .. }
         )
     }
 
@@ -658,8 +664,16 @@ mod tests {
                 agent: Some("agt_1".into()),
             },
             Act::Resume { agent: None },
-            Act::StartTrial { taf: "t1".into() },
-            Act::InstallTrial { taf: "t1".into() },
+            Act::ConfirmDraft {
+                draft: "drf_t".into(),
+                version: "v3".into(),
+                trial: true,
+            },
+            Act::ConfirmDraft {
+                draft: "drf_t".into(),
+                version: "v3".into(),
+                trial: false,
+            },
             Act::EndTrial {
                 draft: "drf_t".into(),
             },
@@ -712,21 +726,71 @@ mod tests {
     }
 
     #[test]
+    fn the_key_confirms_only_a_drafts_own_confirm() {
+        // A trial's start and its install: KIFF's confirm, with exactly the version read.
+        let start = Act::ConfirmDraft {
+            draft: "drf 1".into(),
+            version: "v3".into(),
+            trial: true,
+        };
+        assert_eq!(
+            start.request(),
+            Some((
+                "POST",
+                "/v1/me/agent-drafts/drf%201/confirm".to_string(),
+                br#"{"as":"trial","version":"v3"}"#.to_vec()
+            ))
+        );
+        assert!(!start.at_cloud() && !start.at_planque() && start.answer().is_none());
+        assert!(signed("POST", "/v1/me/agent-drafts/drf%201/confirm"));
+        let install = Act::ConfirmDraft {
+            draft: "drf_1".into(),
+            version: "v3".into(),
+            trial: false,
+        };
+        assert_eq!(
+            install.request().map(|r| r.2),
+            Some(br#"{"version":"v3"}"#.to_vec())
+        );
+        // No other act's request is a confirm or an approve, at KIFF or anywhere: planque's
+        // approve and confirm have no request at all.
+        for act in acts() {
+            let Some((_, path, _)) = act.request() else {
+                continue;
+            };
+            let last = path.split('?').next().unwrap_or(&path).rsplit('/').next();
+            if matches!(last, Some("confirm" | "approve")) {
+                assert!(
+                    matches!(act, Act::ConfirmDraft { .. })
+                        && path.starts_with("/v1/me/agent-drafts/")
+                        && path.ends_with("/confirm"),
+                    "{act:?}"
+                );
+            }
+        }
+        for act in acts().iter().filter(|a| a.at_planque()) {
+            assert!(act.request().is_none(), "{act:?}");
+        }
+    }
+
+    #[test]
     fn what_the_device_signs_at_tafs_cloud_is_never_sent() {
         for (m, p) in [
             ("DELETE", "/v1/tafs/t1"),
             ("DELETE", "/v1/tafs/t1/"),
             ("POST", "/v1/tafs/t1/versions/3/switch"),
             ("POST", "/v1/tafs/t1/versions/3/live?x=1"),
-            ("PUT", "/v1/tafs/t1/trial"),
-            ("POST", "/v1/tafs/t1/trial/install"),
             ("POST", "/v1/tafs/t1//versions/3/live"),
             ("POST", "/v1/home/setting-up/agt_1/discard"),
         ] {
             assert!(signed_at_cloud(m, p), "{m} {p}");
         }
-        // What the iPad sends unsigned: a door, a memory note, the trial's chat, going back.
+        // What the iPad sends unsigned: a door, a memory note, the trial's chat, going back, and
+        // opening or installing a trial, which tafs cloud does only once KIFF's draft says so.
         for (m, p) in [
+            ("POST", "/v1/tafs/t1/versions/3/try"),
+            ("PUT", "/v1/tafs/t1/trial"),
+            ("POST", "/v1/tafs/t1/trial/install"),
             ("DELETE", "/v1/tafs/t1/doors/d1"),
             ("DELETE", "/v1/tafs/t1/memory/n1"),
             ("POST", "/v1/tafs/t1/trial/messages"),
