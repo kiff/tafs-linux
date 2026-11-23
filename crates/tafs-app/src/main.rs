@@ -334,7 +334,7 @@ fn options() -> Result<Options, String> {
             "--view-only" => o.view_only = true,
             "--paired" => o.paired = true,
             "--help" | "-h" => return Err(USAGE.into()),
-            link if link.starts_with("dev.kiff.tafs:") => o.link = Some(link.to_string()),
+            link if is_link(link) => o.link = Some(link.to_string()),
             other => return Err(format!("{other}?\n{USAGE}")),
         }
     }
@@ -379,12 +379,10 @@ fn main() -> glib::ExitCode {
         }
     };
     gio::resources_register_include!("tafs.gresource").expect("the app's resources");
-    // Run plainly (with no option, or only KIFF's link back), tafs is one app on the desktop: a
+    // Run plainly (with no option, or only a link back: KIFF's, or WhatsApp's signup's), tafs is one app on the desktop: a
     // second launch, as the browser makes with `dev.kiff.tafs:/oauth?…`, hands its link to the
     // window that waits for it. With options (a screenshot, the pin check), each run is its own.
-    let plain = std::env::args()
-        .skip(1)
-        .all(|a| a.starts_with("dev.kiff.tafs:"));
+    let plain = std::env::args().skip(1).all(|a| is_link(&a));
     let flags = if plain {
         gio::ApplicationFlags::HANDLES_OPEN
     } else {
@@ -409,7 +407,12 @@ fn main() -> glib::ExitCode {
             activate(app, &options);
         }
         for f in files {
-            app_sign_in::link(&f.uri());
+            let uri = f.uri();
+            if tafs_core::whatsapp_signup::is_return(&uri) {
+                doors::whatsapp_link(&uri);
+            } else {
+                app_sign_in::link(&uri);
+            }
         }
     });
     // GTK reads no arguments of ours, only the link back.
@@ -419,11 +422,14 @@ fn main() -> glib::ExitCode {
     }
 }
 
+/// A link back the desktop hands tafs: KIFF's after its sign-in page, or WhatsApp's signup's.
+fn is_link(a: &str) -> bool {
+    a.starts_with("dev.kiff.tafs:") || tafs_core::whatsapp_signup::is_return(a)
+}
+
 /// The link back, if the desktop launched tafs with one.
 fn options_link() -> Option<String> {
-    std::env::args()
-        .skip(1)
-        .find(|a| a.starts_with("dev.kiff.tafs:"))
+    std::env::args().skip(1).find(|a| is_link(a))
 }
 
 /// The page a screenshot or `--page` opens beside the sidebar.

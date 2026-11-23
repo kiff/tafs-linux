@@ -1,5 +1,7 @@
 //! KIFF's way back after its sign-in page, `dev.kiff.tafs:/oauth?…`, reaches this app through the
-//! desktop: a `.desktop` file that handles `x-scheme-handler/dev.kiff.tafs`. A distribution's
+//! desktop: a `.desktop` file that handles `x-scheme-handler/dev.kiff.tafs`. WhatsApp's signup
+//! comes back the same way at `tafs://doors/whatsapp` (`x-scheme-handler/tafs`), taken only with
+//! the one-use `state` the app sent (`tafs_core::whatsapp_signup`). A distribution's
 //! package installs `packaging/dev.kiff.tafs.desktop`. An AppImage has no install step, so on its
 //! first run it writes its own into the person's applications folder, pointing at the AppImage
 //! where it is, as AppImage tools do, and asks the desktop to take it for the scheme. Nothing is
@@ -27,7 +29,7 @@ pub fn entry(appimage: &Path) -> Option<String> {
         .replace('\\', "\\\\")
         .replace('%', "%%");
     Some(format!(
-        "[Desktop Entry]\nType=Application\nName=tafs\nComment=Your tafs, Needs you and the Record, with KIFF\nExec=\"{quoted}\" %u\nIcon=dev.kiff.tafs\nTerminal=false\nNoDisplay=true\nStartupWMClass=dev.kiff.tafs\nMimeType=x-scheme-handler/dev.kiff.tafs;\nX-tafs-AppImage=true\n"
+        "[Desktop Entry]\nType=Application\nName=tafs\nComment=Your tafs, Needs you and the Record, with KIFF\nExec=\"{quoted}\" %u\nIcon=dev.kiff.tafs\nTerminal=false\nNoDisplay=true\nStartupWMClass=dev.kiff.tafs\nMimeType=x-scheme-handler/dev.kiff.tafs;x-scheme-handler/tafs;\nX-tafs-AppImage=true\n"
     ))
 }
 
@@ -71,6 +73,7 @@ pub fn register_appimage() {
             "default",
             "dev.kiff.tafs.desktop",
             "x-scheme-handler/dev.kiff.tafs",
+            "x-scheme-handler/tafs",
         ])
         .status();
     let _ = std::process::Command::new("update-desktop-database")
@@ -96,7 +99,7 @@ mod tests {
             "{odd}"
         );
         assert_eq!(entry(Path::new("/tmp/a\nExec=evil")), None);
-        assert!(e.contains("MimeType=x-scheme-handler/dev.kiff.tafs;\n"));
+        assert!(e.contains("MimeType=x-scheme-handler/dev.kiff.tafs;x-scheme-handler/tafs;\n"));
         assert!(e.contains("X-tafs-AppImage=true"));
     }
 }

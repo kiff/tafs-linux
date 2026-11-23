@@ -81,6 +81,7 @@ pub mod usage;
 pub mod versions;
 pub mod waits;
 pub mod watch_days;
+pub mod whatsapp_signup;
 pub mod window;
 pub mod words;
 pub mod work;
