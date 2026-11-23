@@ -3,9 +3,10 @@
 //! access, cancelling a request or a sign-in, clearing a removed taf's connections and signing in
 //! again are each signed at planque behind Face ID: this computer asks the iPad's question, and the
 //! tap that would sign says it can't approve, sending nothing. The approval's own button is
-//! `ApprovalGate`'s, so its line stands in the button's place. This computer reads no connection
-//! from planque (`readsConnections`), so signed in with KIFF the screen says so; the sample's
-//! screenshot draws the reference set's. The lines are `tafs-core/src/connections.rs`.
+//! `ApprovalGate`'s, so its line stands in the button's place. Signed in with KIFF, the account's
+//! connections are read from planque with this computer's device key (`readsConnections`,
+//! `connect::read_connections`), and read again once the key approved an act; until then the
+//! screen says so. The sample's screenshot draws the reference set's. The lines are `tafs-core/src/connections.rs`.
 
 use std::rc::Rc;
 
@@ -76,7 +77,9 @@ fn refusal(ctx: &Rc<Ctx>, column: &gtk::Box) -> Refuse {
     column.append(&panel);
     let ctx = ctx.clone();
     Rc::new(move |act: Act, what: Option<String>| {
-        crate::approval::refuse_as(&ctx.w, ctx.mode(), &act, what, &slot);
+        // Once the key approved and the act went, the connections are read again, as the iPad's.
+        let then = ctx.reread.borrow().clone();
+        crate::approval::refuse_then(&ctx.w, ctx.mode(), &act, what, vec![], &slot, then);
         panel.set_visible(slot.get_visible());
     })
 }
@@ -130,26 +133,29 @@ pub(crate) fn app_page(
     };
     let head = head(&l("connect.apps.title"), &title, back);
     let column = gtk::Box::new(gtk::Orientation::Vertical, 10);
-    let conns = connections_of(&app, &ctx.grants);
+    let grants = ctx.grants.borrow();
+    let conns = connections_of(&app, &grants);
     let removed_agents = removed_tafs.iter().map(|t| t.agent.clone()).collect();
     let grouped = groups(&conns, &|g| ctx.taf_of(g), &removed_agents, &attention);
     // What tafs cloud says of each removed taf's connection: only one it lists with nobody using
     // it is cleared. Not listed means no Clear.
     let listed = removed_listed(&removed_tafs);
     let clear_ids = clearable(&grouped.removed, &listed);
-    // This computer doesn't read its connections (`readsConnections`: set up with planque, a
-    // signed act): it says so, rather than an empty list.
-    let device = l("device.linux");
-    column.append(&text(
-        &w.get(
-            "connect.start_connected_tools_first",
-            &[("device", &device)],
-        )
-        .unwrap_or_default(),
-        15,
-        400,
-        &["tafs-soft"],
-    ));
+    // Until this computer has read its connections (`readsConnections`), it says so, rather than
+    // an empty list.
+    if !ctx.read.get() {
+        let device = l("device.linux");
+        column.append(&text(
+            &w.get(
+                "connect.start_connected_tools_first",
+                &[("device", &device)],
+            )
+            .unwrap_or_default(),
+            15,
+            400,
+            &["tafs-soft"],
+        ));
+    }
     // Filled once the sections are drawn: the refusal goes under them, as the iPad's error.
     let sections = gtk::Box::new(gtk::Orientation::Vertical, 10);
     column.append(&sections);
@@ -377,6 +383,8 @@ fn row(ctx: &Rc<Ctx>, app: &App, g: &Grant, refuse: &Refuse) -> gtk::Widget {
         let end = destructive(&end_word(&w, g).unwrap_or_default());
         let (w, grant, refuse) = (w.clone(), g.clone(), refuse.clone());
         let (taf, key) = (ctx.taf_of(g), g.takes_key());
+        // The other tafs whose Card draws on its tools stop too (`alsoStops`).
+        let also = tafs_core::connections::also_stops(g, &ctx.using);
         end.connect_clicked(move |b| {
             let act = Act::Disconnect {
                 grant: grant.id.clone(),
@@ -400,12 +408,12 @@ fn row(ctx: &Rc<Ctx>, app: &App, g: &Grant, refuse: &Refuse) -> gtk::Widget {
                 // Asked first, naming the one taf it ends; only then the security key, in the same
                 // words.
                 let title =
-                    disconnect_title(&w, grant.vendor(), taf.as_deref(), &[]).unwrap_or_default();
+                    disconnect_title(&w, grant.vendor(), taf.as_deref(), &also).unwrap_or_default();
                 ask(
                     b.upcast_ref(),
                     &title.clone(),
                     Some(
-                        &disconnect_message(&w, grant.vendor(), taf.as_deref(), &[], key)
+                        &disconnect_message(&w, grant.vendor(), taf.as_deref(), &also, key)
                             .unwrap_or_default(),
                     ),
                     &w.line("connect.disconnect_button").unwrap_or_default(),
@@ -466,7 +474,7 @@ fn connection_page(
     back_words: &str,
 ) -> gtk::Widget {
     let w = ctx.w.clone();
-    let g = ctx.grants.iter().find(|g| g.id == id).cloned();
+    let g = ctx.grants.borrow().iter().find(|g| g.id == id).cloned();
     let title = g
         .as_ref()
         .and_then(Grant::name)
@@ -548,7 +556,9 @@ fn take(ctx: &Rc<Ctx>, g: &Grant, action: &Action, b: &gtk::Button, slot_column:
             let panel = crate::widgets::panel(false);
             panel.append(&slot);
             slot_column.append(&panel);
-            crate::approval::refuse_as(&ctx.w, ctx.mode(), &act, what, &slot);
+            // Once the key approved and the act went, the connections are read again, as the iPad's.
+            let then = ctx.reread.borrow().clone();
+            crate::approval::refuse_then(&ctx.w, ctx.mode(), &act, what, vec![], &slot, then);
             panel.set_visible(slot.get_visible());
         }
     };
@@ -588,8 +598,13 @@ fn take(ctx: &Rc<Ctx>, g: &Grant, action: &Action, b: &gtk::Button, slot_column:
 pub(crate) fn approval_sheet(ctx: &Ctx, start: &ConnectStart, over: &gtk::Widget) {
     let w = &ctx.w;
     let l = |k: &str| w.line(k).unwrap_or_default();
-    let grant = ctx.grants.iter().find(|g| g.id == start.grant);
-    let title = match grant {
+    let grant = ctx
+        .grants
+        .borrow()
+        .iter()
+        .find(|g| g.id == start.grant)
+        .cloned();
+    let title = match &grant {
         Some(g) => w
             .get("coach.connect_service", &[("service", g.vendor())])
             .unwrap_or_default(),
@@ -602,8 +617,11 @@ pub(crate) fn approval_sheet(ctx: &Ctx, start: &ConnectStart, over: &gtk::Widget
         // does until its read comes.
         None => column.append(&text(&l("connect.reading_request"), 14, 400, &["tafs-dim"])),
         Some(g) => {
-            // The connection's own words from the connection server.
+            // The connection's own words from the connection server, and KIFF's for its profile.
             column.append(&text(&g.text, 15, 400, &["tafs-ink"]));
+            if let Some(profile) = &g.profile {
+                column.append(&profile_words(ctx, profile));
+            }
             if !g.digest_matches {
                 column.append(&text(
                     &l("connect.request_does_not_match_what"),
@@ -640,4 +658,56 @@ pub(crate) fn approval_sheet(ctx: &Ctx, start: &ConnectStart, over: &gtk::Widget
         }
     }
     sheet.dialog.present(Some(over));
+}
+
+/// `ProfileWordsView`: KIFF's words for a connection's profile, never folded away, each line
+/// verbatim and what KIFF can't check in amber; "Reading KIFF's words…" until they're read from
+/// KIFF as the session (`loadProfileWords`), and why when they can't be, or don't check.
+fn profile_words(ctx: &Ctx, profile: &serde_json::Value) -> gtk::Widget {
+    let w = ctx.w.clone();
+    let panel = crate::widgets::panel(false);
+    panel.append(&crate::widgets::eyebrow(
+        &w.line("coach.kiff_counts_way").unwrap_or_default(),
+        false,
+    ));
+    let lines = gtk::Box::new(gtk::Orientation::Vertical, 6);
+    lines.append(&text(
+        &w.line("coach.reading_kiff_words_short").unwrap_or_default(),
+        13,
+        400,
+        &["tafs-dim"],
+    ));
+    panel.append(&lines);
+    let crate::connect::ConnectSource::Cloud {
+        kept, languages, ..
+    } = &ctx.source
+    else {
+        return panel.upcast();
+    };
+    let (token, languages, profile) = (kept.token.clone(), languages.clone(), profile.clone());
+    gtk::glib::spawn_future_local(async move {
+        let words = (*w).clone();
+        let read = gtk::gio::spawn_blocking(move || {
+            crate::connect::read_profile_words(&words, &token, &languages, &profile)
+        })
+        .await
+        .unwrap_or_else(|_| Err(String::new()));
+        while let Some(c) = lines.first_child() {
+            lines.remove(&c);
+        }
+        match read {
+            Ok(words) => {
+                for line in &words.lines {
+                    let tone = if line.caution() {
+                        "tafs-amber-text"
+                    } else {
+                        "tafs-ink"
+                    };
+                    lines.append(&text(&line.text, 13, 400, &[tone]));
+                }
+            }
+            Err(why) => lines.append(&text(&why, 13, 400, &["tafs-no"])),
+        }
+    });
+    panel.upcast()
 }

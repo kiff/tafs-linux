@@ -13,9 +13,55 @@ use std::rc::Rc;
 use adw::prelude::*;
 use gtk::{cairo, gio, glib};
 use tafs_core::doors::{self, dial, BadgeColor, Door, DoorApp, Doors, Key, Knock};
+use tafs_core::whatsapp_signup::{self, Signup};
 use tafs_core::words::WordBook;
 
 use crate::widgets::{eyebrow, outline, panel, primary, text};
+
+/// A WhatsApp signup this app started, waiting for its return.
+struct Pending {
+    signup: Signup,
+    model: DoorsModel,
+    app: DoorApp,
+    done: Rc<dyn Fn(bool)>,
+}
+
+thread_local! {
+    static SIGNUP: RefCell<Option<Pending>> = const { RefCell::new(None) };
+}
+
+/// A `tafs://doors/whatsapp` link the desktop handed the app. Only the waiting signup's return
+/// is taken, once: its `state`, its taf, within 15 minutes. Any other is dropped unread.
+pub fn whatsapp_link(uri: &str) {
+    let now = std::time::Instant::now();
+    let back = SIGNUP.with(|s| {
+        let mut s = s.borrow_mut();
+        if s.as_ref().is_some_and(|p| p.signup.expired(now)) {
+            *s = None;
+        }
+        s.as_ref().and_then(|p| p.signup.answer(uri, now))
+    });
+    let Some(back) = back else {
+        return;
+    };
+    let Some(p) = SIGNUP.with(|s| s.borrow_mut().take()) else {
+        return;
+    };
+    let Some(body) = whatsapp_signup::add_body(&p.app.id, &back) else {
+        p.model.state.borrow_mut().error =
+            p.model.w.line("door.whatsapp_signup_did_not_finish").ok();
+        p.model.changed();
+        (p.done)(false);
+        return;
+    };
+    let done = p.done.clone();
+    p.model.work(
+        "POST",
+        doors::path(p.signup.taf()),
+        Some(body),
+        Rc::new(move |d| done(d.is_some())),
+    );
+}
 
 /// Where a taf's doors are read and changed.
 #[derive(Clone, PartialEq)]
@@ -355,14 +401,32 @@ impl DoorsModel {
         });
     }
 
-    /// `DoorsModel.add`: a door turned on at once. WhatsApp's starts with its signup, whose page
-    /// comes back to the iPhone's own address, which this computer has none of: it says where
-    /// it's added instead, and sends nothing.
+    /// `DoorsModel.add`: a door turned on at once. WhatsApp's starts with its signup, on tafs
+    /// cloud's page in the browser, with this signup's own `state`; `done` waits for its return
+    /// (`whatsapp_link`). A signup started again replaces the one before.
     pub fn add(&self, app: &DoorApp, done: Rc<dyn Fn(bool)>) {
         if app.kind == "whatsapp" {
-            self.state.borrow_mut().error = self.w.line("door.whatsapp_elsewhere").ok();
+            // A screenshot's doors: nothing is sent, so no page opens.
+            if !matches!(self.source, DoorsSource::Cloud { .. }) {
+                return;
+            }
+            let signup = Signup::new(&self.id);
+            let page = signup.page(tafs_core::home::TAFS_CLOUD);
+            SIGNUP.with(|s| {
+                *s.borrow_mut() = Some(Pending {
+                    signup,
+                    model: self.clone(),
+                    app: app.clone(),
+                    done,
+                })
+            });
+            self.state.borrow_mut().error = None;
             self.changed();
-            done(false);
+            gtk::UriLauncher::new(&page).launch(
+                None::<&gtk::Window>,
+                gio::Cancellable::NONE,
+                |_| {},
+            );
             return;
         }
         self.work(

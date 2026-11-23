@@ -203,9 +203,12 @@ pub struct Grant {
     pub entry: Option<String>,
     pub provider: Option<String>,
     pub agent_name: Option<String>,
-    /// Whether `digest` is the hash of the request as planque sent it: set only by a read from
-    /// planque, which this computer never makes, so never here.
+    /// Whether `digest` is the hash of what it covers as planque sent it (`digestCovers`): set
+    /// only by planque's read (`read_all`), never from a sample.
     pub digest_matches: bool,
+    /// The connection's `kiff.profile.v1` in its request, as planque sent it: KIFF's words are
+    /// read for it.
+    pub profile: Option<Value>,
 }
 
 /// `.whitespaces` (no newlines), as `trimmingCharacters(in: .whitespaces)`.
@@ -251,13 +254,29 @@ impl Grant {
             provider: text_if(o, "provider")?,
             agent_name: text_if(o, "agent_name")?,
             digest_matches: false,
+            profile: None,
         })
     }
 
-    /// planque's `{"grants": [...]}`: none when one grant can't be read, as on the iPad.
+    /// planque's `{"grants": [...]}`: none when one grant can't be read, as on the iPad. Each
+    /// grant's digest is checked against what it covers, from planque's own entry at its own
+    /// position, never looked up by id: an id that repeats pairs nothing, so no grant matches.
     pub fn read_all(body: &[u8]) -> Option<Vec<Grant>> {
         let v: Value = serde_json::from_slice(body).ok()?;
-        array(object(&v).ok()?, "grants", Grant::read).ok()
+        let mut grants = array(object(&v).ok()?, "grants", Grant::read).ok()?;
+        let raws = v.get("grants")?.as_array()?;
+        let ids: BTreeSet<&str> = grants.iter().map(|g| g.id.as_str()).collect();
+        let paired = raws.len() == grants.len() && ids.len() == grants.len();
+        for (g, raw) in grants.iter_mut().zip(raws) {
+            if !paired || raw.get("id").and_then(Value::as_str) != Some(g.id.as_str()) {
+                continue;
+            }
+            g.profile = raw.get("request").and_then(|r| r.get("profile")).cloned();
+            g.digest_matches = digest_covers(raw)
+                .and_then(|c| crate::jcs::digest(&c).ok())
+                .is_some_and(|d| d == g.digest);
+        }
+        Some(grants)
     }
 
     /// A list of grants as the iPad's sample keeps them (`SampleScreens.grants`).
@@ -390,6 +409,25 @@ pub struct Group<'a> {
     pub grants: Vec<&'a Grant>,
 }
 
+/// What a grant's digest covers, as its `digest_v` says (`digestCovers`): without one, the
+/// request alone (v1); with `digest_v: 2`, `{"lang", "request", "text"}`, so the words shown in
+/// that language are what's signed. None for a version this app doesn't know, or a v2 grant
+/// without its words or language: its digest then never matches.
+pub fn digest_covers(raw: &Value) -> Option<Value> {
+    let request = raw.get("request")?;
+    match raw.get("digest_v") {
+        None => Some(request.clone()),
+        Some(v) if v.as_u64() == Some(2) && v.is_u64() => {
+            let lang = raw
+                .get("lang")
+                .filter(|l| l.as_str().is_some_and(|l| !l.is_empty()))?;
+            let text = raw.get("text").filter(|t| t.is_string())?;
+            Some(serde_json::json!({"lang": lang, "request": request, "text": text}))
+        }
+        Some(_) => None,
+    }
+}
+
 /// An app's connections grouped (`connectionGroups`): by the taf each was set up for, those
 /// needing attention first, then by name; a removed taf's, as tafs cloud names them; and the
 /// rest, whose taf the app can't name.
@@ -477,6 +515,60 @@ pub fn tool_vendors(grants: &[Grant]) -> BTreeMap<String, String> {
         }
     }
     out
+}
+
+/// A taf as `tafsUsing` reads it: its holder in KIFF, its name, and the actions its live Card
+/// draws on (its rules' and its tools').
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Using {
+    pub agent: String,
+    pub name: String,
+    pub actions: BTreeSet<String>,
+}
+
+impl Using {
+    /// A taf on Home: none for one whose Card is revoked, which draws on nothing.
+    pub fn of(t: &crate::home::HomeTaf) -> Option<Using> {
+        if !t.card.active {
+            return None;
+        }
+        let actions = t
+            .card
+            .rules
+            .iter()
+            .map(|r| r.action.clone())
+            .chain(t.card.tools.iter().cloned())
+            .collect();
+        Some(Using {
+            agent: t.kiff_agent.clone(),
+            name: t.name.clone(),
+            actions,
+        })
+    }
+}
+
+/// `alsoStops`: the other tafs whose Card draws on a connection's tools (a rule or a tool on one
+/// of the actions it connects), by name, as Home lists them. KIFF's tools are the account's, so a
+/// taf can draw on a connection another taf asked for; removing it stops them too.
+pub fn also_stops(g: &Grant, tafs: &[Using]) -> Vec<String> {
+    let actions: BTreeSet<&str> = match &g.tools {
+        Some(tools) => tools.iter().map(String::as_str).collect(),
+        None => g
+            .request
+            .tools
+            .iter()
+            .filter(|t| t.tafs())
+            .map(Tool::action)
+            .collect(),
+    };
+    if actions.is_empty() {
+        return vec![];
+    }
+    tafs.iter()
+        .filter(|t| t.agent != g.request.agent)
+        .filter(|t| t.actions.iter().any(|a| actions.contains(a.as_str())))
+        .map(|t| t.name.clone())
+        .collect()
 }
 
 /// `ConnectApprovalSheet.host(of:)`: the host a key is used with, without its scheme or path;
@@ -967,8 +1059,9 @@ mod tests {
         );
     }
 
-    /// Connect apps' connections screens send nothing: removing, clearing and signing in again are
-    /// signed, so their taps only say this computer can't approve, and nothing reaches planque.
+    /// Connect apps' connections screens send nothing themselves: removing, clearing and signing in
+    /// again are signed, so their taps go to `approval`, and their reads (the connections, KIFF's
+    /// words for a profile) are `connect.rs`'s through `kiff.rs`.
     #[test]
     fn the_connections_screens_send_nothing() {
         let file = concat!(
@@ -1017,6 +1110,82 @@ mod tests {
         assert_eq!(v.get("create_refund").map(String::as_str), Some("Stripe"));
         assert_eq!(v.get("list").map(String::as_str), Some("Other"));
         assert_eq!(v.get("send"), None);
+    }
+
+    #[test]
+    fn removing_a_connection_also_stops_the_other_tafs_drawing_on_its_tools() {
+        let using = |agent: &str, name: &str, actions: &[&str]| Using {
+            agent: agent.into(),
+            name: name.into(),
+            actions: actions.iter().map(|a| a.to_string()).collect(),
+        };
+        let tafs = [
+            using("a1", "Mail sorter", &["fetch"]),
+            using("a2", "Invoices", &["fetch", "pay"]),
+            using("a3", "Leads", &["other"]),
+        ];
+        // Its own taf is left out; another drawing on its tool is named.
+        let g = grant(serde_json::json!({}));
+        assert_eq!(also_stops(&g, &tafs), vec!["Invoices".to_string()]);
+        // planque's connected tools, where it lists them, before the request's.
+        let g = grant(serde_json::json!({"tools": ["other"]}));
+        assert_eq!(also_stops(&g, &tafs), vec!["Leads".to_string()]);
+        // A connection with no tool stops nothing.
+        let g = grant(serde_json::json!({"tools": []}));
+        assert!(also_stops(&g, &tafs).is_empty());
+    }
+
+    /// planque's digest, checked as the iPad's `grants()` checks it: v1 over the request, v2 over
+    /// the words in their language too; anything else, or an id twice, never matches.
+    #[test]
+    fn each_grants_digest_is_checked_against_what_it_covers() {
+        let v1 = r#"{"v":"planque.grant.v1","grant":"g_01","tenant":"t_01","server":"https://mcp.stripe.com","sign_in_at":"https://access.stripe.com","agent":"refunds","tools":[{"tool":"create_refund","name":"refund_payment","amount_argument":"amount","amount_unit":"EUR","amount_scale":2,"fixed_arguments":{"reason":"requested_by_customer","metadata.n":1.50,"big":1e30}},{"tool":"list_payments","read_only":true}],"asked_by":"setup-agent","created_at":"2026-10-17T10:00:00Z","note":"é😀\u000f","profile":{"v":"kiff.profile.v1"}}"#;
+        let v1_digest = "6bc63ba1c1235801b7ddcb66a2e66947faefdd819e0ac0bb669062a063c048a3";
+        let v2 = r#"{"v":"planque.grant.v1","grant":"g_02","tenant":"t_01","server":"https://mcp.qonto.com/mcp","agent":"books","tools":[{"tool":"list_invoices","read_only":true}],"asked_by":"setup-agent","created_at":"2026-11-11T16:00:00Z"}"#;
+        let v2_text = "books pourra lire vos factures sur mcp.qonto.com";
+        let v2_digest = "f1ca3ab371ecf97a82d134204e4931ef39ea474b7cd6a3e233b36f97499fbb32";
+        let entry = |id: &str, request: &str, digest: &str, extra: &str| {
+            format!(
+                r#"{{"id":"{id}","status":"pending","text":"{v2_text}",{extra}"digest":"{digest}","request":{request},"events":[]}}"#
+            )
+        };
+        let read = |entries: &[String]| {
+            Grant::read_all(format!(r#"{{"grants":[{}]}}"#, entries.join(",")).as_bytes()).unwrap()
+        };
+        // The v1 request carries a profile, which isn't planque's digest's: only g_01's own
+        // request without it is.
+        let plain_v1 = v1.replace(r#","profile":{"v":"kiff.profile.v1"}"#, "");
+        let g = read(&[
+            entry("g_01", &plain_v1, v1_digest, ""),
+            entry("g_02", v2, v2_digest, r#""lang":"fr","digest_v":2,"#),
+        ]);
+        assert!(g[0].digest_matches && g[1].digest_matches);
+        assert_eq!(g[0].profile, None);
+        // A profile is kept as planque sent it, and covered by the digest.
+        let g = read(&[entry("g_01", v1, v1_digest, "")]);
+        assert!(!g[0].digest_matches);
+        assert_eq!(
+            g[0].profile,
+            Some(serde_json::json!({"v": "kiff.profile.v1"}))
+        );
+        // v2 without its language, an unknown version, another digest: no match.
+        for extra in [
+            r#""digest_v":2,"#,
+            r#""lang":"fr","digest_v":3,"#,
+            r#""lang":"fr","digest_v":2.0,"#,
+        ] {
+            assert!(
+                !read(&[entry("g_02", v2, v2_digest, extra)])[0].digest_matches,
+                "{extra}"
+            );
+        }
+        assert!(!read(&[entry("g_01", &plain_v1, "00", "")])[0].digest_matches);
+        // An id twice pairs nothing.
+        let twice = read(&[
+            entry("g_01", &plain_v1, v1_digest, ""),
+            entry("g_01", &plain_v1, v1_digest, ""),
+        ]);
+        assert!(twice.iter().all(|g| !g.digest_matches));
     }
 
     #[test]
