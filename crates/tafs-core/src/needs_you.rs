@@ -75,6 +75,9 @@ pub struct CardLines {
     /// Extra room may be given (`NeedsYouView`'s over-total branch): a call over a total kept
     /// across calls, for someone who may answer and manages Cards (`canManageCards`).
     pub extra_room: bool,
+    /// A fill in the person's Chrome: only the phone answers it, with its release, so this
+    /// computer's key offers neither Approve once nor Extra room, and says so.
+    pub needs_release: bool,
     /// KIFF's decision id (`kiffID`): a streamed answer names the call it held by it.
     pub kiff_id: Option<String>,
     /// Its taf's key (`HeldCall.taf`): where the run that paused on it goes on once it's
@@ -258,9 +261,12 @@ pub fn lines(
             .collect::<Vec<_>>()
             .join(", ");
         cards.push(CardLines {
-            approvable_once: call.approvable_once,
+            // A fill in the person's Chrome needs the phone's release beside its answer: never
+            // answered with this computer's key, once or with extra room.
+            approvable_once: call.approvable_once && !call.needs_release,
             accounting_version: call.accounting_version,
-            extra_room: may_answer && manages_cards && !call.approvable_once,
+            extra_room: may_answer && manages_cards && !call.approvable_once && !call.needs_release,
+            needs_release: call.needs_release,
             kiff_id: call.kiff_id.clone(),
             taf: call.taf.clone(),
             record: crate::record::held_key(

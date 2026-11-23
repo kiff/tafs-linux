@@ -255,6 +255,13 @@ from a screen recording or a clipboard manager's history.
   Unreached, or refused otherwise, why is said, in tafs cloud's words or the app's: never
   swallowed (`held::read_gone_on`, `needs_you::go_on`). A taf tafs cloud doesn't hold (KIFF's agent
   alone) sends nothing.
+- **A fill in the person's Chrome is the phone's alone** (kiff/tafs docs/chrome.md: "never an
+  allowing answer without its release"). A held call whose `browser` block carries `sealed_fill`
+  (a saved password or username) or `fill` needs the phone's release beside its answer, and this
+  computer has no approval key to make one. So Needs you's card and the dial offer neither Approve
+  once nor Extra room on it, and the card says "Approve on your phone instead"
+  (`held::needs_release`, `CardLines::needs_release`), and the key's answer refuses one too
+  (`signed::Act::answer`, `held::release_needed`). KIFF's own page stays where it was.
 - **Removing a taf for good** goes in the iPad's order (`AppModel.removeTaf`): the key approves,
   then its Cards are revoked at KIFF with the session, one plain call each, then tafs cloud's
   `DELETE` goes with the approval. What didn't go is said in the app's words: Cards KIFF didn't

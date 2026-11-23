@@ -94,6 +94,11 @@ pub struct CardException {
     pub taf_about: Value,
     #[serde(default)]
     pub taf_reason: Value,
+    /// A Chrome step's own block (`browser`): a sealed fill (`sealed_fill`) or a fill (`fill`)
+    /// needs the phone's release beside its answer (kiff/tafs docs/chrome.md, "never an allowing
+    /// answer without its release"), which this computer, with no approval key, can't make.
+    #[serde(default)]
+    pub browser: Value,
 }
 
 /// `heldCalls`: KIFF's answer, `{"exceptions": […]}`. None when it can't be read.
@@ -156,6 +161,9 @@ pub struct HeldCall {
     pub details: Vec<String>,
     pub taf_about: Option<String>,
     pub taf_reason: Option<String>,
+    /// It fills a sign-in in the person's Chrome (`browser.sealed_fill` or `browser.fill`): only
+    /// the phone answers it, with its release; this computer's key never does.
+    pub needs_release: bool,
 }
 
 /// The arguments KIFF's gateway adds to every call, never listed under Details.
@@ -206,7 +214,45 @@ pub fn held(w: &WordBook, e: &CardException, taf: &str) -> Result<HeldCall, Word
         details: details(e),
         taf_about: taf_words(e.taf_about.as_str(), 120),
         taf_reason: taf_words(e.taf_reason.as_str(), 280),
+        needs_release: noted_release(&e.id, needs_release(&e.browser)),
     })
+}
+
+/// The held calls read as fills in the person's Chrome, by KIFF's id: `signed::Act::answer`
+/// refuses to sign Approve once or Extra room for one of them, whatever draws the button. Shared,
+/// since a read may run off the main loop.
+static RELEASE_NEEDED: std::sync::Mutex<std::collections::BTreeSet<String>> =
+    std::sync::Mutex::new(std::collections::BTreeSet::new());
+
+/// Notes whether the held call `id` needs the phone's release, and says so back.
+fn noted_release(id: &str, needs: bool) -> bool {
+    if let Ok(mut set) = RELEASE_NEEDED.lock() {
+        if needs {
+            set.insert(id.to_string());
+        } else {
+            set.remove(id);
+        }
+    }
+    needs
+}
+
+/// Whether the held call `id` was read as a fill in the person's Chrome. A poisoned record says
+/// yes: never signed here on a guess.
+pub fn release_needed(id: &str) -> bool {
+    RELEASE_NEEDED.lock().map_or(true, |set| set.contains(id))
+}
+
+/// A held call's `browser` block asks for a fill in the person's Chrome: a sealed fill (a saved
+/// password or username) or a plain one. Either needs the phone's release beside the answer. A
+/// block that isn't one this app can read counts too: never allowed here on a guess.
+pub fn needs_release(browser: &Value) -> bool {
+    match browser {
+        Value::Null => false,
+        Value::Object(o) => ["sealed_fill", "fill"]
+            .iter()
+            .any(|k| o.get(*k).is_some_and(|v| !v.is_null())),
+        _ => true,
+    }
 }
 
 /// `name`: its tool's title as KIFF gives it, else the action in words.
