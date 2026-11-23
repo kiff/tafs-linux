@@ -75,6 +75,33 @@ pub fn announce(alerts_on: bool, sound: bool) -> Option<bool> {
     alerts_on.then_some(sound)
 }
 
+/// Needs you's offer of alerts (`AlertsCard`), as Linux has it: its title, its line and its
+/// button. The iPad's line says an alert comes "even with tafs closed", which is a phone's push.
+/// This computer reads held calls only while tafs runs, so the line is Account › Alerts' own.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Offer {
+    pub title: String,
+    pub line: String,
+    pub button: String,
+}
+
+/// Whether Needs you offers alerts, as the iPad's `mode == .kiff, sessionHasKey,
+/// canAnswerHolds != false, alertsReady != true`. `kiff` is `Some` when signed in with KIFF,
+/// carrying `canAnswerHolds` when it's known (unknown reads as may). `device_key` is whether this
+/// computer holds the session's device key. `alerts_on` is Account › Alerts' switch here.
+pub fn offers(kiff: Option<Option<bool>>, device_key: bool, alerts_on: bool) -> bool {
+    matches!(kiff, Some(may) if may != Some(false)) && device_key && !alerts_on
+}
+
+/// The offer's words.
+pub fn offer(w: &WordBook) -> Result<Offer, WordsError> {
+    Ok(Offer {
+        title: w.line("needs_you.know_moment_taf_needs_you")?,
+        line: w.line("alert.prompt")?,
+        button: w.line("needs_you.turn_alerts")?,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -113,5 +140,40 @@ mod tests {
         assert_eq!(announce(true, true), Some(true));
         assert_eq!(announce(true, false), Some(false));
         assert_eq!(announce(false, true), None);
+    }
+
+    #[test]
+    fn needs_you_offers_alerts_only_while_they_are_off_for_someone_who_answers() {
+        // Signed in with KIFF, holding the device key, may answer (or unknown), alerts off.
+        assert!(offers(Some(Some(true)), true, false));
+        assert!(offers(Some(None), true, false));
+        // Alerts already on here.
+        assert!(!offers(Some(Some(true)), true, true));
+        // A role that can't answer holds.
+        assert!(!offers(Some(Some(false)), true, false));
+        // No device key on this computer.
+        assert!(!offers(Some(Some(true)), false, false));
+        // The sample, or signed out.
+        assert!(!offers(None, true, false));
+    }
+
+    #[test]
+    fn the_offer_never_says_even_with_tafs_closed() {
+        let w = words();
+        let o = offer(&w).unwrap();
+        assert_eq!(o.title, "Know the moment a taf needs you");
+        assert_eq!(o.line, "Get an alert when a taf needs you");
+        assert_eq!(o.button, "Turn on alerts");
+        assert_ne!(
+            o.line,
+            w.line("needs_you.get_alert_when_call_waits").unwrap()
+        );
+        // Its line is Account › Alerts' own, in every shipped language.
+        for lang in crate::words::SHIPPED {
+            let w = WordBook::load(&WordBook::default_root(), lang).unwrap();
+            let o = offer(&w).unwrap();
+            assert_eq!(o.line, lines(&w, None).unwrap().foot, "{lang}");
+            assert!(!o.title.is_empty() && !o.button.is_empty(), "{lang}");
+        }
     }
 }

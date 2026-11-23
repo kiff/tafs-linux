@@ -104,7 +104,7 @@ fn draw_notes(w: &Rc<WordBook>, key: &str, p: &gtk::Box, again: &Later) {
     p.append(&text(&l("taf.memory.explains"), 12, 400, &["tafs-soft"]));
 }
 
-/// Forgetting can't be undone, so it's asked first (the 755 retest), as a real taf's note is.
+/// Forgetting can't be undone, so it's asked first, as a real taf's note is.
 fn ask_forget(w: &Rc<WordBook>, key: &str, note: &Note, again: &Later, over: &gtk::Widget) {
     let l = |k: &str| w.line(k).unwrap_or_default();
     let ask = adw::AlertDialog::new(

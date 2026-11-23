@@ -12,6 +12,25 @@ sidebar. What they say is `tafs-core/src/needs_you.rs` and `held.rs`, tested the
   [illustrations](app.md#illustrations)), then a panel, "Nothing is waiting." (15 semibold) and "When a taf asks for
   something outside its Card, it shows up here and on your lock screen." (14, soft).
 
+## Alerts offered
+
+While alerts are off here, Needs you offers them first, under its title, as the iPad's
+`AlertsCard` (`tafs-core/src/alerts.rs` › `offers` and `offer`):
+
+- **When:** signed in with KIFF, on a computer holding the session's device key (a session kept
+  here: the iPad's `sessionHasKey`), for someone who may answer the account's holds
+  (`canAnswerHolds` not false), while Account › Alerts' switch is off. It's read each time Needs
+  you is drawn, so turning alerts on in Account › Alerts takes the card away.
+- **What it says:** "Know the moment a taf needs you" (15 semibold), then Account › Alerts' own
+  line, "Get an alert when a taf needs you" (14, soft). The iPad's "…even with tafs closed" is a
+  phone's push. This computer reads held calls only while tafs runs, so it isn't said.
+- **Turn on alerts** turns on Account › Alerts' switch, and the card goes. A desktop's
+  notifications need no one's permission first, so there's nothing to ask and nothing to wait on.
+- **Not on Linux:** the offer right after signing in (`AlertsOfferSheet`). Needs you's card is
+  where it's offered.
+- `--page needs-you-alerts` draws it for the screenshot without touching the switch (CI's
+  `needs-you-alerts`).
+
 ## A held call's card
 
 An amber-edged panel (`Panel(stroke: amber 40%)`):
@@ -182,5 +201,3 @@ is clicked, not every minute.
   security key, Approve once and Extra room on a held call go from here; the rest stay refused
   whatever the key ([approval](approval.md)). The sample's answers come with the sample's Card
   checks: until then they're dimmed.
-- **Alerts** (`AlertsCard`): the iPad offers them only to a session holding an approval key, and a
-  Linux session never does. Held calls are notified (above).

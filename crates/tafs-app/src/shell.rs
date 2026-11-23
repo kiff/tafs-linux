@@ -307,11 +307,12 @@ pub fn build(
                 // "Your brief" in its place once there is one; Needs you, as today, otherwise.
                 Selection::NeedsYou => {
                     let list: Rc<dyn Fn() -> gtk::Widget> = {
-                        let (w, needs_you, open, aside) = (
+                        let (w, needs_you, open, aside, alerts) = (
                             w.clone(),
                             needs_you.clone(),
                             open.clone(),
                             set_aside.clone(),
+                            alerts.clone(),
                         );
                         Rc::new(move || {
                             crate::needs_you::page(
@@ -319,6 +320,7 @@ pub fn build(
                                 &needs_you,
                                 open.clone(),
                                 aside.clone(),
+                                &alerts,
                             )
                         })
                     };
