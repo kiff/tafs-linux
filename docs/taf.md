@@ -375,8 +375,10 @@ the iPad's order:
     "It wasn't forgotten. {why}".
 - **Remove for good**, for whoever manages it: tapped, it reads what goes with the taf
   (`GET /v1/tafs/{id}/removal`, ending nothing), then asks ("Remove Rae for good?", what always
-  goes and tafs cloud's words, Remove in red). Its yes is signed by the approval key: this
-  computer shows the can't-approve line under the button, and nothing is removed.
+  goes and tafs cloud's words, Remove in red). Its yes is signed: with this computer's security
+  key, its touch and PIN approve the removal, the taf's Cards revoked first, as the iPad's
+  `removeTaf`; without one, this computer shows the can't-approve line under the button, and
+  nothing is removed.
 
 `--page taf-setup:<id>` with `--home shared/contracts/home.json` reads the contract's
 `taf-setup.json` beside it (`--setup` another, such as `taf-setup-reconnect.json`), and `--memory
