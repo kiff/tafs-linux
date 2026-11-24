@@ -168,11 +168,26 @@ impl Fido {
     /// libfido2's log handler: says nothing.
     unsafe extern "C" fn quiet(_: *const c_char) {}
 
-    /// libfido2, loaded and started once.
+    /// libfido2, loaded and started once it loads. A failed load isn't kept: once `libfido2-1`
+    /// is installed, the next ask loads it, with no restart, as the words say ("install it, then
+    /// approve again").
     fn get() -> Result<&'static Fido, Missing> {
-        static FIDO: OnceLock<Result<Fido, Missing>> = OnceLock::new();
-        FIDO.get_or_init(Fido::load).as_ref().map_err(|m| *m)
+        static FIDO: OnceLock<Fido> = OnceLock::new();
+        cached(&FIDO, Fido::load)
     }
+}
+
+/// The first load that succeeds, kept for the process; a failure is never kept, so the next ask
+/// loads again. Two asks loading at once keep one, and the other's is dropped.
+fn cached<T>(
+    cell: &'static OnceLock<T>,
+    load: impl FnOnce() -> Result<T, Missing>,
+) -> Result<&'static T, Missing> {
+    if let Some(kept) = cell.get() {
+        return Ok(kept);
+    }
+    let loaded = load()?;
+    Ok(cell.get_or_init(|| loaded))
 }
 
 /// What asking the key came to.
@@ -536,6 +551,23 @@ fn close(f: &Fido, device: Dev) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A missing libfido2 isn't kept: installing it, then approving again, loads it with no
+    /// restart. A loaded one is kept and never loaded again.
+    #[test]
+    fn a_missing_libfido2_is_tried_again_and_a_loaded_one_is_kept() {
+        static CELL: OnceLock<u32> = OnceLock::new();
+        assert_eq!(
+            cached(&CELL, || Err(Missing::Library)),
+            Err(Missing::Library)
+        );
+        assert_eq!(cached(&CELL, || Err(Missing::TooOld)), Err(Missing::TooOld));
+        assert_eq!(cached(&CELL, || Ok(7)).copied(), Ok(7));
+        assert_eq!(
+            cached(&CELL, || panic!("a loaded library is never loaded again")).copied(),
+            Ok(7)
+        );
+    }
 
     /// Without a key plugged in (CI, this machine), libfido2 is loaded where it's installed and
     /// finds none, and every ask says so before any PIN is handed over.
