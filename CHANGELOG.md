@@ -15,6 +15,8 @@ languages, are in `packaging/release-notes/` and on its GitHub release page.
   signing a device out, a held call's Approve once and Extra room, an API door's Reopen, Revoke
   and Remove, a trial's Start trying and Install, removing a taf (its Cards revoked first) or a
   passkey, and ending or clearing a connection.
+- On a held call, Allow this from now on (`AllowSheetView`): the taf's Card changed only as tafs cloud
+  offers and only if KIFF's draft is exactly that, approved once with the key.
 - Anything that gives a taf access to your apps (connecting, keys, Coach's tools, a subscription,
   a drive) stays on your phone, and the screens say so.
 
