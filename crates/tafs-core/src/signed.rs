@@ -78,7 +78,17 @@ pub fn signs_setup(path: &str) -> bool {
 }
 
 /// `KIFFClient.grantsAuthority`: whether the call grants authority, signed by the approval key.
+/// Adding someone to a group, or naming a manager (`PUT /v1/groups/{id}/members/{subject}`),
+/// gives the use of every taf shared with that group, so it's approved as sharing is.
 pub fn grants_authority(method: &str, path: &str) -> bool {
+    if method == "PUT" {
+        let p = parts(path);
+        return p.len() == 6
+            && path.starts_with("/v1/groups/")
+            && p[4] == "members"
+            && !p[3].is_empty()
+            && !p[5].is_empty();
+    }
     if method != "POST" {
         return false;
     }
@@ -681,6 +691,22 @@ mod tests {
         WordBook::load(&WordBook::default_root(), lang).unwrap()
     }
 
+    /// KIFF refusing a group add that wasn't approved as sharing is (`approval_key_required`,
+    /// `passkey_required`) reads as a refused share does: `key_approval` says a refusal by its
+    /// status, so the person gets the same plain line on either route.
+    #[test]
+    fn a_refused_group_add_reads_as_a_refused_share() {
+        let w = words("en");
+        for code in ["approval_key_required", "passkey_required"] {
+            let answer = crate::signin::Answer {
+                status: 403,
+                body: format!(r#"{{"error":"{code}"}}"#).into_bytes(),
+            };
+            let said = crate::signin::refusal(&answer, Some(&w)).words(&w).unwrap();
+            assert_eq!(said, crate::signin::plain_words(&w, 403).unwrap(), "{code}");
+        }
+    }
+
     fn acts() -> Vec<Act> {
         vec![
             Act::CreateGroup {
@@ -1041,6 +1067,26 @@ mod tests {
         assert!(!grants_authority("DELETE", "/v1/agents/a1/grants"));
         assert!(!grants_authority("POST", "/v1/me/agent-drafts/d1/trial"));
         assert!(grants_authority("POST", "/v1/me/agent-drafts/d1/confirm"));
+        // Adding someone to a group or naming a manager widens access as sharing does; making,
+        // naming, deleting a group and removing someone don't.
+        assert!(grants_authority("PUT", "/v1/groups/g1/members/s1"));
+        assert!(grants_authority(
+            "PUT",
+            "/v1/groups/g%2F1/members/auth0%7Crae"
+        ));
+        for (method, path) in [
+            ("DELETE", "/v1/groups/g1/members/s1"),
+            ("POST", "/v1/groups"),
+            ("PATCH", "/v1/groups/g1"),
+            ("PUT", "/v1/groups/g1"),
+            ("PUT", "/v1/groups//members/s1"),
+            ("PUT", "/v1/groups/g1/members/"),
+            ("PUT", "/v1/groups/g1/owners/s1"),
+        ] {
+            assert!(!grants_authority(method, path), "{method} {path}");
+        }
+        // Nothing changes on the wire: the member's PUT was already a signed call.
+        assert!(signed("PUT", "/v1/groups/g1/members/s1"));
         // A device's removal, a pairing and a passkey are signed beforehand; reading them isn't.
         assert!(signed("DELETE", "/v1/me/devices/dev_2"));
         assert!(!signed("GET", "/v1/me/devices"));
