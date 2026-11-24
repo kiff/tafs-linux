@@ -252,6 +252,15 @@ pub enum Act {
         version: String,
         trial: bool,
     },
+    /// `confirmAllow` ("Allow this from now on"): KIFF's draft of the narrowest Card change,
+    /// confirmed at the version this computer read, with the held call (its KIFF id and the
+    /// accounting version shown) when "Send this one too" is on, so KIFF lets it go under the
+    /// same signature.
+    AllowFromNowOn {
+        draft: String,
+        version: String,
+        hold: Option<(String, i64)>,
+    },
     /// `goBackFromTrial`: the trial's KIFF draft ended with the setup signer, then the trial.
     EndTrial { draft: String },
     /// `discardSettingUp`: a taf being set up discarded, its Cards revoked and tafs cloud's
@@ -323,6 +332,7 @@ impl Act {
             Act::SetTimeZone { zone } => w.get("settings.time_zone.prompt", &[("zone", zone)]).ok(),
             Act::Resume { agent: None } => w.line("taf.halt.resume_all_prompt").ok(),
             Act::RaiseLimit => w.line("usage.raise_limit.prompt").ok(),
+            Act::AllowFromNowOn { .. } => w.line("needs_you.allow_title").ok(),
             _ => None,
         }
     }
@@ -376,6 +386,15 @@ impl Act {
                 serde_json::json!({ "as": "trial", "version": version })
             } else {
                 serde_json::json!({ "version": version })
+            })
+            .ok()?,
+            // `confirmDraft(id:version:hold:accountingVersion:)`'s body, or the plain confirm's.
+            Act::AllowFromNowOn { version, hold, .. } => serde_json::to_vec(&match hold {
+                Some((id, accounting)) => serde_json::json!({
+                    "version": version,
+                    "hold": { "id": id, "accounting_version": accounting },
+                }),
+                None => serde_json::json!({ "version": version }),
             })
             .ok()?,
             _ => return None,
@@ -437,7 +456,7 @@ impl Act {
                     None => "/v1/resume".into(),
                 },
             ),
-            Act::ConfirmDraft { draft, .. } => (
+            Act::ConfirmDraft { draft, .. } | Act::AllowFromNowOn { draft, .. } => (
                 "POST",
                 format!("/v1/me/agent-drafts/{}/confirm", escaped(draft)),
             ),
@@ -706,6 +725,11 @@ mod tests {
                 version: "v3".into(),
                 trial: false,
             },
+            Act::AllowFromNowOn {
+                draft: "drf_a".into(),
+                version: "v2".into(),
+                hold: Some(("exc_1".into(), 7)),
+            },
             Act::EndTrial {
                 draft: "drf_t".into(),
             },
@@ -784,6 +808,26 @@ mod tests {
             install.request().map(|r| r.2),
             Some(br#"{"version":"v3"}"#.to_vec())
         );
+        // "Allow this from now on": the same confirm, with the held call when it goes too.
+        let allow = |hold| Act::AllowFromNowOn {
+            draft: "drf a".into(),
+            version: "v2".into(),
+            hold,
+        };
+        assert_eq!(
+            allow(Some(("exc_1".into(), 7))).request(),
+            Some((
+                "POST",
+                "/v1/me/agent-drafts/drf%20a/confirm".to_string(),
+                br#"{"hold":{"accounting_version":7,"id":"exc_1"},"version":"v2"}"#.to_vec()
+            ))
+        );
+        assert_eq!(
+            allow(None).request().map(|r| r.2),
+            Some(br#"{"version":"v2"}"#.to_vec())
+        );
+        let a = allow(None);
+        assert!(!a.at_cloud() && !a.at_planque() && a.answer().is_none() && !a.sends_nothing());
         // No other act's request is a confirm or an approve, at KIFF or anywhere: planque's
         // approve and confirm have no request at all.
         for act in acts() {
@@ -793,7 +837,7 @@ mod tests {
             let last = path.split('?').next().unwrap_or(&path).rsplit('/').next();
             if matches!(last, Some("confirm" | "approve")) {
                 assert!(
-                    matches!(act, Act::ConfirmDraft { .. })
+                    matches!(act, Act::ConfirmDraft { .. } | Act::AllowFromNowOn { .. })
                         && path.starts_with("/v1/me/agent-drafts/")
                         && path.ends_with("/confirm"),
                     "{act:?}"

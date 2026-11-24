@@ -86,6 +86,13 @@ pub struct CardLines {
     /// Its key in its taf's chat (`heldKey`): its Record line's id, so the card and what became
     /// of it are one row there.
     pub record: String,
+    /// "Allow this from now on" is offered on it (`offersAllow`): KIFF says it's live, the
+    /// person manages Cards, its taf is tafs cloud's, and a Card change can lift its hold.
+    pub allow: bool,
+    /// The KIFF agent it's held for and the action it would take: what the draft is checked
+    /// against before it's signed (`allow::matches`).
+    pub agent: String,
+    pub action: String,
 }
 
 /// A Card unit request's panel (`CardUnitExceptionPanel`): tafs cloud's title, words and history;
@@ -209,6 +216,7 @@ pub fn lines(
     tafs: &[Holder],
     may_answer: bool,
     manages_cards: bool,
+    allow_live: bool,
     now: DateTime<Local>,
 ) -> Result<NeedsYouLines, WordsError> {
     let mut cards = Vec::new();
@@ -268,6 +276,12 @@ pub fn lines(
             extra_room: may_answer && manages_cards && !call.approvable_once && !call.needs_release,
             needs_release: call.needs_release,
             kiff_id: call.kiff_id.clone(),
+            allow: allow_live
+                && manages_cards
+                && crate::allow::cloud_taf(&call.taf)
+                && crate::allow::allowable(call),
+            agent: call.agent.clone(),
+            action: call.action.clone(),
             taf: call.taf.clone(),
             record: crate::record::held_key(
                 call.proposal_id.as_deref(),

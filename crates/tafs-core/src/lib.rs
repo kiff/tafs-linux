@@ -8,6 +8,7 @@ pub mod account_time;
 pub mod activity;
 pub mod ai_consent;
 pub mod alerts;
+pub mod allow;
 pub mod app_event;
 pub mod app_signin;
 pub mod approval;

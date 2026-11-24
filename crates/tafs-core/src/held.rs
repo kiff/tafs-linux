@@ -164,6 +164,12 @@ pub struct HeldCall {
     /// It fills a sign-in in the person's Chrome (`browser.sealed_fill` or `browser.fill`): only
     /// the phone answers it, with its release; this computer's key never does.
     pub needs_release: bool,
+    /// The KIFF agent it's held for, the action it would take, and each breach's outcome as KIFF
+    /// names it: what "Allow this from now on" is decided from (`allow::allowable`). Empty for a
+    /// sample's.
+    pub agent: String,
+    pub action: String,
+    pub breach_outcomes: Vec<String>,
 }
 
 /// The arguments KIFF's gateway adds to every call, never listed under Details.
@@ -215,6 +221,9 @@ pub fn held(w: &WordBook, e: &CardException, taf: &str) -> Result<HeldCall, Word
         taf_about: taf_words(e.taf_about.as_str(), 120),
         taf_reason: taf_words(e.taf_reason.as_str(), 280),
         needs_release: noted_release(&e.id, needs_release(&e.browser)),
+        agent: e.subject.clone(),
+        action: e.action.clone(),
+        breach_outcomes: e.breaches.iter().map(|b| b.outcome.clone()).collect(),
     })
 }
 
