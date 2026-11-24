@@ -311,11 +311,15 @@ touch and PIN, for that very request (`tafs-core/device_signed.rs`, `key_approva
   signature. Only that makes a `Presence`, which nothing else can make or copy.
 - **Then the device key.** It signs by taking the request and its `Presence` both, and only when
   the presence is that request's: `t=<signed_at>,v1=<base64 DER ECDSA>`.
-- **Then KIFF.** `kiff::send_device_signed` sends only the act's own request, once. The sheet then
+- **Then KIFF.** `kiff::send_device_signed` sends only the act's own request, once. KIFF sees
+  only the device key's signature: the security key's check is this computer's own guarantee,
+  which KIFF can't verify (the agreed design, as for Disconnect). The sheet then
   closes, as an approval's does. `can_approve` and `send_with_key` never take these acts.
 
 Raise's sheet shows, under its lead and before the touch, tafs cloud's offer ("Raise the limit to
-€300") and the limit it's raised from ("The spend limit is €200 now.", `from_cents` in euros).
+€300") and the limit it's raised from ("The spend limit is €200 now."): the signed `from_cents`,
+formatted here in the currency tafs cloud names beside it (`raise.currency`, ISO 4217, at that
+currency's own decimals), never a guessed one. Without a currency named, nothing is raised.
 Without the limit it's raised from, nothing is raised: "The limit can't be raised from here right
 now." KIFF's 409s are said in the app's words: the limit changed meanwhile (the balance is read
 again, offering the raise from the limit it is now), or it's as high as the app may raise it.

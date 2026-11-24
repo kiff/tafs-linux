@@ -323,6 +323,7 @@ pub fn sign_with_presence(
     else {
         return;
     };
+    // The key's SPKI DER, kept as base64url: `credential_id` only decodes it, it isn't an id.
     let Some(public_key) = kept
         .security_key_public
         .as_deref()
@@ -348,6 +349,8 @@ pub fn sign_with_presence(
             let client_data = request.client_data();
             let ask = AssertionAsk::new(&passkey::client_data_hash(&client_data), &credential)?;
             let answer = open.get_assertion(&ask, Some(pin))?;
+            // With one credential asked, the key may leave its id out: then it's the one asked,
+            // and what holds is its signature against that credential's own public key.
             let assertion = Assertion {
                 credential_id: answer.credential_id.unwrap_or_else(|| credential.clone()),
                 authenticator_data: answer.authenticator_data,

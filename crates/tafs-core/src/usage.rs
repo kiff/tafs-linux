@@ -33,7 +33,10 @@ fn flag(v: &Value, key: &str) -> Option<bool> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Offer {
     pub words: String,
+    /// The limit now, which the raise signs, in `currency`'s smallest unit.
     pub from_cents: Option<i64>,
+    /// `from_cents`' currency (ISO 4217), as tafs cloud names it: the app formats it itself.
+    pub currency: Option<String>,
 }
 
 /// What the store may sell (`Balance.Buy`).
@@ -98,6 +101,11 @@ impl BalanceLine {
                 Some(Offer {
                     words: text(r, "words")?,
                     from_cents: int(r, "from_cents"),
+                    currency: r
+                        .get("currency")
+                        .and_then(Value::as_str)
+                        .filter(|c| crate::money::is_iso_currency(c))
+                        .map(str::to_string),
                 })
             }),
             buy: v.get("buy").and_then(Buy::read),
@@ -763,11 +771,15 @@ pub fn withdraw_request(id: &str) -> Option<crate::signed::Unsigned> {
 
 /// What the security key's sheet says before Raise the limit's touch: tafs cloud's offer (the new
 /// limit, "Raise the limit to €300") and the limit it's raised from ("The spend limit is €200
-/// now."), `from_cents` in euros. None without the limit it's raised from: nothing is raised then.
+/// now."), the signed `from_cents` formatted here in the currency tafs cloud names, never a guessed
+/// one. None without both: nothing is raised then.
 pub fn raise_lines(w: &WordBook, offer: &Offer) -> Result<Option<Vec<String>>, WordsError> {
     let Some(from) = offer
         .from_cents
-        .and_then(|c| crate::money::Money::new(c, Some("EUR"), 2))
+        .zip(offer.currency.as_deref())
+        .and_then(|(c, unit)| {
+            crate::money::Money::new(c, Some(unit), crate::money::minor_digits(unit))
+        })
     else {
         return Ok(None);
     };
@@ -1120,6 +1132,7 @@ mod tests {
         let offer = Offer {
             words: "Raise the limit to €300".into(),
             from_cents: Some(20_000),
+            currency: Some("EUR".into()),
         };
         assert_eq!(
             raise_lines(&w, &offer).unwrap(),
@@ -1131,9 +1144,55 @@ mod tests {
         // No limit to raise from: nothing to raise.
         let none = Offer {
             from_cents: None,
-            ..offer
+            ..offer.clone()
         };
         assert_eq!(raise_lines(&w, &none).unwrap(), None);
+        // No currency named: never a guessed one, so nothing to raise.
+        let unnamed = Offer {
+            currency: None,
+            ..offer.clone()
+        };
+        assert_eq!(raise_lines(&w, &unnamed).unwrap(), None);
+        // Each currency at its own decimals: yen has none, dinars three.
+        let line = |cents, unit: &str| {
+            raise_lines(
+                &w,
+                &Offer {
+                    from_cents: Some(cents),
+                    currency: Some(unit.into()),
+                    ..offer.clone()
+                },
+            )
+            .unwrap()
+            .unwrap()[1]
+                .clone()
+        };
+        assert_eq!(line(20_000, "USD"), "The spend limit is $200 now.");
+        assert_eq!(
+            line(20_000, "JPY"),
+            "The spend limit is JPY\u{a0}20,000 now."
+        );
+        assert_eq!(
+            line(20_500, "KWD"),
+            "The spend limit is KWD\u{a0}20.500 now."
+        );
+        // As tafs cloud sends it, and refused when it isn't a currency code.
+        let b = Balance::read(
+            br#"{"balance":{"words":"Company","raise":{"words":"Raise the limit to 300 EUR","from_cents":20000,"currency":"EUR"}}}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            b.balance.raise.as_ref().and_then(|r| r.currency.as_deref()),
+            Some("EUR")
+        );
+        for bad in [r#""eur""#, r#""EURO""#, "1", "null"] {
+            let b = Balance::read(
+                format!(r#"{{"balance":{{"words":"Company","raise":{{"words":"R","from_cents":1,"currency":{bad}}}}}}}"#)
+                    .as_bytes(),
+            )
+            .unwrap();
+            assert_eq!(b.balance.raise.unwrap().currency, None, "{bad}");
+        }
     }
 
     #[test]
