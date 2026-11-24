@@ -257,8 +257,8 @@ hours ago; a Mac a day ago) in a screenshot, and none otherwise, as the iPad's s
 out?" ("Sign this device out?" for one with no name), Sign out in red, and Cancel. Its Sign out
 is the tap that would sign. Above the list, where the iPad says why a device wasn't signed out,
 it says "This device can't approve. Approve on another device signed in to your account." Nothing
-is sent (`docs/approval.md` › A view-only computer). The sample signs nothing, so there it does
-nothing. `--page devices-sign-out` opens the question over the sample's iPhone (CI's
+is sent (`docs/approval.md` › A view-only computer). The sample signs nothing, so there it says
+"This isn't in the sample. Sign in with KIFF to do it." (`sample.not_in_sample`), and sends nothing. `--page devices-sign-out` opens the question over the sample's iPhone (CI's
 `devices-sign-out`).
 
 **Passkeys**, signed in with KIFF (`DevicesView`'s passkeys section): the account's passkeys, read
