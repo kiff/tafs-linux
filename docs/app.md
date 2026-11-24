@@ -172,8 +172,9 @@ building those two from source on 22.04, or shipping a Flatpak.
 - Before a draft is published, `.github/workflows/verify-release.yml`, run by hand with its tag,
   downloads the draft's own AppImage, `SHA256SUMS` and `SHA256SUMS.asc`, checks that the
   signature is a good one by the release key (`tools/verify-signature.sh --require`: only
-  `packaging/tafs-release-key.asc`, by its pinned fingerprint; another key, a bad signature or
-  none fails), checks the AppImage against `SHA256SUMS`, and starts that file on a clean
+  `packaging/tafs-release-key.asc`, which must hold that one key alone, by its pinned fingerprint;
+  a signature by it, or by a signing subkey of it, passes; another key, a bad signature or none
+  fails), checks the AppImage against `SHA256SUMS`, and starts that file on a clean
   Ubuntu 24.04. Its three screenshots are the run's only artifact. Nothing
   is created, edited or published. It takes `tools/check-appimage.sh` from the branch it's run
   on (main), so a draft is checked with today's check, not the one it was built with.
