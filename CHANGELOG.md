@@ -19,8 +19,14 @@ languages, are in `packaging/release-notes/` and on its GitHub release page.
   offers and only if KIFF's draft is exactly that, approved once with the key.
 - Raise the limit and Decline a member's request (Plan & usage): the security key checks the person,
   by touch and PIN, for that very request, and only then does this computer's device key sign it.
+- Raise the limit says the limit it's raised from in the currency tafs cloud names beside it, at that
+  currency's own decimals. Without a currency named, nothing is raised.
 - Anything that gives a taf access to your apps (connecting, keys, Coach's tools, a subscription,
   a drive) stays on your phone, and the screens say so.
+- Coach's approval cards: once the connection is made (on the phone), Approve confirms the taf's
+  Card from KIFF's draft with the USB security key. Only the Card's own ask, for the draft and
+  version on the card, is signed; what came of it is reported to tafs cloud, signed by this
+  computer's key. The connection's own approval stays the phone's.
 
 **Connections and doors**
 - Connect apps lists the account's connections, read from planque with this computer's device
