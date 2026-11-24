@@ -761,10 +761,29 @@ pub fn withdraw_request(id: &str) -> Option<crate::signed::Unsigned> {
     )
 }
 
-/// Declining a member's request (`declineRequest`), which the iPad signs.
-pub fn decline_act(r: &PackRequest) -> crate::signed::Act {
+/// What the security key's sheet says before Raise the limit's touch: tafs cloud's offer (the new
+/// limit, "Raise the limit to €300") and the limit it's raised from ("The spend limit is €200
+/// now."), `from_cents` in euros. None without the limit it's raised from: nothing is raised then.
+pub fn raise_lines(w: &WordBook, offer: &Offer) -> Result<Option<Vec<String>>, WordsError> {
+    let Some(from) = offer
+        .from_cents
+        .and_then(|c| crate::money::Money::new(c, Some("EUR"), 2))
+    else {
+        return Ok(None);
+    };
+    let amount = from.formatted(w)?;
+    Ok(Some(vec![
+        offer.words.clone(),
+        w.get("usage.raise_limit.from", &[("amount", &amount)])?,
+    ]))
+}
+
+/// Declining a member's request (`declineRequest`) with the admin's note to them, which the
+/// device key signs once the security key checked the person (`device_signed`).
+pub fn decline_act(r: &PackRequest, note: &str) -> crate::signed::Act {
     crate::signed::Act::DeclineRequest {
         request: r.id.clone(),
+        note: note.trim().to_string(),
     }
 }
 
@@ -1082,7 +1101,10 @@ mod tests {
             (d.title.as_str(), d.decline.as_str()),
             ("Decline", "Decline")
         );
-        for act in [decline_act(r), crate::signed::Act::RaiseLimit] {
+        for act in [
+            decline_act(r, ""),
+            crate::signed::Act::RaiseLimit { from_cents: 1 },
+        ] {
             let (method, path) = act.route();
             assert!(crate::signed::Unsigned::new(method, path, vec![]).is_none());
         }
@@ -1090,6 +1112,28 @@ mod tests {
         assert_eq!(a.title, "Ask an admin");
         assert_eq!(a.hint, "What the credits are for");
         assert_eq!(offered_packs(&u, None).len(), 1);
+    }
+
+    #[test]
+    fn raising_shows_the_new_limit_and_the_one_it_is_raised_from() {
+        let w = WordBook::load(&WordBook::default_root(), "en").unwrap();
+        let offer = Offer {
+            words: "Raise the limit to €300".into(),
+            from_cents: Some(20_000),
+        };
+        assert_eq!(
+            raise_lines(&w, &offer).unwrap(),
+            Some(vec![
+                "Raise the limit to €300".to_string(),
+                "The spend limit is €200 now.".to_string()
+            ])
+        );
+        // No limit to raise from: nothing to raise.
+        let none = Offer {
+            from_cents: None,
+            ..offer
+        };
+        assert_eq!(raise_lines(&w, &none).unwrap(), None);
     }
 
     #[test]

@@ -210,10 +210,11 @@ pub enum Act {
     RemovePasskey { passkey: String },
     /// `setAccountTimeZone`: a zone chosen, or this computer's.
     SetTimeZone { zone: String },
-    /// `raiseLimit`: the spend limit raised one step.
-    RaiseLimit,
+    /// `raiseLimit`: the spend limit raised one step, from the limit it is now (`from_cents`, as
+    /// tafs cloud's offer names it).
+    RaiseLimit { from_cents: i64 },
     /// `declineRequest`: a member's request declined, with a note.
-    DeclineRequest { request: String },
+    DeclineRequest { request: String, note: String },
     /// `disconnect(grantID:)`: a connection's access removed, or its waiting request or sign-in
     /// cancelled, after its question (Connect apps). planque's call, behind Face ID.
     Disconnect { grant: String },
@@ -331,7 +332,8 @@ impl Act {
             Act::CreateGroup { name } => w.get("people.create_group", &[("name", name)]).ok(),
             Act::SetTimeZone { zone } => w.get("settings.time_zone.prompt", &[("zone", zone)]).ok(),
             Act::Resume { agent: None } => w.line("taf.halt.resume_all_prompt").ok(),
-            Act::RaiseLimit => w.line("usage.raise_limit.prompt").ok(),
+            Act::RaiseLimit { .. } => w.line("usage.raise_limit.prompt").ok(),
+            Act::DeclineRequest { .. } => w.line("billing.request.decline_prompt").ok(),
             Act::AllowFromNowOn { .. } => w.line("needs_you.allow_title").ok(),
             _ => None,
         }
@@ -340,8 +342,8 @@ impl Act {
     /// The whole request a security key would approve (method, path with its query, body), for
     /// the acts KIFF or tafs cloud take signed and whose body their fields hold, as the iPad's
     /// `KIFFClient` writes it. None for the rest: planque's (their own signing), a held call's or
-    /// a step's answer (its signature is in the body), Make live (the device checks it first),
-    /// and those whose body needs what the act doesn't carry yet (Raise the limit, Decline).
+    /// a step's answer (its signature is in the body), and Make live (the device checks it first).
+    /// Raise the limit's and Decline's are the device key's alone (`device_signed`).
     pub fn request(&self) -> Option<(&'static str, String, Vec<u8>)> {
         let empty = || b"{}".to_vec();
         let body = match self {
@@ -370,6 +372,14 @@ impl Act {
             // computer can't keep from a screen recording or a clipboard's history.
             Act::ReopenDoor { .. } => br#"{"open":true}"#.to_vec(),
             Act::RevokeDoorKey { .. } | Act::RemoveApiDoor { .. } => Vec::new(),
+            // `raiseLimit(from:)` and `declineRequest(_:note:)`'s bodies, as the iPad writes them.
+            Act::RaiseLimit { from_cents } => {
+                serde_json::to_vec(&serde_json::json!({ "raise": true, "from_cents": from_cents }))
+                    .ok()?
+            }
+            Act::DeclineRequest { note, .. } => {
+                serde_json::to_vec(&serde_json::json!({ "note": note })).ok()?
+            }
             // `preparePasskeyRemoval`: a DELETE with no body at all (`Data()`), not `{}`.
             Act::RemovePasskey { .. } => Vec::new(),
             Act::DeleteGroup { .. }
@@ -425,8 +435,8 @@ impl Act {
                 format!("{}/{}", crate::devices::PASSKEYS_PATH, escaped(passkey)),
             ),
             Act::SetTimeZone { .. } => ("PUT", "/v1/me/time-zone".into()),
-            Act::RaiseLimit => ("PUT", "/v1/me/usage/limit".into()),
-            Act::DeclineRequest { request } => (
+            Act::RaiseLimit { .. } => ("PUT", "/v1/me/usage/limit".into()),
+            Act::DeclineRequest { request, .. } => (
                 "POST",
                 format!("/v1/me/pack-requests/{}/decline", escaped(request)),
             ),
@@ -596,6 +606,14 @@ impl Act {
         }
     }
 
+    /// Signed by this computer's device key, once its security key checked the person for this very
+    /// request (`device_signed::Presence`), never by the key's assertion alone: what KIFF takes
+    /// signed but not as an approval (`PhoneSignedRules`, not `PhoneApprovalRules`): raising the
+    /// spend limit and declining a member's request.
+    pub fn device_signed(&self) -> bool {
+        matches!(self, Act::RaiseLimit { .. } | Act::DeclineRequest { .. })
+    }
+
     /// The call goes to planque, which this computer never reaches (`session::may_send_to`).
     pub fn at_planque(&self) -> bool {
         matches!(
@@ -690,9 +708,12 @@ mod tests {
             Act::SetTimeZone {
                 zone: "Europe/Paris".into(),
             },
-            Act::RaiseLimit,
+            Act::RaiseLimit {
+                from_cents: 100_000,
+            },
             Act::DeclineRequest {
                 request: "req_1".into(),
+                note: "Not this month".into(),
             },
             Act::Disconnect {
                 grant: "g_1".into(),
@@ -962,7 +983,7 @@ mod tests {
             }
         }
         assert_eq!(
-            tap(&words("en"), Mode::Kiff, &Act::RaiseLimit)
+            tap(&words("en"), Mode::Kiff, &Act::RaiseLimit { from_cents: 1 })
                 .unwrap()
                 .unwrap()
                 .line,
@@ -1138,7 +1159,45 @@ mod tests {
         }
         .request()
         .is_none());
-        assert!(Act::RaiseLimit.request().is_none());
+        // Raise the limit and Decline: the device key's, after the security key's presence, never
+        // the key's assertion alone (KIFF's `PhoneSignedRules`, not its approval routes).
+        let raise = Act::RaiseLimit {
+            from_cents: 100_000,
+        };
+        assert_eq!(
+            raise.request(),
+            Some((
+                "PUT",
+                "/v1/me/usage/limit".to_string(),
+                br#"{"from_cents":100000,"raise":true}"#.to_vec()
+            ))
+        );
+        let decline = Act::DeclineRequest {
+            request: "req 1".into(),
+            note: "Not \"now\"".into(),
+        };
+        assert_eq!(
+            decline.request(),
+            Some((
+                "POST",
+                "/v1/me/pack-requests/req%201/decline".to_string(),
+                br#"{"note":"Not \"now\""}"#.to_vec()
+            ))
+        );
+        for act in [&raise, &decline] {
+            assert!(act.device_signed(), "{act:?}");
+            let (m, p, _) = act.request().unwrap();
+            assert!(signed(m, &p), "{act:?}");
+            assert!(!act.at_cloud() && !act.at_planque() && act.answer().is_none());
+        }
+        // No other act is the device key's.
+        for act in acts() {
+            assert_eq!(
+                act.device_signed(),
+                matches!(act, Act::RaiseLimit { .. } | Act::DeclineRequest { .. }),
+                "{act:?}"
+            );
+        }
         // Every request this way is one KIFF takes only signed, or tafs cloud checks the signature of.
         for act in [
             Act::CreateGroup { name: "x".into() },

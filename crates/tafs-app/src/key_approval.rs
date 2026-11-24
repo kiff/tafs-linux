@@ -32,6 +32,7 @@ pub fn can_approve(kept: Option<&KeptSession>, act: &Act) -> bool {
     passkey::ENABLED
         && kept
             .is_some_and(|k| k.approval_mode == ApprovalMode::Passkey && k.security_key.is_some())
+        && !act.device_signed()
         && (act.request().is_some() || act.answer().is_some())
 }
 
@@ -279,6 +280,120 @@ pub fn end_with_presence(
     crate::pin_sheet::present(w, parent, what, attempt, read_tries, stop, sheet_done);
 }
 
+/// Whether Raise the limit or Decline can be done here (the owner's rule, as Disconnect's): this
+/// computer's security key checks the person first, and its device key then signs the request.
+pub fn can_sign(kept: Option<&KeptSession>, act: &Act) -> bool {
+    passkey::ENABLED
+        && kept.is_some_and(|k| {
+            k.approval_mode == ApprovalMode::Passkey
+                && k.security_key.is_some()
+                && k.security_key_public
+                    .as_deref()
+                    .and_then(passkey::credential_id)
+                    .is_some()
+                && k.key().is_some()
+        })
+        && act.device_signed()
+}
+
+/// Raise the limit or Decline with this computer's security key (`device_signed`): on every try,
+/// the PIN sheet asks the key registered here to touch and take its PIN over this request's own
+/// `tafs.presence.request.v1`, the answer is checked, and only then does the device key sign the
+/// request, which goes to KIFF once. Nothing is kept for another try or another request. `done`
+/// hears once, as `approve`'s. `details`: what the act will do, under the sheet's lead (Raise the
+/// limit's new limit and the one it's raised from), read before the touch.
+#[allow(clippy::too_many_arguments)]
+pub fn sign_with_presence(
+    w: Rc<WordBook>,
+    parent: &impl gtk::prelude::IsA<gtk::Widget>,
+    kept: KeptSession,
+    languages: Vec<&'static str>,
+    act: &Act,
+    what: Option<&str>,
+    details: Vec<String>,
+    done: Approved,
+) {
+    if !act.device_signed() {
+        return;
+    }
+    let Some(credential) = kept
+        .security_key
+        .as_deref()
+        .and_then(passkey::credential_id)
+    else {
+        return;
+    };
+    let Some(public_key) = kept
+        .security_key_public
+        .as_deref()
+        .and_then(passkey::credential_id)
+    else {
+        return;
+    };
+    let tenant = kept.tenant.clone().unwrap_or_default();
+    let token = kept.token.clone();
+    let act_sent = act.clone();
+    let open = Arc::new(OpenKey::default());
+    let refused: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
+    let attempt: crate::pin_sheet::Attempt = {
+        let (open, refused, w2) = (open.clone(), refused.clone(), (*w).clone());
+        Arc::new(move |pin| {
+            let signed_at = SIGNING_TIME
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .next(chrono::Utc::now());
+            // This try's own request: a new `signed_at`, so a new presence, each time.
+            let request = tafs_core::device_signed::Request::new(&tenant, &act_sent, &signed_at)
+                .ok_or(KeyError::Unreadable)?;
+            let client_data = request.client_data();
+            let ask = AssertionAsk::new(&passkey::client_data_hash(&client_data), &credential)?;
+            let answer = open.get_assertion(&ask, Some(pin))?;
+            let assertion = Assertion {
+                credential_id: answer.credential_id.unwrap_or_else(|| credential.clone()),
+                authenticator_data: answer.authenticator_data,
+                signature: answer.signature,
+            };
+            // The person checked as KIFF would check them, by the registered key's own
+            // signature, or the device key signs nothing.
+            let presence = request
+                .presence(&credential, &public_key, &assertion)
+                .map_err(|_| KeyError::Unreadable)?;
+            let device = kept.key().ok_or(KeyError::Unreadable)?;
+            let signed = request
+                .sign(presence, &device)
+                .ok_or(KeyError::Unreadable)?;
+            // From here it may have reached KIFF: the sheet closes with KIFF's line, never
+            // offering a try that would send it again.
+            let line = match crate::kiff::send_device_signed(&token, &languages, &act_sent, &signed)
+            {
+                Ok(a) if (200..300).contains(&a.status) => return Ok(()),
+                Ok(a) => tafs_core::device_signed::not_taken(&w2, &act_sent, &a),
+                Err(e) => tafs_core::device_signed::not_sent(&w2, &act_sent, &e),
+            };
+            *refused.lock().unwrap_or_else(|e| e.into_inner()) = line.ok();
+            Err(KeyError::Sent)
+        })
+    };
+    let read_tries: crate::pin_sheet::ReadTries = {
+        let open = Arc::new(OpenKey::default());
+        Arc::new(move || open.tries_left())
+    };
+    let stop: crate::pin_sheet::StopKey = {
+        let open = open.clone();
+        Arc::new(move || open.cancel())
+    };
+    let sheet_done: crate::pin_sheet::Done = {
+        let w = w.clone();
+        Rc::new(move |e| {
+            let kiff = refused.lock().unwrap_or_else(|e| e.into_inner()).take();
+            done(closed_with(&w, e, kiff))
+        })
+    };
+    crate::pin_sheet::present_detailed(
+        w, parent, what, details, attempt, read_tries, stop, sheet_done,
+    );
+}
+
 /// Each connection's `DELETE` at planque, signed by the device key once the security key checked
 /// the person: none when every one went, else planque's line for the first that didn't (one
 /// already gone counts as gone). Never tried again from here: the sheet closes with the line.
@@ -512,5 +627,79 @@ mod tests {
             ..keyed
         };
         assert!(!can_approve(Some(&unkeyed), &act));
+    }
+
+    #[test]
+    fn raise_and_decline_are_the_device_keys_behind_the_security_key() {
+        use tafs_core::keys::DeviceKey;
+        let token: tafs_core::signin::DeviceToken = serde_json::from_value(serde_json::json!({
+            "access_token": "t", "token_type": "Bearer", "expires_in": 0,
+            "tenant": "x", "subject": "s", "approval_mode": "passkey"
+        }))
+        .unwrap();
+        let key = DeviceKey::generate();
+        let cred = tafs_core::pairing_key::Credential {
+            id: b"c".to_vec(),
+            public_key: b"spki".to_vec(),
+        };
+        let keyed = tafs_core::pairing::kept_with_key(&token, &key, &cred, 0);
+        for act in [
+            Act::RaiseLimit { from_cents: 20_000 },
+            Act::DeclineRequest {
+                request: "r1".into(),
+                note: String::new(),
+            },
+        ] {
+            // Never a passkey's approval, which KIFF refuses on these routes.
+            assert!(!can_approve(Some(&keyed), &act), "{act:?}");
+            assert!(!can_end(Some(&keyed), &act), "{act:?}");
+            assert!(can_sign(Some(&keyed), &act), "{act:?}");
+            // No security key, or none whose answer can be checked here: the phone's.
+            let view = tafs_core::pairing::kept(&token, &key, 0);
+            assert!(!can_sign(Some(&view), &act));
+            let unchecked = KeptSession {
+                security_key_public: None,
+                ..keyed.clone()
+            };
+            assert!(!can_sign(Some(&unchecked), &act));
+        }
+        assert!(!can_sign(
+            Some(&keyed),
+            &Act::CreateGroup { name: "x".into() }
+        ));
+    }
+
+    #[test]
+    fn a_device_signed_request_goes_only_behind_the_key() {
+        // `send_device_signed` is called from one place: after the key's answer is checked and
+        // the device key signed with that presence, here.
+        let root = env!("CARGO_MANIFEST_DIR");
+        for entry in std::fs::read_dir(format!("{root}/src")).unwrap() {
+            let path = entry.unwrap().path();
+            let source = std::fs::read_to_string(&path).unwrap();
+            let code = source.split("#[cfg(test)]").next().unwrap_or_default();
+            let calls = code.matches("send_device_signed(").count();
+            let built = code.matches("device_signed::Request::new(").count();
+            if path.ends_with("key_approval.rs") {
+                assert_eq!((calls, built), (1, 1), "one request, one send");
+                let start = code.find("pub fn sign_with_presence(").unwrap();
+                let at = |what: &str| start + code[start..].find(what).unwrap();
+                let (new, asked, checked, signed, sent) = (
+                    at("device_signed::Request::new("),
+                    at("open.get_assertion("),
+                    at(".presence(&credential, &public_key"),
+                    at(".sign(presence, &device)"),
+                    at("send_device_signed("),
+                );
+                assert!(
+                    new < asked && asked < checked && checked < signed && signed < sent,
+                    "built, asked, checked, signed, sent"
+                );
+            } else if path.ends_with("kiff.rs") {
+                assert_eq!((calls, built), (1, 0), "its definition");
+            } else {
+                assert_eq!((calls, built), (0, 0), "{}", path.display());
+            }
+        }
     }
 }

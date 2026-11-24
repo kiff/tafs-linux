@@ -90,9 +90,26 @@ pub fn present(
     stop: StopKey,
     done: Done,
 ) {
-    let Ok(l) = words::sheet(&w, act) else {
+    present_detailed(w, parent, act, vec![], attempt, read_tries, stop, done)
+}
+
+/// `present`, with what the act will do under its lead (`SheetLines::details`), read before the
+/// touch.
+#[allow(clippy::too_many_arguments)]
+pub fn present_detailed(
+    w: Rc<WordBook>,
+    parent: &impl IsA<gtk::Widget>,
+    act: Option<&str>,
+    details: Vec<String>,
+    attempt: Attempt,
+    read_tries: ReadTries,
+    stop: StopKey,
+    done: Done,
+) {
+    let Ok(mut l) = words::sheet(&w, act) else {
         return;
     };
+    l.details = details;
     present_lines(w, l, parent, attempt, read_tries, stop, done);
 }
 
@@ -130,6 +147,11 @@ fn present_lines(
     column.append(&title);
     if let Some(lead) = &l.lead {
         column.append(&text(lead, 15, 600, &["tafs-ink"]));
+    }
+    for (i, detail) in l.details.iter().enumerate() {
+        let line = text(detail, 14, 400, &["tafs-ink"]);
+        line.set_widget_name(&format!("security-key.detail.{i}"));
+        column.append(&line);
     }
     column.append(&text(&l.enter_pin, 14, 400, &["tafs-soft"]));
     let tries = text("", 13, 400, &["tafs-dim"]);

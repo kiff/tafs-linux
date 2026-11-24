@@ -411,12 +411,14 @@ pub fn send_with_key(
     assertion: &str,
 ) -> Result<Answer, KiffError> {
     // Only the act's own request, to where it's taken: tafs cloud for what the device signs there
-    // and an `api` door's changes, else KIFF, and only a call KIFF takes signed.
-    if act
-        .request()
-        .as_ref()
-        .map(|(m, p, b)| (*m, p.as_str(), b.as_slice()))
-        != Some((method, path, body))
+    // and an `api` door's changes, else KIFF, and only a call KIFF takes signed; never one KIFF
+    // takes from the device key alone (`send_device_signed`).
+    if act.device_signed()
+        || act
+            .request()
+            .as_ref()
+            .map(|(m, p, b)| (*m, p.as_str(), b.as_slice()))
+            != Some((method, path, body))
     {
         return Err(KiffError::Unreadable);
     }
@@ -440,6 +442,41 @@ pub fn send_with_key(
             .set("Content-Type", "application/json")
             .set(tafs_core::passkey::HEADER, assertion)
             .send_bytes(body),
+    )
+}
+
+/// A device-signed act's request (`device_signed`), to KIFF as the session with the device key's
+/// header: only the act's own request, only an act KIFF takes that way, only after the security
+/// key checked the person (a `Signed` is made by nothing else).
+pub fn send_device_signed(
+    token: &str,
+    languages: &[&str],
+    act: &tafs_core::signed::Act,
+    signed: &tafs_core::device_signed::Signed,
+) -> Result<Answer, KiffError> {
+    if !act.device_signed()
+        || act
+            .request()
+            .as_ref()
+            .map(|(m, p, b)| (*m, p.as_str(), b.as_slice()))
+            != Some((signed.method, signed.path.as_str(), signed.body.as_slice()))
+        || !tafs_core::signed::signed(signed.method, &signed.path)
+    {
+        return Err(KiffError::Unreadable);
+    }
+    let url = format!("{KIFF_API}{}", signed.path);
+    if !may_send_to(&url) {
+        return Err(KiffError::Unreadable);
+    }
+    Kiff::read(
+        agent()
+            .request(signed.method, &url)
+            .set("Accept", "application/json")
+            .set("Accept-Language", &accept_language(languages))
+            .set("Authorization", &format!("Bearer {token}"))
+            .set("Content-Type", "application/json")
+            .set(tafs_core::device_signed::HEADER, &signed.header)
+            .send_bytes(&signed.body),
     )
 }
 

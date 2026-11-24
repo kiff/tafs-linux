@@ -27,6 +27,7 @@ pub mod coach_tools;
 pub mod code_sign_in;
 pub mod connect;
 pub mod connections;
+pub mod device_signed;
 pub mod devices;
 pub mod doors;
 pub mod drafts;
