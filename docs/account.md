@@ -292,7 +292,7 @@ computer itself.
 ## Language
 
 **Change language** opens **Account › Language** (`LanguagePicker`, `language_picker.rs`):
-"This computer's language" first, then the app's 8 languages in tafs's order, each named in
+"This computer's language" first, then the app's 43 languages in tafs's order, each named in
 itself ("Français", "Polski"), the one in use checked (`tafs-core/account.rs` ›
 `language_rows`). The one in use does nothing. Any other applies at once: it's kept in the
 config folder (`~/.config/tafs/language`), and the window is drawn again in it, on Account,

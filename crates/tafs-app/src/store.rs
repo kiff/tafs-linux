@@ -102,11 +102,8 @@ pub fn clear() -> Result<(), StoreError> {
 /// The theme chosen in Account (`ThemePreference`, the iPad's `tafs.theme`): `light`, `dark` or
 /// `system`, kept in the user's config folder. Anything else reads as system.
 pub fn theme() -> String {
-    std::fs::read_to_string(theme_path())
-        .ok()
-        .map(|s| s.trim().to_string())
-        .filter(|s| s == "light" || s == "dark")
-        .unwrap_or_else(|| "system".into())
+    let kept = std::fs::read_to_string(theme_path()).ok();
+    tafs_core::prefs::theme(kept.as_deref()).to_string()
 }
 
 pub fn set_theme(choice: &str) {
@@ -124,11 +121,8 @@ fn theme_path() -> std::path::PathBuf {
 /// The language picked in Account › Language (the iPad's `tafs.language`): one the app ships, kept
 /// in the user's config folder. None: this computer's language.
 pub fn language() -> Option<&'static str> {
-    let kept = std::fs::read_to_string(language_path()).ok()?;
-    tafs_core::words::SHIPPED
-        .iter()
-        .find(|l| **l == kept.trim())
-        .copied()
+    let kept = std::fs::read_to_string(language_path()).ok();
+    tafs_core::prefs::language(kept.as_deref())
 }
 
 /// Picks a language, or this computer's with `None`.
@@ -224,11 +218,8 @@ pub fn set_coach_width(w: &tafs_core::coach_mode::Width) {
 }
 
 fn flag(name: &str, default: bool) -> bool {
-    match std::fs::read_to_string(gtk::glib::user_config_dir().join("tafs").join(name)) {
-        Ok(s) if s.trim() == "off" => false,
-        Ok(s) if s.trim() == "on" => true,
-        _ => default,
-    }
+    let kept = std::fs::read_to_string(gtk::glib::user_config_dir().join("tafs").join(name)).ok();
+    tafs_core::prefs::switch(kept.as_deref(), default)
 }
 
 fn set_flag(name: &str, on: bool) {
@@ -236,5 +227,5 @@ fn set_flag(name: &str, on: bool) {
     if let Some(dir) = path.parent() {
         let _ = std::fs::create_dir_all(dir);
     }
-    let _ = std::fs::write(path, if on { "on" } else { "off" });
+    let _ = std::fs::write(path, tafs_core::prefs::switch_text(on));
 }

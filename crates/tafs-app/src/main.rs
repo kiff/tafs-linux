@@ -3177,22 +3177,6 @@ fn read_contract(path: &str) -> Option<Home> {
 /// (`listedTafs`, `byRecent`); Your tafs those relevant now, and tafs cloud's count of what waits.
 /// Everything the window reads at tafs cloud and KIFF as the session (`refresh`): Home, KIFF's held
 /// calls and activity, the account, and the rest the screens draw. Blocking: off the main loop.
-/// This computer's id in KIFF for Home's grants read, read once per session and kept: each Home
-/// read after the first adds only planque's grants read. A session that changed reads it again.
-fn home_device(kept: &KeptSession, languages: &[&'static str]) -> Option<String> {
-    static DEVICE: std::sync::Mutex<Option<(String, String)>> = std::sync::Mutex::new(None);
-    if let Some((token, id)) = DEVICE.lock().ok()?.as_ref() {
-        if *token == kept.token {
-            return Some(id.clone());
-        }
-    }
-    let id = coach::this_device(kept, languages)?;
-    if let Ok(mut d) = DEVICE.lock() {
-        *d = Some((kept.token.clone(), id.clone()));
-    }
-    Some(id)
-}
-
 fn read_cloud(kept: &KeptSession, languages: &[&'static str], words: &WordBook) -> Read {
     let token = kept.token.as_str();
     let signed_out = |a: &tafs_core::signin::Answer| a.status == 401;
@@ -3327,6 +3311,22 @@ fn read_cloud(kept: &KeptSession, languages: &[&'static str], words: &WordBook) 
     }))
 }
 
+/// This computer's id in KIFF for Home's grants read, read once per session and kept: each Home
+/// read after the first adds only planque's grants read. A session that changed reads it again.
+fn home_device(kept: &KeptSession, languages: &[&'static str]) -> Option<String> {
+    static DEVICE: std::sync::Mutex<Option<(String, String)>> = std::sync::Mutex::new(None);
+    if let Some((token, id)) = DEVICE.lock().ok()?.as_ref() {
+        if *token == kept.token {
+            return Some(id.clone());
+        }
+    }
+    let id = coach::this_device(kept, languages)?;
+    if let Ok(mut d) = DEVICE.lock() {
+        *d = Some((kept.token.clone(), id.clone()));
+    }
+    Some(id)
+}
+
 fn home_model(
     w: &WordBook,
     c: &Cloud,
@@ -3340,87 +3340,25 @@ fn home_model(
         &c.access,
         c.balance.as_ref(),
     );
-    let tafs: Vec<tafs_core::home::Taf> = h
-        .tafs
-        .iter()
-        .map(|t| tafs_core::home::taf(w, t))
-        .collect::<Result<_, _>>()?;
-    // Each held call on its taf, by the KIFF agent it's held for.
-    let mut held = Vec::new();
-    for e in exceptions {
-        let key = tafs
-            .iter()
-            .find(|t| t.agent == e.subject)
-            .map(|t| t.key.clone())
-            .unwrap_or_else(|| format!("agent:{}", e.subject));
-        held.push(tafs_core::held::held(w, e, &key)?);
-    }
-    // `signedOut`: a connection its vendor signed out, for the taf it was made for.
-    let signed_out = |t: &tafs_core::home::Taf| {
-        grants
-            .iter()
-            .find(|g| g.request.agent == t.agent && g.needs_reconnect())
-    };
-    // `waitingOnOwner`: a call held for an answer, or a connection to sign in to again.
-    let holds = |t: &tafs_core::home::Taf| held.iter().any(|c| c.taf == t.key);
-    let waits = |t: &tafs_core::home::Taf| holds(t) || signed_out(t).is_some();
-    // Its newest call in the Record, by its KIFF agent, or its chat's newest message as kept here
-    // (`byRecent`: "the latest message in its chat").
-    let latest = |t: &tafs_core::home::Taf| {
-        activity
-            .iter()
-            .filter(|c| c.actor_id.as_deref() == Some(t.agent.as_str()))
-            .map(|c| c.created_at)
-            .chain(taf_chat::last_message_at(&t.key))
-            .max()
-    };
-    let ordered = tafs_core::sidebar::by_recent(&tafs, waits, latest);
-    let rows = ordered
-        .iter()
-        .map(|t| {
-            let mut row = tafs_core::home::row(t);
-            // Its line says so first, in planque's words, in the amber.
-            if let Some(g) = signed_out(t) {
-                row.now = tafs_core::connections::signed_out_words(w, g);
-                row.tone = tafs_core::sidebar::Tone::Amber;
-            }
-            // Its open trial, under it, for whoever manages it: its sheet is reached from the
-            // taf's Versions, which only they see.
-            if access.get(&t.agent).is_some_and(|a| a.manage) {
-                row.trial = tafs_core::home::trial_row(w, t)
-                    .ok()
-                    .flatten()
-                    .map(Box::new);
-            }
-            (row, tafs_core::home::relevant(t, holds(t), at))
-        })
-        .collect();
-    let overview = ordered
-        .iter()
-        .map(|t| tafs_core::home::overview_taf(t))
-        .collect();
-    // `sharedWithMe`: KIFF's answer says use without manage; no answer yet is not "shared".
-    let shared = tafs
-        .iter()
-        .filter(|t| access.get(&t.agent).is_some_and(|a| !a.manage))
-        .map(|t| t.key.clone())
-        .collect();
-    // Agents made through KIFF's API, not run by tafs: their Cards, apart (`otherAgents`).
-    let others = h
-        .other_agents()
-        .iter()
-        .filter_map(|o| tafs_core::home::taf(w, o).ok())
-        .map(|t| tafs_core::home::row(&t))
-        .collect();
+    let l = tafs_core::home::lists(
+        w,
+        h,
+        exceptions,
+        grants,
+        activity,
+        access,
+        &taf_chat::last_message_at,
+        at,
+    )?;
     let model = SidebarModel {
         list_loaded: true,
         plan: balance.and_then(|b| b.home_line.clone().map(|l| (l, b.plan_tone.clone()))),
         brief_tab: None,
-        tafs: rows,
-        held,
+        tafs: l.tafs,
+        held: l.held,
         cloud_needs_you: h.needs_you.as_ref().map(|n| n.count),
-        shared,
-        others,
+        shared: l.shared,
+        others: l.others,
         setting_up: h
             .setting_up()
             .iter()
@@ -3434,7 +3372,7 @@ fn home_model(
             .collect(),
         ..kiff_model()
     };
-    Ok((model, overview))
+    Ok((model, l.overview))
 }
 
 /// The reads the Overview and a taf's Card tab add to Home's (`refreshAccess`, `shares`,
