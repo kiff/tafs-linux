@@ -311,7 +311,9 @@ touch and PIN, for that very request (`tafs-core/device_signed.rs`, `key_approva
   signature. Only that makes a `Presence`, which nothing else can make or copy.
 - **Then the device key.** It signs by taking the request and its `Presence` both, and only when
   the presence is that request's: `t=<signed_at>,v1=<base64 DER ECDSA>`.
-- **Then KIFF.** `kiff::send_device_signed` sends only the act's own request, once. The sheet then
+- **Then KIFF.** `kiff::send_device_signed` sends only the act's own request, once. KIFF sees
+  only the device key's signature: the security key's check is this computer's own guarantee,
+  which KIFF can't verify (the agreed design, as for Disconnect). The sheet then
   closes, as an approval's does. `can_approve` and `send_with_key` never take these acts.
 
 Raise's sheet shows, under its lead and before the touch, tafs cloud's offer ("Raise the limit to
