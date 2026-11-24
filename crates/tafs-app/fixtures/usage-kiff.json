@@ -8,7 +8,7 @@
       "words": "Company · 140 of 1,000 credits left this period",
       "detail": "The spend limit is €200 a month",
       "warning": "Your tafs stop when the credits run out.",
-      "raise": { "words": "Raise the limit to €300", "from_cents": 20000 }
+      "raise": { "words": "Raise the limit to €300", "from_cents": 20000, "currency": "EUR" }
     }
   },
   "credits": {

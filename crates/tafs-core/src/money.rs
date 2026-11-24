@@ -131,9 +131,21 @@ fn number(minor: i64, decimals: u32, language: &str) -> String {
     crate::locale::number(minor, decimals, language)
 }
 
+/// A currency's minor-unit digits (ISO 4217): what its smallest unit is worth, for an amount sent
+/// in it (`raise.from_cents`). Two unless ISO says otherwise.
+pub fn minor_digits(code: &str) -> u32 {
+    match code {
+        "BIF" | "CLP" | "DJF" | "GNF" | "ISK" | "JPY" | "KMF" | "KRW" | "PYG" | "RWF" | "UGX"
+        | "UYI" | "VND" | "VUV" | "XAF" | "XOF" | "XPF" => 0,
+        "BHD" | "IQD" | "JOD" | "KWD" | "LYD" | "OMR" | "TND" => 3,
+        "CLF" | "UYW" => 4,
+        _ => 2,
+    }
+}
+
 /// The currencies tafs's amounts come in so far, by their ISO code; any other three-letter code
 /// is a currency written by its code.
-fn is_iso_currency(code: &str) -> bool {
+pub(crate) fn is_iso_currency(code: &str) -> bool {
     code.len() == 3 && code.chars().all(|c| c.is_ascii_uppercase())
 }
 

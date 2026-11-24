@@ -317,7 +317,9 @@ touch and PIN, for that very request (`tafs-core/device_signed.rs`, `key_approva
   closes, as an approval's does. `can_approve` and `send_with_key` never take these acts.
 
 Raise's sheet shows, under its lead and before the touch, tafs cloud's offer ("Raise the limit to
-€300") and the limit it's raised from ("The spend limit is €200 now.", `from_cents` in euros).
+€300") and the limit it's raised from ("The spend limit is €200 now."): the signed `from_cents`,
+formatted here in the currency tafs cloud names beside it (`raise.currency`, ISO 4217, at that
+currency's own decimals), never a guessed one. Without a currency named, nothing is raised.
 Without the limit it's raised from, nothing is raised: "The limit can't be raised from here right
 now." KIFF's 409s are said in the app's words: the limit changed meanwhile (the balance is read
 again, offering the raise from the limit it is now), or it's as high as the app may raise it.
