@@ -81,9 +81,10 @@ pub struct DraftCard {
     /// now (`current`: only its terms are read there).
     pub revises: Option<String>,
     pub current: Option<Box<DraftCard>>,
-    /// `current`'s own id, when KIFF sends it: the Card in force it describes, which must be the
-    /// one `revises` names (`allow::matches`). None from a KIFF that doesn't send it.
-    pub id: Option<String>,
+    /// Read only on a revision's `current` (its `id`, when KIFF sends it): the Card in force those
+    /// terms describe, which must be the one `revises` names (`allow::matches`). None on every
+    /// other Card, and from a KIFF that doesn't send it. Never a draft Card's own id.
+    pub in_force_id: Option<String>,
     /// KIFF says the Card it revises keeps its full terms.
     pub unchanged: Option<bool>,
     /// Who holds it, where it applies, and when it starts and ends, as KIFF writes them.
@@ -208,7 +209,7 @@ fn draft_card(v: &Value) -> Read<DraftCard> {
         Some(c) => {
             let c = object(c)?;
             Some(Box::new(DraftCard {
-                id: text_if(c, "id")?,
+                in_force_id: text_if(c, "id")?,
                 ..terms(c)?
             }))
         }

@@ -532,7 +532,11 @@ pub fn matches(draft: &AgentDraft, offer: &Offer, agent: &str, hold: &str, actio
             return false;
         };
         // The Card in force it's compared with must be the one it revises, when KIFF says which.
-        if current.id.as_deref().is_some_and(|id| id != revises) {
+        if current
+            .in_force_id
+            .as_deref()
+            .is_some_and(|id| id != revises)
+        {
             return false;
         }
         // A draft that sets how long a hold waits, or revokes, changes more than a limit.

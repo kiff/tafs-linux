@@ -28,8 +28,9 @@ Linux draws it in place of "Did this happen?"'s No and Yes (`docs/needs-you.md`)
 Linux never signs. For each act the iPad signs, this computer draws the iPad's button, and the
 sheet the iPad opens before signing, with its fields. The tap that would sign shows
 `ApprovalNotReady`'s words where the iPad says why an act didn't go, and nothing is sent
-(`tafs-core/src/signed.rs` › `tap`, app `approval::refuse`). The sample, which the iPad never
-signs for, does nothing on that tap.
+(`tafs-core/src/signed.rs` › `tap`, app `approval::refuse`). The sample, which never signs, says on
+that tap that it isn't in the sample ("This isn't in the sample. Sign in with KIFF to do it.",
+`sample.not_in_sample`), and sends nothing.
 
 `signed::signed` says which calls KIFF takes only signed, as the iPad's `KIFFClient` lists them:
 - `signsSetup`: a taf's draft, alert targets, keys, the time zone, deleting the account, raising

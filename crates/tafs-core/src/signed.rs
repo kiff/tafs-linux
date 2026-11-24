@@ -611,10 +611,19 @@ impl Act {
 }
 
 /// The tap that would sign `act`: what this computer says instead, and it sends nothing. Signed in
-/// with KIFF, that it can't approve here (`ApprovalNotReady`'s words); in the sample, which the
-/// iPad never signs for (`guard mode == .kiff`), nothing.
+/// with KIFF, that it can't approve here (`ApprovalNotReady`'s words); in the sample, which never
+/// signs, that it isn't in the sample (`sample.not_in_sample`).
 pub fn tap(w: &WordBook, mode: Mode, act: &Act) -> Result<Option<NotReady>, WordsError> {
     let _ = act;
+    // The sample signs nothing: its tap says so, and how to do it for real (`sample.not_in_sample`).
+    if mode == Mode::Sample {
+        return Ok(Some(NotReady {
+            line: w.line("sample.not_in_sample")?,
+            note: None,
+            open_settings: None,
+            check_again: None,
+        }));
+    }
     approval::notice(w, mode, THIS_COMPUTER)
 }
 
@@ -944,8 +953,11 @@ mod tests {
             let line = approval::not_ready(&w, THIS_COMPUTER, None).unwrap();
             for act in acts() {
                 assert_eq!(tap(&w, Mode::Kiff, &act).unwrap(), Some(line.clone()));
-                // The sample signs nothing, so its tap does nothing.
-                assert_eq!(tap(&w, Mode::Sample, &act).unwrap(), None);
+                // The sample signs nothing: its tap says it isn't in the sample, nothing more.
+                let sample = tap(&w, Mode::Sample, &act).unwrap().unwrap();
+                assert_eq!(sample.line, w.line("sample.not_in_sample").unwrap());
+                assert!(sample.note.is_none() && sample.open_settings.is_none());
+                assert!(sample.check_again.is_none());
                 assert_eq!(tap(&w, Mode::SignedOut, &act).unwrap(), None);
             }
         }

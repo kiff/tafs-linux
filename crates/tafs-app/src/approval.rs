@@ -1,7 +1,8 @@
 //! What stands where an approval's button would while this computer can't approve
 //! (`ApprovalSetupView.swift` › `ApprovalGate`, `ApprovalNotReady`). It never can: it has no
 //! Face ID or Touch ID (`tafs_core::approval::THIS_COMPUTER`), so signed in with KIFF the
-//! words stand in the button's place; the sample, which signs nothing, keeps the button.
+//! words stand in the button's place; the sample, which signs nothing, keeps the button, and its
+//! tap says it isn't in the sample.
 
 use gtk::prelude::*;
 use tafs_core::approval::{self, Gate, NotReady};
@@ -50,7 +51,8 @@ pub fn refusal_slot() -> gtk::Box {
 }
 
 /// The tap that would sign `act` (`tafs_core::signed::tap`): this computer sends nothing, and
-/// `slot` says it can't approve here. In the sample, which signs nothing, the tap does nothing.
+/// `slot` says it can't approve here. In the sample, which signs nothing, `slot` says it isn't in
+/// the sample (`sample.not_in_sample`).
 ///
 /// With this computer's security key on (`key_approval`), signed in with a session that approves
 /// with it, the tap asks the key instead, and `slot` says why when KIFF or the key refused.
