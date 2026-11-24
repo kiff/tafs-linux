@@ -88,7 +88,9 @@ third answer changes the taf's Card, as narrowly as it can, so calls like it go 
   - leave every other term as in force: actions, caps, scopes, states, next steps, totals with
     their measure and per-item parameter, what happens past a limit, holders, domain, environment,
     location and validity. A time is compared as the instant it names. A Card KIFF marks
-    unchanged must read as in force.
+    unchanged must read as in force;
+  - when KIFF names the Card in force a revision is compared with (`current.id`), be the one it
+    revises (`revises`).
 
   Anything else shows "This change isn't what was offered.", and there's no Approve.
 - **The sheet:** its title; tafs cloud's change, before and → after; KIFF's own lines for each
