@@ -142,8 +142,8 @@ in red, under the first row. Read as strictly as the iPad's decoder: a zone with
 **Choosing a zone** and **using this computer's** are the owner's act, which the iPad signs
 (`setAccountTimeZone`: `tafs.time-zone.v1` behind Face ID, then `PUT /v1/me/time-zone` as a
 signed setup call). The rows are buttons, as the iPad's are, and so is Use this computer's.
-Their tap is the tap that would sign. Under the first row, where the iPad says why the zone
-didn't change, it says "This device can't approve. Approve on another device signed in to your
+Their tap is the tap that would sign. With this computer's security key, the tap asks the key's touch and PIN, which approves KIFF's own request ([approval](approval.md#approving-with-a-passkey)). Without one, under the first row, where the iPad says why the
+zone didn't change, it says "This device can't approve. Approve on another device signed in to your
 account." Nothing is sent (`docs/approval.md` › A view-only computer). `--page time-zone-use`
 taps Use this computer's (CI's `time-zone-use`).
 
@@ -156,8 +156,8 @@ when this computer is in another zone, "Use this computer's: {identifier}" (this
 by `TZ`, else `/etc/localtime`), and "Holds' deadlines, Activity, the Record and what your tafs
 write use this time zone."; Export my chats with what it exports; and Delete account with what it
 deletes, for whoever may (`account.delete`). The time zone row opens its picker. Using
-this computer's zone is signed: its tap says this computer can't approve, under it, and sends
-nothing.
+this computer's zone is signed: with the security key it's approved with the key's touch and
+PIN; without one, its tap says this computer can't approve, under it, and sends nothing.
 
 Export my chats (`ExportChatsView.swift`, kiff/tafs#424) reads `GET /v1/me/chats/export` as the
 session, signed in with KIFF from a kept session. While it reads, "Preparing your chats…" shows
@@ -229,7 +229,7 @@ computer):
   each with their badge; "Everyone on the account is here. …" when no one is left.
 
 Create, Save, Delete, each menu item and each person in the add sheet is the tap that would
-sign. It says "This device can't approve. Approve on another device signed in to your account."
+sign. With this computer's security key, the tap asks the key's touch and PIN, which approves KIFF's own request ([approval](approval.md#approving-with-a-passkey)). Without one, it says "This device can't approve. Approve on another device signed in to your account."
 In a sheet, the words go under its content and the sheet stays open. On the screen, they go
 where the iPad says why a change didn't go, above the groups.
 
@@ -255,8 +255,8 @@ hours ago; a Mac a day ago) in a screenshot, and none otherwise, as the iPad's s
 **Signing another device out** is an approval the iPad signs with its approval key
 (`removeDevice`). Sign out asks first, as the iPad's confirmation does: "Sign tafs on iPhone
 out?" ("Sign this device out?" for one with no name), Sign out in red, and Cancel. Its Sign out
-is the tap that would sign. Above the list, where the iPad says why a device wasn't signed out,
-it says "This device can't approve. Approve on another device signed in to your account." Nothing
+is the tap that would sign. With this computer's security key, the tap asks the key's touch and PIN, which approves KIFF's own request ([approval](approval.md#approving-with-a-passkey)). Without one, above the list, where the iPad says why a device wasn't
+signed out, it says "This device can't approve. Approve on another device signed in to your account." Nothing
 is sent (`docs/approval.md` › A view-only computer). The sample signs nothing, so there it says
 "This isn't in the sample. Sign in with KIFF to do it." (`sample.not_in_sample`), and sends nothing. `--page devices-sign-out` opens the question over the sample's iPhone (CI's
 `devices-sign-out`).
