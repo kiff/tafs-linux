@@ -3,6 +3,14 @@
 What changed in each release of tafs for Linux, newest first. Each release's notes, in its eight
 languages, are in `packaging/release-notes/` and on its GitHub release page.
 
+## v1.1.1
+
+**A security key without libfido2**
+- A security key needs libfido2 1.14 or later on this computer (on Ubuntu, the `libfido2-1`
+  package). Without it, approving with the key says to install it and keeps the request, instead of
+  "the security key couldn't sign", and pairing says so under its code instead of pairing without
+  the key in silence. Once it's installed, the next try works without restarting tafs.
+
 ## v1.1.0
 
 **Signing in and languages**
