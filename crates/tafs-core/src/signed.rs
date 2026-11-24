@@ -583,7 +583,8 @@ impl Act {
     }
 
     /// Whether the device checks the person, or signs with its approval key, before a tafs
-    /// cloud call (`useVersion`, `removeTaf`): this computer never sends it.
+    /// cloud call (`useVersion`, `removeTaf`): this computer sends it only once its security key
+    /// has approved it here (`key_approval`).
     pub fn at_device(&self) -> bool {
         matches!(
             self,

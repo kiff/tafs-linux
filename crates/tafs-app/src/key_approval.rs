@@ -682,6 +682,46 @@ mod tests {
     }
 
     #[test]
+    fn raise_is_offered_with_the_key_and_gated_without_it() {
+        // Plan & usage's Raise (the balance's and a member's request's) goes through
+        // `raise_or_gate`, which offers it when the key can sign it and gates it otherwise: never
+        // the gate alone, which would hide it even with the key (v1.1.0's walk-through).
+        let code = std::fs::read_to_string(format!("{}/src/usage.rs", env!("CARGO_MANIFEST_DIR")))
+            .unwrap();
+        let code = code.split("#[cfg(test)]").next().unwrap();
+        assert_eq!(
+            code.matches("raise_or_gate(ctx, &").count(),
+            2,
+            "both Raises"
+        );
+        assert_eq!(
+            code.matches("approval::gate(").count(),
+            1,
+            "only inside raise_or_gate"
+        );
+        let f = code.find("fn raise_or_gate(").unwrap();
+        let gate = code.find("approval::gate(").unwrap();
+        let sign = f + code[f..].find("key_approval::can_sign(").unwrap();
+        assert!(f < sign && sign < gate, "the key is asked first");
+    }
+
+    #[test]
+    fn a_card_steps_pin_sheet_opens_over_the_window() {
+        // Approve is drawn away (`approving`) before tafs cloud answers, so the sheet's parent is
+        // the window, taken before that redraw, never the button (walk-through: it opened as a
+        // window of its own).
+        let code = std::fs::read_to_string(format!("{}/src/coach.rs", env!("CARGO_MANIFEST_DIR")))
+            .unwrap();
+        let start = code.find("fn approve_card(").unwrap();
+        let body = &code[start..start + code[start..].find("\n    }\n").unwrap()];
+        let root = body
+            .find("parent\n            .root()")
+            .expect("the window is taken");
+        let drawn = body.find("self.draw();").unwrap();
+        assert!(root < drawn, "before Approve is drawn away");
+    }
+
+    #[test]
     fn a_card_steps_report_is_signed_only_after_the_key_answered() {
         // The Card step (`setup_approval`): the ask is checked before anything is signed, the
         // draft is confirmed on the security key, and only the key's answer starts the report,

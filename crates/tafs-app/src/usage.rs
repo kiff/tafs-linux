@@ -567,12 +567,13 @@ fn balance_panel(ctx: &Ctx, column: &gtk::Box, s: &State, kiff: bool) {
     }
     column.append(&p);
     if let (true, Some(raise)) = (kiff, &line.raise) {
-        // `ApprovalGate`, as the iPad's: while this computer can't approve, why in Raise's place.
+        // `ApprovalGate`, as the iPad's: with this computer's security key, Raise; without one,
+        // why this computer can't approve, in its place (`raise_or_gate`).
         let b = crate::widgets::primary(&raise.words);
         b.set_widget_name("raise-limit");
         let (ctx2, offer) = (ctx.clone(), raise.clone());
         b.connect_clicked(move |b| ctx2.raise(&offer, b.upcast_ref(), |s, n| s.raise_refused = n));
-        column.append(&crate::approval::gate(&ctx.w, ctx.mode(), &b));
+        column.append(&raise_or_gate(ctx, &b, raise));
         if let Some(n) = &s.raise_refused {
             column.append(&crate::approval::not_ready(n));
         }
@@ -1398,6 +1399,20 @@ fn open_sheet(ctx: &Ctx, column: &gtk::Box) {
     });
 }
 
+/// Raise the limit's place (`ApprovalGate`): the button while this computer's security key can
+/// sign it (`key_approval::can_sign`: the key's touch and PIN, then the device key), else why this
+/// computer can't approve, as before. The key is never assumed: without one, nothing is offered.
+fn raise_or_gate(ctx: &Ctx, button: &gtk::Button, offer: &tafs_core::usage::Offer) -> gtk::Widget {
+    let act = Act::RaiseLimit {
+        from_cents: offer.from_cents.unwrap_or_default(),
+    };
+    let kept = crate::store::load(chrono::Utc::now().timestamp());
+    if ctx.mode() == Mode::Kiff && crate::key_approval::can_sign(kept.as_ref(), &act) {
+        return button.clone().upcast();
+    }
+    crate::approval::gate(&ctx.w, ctx.mode(), button)
+}
+
 /// `requestsPanel`, for someone who manages billing: members' open requests, in the amber,
 /// each its line and reason, then Raise the limit (where tafs cloud offers it) and Decline, which
 /// opens its sheet. Both are signed by the device key after the security key's touch and PIN
@@ -1430,12 +1445,12 @@ fn requests_panel(ctx: &Ctx, column: &gtk::Box, u: &KiffUsage, manages_billing: 
             // `answerRaise`: raising answers every open request for one.
             let raise = crate::widgets::primary(&l("usage.raise_limit_button"));
             raise.set_widget_name(&format!("usage.raise.{}", r.id));
-            let ctx2 = ctx.clone();
+            let (ctx2, shown) = (ctx.clone(), offer.clone());
             raise.connect_clicked(move |b| {
                 ctx2.raise(&offer, b.upcast_ref(), |s, n| s.plan_refused = n)
             });
-            // `ApprovalGate`, as the iPad's: while this computer can't approve, why in its place.
-            buttons.append(&crate::approval::gate(&ctx.w, ctx.mode(), &raise));
+            // `ApprovalGate`, as the iPad's: with the security key, Raise; without, why in its place.
+            buttons.append(&raise_or_gate(ctx, &raise, &shown));
         }
         let packs_sell = s
             .balance
