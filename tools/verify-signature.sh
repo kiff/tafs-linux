@@ -33,12 +33,18 @@ export GNUPGHOME
 trap 'gpgconf --kill gpg-agent >/dev/null 2>&1 || true; rm -rf "$GNUPGHOME"' EXIT
 chmod 700 "$GNUPGHOME"
 gpg --batch --quiet --import "$root/packaging/tafs-release-key.asc"
-key=$(gpg --batch --with-colons --list-keys | awk -F: '$1 == "fpr" { print $10; exit }')
-[ "$key" = "$FINGERPRINT" ] ||
-  fail "packaging/tafs-release-key.asc isn't the release key: its fingerprint is ${key:-none}."
+# Exactly one key in the file, and it's the pinned one: a second key can't ride along unchecked.
+# Each primary key's fingerprint is the first `fpr` after its `pub` line; its subkeys' come after
+# `sub` lines.
+primaries=$(gpg --batch --with-colons --list-keys |
+  awk -F: '$1 == "pub" { want = 1; next } $1 == "fpr" && want { print $10; want = 0 }')
+[ "$primaries" = "$FINGERPRINT" ] ||
+  fail "packaging/tafs-release-key.asc isn't the release key alone: it holds ${primaries:-no key}."
 
-# gpg's machine-readable status: VALIDSIG names the key that made a good signature.
+# gpg's machine-readable status: VALIDSIG names the key that made a good signature first and, when
+# a signing subkey made it, the primary key last. Either must be the release key.
 status=$(gpg --batch --status-fd 1 --verify "$dir/SHA256SUMS.asc" "$dir/SHA256SUMS" 2>/dev/null || true)
-grep -q "^\[GNUPG:\] VALIDSIG $FINGERPRINT " <<<"$status" ||
+awk -v fp="$FINGERPRINT" '$1 == "[GNUPG:]" && $2 == "VALIDSIG" && ($3 == fp || $NF == fp) { ok = 1 }
+  END { exit !ok }' <<<"$status" ||
   fail "SHA256SUMS.asc isn't a good signature by the release key $FINGERPRINT."
 echo "SHA256SUMS is signed by the release key $FINGERPRINT."

@@ -72,7 +72,10 @@ jobs:
       - name: The release check refuses that key and takes the release key's own signature
         # tools/verify-signature.sh, as verify-release.yml runs it: the dry run's signature is by
         # another key, so it must fail; the last published release's is the real key's, so it
-        # must pass. Only those two small files are downloaded.
+        # must pass. Only those two small files are downloaded. The latest release is read with
+        # the job's own read-only token, so a busy runner isn't rate-limited.
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           mkdir dry && mv SHA256SUMS SHA256SUMS.asc dry/
           if tools/verify-signature.sh dry --require; then
@@ -80,7 +83,8 @@ jobs:
             exit 1
           fi
           mkdir published
-          tag=$(curl -fsSL https://api.github.com/repos/kiff/tafs-linux/releases/latest | jq -r .tag_name)
+          tag=$(curl -fsSL -H "Authorization: Bearer $GH_TOKEN" \
+            https://api.github.com/repos/kiff/tafs-linux/releases/latest | jq -r .tag_name)
           for f in SHA256SUMS SHA256SUMS.asc; do
             curl -fsSL -o "published/$f" "https://github.com/kiff/tafs-linux/releases/download/$tag/$f"
           done

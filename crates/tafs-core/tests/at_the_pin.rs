@@ -1860,3 +1860,83 @@ fn a_taf_s_chat_draws_in_every_language() {
         }
     }
 }
+
+/// An API door's endpoint and example against the shared vector at the pin
+/// (`vectors/api-door-endpoint.json`, read by every app's tests): each `exact` address shows exactly
+/// its endpoint, single-quoted in the example; each `hostile` one keeps the rules: tafs cloud's
+/// host over HTTPS, no user or port, an unreserved path, and no query or fragment.
+#[test]
+fn an_api_doors_endpoint_keeps_the_shared_vector() {
+    use tafs_core::doors::{api, read};
+    let root = env!("CARGO_MANIFEST_DIR");
+    let vector: serde_json::Value = serde_json::from_slice(
+        &std::fs::read(format!(
+            "{root}/../../shared/vectors/api-door-endpoint.json"
+        ))
+        .expect("the vector at the pin (tools/sync.sh)"),
+    )
+    .unwrap();
+    let doors =
+        read(&std::fs::read(format!("{root}/../tafs-app/fixtures/taf-doors-api.json")).unwrap())
+            .unwrap();
+    let at = |address: &str| {
+        let mut d = doors.doors[0].clone();
+        d.address = address.to_string();
+        api::endpoint(&d)
+    };
+    let text = |v: &serde_json::Value, k: &str| v[k].as_str().unwrap().to_string();
+    let (prefix, suffix) = (
+        text(&vector, "example_prefix"),
+        text(&vector, "example_suffix"),
+    );
+    let exact = vector["exact"].as_array().unwrap();
+    assert!(!exact.is_empty());
+    for case in exact {
+        let shown = at(&text(case, "address"));
+        assert_eq!(shown, text(case, "endpoint"), "{case}");
+        assert_eq!(
+            api::example(&shown),
+            format!("{prefix}{shown}{suffix}"),
+            "{case}"
+        );
+    }
+    let rules = &vector["rules"];
+    let path = regex_lite(&text(rules, "path_pattern"));
+    let hostile = vector["hostile"].as_array().unwrap();
+    assert!(!hostile.is_empty());
+    for address in hostile {
+        let shown = at(address.as_str().unwrap());
+        let u = url::Url::parse(&shown).unwrap_or_else(|_| panic!("{address}: {shown}"));
+        assert_eq!(u.scheme(), text(rules, "scheme"), "{address}");
+        assert_eq!(
+            u.host_str(),
+            Some(text(rules, "host").as_str()),
+            "{address}"
+        );
+        assert_eq!(u.port(), None, "{address}");
+        assert!(
+            u.username().is_empty() && u.password().is_none(),
+            "{address}"
+        );
+        assert!(u.query().is_none() && u.fragment().is_none(), "{address}");
+        assert!(path(u.path()), "{address}: {}", u.path());
+        assert_eq!(
+            api::example(&shown),
+            format!("{prefix}{shown}{suffix}"),
+            "{address}"
+        );
+    }
+}
+
+/// The vector's `path_pattern`, `^/[A-Za-z0-9/_.~-]*$`, as a check: it names exactly that class.
+fn regex_lite(pattern: &str) -> impl Fn(&str) -> bool {
+    assert_eq!(
+        pattern, "^/[A-Za-z0-9/_.~-]*$",
+        "the vector's path rule changed: read it again"
+    );
+    |p: &str| {
+        p.starts_with('/')
+            && p.chars()
+                .all(|c| c.is_ascii_alphanumeric() || "/_.~-".contains(c))
+    }
+}

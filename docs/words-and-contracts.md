@@ -2,7 +2,11 @@
 
 Both come from kiff/tafs at the commit in `shared-pin.json`. `tools/sync.sh` puts them in
 `shared/` (`shared/app/strings`, `shared/contracts`), never in git, with one of the iPad's own
-samples: `ios/Tafs/Samples/connect-apps.json`, the reference set's Connect apps.
+samples (`ios/Tafs/Samples/connect-apps.json`, the reference set's Connect apps) and a shared test
+vector: `vectors/api-door-endpoint.json`, an API door's endpoint and example, which every app's
+tests read (`tests/at_the_pin.rs` › `an_api_doors_endpoint_keeps_the_shared_vector`: each exact
+address shows exactly its endpoint, and each hostile one keeps tafs cloud's host over HTTPS, an
+unreserved path, and no user, port, query or fragment).
 
 `WordBook::load(root, language)` reads `app/strings/<language>/*.json`, the files the iPad's
 `Words.swift` is generated from:

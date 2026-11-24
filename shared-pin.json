@@ -5,6 +5,7 @@
     "app/strings",
     "app/hosts.json",
     "contracts",
-    "ios/Tafs/Samples/connect-apps.json"
+    "ios/Tafs/Samples/connect-apps.json",
+    "vectors/api-door-endpoint.json"
   ]
 }

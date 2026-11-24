@@ -379,3 +379,43 @@ fn a_draft_naming_only_the_same_first_holder_keeps_the_cards_holders() {
     );
     assert!(!ok(&d, &o));
 }
+
+#[test]
+fn the_card_in_force_is_the_one_revised_when_kiff_names_it() {
+    let o = per_action_offer(32000);
+    let with_current_id = |id: &str| {
+        let id = id.to_string();
+        draft_with(
+            |c| cap(c, 32000),
+            move |d| d["cards"][0]["current"]["id"] = json!(id),
+        )
+    };
+    // Named and the same Card: passes. Named and another Card: refused, nothing signed.
+    assert!(ok(&with_current_id("m1"), &o));
+    assert!(!ok(&with_current_id("m2"), &o));
+    // Not named (KIFF today): as before.
+    assert!(ok(&draft_with(|c| cap(c, 32000), |_| {}), &o));
+    // A Card marked unchanged is bound the same way: its own Card, or nothing is signed.
+    let unchanged_with = |id: &str| {
+        let id = id.to_string();
+        draft_with(
+            |c| cap(c, 32000),
+            move |d| {
+                let mut other = current();
+                other["revises"] = json!("m7");
+                other["current"] = current();
+                other["current"]["id"] = json!(id);
+                other["unchanged"] = json!(true);
+                d["cards"].as_array_mut().unwrap().push(other);
+            },
+        )
+    };
+    assert!(ok(&unchanged_with("m7"), &o));
+    assert!(!ok(&unchanged_with("m1"), &o));
+    // An id that isn't text fails the draft's read.
+    let mut d = serde_json::json!({"id": "drf_1", "agent_id": "agt_refunds", "status": "draft", "version": "v2",
+        "cards": [{"revises": "m1", "current": {"id": 7}}]});
+    assert!(AgentDraft::read(d.to_string().as_bytes()).is_none());
+    d["cards"][0]["current"]["id"] = json!("m1");
+    assert!(AgentDraft::read(d.to_string().as_bytes()).is_some());
+}
