@@ -384,6 +384,9 @@ pub mod words {
         /// the iPad out of your account. Plug it in, then touch it and enter its PIN."); adding
         /// the key, what a security key is.
         pub lead: Option<String>,
+        /// Under the lead, what the act will do, read before the touch (Raise the limit: the new
+        /// limit and the one it's raised from).
+        pub details: Vec<String>,
         pub enter_pin: String,
         pub pin: String,
         pub touch: String,
@@ -398,6 +401,7 @@ pub mod words {
         Ok(SheetLines {
             title: w.line("approval.security_key.add_title")?,
             lead: Some(none_paired(w)?),
+            details: vec![],
             enter_pin: w.line("approval.security_key.add_enter_pin")?,
             pin: w.line("approval.security_key.pin")?,
             touch: w.line("approval.security_key.touch")?,
@@ -411,6 +415,7 @@ pub mod words {
         Ok(SheetLines {
             title: w.line("approval.security_key.title")?,
             lead: act.map(|a| before(w, a)).transpose()?,
+            details: vec![],
             enter_pin: w.line("approval.security_key.enter_pin")?,
             pin: w.line("approval.security_key.pin")?,
             touch: w.line("approval.security_key.touch")?,

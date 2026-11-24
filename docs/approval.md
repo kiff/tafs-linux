@@ -293,5 +293,34 @@ from a screen recording or a clipboard manager's history.
   twice). With no line to show, it's the shared "couldn't sign" line, never a code name.
 
 Still refused here, whatever the key: planque's acts (their own signing), a held call's or a
-step's answer (its signature is in its body), Make live (the device checks it first), and Raise
-the limit and Decline, whose bodies need what their acts don't carry yet.
+step's answer (its signature is in its body), and Make live (the device checks it first).
+
+### Raise the limit and Decline: the key's touch, then the device key
+
+KIFF takes these two only signed by the device key (`KIFF-Device-Signature`, its signed
+routes), never as a passkey's approval. A device key on a computer's disk proves no one is there,
+so, as with Disconnect, the device key signs only after the security key checked the person, by
+touch and PIN, for that very request (`tafs-core/device_signed.rs`, `key_approval::sign_with_presence`):
+- **Every try, a new request.** Each PIN try builds the act's request with a new `signed_at`
+  (`device_signed::Request`), and its `kiff.request.v1` message. Nothing is kept from a try before.
+- **What the key answers over.** `tafs.presence.request.v1`: the tenant, `signed_at`, and that
+  message's SHA-256. It's never sent anywhere. Its first line keeps it from ever being a message
+  KIFF would take as an approval.
+- **The answer, checked.** It's checked as KIFF checks an assertion (kiff.dev's, present and
+  verified, the credential asked, not a synced passkey) and by the registered key's own
+  signature. Only that makes a `Presence`, which nothing else can make or copy.
+- **Then the device key.** It signs by taking the request and its `Presence` both, and only when
+  the presence is that request's: `t=<signed_at>,v1=<base64 DER ECDSA>`.
+- **Then KIFF.** `kiff::send_device_signed` sends only the act's own request, once. The sheet then
+  closes, as an approval's does. `can_approve` and `send_with_key` never take these acts.
+
+Raise's sheet shows, under its lead and before the touch, tafs cloud's offer ("Raise the limit to
+€300") and the limit it's raised from ("The spend limit is €200 now.", `from_cents` in euros).
+Without the limit it's raised from, nothing is raised: "The limit can't be raised from here right
+now." KIFF's 409s are said in the app's words: the limit changed meanwhile (the balance is read
+again, offering the raise from the limit it is now), or it's as high as the app may raise it.
+Decline signs the note as it stands at the tap; declined, its sheet closes and the requests are
+read again. Not declined: "The request wasn't declined. {why}".
+
+With no security key, or a session kept without the key's public half, both stay as before: the
+can't-approve line, and nothing sent.

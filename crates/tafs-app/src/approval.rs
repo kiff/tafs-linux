@@ -106,7 +106,9 @@ pub fn refuse_then(
         // device key alone).
         let approves = crate::key_approval::can_approve(kept.as_ref(), act);
         let ends = crate::key_approval::can_end(kept.as_ref(), act);
-        if let (true, Some(kept)) = (approves || ends, kept) {
+        // Raise the limit and Decline: the key's touch and PIN, then the device key, every time.
+        let signs = crate::key_approval::can_sign(kept.as_ref(), act);
+        if let (true, Some(kept)) = (approves || ends || signs, kept) {
             let slot2 = slot.clone();
             let languages =
                 tafs_core::language::screen_languages(&tafs_core::language::preferred_from_env());
@@ -135,6 +137,17 @@ pub fn refuse_then(
                     act,
                     what.as_deref(),
                     cards,
+                    done,
+                );
+            } else if signs {
+                crate::key_approval::sign_with_presence(
+                    w,
+                    slot,
+                    kept,
+                    languages,
+                    act,
+                    what.as_deref(),
+                    vec![],
                     done,
                 );
             } else {

@@ -120,6 +120,68 @@ impl Ctx {
         let redraw = self.redraw.clone();
         gtk::glib::idle_add_local_once(move || redraw());
     }
+
+    /// Raise the limit (`raiseLimit`) from the limit tafs cloud offered raising. With this
+    /// computer's security key, its sheet shows the new limit and the one it's raised from, then
+    /// the key's touch and PIN check the person, then the device key signs, every time; once
+    /// raised, the balance is read again. Else what this computer says, kept with `put`.
+    fn raise(
+        &self,
+        offer: &tafs_core::usage::Offer,
+        over: &gtk::Widget,
+        put: fn(&mut State, Option<NotReady>),
+    ) {
+        let act = Act::RaiseLimit {
+            from_cents: offer.from_cents.unwrap_or_default(),
+        };
+        let kept = crate::store::load(chrono::Utc::now().timestamp());
+        let signs = self.mode() == Mode::Kiff && crate::key_approval::can_sign(kept.as_ref(), &act);
+        let (true, Some(kept)) = (signs, kept) else {
+            return self.refuse(&act, put);
+        };
+        let said = move |ctx: &Ctx, line: String| {
+            put(
+                &mut ctx.state.borrow_mut(),
+                Some(NotReady {
+                    line,
+                    note: None,
+                    open_settings: None,
+                    check_again: None,
+                }),
+            );
+            let redraw = ctx.redraw.clone();
+            gtk::glib::idle_add_local_once(move || redraw());
+        };
+        // No limit to raise from: nothing is raised (`noRaise`).
+        let Ok(Some(details)) = tafs_core::usage::raise_lines(&self.w, offer) else {
+            let line = self.w.line("card.limit_can_not_raised_right");
+            return said(self, line.unwrap_or_default());
+        };
+        put(&mut self.state.borrow_mut(), None);
+        let ctx = self.clone();
+        let done: crate::key_approval::Approved = Rc::new(move |outcome| match outcome {
+            Some(Ok(())) => (ctx.reload)(),
+            // `limit_changed`: the balance is read again, which offers the raise from the limit
+            // it is now; the line says so.
+            Some(Err(line)) => {
+                said(&ctx, line);
+                (ctx.reload)();
+            }
+            None => {}
+        });
+        let languages =
+            tafs_core::language::screen_languages(&tafs_core::language::preferred_from_env());
+        crate::key_approval::sign_with_presence(
+            self.w.clone(),
+            over,
+            kept,
+            languages,
+            &act,
+            act.own_prompt(&self.w).as_deref(),
+            details,
+            done,
+        );
+    }
 }
 
 type Redraw = Rc<dyn Fn()>;
@@ -508,8 +570,8 @@ fn balance_panel(ctx: &Ctx, column: &gtk::Box, s: &State, kiff: bool) {
         // `ApprovalGate`, as the iPad's: while this computer can't approve, why in Raise's place.
         let b = crate::widgets::primary(&raise.words);
         b.set_widget_name("raise-limit");
-        let ctx2 = ctx.clone();
-        b.connect_clicked(move |_| ctx2.refuse(&Act::RaiseLimit, |s, n| s.raise_refused = n));
+        let (ctx2, offer) = (ctx.clone(), raise.clone());
+        b.connect_clicked(move |b| ctx2.raise(&offer, b.upcast_ref(), |s, n| s.raise_refused = n));
         column.append(&crate::approval::gate(&ctx.w, ctx.mode(), &b));
         if let Some(n) = &s.raise_refused {
             column.append(&crate::approval::not_ready(n));
@@ -1264,8 +1326,9 @@ fn ask_admin(ctx: &Ctx, raise: bool, over: &gtk::Widget) {
 }
 
 /// `DeclineRequestView`, its own sheet: the question, Note (optional), and Decline in red. Declining
-/// is signed, so its tap says this computer can't approve, where the iPad says why it wasn't
-/// declined, and sends nothing; the sheet stays open.
+/// is signed by the device key after the security key's touch and PIN, over the note as typed;
+/// declined, the sheet closes and the requests are read again; not, why, where the iPad says it.
+/// Without a key, its tap says this computer can't approve, sends nothing, and the sheet stays.
 fn decline(ctx: &Ctx, r: &PackRequest, u: &KiffUsage, over: &gtk::Widget) {
     let w = &ctx.w;
     let Ok(lines) = decline_sheet(w, r, u) else {
@@ -1287,8 +1350,18 @@ fn decline(ctx: &Ctx, r: &PackRequest, u: &KiffUsage, over: &gtk::Widget) {
     let b = outline(&lines.decline);
     b.add_css_class("refuse");
     b.set_widget_name("usage.decline");
-    let (w2, mode, act) = (w.clone(), ctx.mode(), decline_act(r));
-    b.connect_clicked(move |_| crate::approval::refuse(&w2, mode, &act, &refused));
+    // The act is the note as it stands at the tap: what the key's touch then signs.
+    let (w2, mode, r2) = (w.clone(), ctx.mode(), r.clone());
+    // Declined: the sheet closes and the requests are read again.
+    let (dialog, reload) = (sheet.dialog.clone(), ctx.reload.clone());
+    let then: Rc<dyn Fn()> = Rc::new(move || {
+        dialog.close();
+        reload();
+    });
+    b.connect_clicked(move |_| {
+        let act = decline_act(&r2, &note.text());
+        crate::approval::refuse_then(&w2, mode, &act, None, vec![], &refused, Some(then.clone()))
+    });
     sheet.column.append(&b);
     sheet.dialog.present(Some(over));
     if OPEN.with(|o| o.get()) == Some("decline-tapped") {
@@ -1327,7 +1400,8 @@ fn open_sheet(ctx: &Ctx, column: &gtk::Box) {
 
 /// `requestsPanel`, for someone who manages billing: members' open requests, in the amber,
 /// each its line and reason, then Raise the limit (where tafs cloud offers it) and Decline, which
-/// opens its sheet. Both are signed: their tap says this computer can't approve, and sends
+/// opens its sheet. Both are signed by the device key after the security key's touch and PIN
+/// (`Ctx::raise`, `decline`); without a key, their tap says this computer can't approve, and sends
 /// nothing. Approving a pack buys it in the phone's store: here, where to buy it (ruling A).
 fn requests_panel(ctx: &Ctx, column: &gtk::Box, u: &KiffUsage, manages_billing: bool, s: &State) {
     let open = open_requests(u, manages_billing);
@@ -1351,17 +1425,15 @@ fn requests_panel(ctx: &Ctx, column: &gtk::Box, u: &KiffUsage, manages_billing: 
             one.append(&text(&r.reason, 14, 400, &["tafs-soft"]));
         }
         let buttons = gtk::Box::new(gtk::Orientation::Horizontal, 10);
-        let offers_raise = s
-            .balance
-            .as_ref()
-            .is_some_and(|b| b.balance.raise.is_some());
-        if r.kind == "raise" && offers_raise {
+        let offer = s.balance.as_ref().and_then(|b| b.balance.raise.clone());
+        if let (true, Some(offer)) = (r.kind == "raise", offer) {
             // `answerRaise`: raising answers every open request for one.
             let raise = crate::widgets::primary(&l("usage.raise_limit_button"));
             raise.set_widget_name(&format!("usage.raise.{}", r.id));
             let ctx2 = ctx.clone();
-            raise
-                .connect_clicked(move |_| ctx2.refuse(&Act::RaiseLimit, |s, n| s.plan_refused = n));
+            raise.connect_clicked(move |b| {
+                ctx2.raise(&offer, b.upcast_ref(), |s, n| s.plan_refused = n)
+            });
             // `ApprovalGate`, as the iPad's: while this computer can't approve, why in its place.
             buttons.append(&crate::approval::gate(&ctx.w, ctx.mode(), &raise));
         }

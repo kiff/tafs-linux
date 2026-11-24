@@ -14,9 +14,11 @@ It reads each time it opens: until then a panel with a spinner, at the screen's 
   (14, soft) and the `warning` (14 semibold, in the state's colour). The panel's edge is red at
   50% while waiting, amber at 50% from the warning. When it couldn't be read, why, in red.
   Signed in with KIFF, tafs cloud's Raise offer (`raise.words`) goes under it, behind
-  `ApprovalGate` as on the iPad: while this computer can't approve, the gate's line ("This device
-  can't approve. Approve on another device signed in to your account.") is drawn in Raise's
-  place, and nothing is sent. The same for Raise the limit on a member's request.
+  `ApprovalGate` as on the iPad. With this computer's security key, Raise opens the key's sheet,
+  which shows the new limit and the one it's raised from; the key's touch and PIN come next,
+  then the device key signs (`docs/approval.md` › Raise the limit and Decline). Raised, the
+  balance is read again. Without a key, the can't-approve line is drawn in Raise's place, and
+  nothing is sent. Raise the limit on a member's request works the same way.
 - **KIFF's plan** (`GET /v1/me/usage` at KIFF), signed in with KIFF, in the iPad's order:
   - who bills it (`billingPanel`): "Billed by Apple", "Billed by Google Play", "Billed by KIFF"
     or "Managed by your company's agreement", none when no plan is billed; after a move from
@@ -51,13 +53,17 @@ The iPad doesn't sign a member's asks, so they work here, at KIFF as the session
 
 The plan's message (`planMessage`) is a panel after the balance, in the soft colour.
 
-An admin's answers are signed (`docs/approval.md` › A view-only computer), and nothing is sent:
-- **Raise the limit** on a member's raise request: its tap says this computer can't approve, in
-  the plan's message's place.
+An admin's answers are signed by the device key, after the security key's touch and PIN for
+each one (`docs/approval.md` › Raise the limit and Decline). Without a key, nothing is sent:
+- **Raise the limit** on a member's raise request: the balance's Raise, from the limit tafs cloud
+  offers raising. Raising answers every open request for one. Not raised, or without a key, the
+  line goes in the plan's message's place.
 - **Decline** opens `DeclineRequestView`: Cancel, "Decline", its question ("Decline the request
   to raise the spend limit?", "Decline the request for {pack}?"), NOTE (OPTIONAL) with "Why, for
-  them", and Decline in red. Its tap says this computer can't approve, above the button where the
-  iPad says why it wasn't declined, and the sheet stays open.
+  them", and Decline in red. Its tap signs the note as typed (`decline_act`). Declined, the sheet
+  closes and the requests are read again. Not declined, the line goes above the button, where
+  the iPad says why. Without a key, the line says this computer can't approve, and the sheet
+  stays open.
 
 Each send is an unsigned call (`tafs_core::signed::Unsigned`), which can't be one KIFF takes only
 signed. A screenshot's account (`--usage`) sends nothing. `--page usage-ask` opens Ask an
