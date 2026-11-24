@@ -741,6 +741,11 @@ pub struct Conversation {
     pub answered: HashSet<String>,
     /// Why an answer didn't go, by card id (`cardNotes`).
     pub notes: HashMap<String, String>,
+    /// This computer approves with its security key (`key_approval::can_approve`): an approval's
+    /// Card step is offered here (`setup_approval`).
+    pub key_approves: bool,
+    /// The card whose Card step is being approved now: its Approve waits.
+    pub approving: Option<String>,
     pub error: Option<String>,
     /// Bumped by each new or reopened conversation (`setupConversationGeneration`).
     pub generation: u64,
