@@ -344,6 +344,16 @@ pub mod words {
         w.line(key)
     }
 
+    /// No libfido2 on this computer, or one older than 1.14: install it, then approve again.
+    pub fn no_library(w: &WordBook) -> Result<String, WordsError> {
+        w.line("approval.security_key.no_library")
+    }
+
+    /// The same, while pairing: the key can't be added now, so the computer pairs without it.
+    pub fn no_library_pairing(w: &WordBook) -> Result<String, WordsError> {
+        w.line("approval.security_key.no_library_pairing")
+    }
+
     /// Anything else that stopped the approval: an answer KIFF would refuse (no user
     /// verification among them) is the key failing to sign, never the key's own decline.
     pub fn failed(w: &WordBook) -> Result<String, WordsError> {

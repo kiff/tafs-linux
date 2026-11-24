@@ -57,9 +57,9 @@ fn said(w: &WordBook, e: KeyError) -> Option<(String, bool)> {
             words::line(w, f).unwrap_or_default(),
             words::may_try_again(Some(f)),
         )),
-        KeyError::Missing(_) | KeyError::Unreadable => {
-            Some((words::failed(w).unwrap_or_default(), true))
-        }
+        // No libfido2 (or one too old): say to install it, never "couldn't sign".
+        KeyError::Missing(_) => Some((words::no_library(w).unwrap_or_default(), true)),
+        KeyError::Unreadable => Some((words::failed(w).unwrap_or_default(), true)),
         // Never shown here: the sheet closes, and its caller says KIFF's line.
         KeyError::Sent => Some((words::failed(w).unwrap_or_default(), false)),
     }
@@ -358,6 +358,30 @@ fn present_lines(
 mod tests {
     use super::*;
     use std::sync::{Condvar, Mutex};
+
+    /// No libfido2 here, or one older than 1.14: the sheet says to install it and stays open, never
+    /// "couldn't sign", which reads as the key's fault.
+    #[test]
+    fn no_libfido2_says_to_install_it_not_that_the_key_couldnt_sign() {
+        let w = WordBook::load(&WordBook::default_root(), "en").expect("the words at the pin");
+        for missing in [
+            crate::fido_key::Missing::Library,
+            crate::fido_key::Missing::TooOld,
+        ] {
+            let (line, open) = said(&w, KeyError::Missing(missing)).expect("a line");
+            assert!(line.contains("libfido2"), "{line}");
+            assert_ne!(line, words::failed(&w).unwrap());
+            assert!(
+                open,
+                "the sheet stays open to try again once it's installed"
+            );
+        }
+        // Anything unreadable is still the key failing to sign.
+        assert_eq!(
+            said(&w, KeyError::Unreadable).map(|s| s.0),
+            words::failed(&w).ok()
+        );
+    }
 
     /// A stand-in attempt that waits for the key's touch until it's stopped: closing the sheet
     /// while it waits stops it, and it answers `Cancelled`, never an approval.

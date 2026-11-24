@@ -706,6 +706,28 @@ mod tests {
     }
 
     #[test]
+    fn pairing_says_why_no_key_was_added_when_libfido2_is_missing() {
+        // Without libfido2, pairing goes on without the key, and its code says why
+        // (`no_library_pairing`); it's never taken for "no key plugged in".
+        let code =
+            std::fs::read_to_string(format!("{}/src/pairing.rs", env!("CARGO_MANIFEST_DIR")))
+                .unwrap();
+        let code = code.split("#[cfg(test)]").next().unwrap();
+        let start = code.find("async fn add_key(").unwrap();
+        let body = &code[start..];
+        assert!(
+            body.contains("Err(_) => return KeyAdd::NoLibrary"),
+            "a missing library is said"
+        );
+        let shown = code
+            .find("KeyAdd::NoLibrary => (")
+            .expect("the caller tells NoLibrary apart");
+        let line = code[shown..].find("no_library_pairing(").unwrap();
+        assert!(line < 200, "and shows the pairing line for it");
+        assert!(code.contains("key_note,"), "under the code");
+    }
+
+    #[test]
     fn a_card_steps_pin_sheet_opens_over_the_window() {
         // Approve is drawn away (`approving`) before tafs cloud answers, so the sheet's parent is
         // the window, taken before that redraw, never the button (walk-through: it opened as a
