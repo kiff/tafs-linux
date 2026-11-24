@@ -283,12 +283,38 @@ panel beside any conversation tafs cloud has for it.
 
 ## The phone's, never this computer's
 
-Approve, a sign-in's button, and a drive's Approve are the phone's. Approving a card ends in tafs
-cloud's report signed by the device behind Face ID, and its other steps grant access (planque's
-approve, tools and Cards together), which a computer never does; a security-key report for a
-`cards`-only ask would be a new signed protocol, so it's a design question first. Signing in at a vendor
-grants access, and a drive runs on the phone for KIFF's critical key. Those cards keep the
-can't-approve line where those buttons go.
+A sign-in's button and a drive's Approve are the phone's, and so is an approval's Approve, except
+for its Card step (below). An approval's connection step grants access (planque's approve, which
+takes the phone's approval key only), which a computer never does. Signing in at a vendor grants
+access, and a drive runs on the phone for KIFF's critical key. Those cards keep the can't-approve
+line where those buttons go.
+
+### An approval's Card step, on the security key
+
+On an approval whose connection is already made (tafs cloud's `connection.done`), whose Card comes
+next (`signs.card: false`), and whose KIFF draft is read at a version, with this computer's security
+key on (`key_approval::can_approve`), Approve stands in the gate's place (`coach_lines`,
+`setup_approval::offered`). It's the iPad's `approve(_:shown:shownDraft:)` for its `cards` step,
+and tafs-macos's `SetupApproval`:
+1. **tafs cloud is asked** (`POST /v1/tafs/{taf}/components/{component}/approval`) with the grant,
+   the draft, the version drawn and the chat, plus this computer's planque read proof. It answers
+   `answered` (the thread is read again), `read_again` (the draft is read again, nothing signed,
+   and the card says what you're asked to approve changed), or `sign` with one ask.
+2. **An ask is signed only when it's the Card's** (`setup_approval::signs_here`): its step is
+   `cards`, it names the draft and the version the card drew, and its message is exactly
+   `tafs.cards.v1|{tenant}|{draft}|{version}`, which this computer builds itself. Any other ask,
+   the connection's above all, signs nothing, and the card says to approve on another device.
+3. **KIFF's draft confirm on the security key** (`Act::ConfirmDraft`, the act a trial's Install
+   already uses), with the ask's reason as the PIN sheet's lead. A closed sheet sends nothing and
+   reports nothing.
+4. **What came of it is reported** (`POST …/approval/{ask}`, `confirmed`, or `failed` with why),
+   signed by the device key over the exact bytes sent (`setup_approval::report_signature`), with a
+   fresh read proof. It's made only once the key answered. It reports and grants nothing: tafs
+   cloud reads KIFF's draft itself before it tells Coach "approved". Then the thread is read again,
+   and a failure's line goes under the card.
+
+A test pins the order: the ask is checked, the draft confirmed on the key, and only the key's
+answer starts the report.
 
 Their refusals are answered here, as on the iPad, where they sit outside `ApprovalGate`: Decline
 on an approval, Not now on a sign-in (in tafs cloud's words when it gives some) and Not now on a

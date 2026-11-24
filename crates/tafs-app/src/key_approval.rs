@@ -26,6 +26,15 @@ pub type Approved = Rc<dyn Fn(Option<Result<(), String>>)>;
 /// `signed_at` never repeats, across every approval this app makes.
 static SIGNING_TIME: Mutex<SigningTime> = Mutex::new(SigningTime::new());
 
+/// A `signed_at` from the same clock as every approval's, so none ever repeats
+/// (`setup_approval::report_signature`).
+pub fn signed_at() -> String {
+    SIGNING_TIME
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .next(chrono::Utc::now())
+}
+
 /// Whether `act` can be approved here: the key is on, the session approves with a passkey and
 /// holds this computer's key, and the act is one whose whole request this app writes.
 pub fn can_approve(kept: Option<&KeptSession>, act: &Act) -> bool {
@@ -670,6 +679,50 @@ mod tests {
             Some(&keyed),
             &Act::CreateGroup { name: "x".into() }
         ));
+    }
+
+    #[test]
+    fn a_card_steps_report_is_signed_only_after_the_key_answered() {
+        // The Card step (`setup_approval`): the ask is checked before anything is signed, the
+        // draft is confirmed on the security key, and only the key's answer starts the report,
+        // which alone the device key signs.
+        let root = env!("CARGO_MANIFEST_DIR");
+        for entry in std::fs::read_dir(format!("{root}/src")).unwrap() {
+            let path = entry.unwrap().path();
+            let source = std::fs::read_to_string(&path).unwrap();
+            let code = source.split("#[cfg(test)]").next().unwrap_or_default();
+            let count = |what: &str| code.matches(what).count();
+            if path.ends_with("coach.rs") {
+                assert_eq!(
+                    count("report_signature("),
+                    1,
+                    "one signature, in report_card"
+                );
+                assert_eq!(count("setup_approval_report("), 1);
+                assert_eq!(count(".report_card("), 1, "reported from one place");
+                let start = code.find("fn approve_card(").unwrap();
+                let at = |what: &str| start + code[start..].find(what).unwrap();
+                let (checked, act, approved, came, reported) = (
+                    at("setup_approval::signs_here("),
+                    at("Act::ConfirmDraft"),
+                    at("crate::key_approval::approve("),
+                    at("let Some(came) = outcome"),
+                    at(".report_card("),
+                );
+                // The report is started inside the key's `done`, which only hears once the sheet
+                // closed: after a try, `came`; cancelled, nothing is reported.
+                assert!(checked < act && act < came && came < reported && reported < approved);
+                let report = code.find("async fn report_card(").unwrap();
+                let at = |what: &str| report + code[report..].find(what).unwrap();
+                assert!(at("report_signature(") < at("setup_approval_report("));
+            } else if path.ends_with("kiff.rs") {
+                assert_eq!(count("setup_approval_report("), 1, "its definition");
+                assert_eq!(count("report_signature("), 0);
+            } else {
+                assert_eq!(count("report_signature("), 0, "{}", path.display());
+                assert_eq!(count("setup_approval_report("), 0, "{}", path.display());
+            }
+        }
     }
 
     #[test]

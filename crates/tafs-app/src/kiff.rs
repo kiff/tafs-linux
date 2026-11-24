@@ -254,6 +254,66 @@ pub fn set_aside(
     Kiff::read(request.send_bytes(b"{}"))
 }
 
+/// Approve on an approval card's Card step (`setup_approval`): tafs cloud asked, as the session,
+/// with this device's signed read of its connections (`proof`) so it reads planque's grant as this
+/// device. It signs nothing; tafs cloud says what needs signing.
+pub fn setup_approval_ask(
+    token: &str,
+    languages: &[&str],
+    taf: &str,
+    component: &str,
+    body: &[u8],
+    proof: Option<&str>,
+) -> Result<Answer, KiffError> {
+    let path = tafs_core::setup_approval::ask_path(taf, component);
+    let url = format!("{}{path}", tafs_core::home::TAFS_CLOUD);
+    if !may_send_to(&url) {
+        return Err(KiffError::Unreadable);
+    }
+    let mut request = agent()
+        .post(&url)
+        .set("Accept", "application/json")
+        .set("Accept-Language", &accept_language(languages))
+        .set("Authorization", &format!("Bearer {token}"))
+        .set("Content-Type", "application/json");
+    if let Some(proof) = proof {
+        request = request.set(tafs_core::planque::HEADER, proof);
+    }
+    Kiff::read(request.send_bytes(body))
+}
+
+/// What came of a Card step's confirm (`setup_approval::report_body`), to tafs cloud as the
+/// session, with the device key's signature over exactly these bytes (`report_signature`) and a
+/// fresh read proof. It reports; it grants nothing.
+#[allow(clippy::too_many_arguments)]
+pub fn setup_approval_report(
+    token: &str,
+    languages: &[&str],
+    taf: &str,
+    component: &str,
+    ask: &str,
+    body: &[u8],
+    signature: &str,
+    proof: Option<&str>,
+) -> Result<Answer, KiffError> {
+    let path = tafs_core::setup_approval::report_path(taf, component, ask);
+    let url = format!("{}{path}", tafs_core::home::TAFS_CLOUD);
+    if !may_send_to(&url) {
+        return Err(KiffError::Unreadable);
+    }
+    let mut request = agent()
+        .post(&url)
+        .set("Accept", "application/json")
+        .set("Accept-Language", &accept_language(languages))
+        .set("Authorization", &format!("Bearer {token}"))
+        .set("Content-Type", "application/json")
+        .set(tafs_core::device_signed::HEADER, signature);
+    if let Some(proof) = proof {
+        request = request.set(tafs_core::planque::HEADER, proof);
+    }
+    Kiff::read(request.send_bytes(body))
+}
+
 /// A knock answered (`TafsCloud.answerKnock`): "do", "pair" or "ignore", at tafs cloud as the
 /// session. It signs nothing.
 pub fn answer_knock(

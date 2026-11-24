@@ -71,6 +71,7 @@ pub mod sample_chat;
 pub mod security_key;
 pub mod session;
 pub mod setup;
+pub mod setup_approval;
 pub mod setup_shape;
 pub mod share;
 pub mod sidebar;

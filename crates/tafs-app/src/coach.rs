@@ -25,6 +25,7 @@ use tafs_core::coach_send::{
 };
 use tafs_core::coach_tools::CoachTools;
 use tafs_core::session::KeptSession;
+use tafs_core::setup_approval;
 use tafs_core::sidebar::{Mode, Selection};
 use tafs_core::signin::Answer;
 use tafs_core::words::WordBook;
@@ -613,6 +614,16 @@ impl Page {
         }
         let words = (*self.w).clone();
         let device = self.device.borrow().clone();
+        // An approval's Card step is KIFF's draft confirm: offered while this session approves it
+        // with the security key.
+        let key_approves = crate::key_approval::can_approve(
+            Some(&kept),
+            &tafs_core::signed::Act::ConfirmDraft {
+                draft: "-".into(),
+                version: "-".into(),
+                trial: false,
+            },
+        );
         let read = gtk::gio::spawn_blocking(move || {
             read_thread(&words, &kept, &languages, &setup, chat, device)
         })
@@ -632,6 +643,7 @@ impl Page {
                 if c.generation != generation || c.fresh {
                     return;
                 }
+                c.key_approves = key_approves;
                 if let Some(chats) = r.chats {
                     c.chats = chats;
                 }
@@ -1461,6 +1473,245 @@ impl Page {
             p.draw();
             p.load_thread().await;
         });
+    }
+
+    /// Approve on an approval card's Card step (`setup_approval`), as the iPad's
+    /// `approve(_:shown:shownDraft:)` for `cards`:
+    /// 1. tafs cloud is asked, with this computer's planque read proof;
+    /// 2. an ask is signed only when it's the Card's, for the draft and version drawn, with exactly
+    ///    the message this computer builds (`signs_here`);
+    /// 3. KIFF's draft confirm on the security key (`key_approval::approve`, `Act::ConfirmDraft`);
+    /// 4. once the key answered, what came of it is reported, signed by the device key.
+    ///
+    /// The connection's step is never signed here; a closed PIN sheet sends and reports nothing.
+    fn approve_card(self: &Rc<Self>, id: &str, parent: &gtk::Widget) {
+        let CoachSource::Cloud {
+            kept, languages, ..
+        } = self.source.clone()
+        else {
+            return;
+        };
+        let (taf, generation, shown, version) = {
+            let c = self.conv.borrow();
+            if c.approving.is_some() || !c.key_approves {
+                return;
+            }
+            let Some(taf) = c.setup.clone() else { return };
+            let Some(shown) = c
+                .thread
+                .components
+                .iter()
+                .rev()
+                .find(|s| s.component.id == id)
+                .cloned()
+            else {
+                return;
+            };
+            let version = shown
+                .component
+                .draft
+                .as_ref()
+                .and_then(|d| c.drafts.get(d))
+                .map(|d| d.version.clone());
+            (taf, c.generation, shown, version)
+        };
+        let (Some(grant), Some(draft), Some(version)) = (
+            shown.component.grant.clone(),
+            shown.component.draft.clone(),
+            version,
+        ) else {
+            return;
+        };
+        let tenant = kept.tenant.clone().unwrap_or_default();
+        {
+            let mut c = self.conv.borrow_mut();
+            c.approving = Some(id.to_string());
+            c.notes.remove(id);
+        }
+        self.draw();
+        let (p, id, parent) = (self.clone(), id.to_string(), parent.clone());
+        glib::spawn_future_local(async move {
+            let body = setup_approval::ask_body(&grant, &draft, &version, Some(&shown.session));
+            let device = p.device.borrow().clone();
+            let (k, l, t, c) = (kept.clone(), languages.clone(), taf.clone(), id.clone());
+            let asked = gtk::gio::spawn_blocking(move || {
+                let proof = device.as_deref().and_then(|d| proof(&k, d));
+                crate::kiff::setup_approval_ask(&k.token, &l, &t, &c, &body, proof.as_deref())
+            })
+            .await
+            .unwrap_or(Err(tafs_core::signin::KiffError::Offline));
+            if !p.open() || p.conv.borrow().generation != generation {
+                return p.approved_card(&id, None);
+            }
+            let decision = match asked {
+                Ok(a) if a.status == 401 => return p.signed_out(),
+                Ok(a) if a.status == 409 => {
+                    p.approved_card(&id, None);
+                    return p.load_thread().await;
+                }
+                Ok(a) if (200..300).contains(&a.status) => setup_approval::Decision::read(&a.body),
+                Ok(a) => return p.approved_card(&id, Some(refusal(&p.w, &a))),
+                Err(e) => return p.approved_card(&id, e.words(&p.w).ok()),
+            };
+            match decision {
+                setup_approval::Decision::Answered { .. } => {
+                    p.approved_card(&id, None);
+                    p.load_thread().await;
+                }
+                setup_approval::Decision::ReadAgain { note } => {
+                    // What the card showed is out of date: the draft is read again, nothing signed.
+                    let note = note.or_else(|| p.w.line("version.out_of_date_card").ok());
+                    p.conv.borrow_mut().drafts.remove(&draft);
+                    p.approved_card(&id, note);
+                    p.load_thread().await;
+                }
+                setup_approval::Decision::Sign { ask, session }
+                    if setup_approval::signs_here(&ask, &draft, &version, &tenant) =>
+                {
+                    let act = tafs_core::signed::Act::ConfirmDraft {
+                        draft: draft.clone(),
+                        version: version.clone(),
+                        trial: false,
+                    };
+                    let session = session.unwrap_or(shown.session.clone());
+                    let (p2, id2, kept2, languages2) =
+                        (p.clone(), id.clone(), kept.clone(), languages.clone());
+                    let done: crate::key_approval::Approved = Rc::new(move |outcome| {
+                        // Closed without a try: nothing was sent, so nothing is reported.
+                        let Some(came) = outcome else {
+                            return p2.approved_card(&id2, None);
+                        };
+                        let (p3, id3, kept3, languages3, taf3, ask3, session3) = (
+                            p2.clone(),
+                            id2.clone(),
+                            kept2.clone(),
+                            languages2.clone(),
+                            taf.clone(),
+                            ask.id.clone(),
+                            session.clone(),
+                        );
+                        glib::spawn_future_local(async move {
+                            p3.report_card(
+                                &kept3,
+                                &languages3,
+                                &taf3,
+                                &id3,
+                                &ask3,
+                                &session3,
+                                came,
+                            )
+                            .await;
+                        });
+                    });
+                    let languages: Vec<&'static str> = languages.clone();
+                    crate::key_approval::approve(
+                        p.w.clone(),
+                        &parent,
+                        (*kept).clone(),
+                        languages,
+                        &act,
+                        Some(&ask.reason)
+                            .filter(|r| !r.is_empty())
+                            .map(String::as_str),
+                        vec![],
+                        done,
+                    );
+                }
+                // Not the Card's step (the connection's is the phone's), or not what this card
+                // shows: nothing signed.
+                setup_approval::Decision::Sign { .. } => {
+                    let line = p.w.line("approval.device_can_not_approve_approve").ok();
+                    p.approved_card(&id, line);
+                }
+                setup_approval::Decision::Unknown => {
+                    let line = p.w.line("coach.unknown_answer").ok();
+                    p.approved_card(&id, line);
+                }
+            }
+        });
+    }
+
+    /// What came of the Card step's confirm, once the security key answered: reported to tafs
+    /// cloud, signed by the device key over exactly the bytes sent, with a fresh read proof. Then
+    /// the thread is read again.
+    #[allow(clippy::too_many_arguments)]
+    async fn report_card(
+        self: &Rc<Self>,
+        kept: &KeptSession,
+        languages: &[&'static str],
+        taf: &str,
+        id: &str,
+        ask: &str,
+        session: &str,
+        came: Result<(), String>,
+    ) {
+        let body = setup_approval::report_body(&came, Some(session));
+        let device = self.device.borrow().clone();
+        let (k, l, t, c, a) = (
+            kept.clone(),
+            languages.to_vec(),
+            taf.to_string(),
+            id.to_string(),
+            ask.to_string(),
+        );
+        let sent = gtk::gio::spawn_blocking(move || {
+            let key = k.key().ok_or(tafs_core::signin::KiffError::Unreadable)?;
+            let tenant = k.tenant.clone().unwrap_or_default();
+            let path = setup_approval::report_path(&t, &c, &a);
+            let signature = setup_approval::report_signature(
+                &key,
+                &tenant,
+                &path,
+                &body,
+                &crate::key_approval::signed_at(),
+            );
+            let proof = device.as_deref().and_then(|d| proof(&k, d));
+            crate::kiff::setup_approval_report(
+                &k.token,
+                &l,
+                &t,
+                &c,
+                &a,
+                &body,
+                &signature,
+                proof.as_deref(),
+            )
+        })
+        .await
+        .unwrap_or(Err(tafs_core::signin::KiffError::Offline));
+        let note = match (&came, sent) {
+            (_, Ok(a)) if a.status == 401 => return self.signed_out(),
+            (Ok(()), Ok(a)) if (200..300).contains(&a.status) => None,
+            (Err(why), Ok(a)) if (200..300).contains(&a.status) => {
+                match setup_approval::Decision::read(&a.body) {
+                    setup_approval::Decision::Answered { note: Some(n) } => Some(n),
+                    _ => Some(why.clone()),
+                }
+            }
+            (_, Ok(a)) => Some(refusal(&self.w, &a)),
+            (_, Err(e)) => e.words(&self.w).ok(),
+        };
+        self.approved_card(id, note);
+        self.load_thread().await;
+    }
+
+    /// A Card step's Approve is over: its note, if any, under the card.
+    fn approved_card(self: &Rc<Self>, id: &str, note: Option<String>) {
+        {
+            let mut c = self.conv.borrow_mut();
+            if c.approving.as_deref() == Some(id) {
+                c.approving = None;
+            }
+            match note.filter(|n| !n.trim().is_empty()) {
+                Some(n) => {
+                    c.notes.insert(id.to_string(), n);
+                }
+                None => {
+                    c.notes.remove(id);
+                }
+            }
+        }
+        self.draw();
     }
 
     /// Retry on a message that didn't go (`retrySetup`): sent once more; not taken, it goes back.
@@ -3102,6 +3353,21 @@ fn approval(page: &Rc<Page>, a: &ApprovalLines) -> gtk::Widget {
     }
     if let Some(g) = &a.gate {
         p.append(&crate::approval::not_ready(g));
+    }
+    if let Some(approve) = &a.approve {
+        // The Card's step, on this computer's security key (`setup_approval`): its connection is
+        // made, and the Card is what's left to approve. The connection's own approval stays the
+        // phone's.
+        let b = primary(&approve.words);
+        b.set_halign(gtk::Align::Start);
+        b.set_widget_name(&format!("approval.card-step.{}", approve.id));
+        let (pg, id) = (Rc::downgrade(page), approve.id.clone());
+        b.connect_clicked(move |b| {
+            if let Some(pg) = pg.upgrade() {
+                pg.approve_card(&id, b.upcast_ref());
+            }
+        });
+        p.append(&b);
     }
     let Some(folded) = &a.folded else {
         return p.upcast();

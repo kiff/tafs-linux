@@ -145,6 +145,9 @@ pub struct ApprovalLines {
     pub failed: Option<String>,
     /// Why this computer can't approve, in the buttons' place.
     pub gate: Option<NotReady>,
+    /// Approve, for the Card's step on this computer's security key (`setup_approval`): the
+    /// connection is made, the Card comes next and its draft is read. In the gate's place.
+    pub approve: Option<CardApprove>,
     /// KIFF's draft of the taf's Card, as far as it's read.
     pub draft: Option<DraftShown>,
     /// What was approved, under the folded line: the signed Card's lines, as KIFF has them.
@@ -156,6 +159,13 @@ pub struct ApprovalLines {
     pub request: Option<Box<RequestShown>>,
     /// Decline, beside where Approve would be, while the card asks.
     pub decline: Option<Refuse>,
+}
+
+/// Approve on an approval card's Card step: the card it approves, and its words.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CardApprove {
+    pub id: String,
+    pub words: String,
 }
 
 /// An approval's request as planque has it (`SetupApproval`'s grant): what the owner reads before
@@ -204,6 +214,10 @@ pub struct Drafts<'a> {
     pub grants: Option<&'a [crate::connections::Grant]>,
     /// Each dial card's taf's dial, by tafs cloud's id, as read.
     pub knobs: Option<&'a HashMap<String, crate::knob::Knob>>,
+    /// This computer approves with its security key: an approval's Card step is offered here.
+    pub key_approves: bool,
+    /// The card whose Card step is being approved now.
+    pub approving: Option<&'a str>,
 }
 
 impl<'a> Drafts<'a> {
@@ -1135,6 +1149,26 @@ fn approval_lines(
         _ => None,
     };
     let asks = !replaced && matches!(state, CardState::NeedsYou | CardState::Failed(_));
+    // The Card's step on this computer's security key, as the iPad's `approve(_:shown:shownDraft:)`
+    // for `cards`: the connection made (tafs cloud's `connection.done`), the Card next, and KIFF's
+    // draft read at a version. The connection's own approval stays the phone's.
+    let approve = if asks
+        && mode == Mode::Kiff
+        && drafts.key_approves
+        && drafts.approving != Some(c.id.as_str())
+        && crate::setup_approval::offered(
+            c.connection.as_ref().and_then(|x| x.done) == Some(true),
+            c.signs.as_ref().is_some_and(|s| s.card_next()),
+            c.draft.as_deref(),
+            draft.map(|d| d.version.as_str()),
+        ) {
+        Some(CardApprove {
+            id: c.id.clone(),
+            words: w.line("approval.approve")?,
+        })
+    } else {
+        None
+    };
     // The taf's Card as the approval signs it, or, by tafs cloud's mark, as the one approved
     // next: under its words and dimmed. Marked next with no words, it isn't drawn. A draft not
     // read yet says so, never a blank: KIFF's reason with Try again when it wouldn't give it.
@@ -1248,7 +1282,13 @@ fn approval_lines(
             None
         },
         failed,
-        gate: if asks { gate(w, mode)? } else { None },
+        // While its Card step is being approved here, neither Approve nor the gate's line.
+        gate: if asks && approve.is_none() && drafts.approving != Some(c.id.as_str()) {
+            gate(w, mode)?
+        } else {
+            None
+        },
+        approve,
     })
 }
 
@@ -1799,6 +1839,8 @@ pub fn lines(
                 errors: &HashMap::new(),
                 grants: None,
                 knobs: None,
+                key_approves: false,
+                approving: None,
             },
             live: None,
             streaming: false,
@@ -1830,6 +1872,8 @@ pub fn conversation_lines(
                 errors: &c.draft_errors,
                 grants: c.grants.as_deref(),
                 knobs: Some(&c.knobs),
+                key_approves: c.key_approves,
+                approving: c.approving.as_deref(),
             },
             live: c.live.as_ref().map(|l| (l, &c.live_before)),
             streaming: !c.live_text().is_empty(),
@@ -2839,6 +2883,99 @@ mod tests {
         crate::connections::Grant::read_list(json!([g]).to_string().as_bytes())
             .unwrap()
             .remove(0)
+    }
+
+    /// An approval whose connection is made and whose Card comes next, from KIFF's draft `drf_s1`.
+    fn card_step_thread() -> crate::coach_send::Conversation {
+        let card = json!({
+            "at": "2026-10-16T12:00:25.000Z", "session": "sess1", "run": "run2", "seq": 6,
+            "component": {"type": "approval", "id": "card", "grant": "g1", "draft": "drf_s1",
+                          "waits": "owner", "connection": {"done": true, "words": "Gmail is connected."},
+                          "signs": {"card": false, "words": "Then its Card."}},
+            "key": "sess1#card"
+        });
+        let mut c = crate::coach_send::Conversation::default();
+        c.took(read(&json!({"messages": [], "components": [card]})), now());
+        c
+    }
+
+    #[test]
+    fn the_cards_step_is_approved_here_only_with_the_key_and_the_draft_read() {
+        let mut c = card_step_thread();
+        // No key with this computer: the gate's line, as before.
+        c.drafts.insert("drf_s1".into(), draft("draft"));
+        let a = approval_of(&c);
+        assert!(a.approve.is_none() && a.gate.is_some());
+        // With the key, the connection made, the Card next and its draft read: Approve, in the
+        // gate's place.
+        c.key_approves = true;
+        let a = approval_of(&c);
+        assert_eq!(
+            a.approve
+                .as_ref()
+                .map(|x| (x.id.as_str(), x.words.as_str())),
+            Some(("card", "Approve"))
+        );
+        assert!(a.gate.is_none());
+        // While it's being approved: neither.
+        c.approving = Some("card".into());
+        let a = approval_of(&c);
+        assert!(a.approve.is_none() && a.gate.is_none());
+        c.approving = Some("another".into());
+        assert!(approval_of(&c).approve.is_some());
+        c.approving = None;
+        // The draft not read yet: no version to sign, so the gate.
+        c.drafts.clear();
+        let a = approval_of(&c);
+        assert!(a.approve.is_none() && a.gate.is_some());
+        // The connection not made yet (its approval is the phone's), or the Card not next.
+        for (connection, signs) in [
+            (json!({"done": false}), json!({"card": false})),
+            (json!(null), json!({"card": false})),
+            (json!({"done": true}), json!({"card": true})),
+            (json!({"done": true}), json!(null)),
+        ] {
+            let mut card = json!({
+                "at": "2026-10-16T12:00:25.000Z", "session": "sess1", "run": "run2", "seq": 6,
+                "component": {"type": "approval", "id": "card", "grant": "g1", "draft": "drf_s1",
+                              "waits": "owner"},
+                "key": "sess1#card"
+            });
+            if !connection.is_null() {
+                card["component"]["connection"] = connection.clone();
+            }
+            if !signs.is_null() {
+                card["component"]["signs"] = signs.clone();
+            }
+            let mut c = crate::coach_send::Conversation::default();
+            c.took(read(&json!({"messages": [], "components": [card]})), now());
+            c.key_approves = true;
+            c.drafts.insert("drf_s1".into(), draft("draft"));
+            let a = approval_of(&c);
+            assert!(a.approve.is_none(), "{connection} {signs}");
+            assert!(a.gate.is_some(), "{connection} {signs}");
+        }
+        // Answered: nothing to approve.
+        let mut c = card_step_thread();
+        c.key_approves = true;
+        c.drafts.insert("drf_s1".into(), draft("draft"));
+        let answered = {
+            let mut t = card_step_thread();
+            let mut card = json!({
+                "at": "2026-10-16T12:00:25.000Z", "session": "sess1", "run": "run2", "seq": 6,
+                "component": {"type": "approval", "id": "card", "grant": "g1", "draft": "drf_s1",
+                              "waits": "owner", "connection": {"done": true},
+                              "signs": {"card": false}},
+                "key": "sess1#card"
+            });
+            card["answer"] =
+                json!({"state": "answered", "words": "approved", "at": "2026-10-16T12:00:40.000Z"});
+            t.took(read(&json!({"messages": [], "components": [card]})), now());
+            t.key_approves = true;
+            t.drafts = c.drafts.clone();
+            t
+        };
+        assert!(approval_of(&answered).approve.is_none());
     }
 
     #[test]
