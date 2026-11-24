@@ -3,6 +3,18 @@
 What changed in each release of tafs for Linux, newest first. Each release's notes, in its eight
 languages, are in `packaging/release-notes/` and on its GitHub release page.
 
+## v1.2.0
+
+**Approving on this computer**
+- Coach's approval cards: once the connection is made (on the phone), Approve confirms the taf's
+  Card from KIFF's draft with the USB security key. Only the Card's own ask, for the draft and
+  version on the card, is signed; what came of it is reported to tafs cloud, signed by this
+  computer's key. The connection's own approval stays the phone's.
+
+**Plan & usage**
+- Raise the limit says the limit it's raised from in the currency tafs cloud names beside it, at that
+  currency's own decimals. Without a currency named, nothing is raised.
+
 ## v1.1.0
 
 **Signing in and languages**
