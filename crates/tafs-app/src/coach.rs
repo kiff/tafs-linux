@@ -1523,6 +1523,12 @@ impl Page {
             return;
         };
         let tenant = kept.tenant.clone().unwrap_or_default();
+        // The PIN sheet opens over this window: Approve itself is gone once the card is drawn
+        // approving, and a sheet on a widget that's no longer shown opens as a window of its own.
+        let parent: gtk::Widget = parent
+            .root()
+            .map(|r| r.upcast())
+            .unwrap_or_else(|| parent.clone());
         {
             let mut c = self.conv.borrow_mut();
             c.approving = Some(id.to_string());
