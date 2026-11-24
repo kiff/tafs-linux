@@ -292,6 +292,57 @@ pub fn write_private(path: &std::path::Path, bytes: &[u8]) -> std::io::Result<()
 
 #[cfg(test)]
 mod tests {
+    /// One layout on every app (kiff/tafs `docs/parity.md`): a page's column is set only through
+    /// `page_column`, so no source but this one sets a page cap of its own, and each page uses it.
+    #[test]
+    fn every_page_column_comes_from_page_column() {
+        use super::PageColumn;
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+        // Not pages: Account's sheets, a taf's chat column and a file's preview keep their own.
+        let not_pages = ["widgets.rs", "sheet.rs", "taf_chat.rs", "files.rs"];
+        let mut own = Vec::new();
+        let mut pages = Vec::new();
+        for entry in std::fs::read_dir(&dir).unwrap() {
+            let path = entry.unwrap().path();
+            let name = path.file_name().unwrap().to_string_lossy().to_string();
+            let src = std::fs::read_to_string(&path).unwrap();
+            if !not_pages.contains(&name.as_str()) {
+                for cap in ["720", "980", "640", "1100", "1180"] {
+                    if src.contains(&format!("set_maximum_size({cap})")) {
+                        own.push(name.clone());
+                    }
+                }
+            }
+            if name != "widgets.rs" && src.contains("page_column(") {
+                pages.push(name);
+            }
+        }
+        assert_eq!(own, Vec::<String>::new());
+        pages.sort();
+        assert_eq!(
+            pages,
+            [
+                "account.rs",
+                "alerts.rs",
+                "brief.rs",
+                "calendar.rs",
+                "chrome.rs",
+                "connect.rs",
+                "connections.rs",
+                "devices.rs",
+                "kiff_account.rs",
+                "language_picker.rs",
+                "needs_you.rs",
+                "overview.rs",
+                "people.rs",
+                "recipes.rs",
+                "usage.rs"
+            ]
+        );
+        assert_eq!(PageColumn::Reading.width(), 720);
+        assert_eq!(PageColumn::List.width(), 980);
+    }
+
     use std::os::unix::fs::PermissionsExt;
 
     #[test]
@@ -307,4 +358,40 @@ mod tests {
         assert_eq!(mode, 0o600);
         std::fs::remove_dir_all(&dir).unwrap();
     }
+}
+
+/// The most a page's column takes on a wide window, the same on every app (kiff/tafs
+/// `docs/parity.md`, "One layout on every app"): the iPad's and the Mac's caps. A page sets its
+/// width only through `page_column`, never a number of its own.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PageColumn {
+    /// Account and its pages, Devices, People, Alerts, Chrome, Needs you, Connect apps, a
+    /// connection, Plan & usage.
+    Reading = 720,
+    /// Overview and an app's connections.
+    List = 980,
+    /// The recipe gallery.
+    Gallery = 640,
+    /// The Brief.
+    Brief = 1100,
+    /// Calendar.
+    Calendar = 1180,
+}
+
+impl PageColumn {
+    /// Its cap, in pixels.
+    pub const fn width(self) -> i32 {
+        self as i32
+    }
+}
+
+/// The page's column: at most `column`'s width, centred in the pane, its own rows aligned left.
+/// A pane narrower than the cap is unchanged. Put it in the page's scroller.
+pub fn page_column<W: IsA<gtk::Widget>>(child: &W, column: PageColumn) -> adw::Clamp {
+    let clamp = adw::Clamp::new();
+    clamp.set_maximum_size(column.width());
+    clamp.set_tightening_threshold(column.width());
+    clamp.set_valign(gtk::Align::Start);
+    clamp.set_child(Some(child));
+    clamp
 }

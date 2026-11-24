@@ -15,9 +15,6 @@ thread_local! {
     pub static CHOSEN: RefCell<Option<String>> = const { RefCell::new(None) };
 }
 
-/// The column's widest, from the leading edge of a centred column (`frame(maxWidth: 980)`).
-const MAX_WIDTH: i32 = 980;
-
 pub fn page(
     o: &OverviewLines,
     open: Rc<dyn Fn(Selection)>,
@@ -91,11 +88,7 @@ pub fn page(
     listing.draw();
     column.append(&text(&o.each_line_opens, 12, 400, &["tafs-dim"]));
 
-    let clamp = adw::Clamp::new();
-    clamp.set_maximum_size(MAX_WIDTH);
-    clamp.set_tightening_threshold(MAX_WIDTH);
-    clamp.set_child(Some(&column));
-    clamp.set_valign(gtk::Align::Start);
+    let clamp = crate::widgets::page_column(&column, crate::widgets::PageColumn::List);
     let scroller = gtk::ScrolledWindow::new();
     scroller.set_hscrollbar_policy(gtk::PolicyType::Never);
     scroller.set_child(Some(&clamp));

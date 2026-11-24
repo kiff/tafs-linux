@@ -69,7 +69,10 @@ pub fn page(
     let scroller = gtk::ScrolledWindow::new();
     scroller.set_hscrollbar_policy(gtk::PolicyType::Never);
     scroller.set_vexpand(true);
-    scroller.set_child(Some(&column));
+    scroller.set_child(Some(&crate::widgets::page_column(
+        &column,
+        crate::widgets::PageColumn::Calendar,
+    )));
     outer.append(&scroller);
 
     let data = Rc::new(RefCell::new(Data {

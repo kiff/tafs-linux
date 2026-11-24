@@ -239,7 +239,10 @@ impl Page {
         column.set_valign(gtk::Align::Start);
         let scroller = gtk::ScrolledWindow::new();
         scroller.set_hscrollbar_policy(gtk::PolicyType::Never);
-        scroller.set_child(Some(&column));
+        scroller.set_child(Some(&crate::widgets::page_column(
+            &column,
+            crate::widgets::PageColumn::Brief,
+        )));
         scroller.set_vexpand(true);
         crate::widgets::ground(&scroller);
         self.root.append(&scroller);
@@ -753,7 +756,10 @@ impl Page {
         column.set_valign(gtk::Align::Start);
         let scroller = gtk::ScrolledWindow::new();
         scroller.set_hscrollbar_policy(gtk::PolicyType::Never);
-        scroller.set_child(Some(&column));
+        scroller.set_child(Some(&crate::widgets::page_column(
+            &column,
+            crate::widgets::PageColumn::Brief,
+        )));
         scroller.set_vexpand(true);
         crate::widgets::ground(&scroller);
         scroller.upcast()

@@ -421,7 +421,10 @@ pub fn page(w: Rc<WordBook>, source: ConnectSource, open_coach: Rc<dyn Fn()>) ->
     let scroller = gtk::ScrolledWindow::new();
     scroller.set_hscrollbar_policy(gtk::PolicyType::Never);
     scroller.set_vexpand(true);
-    scroller.set_child(Some(&column));
+    scroller.set_child(Some(&crate::widgets::page_column(
+        &column,
+        crate::widgets::PageColumn::Reading,
+    )));
     outer.append(&scroller);
     crate::widgets::ground(&outer);
     screens.stack.add_named(&outer, Some("apps"));

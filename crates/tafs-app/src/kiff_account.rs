@@ -290,7 +290,10 @@ fn delete_sheet(w: &WordBook, parent: &impl IsA<gtk::Widget>) {
 
     let scroller = gtk::ScrolledWindow::new();
     scroller.set_hscrollbar_policy(gtk::PolicyType::Never);
-    scroller.set_child(Some(&column));
+    scroller.set_child(Some(&crate::widgets::page_column(
+        &column,
+        crate::widgets::PageColumn::Reading,
+    )));
     scroller.set_vexpand(true);
     let header = adw::HeaderBar::new();
     header.set_show_end_title_buttons(false);
@@ -415,7 +418,10 @@ pub fn page(
     let scroller = gtk::ScrolledWindow::new();
     scroller.set_hscrollbar_policy(gtk::PolicyType::Never);
     scroller.set_vexpand(true);
-    scroller.set_child(Some(&column));
+    scroller.set_child(Some(&crate::widgets::page_column(
+        &column,
+        crate::widgets::PageColumn::Reading,
+    )));
     crate::widgets::ground(&scroller);
     scroller.upcast()
 }

@@ -36,10 +36,8 @@ order:
 - **Time zone** (KIFF): the account's, from KIFF, else UTC.
 - **Export my chats** (KIFF, `ExportChatsSection`), with what it exports under it: the same row
   as the KIFF account's (below).
-- **How it works:** "Every action a taf takes goes through KIFF, … Your approvals are signed on
-  your phone." (`sign_in.every_action_taf_takes_goes_view`, the line for a computer that only
-  views, in place of the phones' "signed on this {device}").
-- **Legal:** Terms and Privacy policy, tafs's own pages, saying "(in English)" outside English.
+- **Legal:** How tafs works (the three cards again, its one entry), then Terms and Privacy
+  policy, tafs's own pages, saying "(in English)" outside English.
 - **About:** Version, and "They taf. You kiff."
 - **Account actions:** in the sample, Sign in with KIFF and Clear the sample; signed in, Sign out,
   and under it why signing out didn't work.
@@ -113,8 +111,11 @@ Each section and row of `SettingsView` is here, in its order, with `AccountLines
 What differs:
 - **The theme's segments** have their words alone: `ThemePicker`'s labels carry SF Symbols,
   which this computer doesn't have.
-- **How it works** says the approvals are signed on the phone (`…_view`), since this computer
-  signs nothing; the iPad's line says they're signed on this device.
+- **Where approvals are signed** is said under Your account, beside the sign-in it's about: "Every
+  action a taf takes goes through KIFF, … Your approvals are signed on your phone."
+  (`sign_in.every_action_taf_takes_goes_view`), since this computer signs nothing; the iPad's
+  line says they're signed on this device. No section is only an explanation, and How tafs works
+  is one entry, under Legal (kiff/tafs `docs/parity.md`, "One layout on every app").
 - **Under Account in the sidebar** is the account's name (`accountLabel`), as the iPad's; its
   email is on Account itself, in Signed in as.
 

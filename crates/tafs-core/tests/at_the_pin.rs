@@ -311,7 +311,6 @@ const LINES: &[(&str, &[&str])] = &[
     ("settings.language_title", &[]),
     ("settings.change_language", &[]),
     ("settings.time_zone_title", &[]),
-    ("sign_in.how_works", &[]),
     ("sign_in.every_action_taf_takes_goes_view", &[]),
     ("settings.legal", &[]),
     ("settings.about", &[]),
@@ -868,7 +867,6 @@ fn account_is_the_ipads_in_its_order() {
             None,
             Some("Theme"),
             Some("Language"),
-            Some("How it works"),
             Some("Legal"),
             Some("About"),
             Some("Account actions")
@@ -882,7 +880,11 @@ fn account_is_the_ipads_in_its_order() {
     assert!(matches!(actions[0], Row::Action(t, _) if t == "Sign in with KIFF"));
     assert!(matches!(actions[1], Row::Destructive(t, _) if t == "Clear the sample"));
     assert!(
-        matches!(&sample.sections[4].rows[0], Row::Text(t) if t.ends_with("Your approvals are signed on your phone."))
+        matches!(sample.sections[0].rows.last(), Some(Row::Text(t)) if t.ends_with("Your approvals are signed on your phone."))
+    );
+    // How tafs works is one entry, first under Legal; no section is only an explanation.
+    assert!(
+        matches!(&sample.sections[4].rows[0], Row::Opens { title, .. } if title == "How tafs works")
     );
 
     let acme = Account {
@@ -930,7 +932,6 @@ fn account_is_the_ipads_in_its_order() {
             Some("Sign-in"),
             None,
             None,
-            Some("How it works"),
             Some("Legal"),
             Some("About"),
             Some("Account actions")
@@ -981,9 +982,9 @@ fn account_is_the_ipads_in_its_order() {
         .iter()
         .find(|s| s.rows.iter().any(|r| matches!(r, Row::Link(..))))
         .unwrap();
-    assert!(matches!(&legal.rows[0], Row::Link(t, _) if t == &fr.line("settings.terms").unwrap()));
+    assert!(matches!(&legal.rows[1], Row::Link(t, _) if t == &fr.line("settings.terms").unwrap()));
     assert!(
-        matches!(&legal.rows[1], Row::Link(t, _) if t == &fr.line("settings.privacy_policy").unwrap())
+        matches!(&legal.rows[2], Row::Link(t, _) if t == &fr.line("settings.privacy_policy").unwrap())
     );
 }
 

@@ -46,14 +46,14 @@ struct Measure {
 }
 
 const HOME: Measure = Measure {
-    width: 720,
+    width: crate::widgets::PageColumn::Reading.width(),
     side: 24,
     top: 20,
     spacing: 12,
 };
 
 const GALLERY: Measure = Measure {
-    width: 640,
+    width: crate::widgets::PageColumn::Gallery.width(),
     side: 20,
     top: 16,
     spacing: 16,
@@ -342,9 +342,7 @@ pub fn sheet(pane: &RecipesPane, recipe: &Recipe, parent: &impl IsA<gtk::Widget>
         });
         column.append(&hand);
     }
-    let clamp = adw::Clamp::new();
-    clamp.set_maximum_size(640);
-    clamp.set_child(Some(&column));
+    let clamp = crate::widgets::page_column(&column, crate::widgets::PageColumn::Gallery);
     let scroller = gtk::ScrolledWindow::new();
     scroller.set_hscrollbar_policy(gtk::PolicyType::Never);
     scroller.set_child(Some(&clamp));
