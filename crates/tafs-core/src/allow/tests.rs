@@ -395,6 +395,23 @@ fn the_card_in_force_is_the_one_revised_when_kiff_names_it() {
     assert!(!ok(&with_current_id("m2"), &o));
     // Not named (KIFF today): as before.
     assert!(ok(&draft_with(|c| cap(c, 32000), |_| {}), &o));
+    // A Card marked unchanged is bound the same way: its own Card, or nothing is signed.
+    let unchanged_with = |id: &str| {
+        let id = id.to_string();
+        draft_with(
+            |c| cap(c, 32000),
+            move |d| {
+                let mut other = current();
+                other["revises"] = json!("m7");
+                other["current"] = current();
+                other["current"]["id"] = json!(id);
+                other["unchanged"] = json!(true);
+                d["cards"].as_array_mut().unwrap().push(other);
+            },
+        )
+    };
+    assert!(ok(&unchanged_with("m7"), &o));
+    assert!(!ok(&unchanged_with("m1"), &o));
     // An id that isn't text fails the draft's read.
     let mut d = serde_json::json!({"id": "drf_1", "agent_id": "agt_refunds", "status": "draft", "version": "v2",
         "cards": [{"revises": "m1", "current": {"id": 7}}]});
