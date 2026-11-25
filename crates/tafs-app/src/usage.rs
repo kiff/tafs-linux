@@ -238,7 +238,10 @@ pub fn page(w: Rc<WordBook>, source: UsageSource, names: Names) -> gtk::Widget {
     let scroller = gtk::ScrolledWindow::new();
     scroller.set_hscrollbar_policy(gtk::PolicyType::Never);
     scroller.set_vexpand(true);
-    scroller.set_child(Some(&column));
+    scroller.set_child(Some(&crate::widgets::page_column(
+        &column,
+        crate::widgets::PageColumn::Reading,
+    )));
     outer.append(&scroller);
     screens.add_named(&outer, Some("usage"));
 
@@ -891,7 +894,10 @@ fn runs_page(
     let scroller = gtk::ScrolledWindow::new();
     scroller.set_hscrollbar_policy(gtk::PolicyType::Never);
     scroller.set_vexpand(true);
-    scroller.set_child(Some(&column));
+    scroller.set_child(Some(&crate::widgets::page_column(
+        &column,
+        crate::widgets::PageColumn::Reading,
+    )));
     outer.append(&scroller);
 
     #[derive(Default)]

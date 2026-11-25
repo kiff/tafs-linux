@@ -50,7 +50,11 @@ fn head(back_words: &str, title: &str, back: Rc<dyn Fn()>) -> gtk::CenterBox {
 }
 
 /// A screen: its head over its column, scrolled, on the app's cream.
-fn screen(head: &gtk::CenterBox, column: &gtk::Box) -> gtk::Widget {
+fn screen(
+    head: &gtk::CenterBox,
+    column: &gtk::Box,
+    cap: crate::widgets::PageColumn,
+) -> gtk::Widget {
     let outer = gtk::Box::new(gtk::Orientation::Vertical, 0);
     outer.set_margin_top(12);
     outer.append(head);
@@ -61,7 +65,7 @@ fn screen(head: &gtk::CenterBox, column: &gtk::Box) -> gtk::Widget {
     let scroller = gtk::ScrolledWindow::new();
     scroller.set_hscrollbar_policy(gtk::PolicyType::Never);
     scroller.set_vexpand(true);
-    scroller.set_child(Some(column));
+    scroller.set_child(Some(&crate::widgets::page_column(column, cap)));
     outer.append(&scroller);
     crate::widgets::ground(&outer);
     outer.upcast()
@@ -243,7 +247,7 @@ pub(crate) fn app_page(
     if shows_footer(manages, &grouped.tafs) {
         sections.append(&crate::sheet::footer(&l("connect.apps.disconnect_why")));
     }
-    let page = screen(&head, &column);
+    let page = screen(&head, &column, crate::widgets::PageColumn::List);
     // A screenshot's connection: the first one drawn, its detail, and its Remove access question.
     if let Some(open) = OPEN.with(|o| o.take()) {
         let first = grouped
@@ -547,7 +551,7 @@ fn connection_page(
         }
         column.append(&slot_column);
     }
-    let page = screen(&head, &column);
+    let page = screen(&head, &column, crate::widgets::PageColumn::Reading);
     if OPEN.with(|o| o.take()) == Some("connect-remove") {
         if let Some((b, _)) = remove {
             gtk::glib::idle_add_local_once(move || b.emit_clicked());

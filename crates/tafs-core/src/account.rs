@@ -318,6 +318,11 @@ pub fn lines(
             yours.push(Row::Value(l("settings.signed_in_as")?, email));
         }
     }
+    // This computer is view-only: its approvals are signed on the phone, so it says so
+    // (`sign_in.every_action_taf_takes_goes_view`), never that they're signed here. Under the
+    // sign-in it's about: an explanation sits beside its action (kiff/tafs `docs/parity.md`, "One
+    // layout on every app").
+    yours.push(Row::Text(l("sign_in.every_action_taf_takes_goes_view")?));
     sections.push(Section {
         slot: None,
         header: Some(l("settings.your_account")?),
@@ -442,27 +447,18 @@ pub fn lines(
             rows: vec![],
         });
     }
-    // This computer is view-only: its approvals are signed on the phone, so it says so
-    // (`sign_in.every_action_taf_takes_goes_view`), never that they're signed here.
-    sections.push(Section {
-        slot: None,
-        header: Some(l("sign_in.how_works")?),
-        rows: vec![
-            Row::Text(l("sign_in.every_action_taf_takes_goes_view")?),
-            // The three cards again, with the privacy and terms pages (`HowTafsWorksView`).
-            Row::Opens {
-                title: l("onboarding.how_it_works")?,
-                value: None,
-                screen: Screen::HowItWorks,
-            },
-        ],
-    });
-    // tafs's own pages, in the app's language where kiff.dev has them.
+    // tafs's own pages, in the app's language where kiff.dev has them, after How tafs works, its
+    // one entry: the three cards again, with the privacy and terms pages (`HowTafsWorksView`).
     let legal = |key: &str| legal_label(w, key);
     sections.push(Section {
         slot: None,
         header: Some(l("settings.legal")?),
         rows: vec![
+            Row::Opens {
+                title: l("onboarding.how_it_works")?,
+                value: None,
+                screen: Screen::HowItWorks,
+            },
             Row::Link(legal("settings.terms")?, terms.to_string()),
             Row::Link(legal("settings.privacy_policy")?, privacy.to_string()),
         ],

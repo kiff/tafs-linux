@@ -93,7 +93,10 @@ pub fn page(w: Rc<WordBook>, source: DevicesSource, back: Rc<dyn Fn()>) -> gtk::
     let scroller = gtk::ScrolledWindow::new();
     scroller.set_hscrollbar_policy(gtk::PolicyType::Never);
     scroller.set_vexpand(true);
-    scroller.set_child(Some(&column));
+    scroller.set_child(Some(&crate::widgets::page_column(
+        &column,
+        crate::widgets::PageColumn::Reading,
+    )));
 
     let state = Rc::new(RefCell::new(State::default()));
     // Why a passkey wasn't removed (`passkeysError`), under Passkeys; and the read of the passkeys

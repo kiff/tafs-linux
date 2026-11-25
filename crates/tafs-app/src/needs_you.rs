@@ -90,11 +90,14 @@ pub fn page(
     for knock in &n.knocks {
         column.append(&knock_row(knock, open.clone()));
     }
-    // The pane's full width, 16 from each edge, as the iPad's.
+    // The reading column (`PageColumn::Reading`): at most 720, centred, 16 from each edge.
     column.set_valign(gtk::Align::Start);
     let scroller = gtk::ScrolledWindow::new();
     scroller.set_hscrollbar_policy(gtk::PolicyType::Never);
-    scroller.set_child(Some(&column));
+    scroller.set_child(Some(&crate::widgets::page_column(
+        &column,
+        crate::widgets::PageColumn::Reading,
+    )));
     scroller.set_vexpand(true);
     crate::widgets::ground(&scroller);
     if let Some(card) = REQUESTED

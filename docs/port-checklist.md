@@ -5,6 +5,19 @@ Linux status. A file is **ported** when every branch it draws is on Linux, **par
 of it is (what's missing is named), **not started**, or **not for Linux** (and why). The PR that
 ports a file updates its line here.
 
+**One layout on every app** (kiff/tafs `docs/parity.md`). Each page is one column, centred in the
+pane and capped by `PageColumn` (`widgets.rs`, through `page_column`), and nothing else sets a
+page's width:
+- 720 for reading pages: Account and its pages, Devices, People, Alerts, Chrome, Needs you,
+  Connect apps, a connection, Plan & usage;
+- 980 for list pages: Overview, an app's connections;
+- 640 for the recipe gallery;
+- 1100 for the Brief and 1180 for Calendar.
+
+Rows stay aligned left inside the column. A test in `widgets.rs` keeps every cap inside
+`PageColumn`. On Account, an explanation sits beside its action: where approvals are signed is
+under Your account, and How tafs works is one entry, under Legal.
+
 ## Ported
 
 | iPad file | Lines | What | Models | Linux |
