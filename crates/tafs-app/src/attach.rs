@@ -278,8 +278,10 @@ impl Attach {
                 if id.is_empty() {
                     return Err(words.line("chat.file.could_not_open").unwrap_or_default());
                 }
-                let dir = glib::user_cache_dir().join("tafs").join("opened").join(id);
-                std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+                let dir = opened_dir().join(id);
+                private_dir(&opened_dir())
+                    .and_then(|()| private_dir(&dir))
+                    .map_err(|e| e.to_string())?;
                 let path = dir.join(attach::opened_name(&f.name, &f.media_type));
                 std::fs::write(&path, &d.body).map_err(|e| e.to_string())?;
                 Ok(path)
@@ -578,5 +580,78 @@ fn upload(w: &WordBook, t: &Target, file: &Prepared) -> State {
     match crate::kiff::upload(&to, &file.data) {
         Ok(status) if (200..300).contains(&status) => State::Ready(attachment),
         _ => State::Failed(w.line("error.file_not_uploaded").unwrap_or_default()),
+    }
+}
+
+/// Where a file opened from a chat is written for the desktop to open: one folder per file, in the
+/// user's cache, readable by this user alone.
+pub fn opened_dir() -> std::path::PathBuf {
+    glib::user_cache_dir().join("tafs").join("opened")
+}
+
+/// The files opened from a chat go: at sign-out, when KIFF ends the session, and at a start with no
+/// session, since a crash or a kill before sign-out could leave them. A person's own files never stay
+/// on this computer after them, as Windows' and the iPad's `removeOpenedFiles`.
+pub fn clear_opened() {
+    clear_opened_in(&opened_dir());
+}
+
+fn clear_opened_in(dir: &std::path::Path) {
+    if let Err(e) = std::fs::remove_dir_all(dir) {
+        if e.kind() != std::io::ErrorKind::NotFound {
+            eprintln!("the files opened from a chat stayed: {:?}", e.kind());
+        }
+    }
+}
+
+/// A folder only this user may read (0700), made if it's missing and narrowed if it's wider.
+fn private_dir(dir: &std::path::Path) -> std::io::Result<()> {
+    use std::os::unix::fs::{DirBuilderExt, PermissionsExt};
+    std::fs::DirBuilder::new()
+        .recursive(true)
+        .mode(0o700)
+        .create(dir)?;
+    std::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o700))
+}
+
+#[cfg(test)]
+mod opened_tests {
+    use super::{clear_opened_in, private_dir};
+    use std::os::unix::fs::PermissionsExt;
+
+    fn temp(name: &str) -> std::path::PathBuf {
+        std::env::temp_dir().join(format!("tafs-opened-{name}-{}", std::process::id()))
+    }
+
+    #[test]
+    fn an_opened_files_folder_is_this_users_alone() {
+        let root = temp("private");
+        let _ = std::fs::remove_dir_all(&root);
+        let dir = root.join("opened").join("file_1");
+        private_dir(&dir).unwrap();
+        assert_eq!(
+            std::fs::metadata(&dir).unwrap().permissions().mode() & 0o777,
+            0o700
+        );
+        // One that was there, wider, is narrowed.
+        std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o755)).unwrap();
+        private_dir(&dir).unwrap();
+        assert_eq!(
+            std::fs::metadata(&dir).unwrap().permissions().mode() & 0o777,
+            0o700
+        );
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn the_opened_files_go_and_none_is_no_error() {
+        let root = temp("clear");
+        let dir = root.join("opened");
+        private_dir(&dir.join("file_1")).unwrap();
+        std::fs::write(dir.join("file_1").join("invoice.pdf"), b"%PDF").unwrap();
+        clear_opened_in(&dir);
+        assert!(!dir.exists());
+        clear_opened_in(&dir);
+        std::fs::remove_dir_all(&root).unwrap();
     }
 }
