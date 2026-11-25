@@ -3,6 +3,19 @@
 What changed in each release of tafs for Linux, newest first. Each release's notes, in its eight
 languages, are in `packaging/release-notes/` and on its GitHub release page.
 
+## v1.1.2
+
+**One layout, and "Allow this from now on" reads every term**
+- A wide window: every page is one centred column, capped by its kind (720 to read, 980 for lists,
+  640 for the recipes, 1100 for the brief, 1180 for Calendar), instead of filling the window. In
+  Account, where approvals are signed sits under Your account, and How tafs works is the first entry
+  under Legal.
+- "Allow this from now on": the security key signs KIFF's draft only when every key of its Cards is
+  one the check reads (kiff/tafs `vectors/agent-draft-keys.json`); a term KIFF adds later is never
+  approved unseen.
+- Adding someone to a group, or naming a manager, is approved with the security key as sharing a taf
+  is; a refusal reads as a refused share does.
+
 ## v1.1.1
 
 **A security key without libfido2**
