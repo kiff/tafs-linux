@@ -196,7 +196,11 @@ fn table(o: &OverviewLines, open: &Rc<dyn Fn(Selection)>, label: Option<&str>) -
         names.set_valign(gtk::Align::Center);
         names.append(&one_line(&row.name, 15, 600, &["tafs-ink"]));
         if !row.used_by.is_empty() {
-            names.append(&one_line(&row.used_by, 12, 400, &["tafs-dim"]));
+            // Who uses it wraps to a second line rather than being cut ("Support · 1 persona").
+            let used = crate::widgets::text(&row.used_by, 12, 400, &["tafs-dim"]);
+            used.set_lines(2);
+            used.set_ellipsize(gtk::pango::EllipsizeMode::End);
+            names.append(&used);
         }
         // Its labels, as small grey chips: two, then "+N" (`TafLabels`).
         if !row.labels.is_empty() {

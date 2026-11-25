@@ -1685,7 +1685,7 @@ fn who_uses_a_taf_at_the_pin() {
             std::slice::from_ref(&person)
         )
         .unwrap(),
-        "Support, lee@example.test, a · 3 people"
+        "Support, lee@example.test, a · 3\u{00A0}people"
     );
     assert_eq!(used_by(&w, &[], &[], &[]).unwrap(), "Not shared");
     for lang in SHIPPED {

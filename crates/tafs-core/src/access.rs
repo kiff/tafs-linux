@@ -134,10 +134,13 @@ pub fn used_by(
             who.insert(subject.clone());
         }
     }
+    // The count is held together by no-break spaces, so a narrow column moves "3 people" (or "1 persona") to the next
+    // line whole, never splitting or cutting it (the iPad's `OverviewView.peopleLine`).
     Ok(format!(
         "{} · {}",
         names.join(", "),
         w.count("people.count", who.len() as i64, &[])?
+            .replace(' ', "\u{00A0}")
     ))
 }
 
