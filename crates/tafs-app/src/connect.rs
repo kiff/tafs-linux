@@ -1034,18 +1034,28 @@ fn row(
     } else {
         let how = one_line(&said.how, 14, 400, &["tafs-soft"]);
         let whose = one_line(said.whose.as_deref().unwrap_or(""), 14, 400, &["tafs-soft"]);
+        // A Status cell with words and a button puts the button under the words, at the trailing edge, so a long
+        // label ("Volver a iniciar sesión", "Preguntar a Coach") never squeezes the status (the iPad's `BesideOrUnder`,
+        // Windows' `ButtonUnder`). With no words, the button stays where it was.
+        let worded = said.setup.as_ref().is_some_and(|s| !s.is_empty()) || said.status.is_some();
+        let under = worded && end.is_some();
         let status = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+        // The words, and the button under them when `under`, in one column beside the chevron.
+        let cell = gtk::Box::new(gtk::Orientation::Vertical, 6);
+        cell.set_hexpand(true);
         if let Some(setup) = said.setup.as_ref().filter(|s| !s.is_empty()) {
             let t = text(setup, 13, 400, &["tafs-soft"]);
             t.set_lines(2);
             t.set_ellipsize(gtk::pango::EllipsizeMode::End);
             t.set_hexpand(true);
-            status.append(&t);
+            cell.append(&t);
         } else {
             let v = gtk::Box::new(gtk::Orientation::Vertical, 2);
             v.set_hexpand(true);
             if let Some(st) = &said.status {
-                v.append(&one_line(
+                // The status wraps, as the iPad's does: "Volver a conectar" beside its button is
+                // never cut short.
+                v.append(&text(
                     st,
                     14,
                     600,
@@ -1062,10 +1072,16 @@ fn row(
                     v.append(&u);
                 }
             }
-            status.append(&v);
+            cell.append(&v);
         }
+        status.append(&cell);
         if let Some(t) = end {
-            status.append(&t);
+            if under {
+                t.set_halign(gtk::Align::End);
+                cell.append(&t);
+            } else {
+                status.append(&t);
+            }
         }
         if let Some(c) = &chevron {
             status.append(c);
