@@ -569,5 +569,193 @@ pub fn matches(draft: &AgentDraft, offer: &Offer, agent: &str, hold: &str, actio
     changed == named
 }
 
+/// The keys each object of a draft's Cards may carry: those `matches` compares, and the few it
+/// reads as words or knows to be unchanged. kiff/tafs `vectors/agent-draft-keys.json` lists the
+/// same, and its cases are this computer's tests, as they are the iPad's, Android's and tafs
+/// cloud's.
+pub const KEYS: &[(&str, &[&str])] = &[
+    (
+        "card",
+        &[
+            "id",
+            "revises",
+            "current",
+            "unchanged",
+            "grants",
+            "aggregates",
+            "on_exceed",
+            "lines",
+            "subject",
+            "subjects",
+            "domain",
+            "environment",
+            "location",
+            "valid_from",
+            "valid_until",
+            "hold_expiry",
+            "revoked_at",
+        ],
+    ),
+    (
+        "current",
+        &[
+            "id",
+            "grants",
+            "aggregates",
+            "on_exceed",
+            "lines",
+            "subject",
+            "subjects",
+            "domain",
+            "environment",
+            "location",
+            "valid_from",
+            "valid_until",
+            "active",
+            "domain_id",
+            "hold_expiry_seconds",
+        ],
+    ),
+    (
+        "grant",
+        &[
+            "action",
+            "title",
+            "per_action_max",
+            "resources",
+            "entity_states",
+            "next_steps",
+        ],
+    ),
+    ("cap", &["quantity", "quantity_of", "max", "unit", "scale"]),
+    (
+        "total",
+        &[
+            "quantity",
+            "quantity_of",
+            "limit",
+            "window",
+            "unit",
+            "scale",
+            "measure",
+            "per",
+        ],
+    ),
+    ("resources", &["parameter", "values"]),
+    ("quantity_of", &["kind", "parameter"]),
+];
+
+/// "Allow this from now on", its second half (the iPad's `HoldAllow.keysKnown`): every key of
+/// each of the draft's Cards, as KIFF sent them (`body`), is one this check reads (`KEYS`), so a
+/// term KIFF adds later is never signed unseen. A key whose value is null sets nothing. A Card's
+/// `id`, when sent, is the Card it revises. A `quantity_of` says what its `quantity` says:
+/// "sum(amount_cents)" is {kind: sum, parameter: amount_cents}, "count" is {kind: count}. The
+/// draft's own keys aren't a Card's.
+pub fn keys_known(body: &[u8]) -> bool {
+    let Ok(Value::Object(root)) = serde_json::from_slice::<Value>(body) else {
+        return false;
+    };
+    type Object = serde_json::Map<String, Value>;
+    fn absent(v: Option<&Value>) -> bool {
+        matches!(v, None | Some(Value::Null))
+    }
+    fn only<'a>(v: Option<&'a Value>, kind: &str) -> Option<&'a Object> {
+        let o = v?.as_object()?;
+        let allowed = KEYS.iter().find(|(k, _)| *k == kind)?.1;
+        o.iter()
+            .all(|(k, value)| value.is_null() || allowed.contains(&k.as_str()))
+            .then_some(o)
+    }
+    fn list(v: Option<&Value>, each: impl Fn(&Value) -> bool) -> bool {
+        if absent(v) {
+            return true;
+        }
+        v.and_then(Value::as_array)
+            .is_some_and(|all| all.iter().all(each))
+    }
+    // "sum(amount_cents)" as its kind and parameter; "count" as itself.
+    fn applied(quantity: &str) -> (&str, Option<&str>) {
+        if let (Some(open), Some(inner)) = (quantity.find('('), quantity.strip_suffix(')')) {
+            let kind = &quantity[..open];
+            let parameter = &inner[open + 1..];
+            if !kind.is_empty()
+                && kind.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
+                && !parameter.is_empty()
+            {
+                return (kind, Some(parameter));
+            }
+        }
+        (quantity, None)
+    }
+    fn quantity_of(o: &Object) -> bool {
+        if absent(o.get("quantity_of")) {
+            return true;
+        }
+        let (Some(of), Some(quantity)) = (
+            only(o.get("quantity_of"), "quantity_of"),
+            o.get("quantity").and_then(Value::as_str),
+        ) else {
+            return false;
+        };
+        let Some(kind) = of.get("kind").and_then(Value::as_str) else {
+            return false;
+        };
+        if !absent(of.get("parameter")) && !of["parameter"].is_string() {
+            return false;
+        }
+        let parameter = of.get("parameter").and_then(Value::as_str);
+        (kind, parameter) == applied(quantity)
+    }
+    fn cap(v: &Value) -> bool {
+        only(Some(v), "cap").is_some_and(quantity_of)
+    }
+    fn total(v: &Value) -> bool {
+        only(Some(v), "total").is_some_and(quantity_of)
+    }
+    fn grant(v: &Value) -> bool {
+        let Some(g) = only(Some(v), "grant") else {
+            return false;
+        };
+        list(g.get("per_action_max"), cap)
+            && (absent(g.get("resources")) || only(g.get("resources"), "resources").is_some())
+    }
+    fn terms(t: &Object) -> bool {
+        list(t.get("grants"), grant) && list(t.get("aggregates"), total)
+    }
+    list(root.get("cards"), |v| {
+        let Some(card) = only(Some(v), "card") else {
+            return false;
+        };
+        if !absent(card.get("id")) {
+            let revises = card.get("revises").and_then(Value::as_str);
+            if card.get("id").and_then(Value::as_str).is_none()
+                || card.get("id").and_then(Value::as_str) != revises
+            {
+                return false;
+            }
+        }
+        if !terms(card) {
+            return false;
+        }
+        if absent(card.get("current")) {
+            return true;
+        }
+        only(card.get("current"), "current").is_some_and(terms)
+    })
+}
+
+/// What this computer signs: KIFF's draft, read from its bytes (`body`), only when every key of
+/// its Cards is one the check reads (`keys_known`) and it is what was offered (`matches`).
+pub fn signable(
+    body: &[u8],
+    draft: &AgentDraft,
+    offer: &Offer,
+    agent: &str,
+    hold: &str,
+    action: &str,
+) -> bool {
+    keys_known(body) && matches(draft, offer, agent, hold, action)
+}
+
 #[cfg(test)]
 mod tests;

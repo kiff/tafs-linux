@@ -89,7 +89,8 @@ fn read(
             .unwrap_or_default()));
     }
     let draft = AgentDraft::read(&d.body).ok_or_else(plain)?;
-    let matches = allow::matches(&draft, &offer, &t.agent, &t.exception, &t.action);
+    // Signed only when every key of its Cards is one the check reads, and it's what was offered.
+    let matches = allow::signable(&d.body, &draft, &offer, &t.agent, &t.exception, &t.action);
     Ok((answer, Some(draft), matches))
 }
 

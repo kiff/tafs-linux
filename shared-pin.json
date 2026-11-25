@@ -1,11 +1,12 @@
 {
   "repo": "kiff/tafs",
-  "commit": "9aaf67c3850423723d390cc1592ad0cc209eeff8",
+  "commit": "c261f6d75c78daea833609ed7465ff54c4841049",
   "paths": [
     "app/strings",
     "app/hosts.json",
     "contracts",
     "ios/Tafs/Samples/connect-apps.json",
-    "vectors/api-door-endpoint.json"
+    "vectors/api-door-endpoint.json",
+    "vectors/agent-draft-keys.json"
   ]
 }
