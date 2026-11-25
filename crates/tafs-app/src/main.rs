@@ -922,6 +922,10 @@ fn activate(app: &adw::Application, o: &Options) {
     } else {
         store::load(now)
     };
+    // No session: a crash or a kill before sign-out may have left files opened from a chat.
+    if kept.is_none() && !screenshot && !o.sample {
+        attach::clear_opened();
+    }
     let from_file = o.home.as_deref().map(|path| match read_contract(path) {
         Some(home) => Rc::new(Cloud {
             home,
@@ -3174,6 +3178,8 @@ impl App {
 /// the log by its fixed word; the token it keeps is one KIFF has ended, so the next launch's
 /// reads get a 401 and forget it again.
 fn forget_kept() {
+    // The files opened from the account's chats go with it.
+    attach::clear_opened();
     if let Err(first) = store::clear() {
         if let Err(again) = store::clear() {
             eprintln!(
