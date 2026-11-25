@@ -90,7 +90,14 @@ third answer changes the taf's Card, as narrowly as it can, so calls like it go 
     location and validity. A time is compared as the instant it names. A Card KIFF marks
     unchanged must read as in force;
   - when KIFF names the Card in force a revision is compared with (`current.id`), be the one it
-    revises (`revises`).
+    revises (`revises`);
+  - carry on each of its Cards only keys the check reads (`allow::keys_known`, the iPad's
+    `HoldAllow.keysKnown`, over the draft's bytes as KIFF sent them), so a term KIFF adds later is
+    never signed unseen. The keys are kiff/tafs `vectors/agent-draft-keys.json`'s, by object. A
+    key whose value is null sets nothing, a Card's `id` is the Card it revises, and a
+    `quantity_of` says what its `quantity` says. The vector's cases, over KIFF's own draft pinned
+    in `contracts/kiff-agent-draft-from-hold.json`, are this computer's tests
+    (`tafs-core/tests/allow_keys.rs`). Both checks are `allow::signable`.
 
   Anything else shows "This change isn't what was offered.", and there's no Approve.
 - **The sheet:** its title; tafs cloud's change, before and → after; KIFF's own lines for each
