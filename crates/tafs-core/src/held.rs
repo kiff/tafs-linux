@@ -79,10 +79,10 @@ pub struct CardException {
     pub accounting_version: Option<i64>,
     #[serde(default)]
     pub title: Option<String>,
-    /// Each argument as text (`ArgumentText`): a string as it is, a number or a flag written
-    /// out, anything else "…".
-    #[serde(default)]
-    pub arguments: Option<BTreeMap<String, Value>>,
+    /// Each argument as KIFF keeps it, whole: Details writes a list or object in full
+    /// (`details`, contracts/held-arguments.json).
+    #[serde(default, deserialize_with = "held_arguments")]
+    pub arguments: Option<BTreeMap<String, Arg>>,
     #[serde(default)]
     pub proposal_id: Option<String>,
     #[serde(default)]
@@ -117,10 +117,11 @@ pub fn argument_text(v: &Value) -> String {
     match v {
         Value::String(s) => s.clone(),
         Value::Bool(b) => b.to_string(),
-        Value::Number(n) => match (n.as_i64(), n.as_f64()) {
-            (Some(i), _) => i.to_string(),
-            (None, Some(f)) => plain(f),
-            _ => "…".into(),
+        Value::Number(n) => match (n.as_i64(), n.as_u64(), n.as_f64()) {
+            (Some(i), _, _) => i.to_string(),
+            (None, Some(u), _) => u.to_string(),
+            (None, None, Some(f)) => plain(f),
+            _ => n.to_string(),
         },
         _ => "…".into(),
     }
@@ -521,7 +522,11 @@ pub fn ordinal(language: &str, n: i64) -> String {
     }
 }
 
-/// `details`: what a gateway call is on, one line an argument, not the amount, not KIFF's own.
+/// `details`: what a gateway call is on, as KIFF keeps its arguments: one line an argument, and a list
+/// or object written out in full below its name, each item (1, 2, ...) or field on its own line, two
+/// spaces deeper each level, keys in code point order at every level (contracts/held-arguments.json).
+/// Nothing the call carries is ever folded to "…": a held browser call's `steps` are what the owner
+/// signs (red-team, 27 Nov). Not the amount, not KIFF's own; an empty string at the top says nothing.
 pub fn details(e: &CardException) -> Vec<String> {
     let Some(arguments) = &e.arguments else {
         return vec![];
@@ -539,12 +544,265 @@ pub fn details(e: &CardException) -> Vec<String> {
     );
     arguments
         .iter()
-        .filter_map(|(key, v)| {
+        .flat_map(|(key, v)| {
             let k = key.to_lowercase();
-            let text = argument_text(v);
-            (!shown.contains(&k) && !KIFF_OWN_ARGUMENTS.contains(&k.as_str()) && !text.is_empty())
-                .then(|| format!("{key}: {text}"))
+            if shown.contains(&k)
+                || KIFF_OWN_ARGUMENTS.contains(&k.as_str())
+                || *v == Arg::Text(String::new())
+            {
+                return vec![];
+            }
+            argument_lines(&visible(key), v, 0)
         })
+        .collect()
+}
+
+/// `argumentLines`: `label`'s `value` as lines. A plain value on its label's line; a list's items
+/// (1, 2, ...) and an object's fields below it, two spaces deeper each level, keys in code point
+/// order (a `BTreeMap` of UTF-8 keys is in code point order). An empty string below the top is
+/// written `""`, so a fill with nothing still shows.
+pub fn argument_lines(label: &str, v: &Arg, depth: usize) -> Vec<String> {
+    let pad = "  ".repeat(depth);
+    match v {
+        Arg::List(items) if items.is_empty() => vec![format!("{pad}{label}: []")],
+        Arg::List(items) => std::iter::once(format!("{pad}{label}:"))
+            .chain(
+                items
+                    .iter()
+                    .enumerate()
+                    .flat_map(|(i, x)| argument_lines(&(i + 1).to_string(), x, depth + 1)),
+            )
+            .collect(),
+        Arg::Object(fields) if fields.is_empty() => vec![format!("{pad}{label}: {{}}")],
+        Arg::Object(fields) => std::iter::once(format!("{pad}{label}:"))
+            .chain(
+                fields
+                    .iter()
+                    .flat_map(|(k, x)| argument_lines(&visible(k), x, depth + 1)),
+            )
+            .collect(),
+        Arg::Text(s) if s.is_empty() => vec![format!("{pad}{label}: \"\"")],
+        Arg::Text(s) => vec![format!("{pad}{label}: {}", visible(s))],
+        Arg::Null => vec![format!("{pad}{label}: null")],
+        Arg::Flag(b) => vec![format!("{pad}{label}: {b}")],
+        Arg::Number(n) => vec![format!("{pad}{label}: {}", plain_literal(n))],
+    }
+}
+
+/// A held call's argument as KIFF keeps it, read from its own bytes: a number keeps the text it
+/// was sent with (`1E+400` stays `1E+400`, `0.12345678901234567890` keeps every digit), which no
+/// `f64`, and not serde_json's own number, does.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Arg {
+    Text(String),
+    Number(String),
+    Flag(bool),
+    Null,
+    List(Vec<Arg>),
+    /// Fields in code point order; a key sent twice keeps the last, which is what runs.
+    Object(BTreeMap<String, Arg>),
+}
+
+/// How deep a held call's arguments are read, as serde_json's own limit: past it, the call has
+/// no arguments to show (`arguments_unavailable`), never a stack overflow.
+const ARGUMENTS_DEPTH_MAX: usize = 128;
+
+/// `arguments`, read from the bytes KIFF sent (`RawValue`). Anything but an object, or past
+/// [`ARGUMENTS_DEPTH_MAX`], is refused as before.
+fn held_arguments<'de, D: Deserializer<'de>>(
+    d: D,
+) -> Result<Option<BTreeMap<String, Arg>>, D::Error> {
+    let Some(raw) = Option::<Box<serde_json::value::RawValue>>::deserialize(d)? else {
+        return Ok(None);
+    };
+    match read_arguments(raw.get()) {
+        Some(Arg::Object(fields)) => Ok(Some(fields)),
+        _ => Err(serde::de::Error::custom(
+            "arguments: not an object of JSON values",
+        )),
+    }
+}
+
+/// One JSON value from `text`, numbers kept as their text.
+pub fn read_arguments(text: &str) -> Option<Arg> {
+    let mut r = ArgReader { s: text, i: 0 };
+    let v = r.value(0)?;
+    r.space();
+    (r.i == text.len()).then_some(v)
+}
+
+struct ArgReader<'a> {
+    s: &'a str,
+    i: usize,
+}
+
+impl ArgReader<'_> {
+    fn space(&mut self) {
+        while matches!(
+            self.s.as_bytes().get(self.i),
+            Some(b' ' | b'\t' | b'\n' | b'\r')
+        ) {
+            self.i += 1;
+        }
+    }
+
+    fn take(&mut self, b: u8) -> Option<()> {
+        self.space();
+        (self.s.as_bytes().get(self.i) == Some(&b)).then(|| self.i += 1)
+    }
+
+    fn word(&mut self, w: &str, v: Arg) -> Option<Arg> {
+        self.s[self.i..].starts_with(w).then(|| {
+            self.i += w.len();
+            v
+        })
+    }
+
+    /// A string, unescaped by serde_json from its own bytes.
+    fn text(&mut self) -> Option<String> {
+        self.space();
+        let b = self.s.as_bytes();
+        let start = self.i;
+        if b.get(self.i) != Some(&b'"') {
+            return None;
+        }
+        self.i += 1;
+        loop {
+            match b.get(self.i)? {
+                b'\\' => self.i += 2,
+                b'"' => break,
+                _ => self.i += 1,
+            }
+        }
+        self.i += 1;
+        serde_json::from_str(self.s.get(start..self.i)?).ok()
+    }
+
+    fn value(&mut self, depth: usize) -> Option<Arg> {
+        if depth > ARGUMENTS_DEPTH_MAX {
+            return None;
+        }
+        self.space();
+        match *self.s.as_bytes().get(self.i)? {
+            b'{' => {
+                self.i += 1;
+                let mut fields = BTreeMap::new();
+                if self.take(b'}').is_some() {
+                    return Some(Arg::Object(fields));
+                }
+                loop {
+                    let k = self.text()?;
+                    self.take(b':')?;
+                    fields.insert(k, self.value(depth + 1)?);
+                    if self.take(b',').is_none() {
+                        self.take(b'}')?;
+                        return Some(Arg::Object(fields));
+                    }
+                }
+            }
+            b'[' => {
+                self.i += 1;
+                let mut items = Vec::new();
+                if self.take(b']').is_some() {
+                    return Some(Arg::List(items));
+                }
+                loop {
+                    items.push(self.value(depth + 1)?);
+                    if self.take(b',').is_none() {
+                        self.take(b']')?;
+                        return Some(Arg::List(items));
+                    }
+                }
+            }
+            b'"' => self.text().map(Arg::Text),
+            b't' => self.word("true", Arg::Flag(true)),
+            b'f' => self.word("false", Arg::Flag(false)),
+            b'n' => self.word("null", Arg::Null),
+            b'-' | b'0'..=b'9' => {
+                let start = self.i;
+                while matches!(
+                    self.s.as_bytes().get(self.i),
+                    Some(b'0'..=b'9' | b'-' | b'+' | b'.' | b'e' | b'E')
+                ) {
+                    self.i += 1;
+                }
+                Some(Arg::Number(self.s[start..self.i].to_string()))
+            }
+            _ => None,
+        }
+    }
+}
+
+/// The most digits a number is written out with. Past it, the number shows as sent, so an
+/// exponent can't make the app write a billion zeros (case 7 of the contract).
+const PLAIN_DIGITS_MAX: i128 = 100;
+
+/// A JSON number exactly as sent ([`Arg::Number`] keeps its text), written
+/// plainly: no exponent, and no trailing zero after the point ("1.50" is 1.5, "2.0" is 2,
+/// "1.5e-05" is 0.000015), and every digit kept, past an f64 or an i64 too. One whose plain form
+/// would pass 100 digits (the leading 0 and the zeros after the point counted) is written as sent:
+/// `1e99` is written out, `1e100` and `1e-400` stay as they are.
+pub fn plain_literal(n: &str) -> String {
+    let sent = n;
+    let (sign, n) = match n.strip_prefix('-') {
+        Some(rest) => ("-", rest),
+        None => ("", n),
+    };
+    let (mant, exp) = n.split_once(['e', 'E']).unwrap_or((n, ""));
+    let (whole, frac) = mant.split_once('.').unwrap_or((mant, ""));
+    let digits = format!("{whole}{frac}");
+    let digits = digits.trim_start_matches('0');
+    // A zero is one written digit, whatever its exponent ("0e500", and one past i64 too).
+    if digits.is_empty() {
+        return "0".into();
+    }
+    let exp = if exp.is_empty() {
+        0
+    } else {
+        match exp.trim_start_matches('+').parse::<i64>() {
+            Ok(e) => e,
+            Err(_) => return sent.to_string(),
+        }
+    };
+    // The plain form's digit count, worked out before a zero is written.
+    let significant = digits.trim_end_matches('0');
+    let s = frac.len() as i128 - exp as i128 - (digits.len() - significant.len()) as i128;
+    let count = if s <= 0 {
+        significant.len() as i128 - s
+    } else {
+        (significant.len() as i128).max(s + 1)
+    };
+    if count > PLAIN_DIGITS_MAX {
+        return sent.to_string();
+    }
+    let scale = frac.len() as i64 - exp;
+    let text = if scale <= 0 {
+        format!("{digits}{}", "0".repeat((-scale) as usize))
+    } else {
+        let scale = scale as usize;
+        let digits = if digits.len() <= scale {
+            format!("{}{digits}", "0".repeat(scale - digits.len() + 1))
+        } else {
+            digits.to_string()
+        };
+        let (int, dec) = digits.split_at(digits.len() - scale);
+        let dec = dec.trim_end_matches('0');
+        if dec.is_empty() {
+            int.to_string()
+        } else {
+            format!("{int}.{dec}")
+        }
+    };
+    format!("{sign}{text}")
+}
+
+/// `visible`: a line from KIFF or a taf as Details draws it: no direction mark, so nothing can
+/// reorder what's beside it, and any other control character (a line break) as a space, so a
+/// value can't draw a line of its own.
+pub fn visible(text: &str) -> String {
+    text.chars()
+        .filter(|c| !crate::files::is_direction(*c))
+        .map(|c| if c.is_control() { ' ' } else { c })
         .collect()
 }
 
@@ -808,6 +1066,155 @@ mod tests {
         assert_eq!(argument_text(&Value::from(42)), "42");
         assert_eq!(argument_text(&Value::from(true)), "true");
         assert_eq!(argument_text(&serde_json::json!({"a": 1})), "…");
+    }
+
+    /// A number under Details exactly as sent, written plainly: no exponent, no trailing zero,
+    /// every digit (the vector's cases 5 and 6, kiff/tafs#2254 and the next).
+    #[test]
+    fn a_number_argument_keeps_every_digit_and_drops_trailing_zeros() {
+        let Some(Arg::Object(args)) = read_arguments(
+            r#"{"price": 1.50, "rate": 2.0, "share": 0.250, "tiny": 1.5e-05, "id_like": 12345678901234567.89,
+                "long": 0.12345678901234567890, "big": 98765432109876543210987, "neg": -0.5, "zero": 0.0, "e": 1E+3}"#,
+        ) else {
+            panic!("not an object")
+        };
+        let line = |k: &str| argument_lines(k, &args[k], 0).remove(0);
+        assert_eq!(line("price"), "price: 1.5");
+        assert_eq!(line("rate"), "rate: 2");
+        assert_eq!(line("share"), "share: 0.25");
+        assert_eq!(line("tiny"), "tiny: 0.000015");
+        assert_eq!(line("id_like"), "id_like: 12345678901234567.89");
+        assert_eq!(line("long"), "long: 0.1234567890123456789");
+        assert_eq!(line("big"), "big: 98765432109876543210987");
+        assert_eq!(line("neg"), "neg: -0.5");
+        assert_eq!(line("zero"), "zero: 0");
+        assert_eq!(line("e"), "e: 1000");
+    }
+
+    /// Case 7: a number whose plain form would pass 100 digits shows as sent, so an exponent
+    /// can't make Details write a billion zeros (a taf's `1e999999999`).
+    #[test]
+    fn a_number_past_a_hundred_digits_shows_as_sent() {
+        let Some(Arg::Object(args)) = read_arguments(
+            r#"{"huge": 1e400, "small": 1e-400, "big_edge": 1e99, "over": 1e100, "neg": -1E+400,
+                "small_edge": 1e-99, "small_over": 1e-100, "zeros": 1.000e-99, "vast": 1e999999999,
+                "past_i64": 1e99999999999999999999, "long_edge": 1234567890e90}"#,
+        ) else {
+            panic!("not an object")
+        };
+        let line = |k: &str| argument_lines(k, &args[k], 0).remove(0);
+        assert_eq!(line("huge"), "huge: 1e400");
+        assert_eq!(line("small"), "small: 1e-400");
+        assert_eq!(line("big_edge"), format!("big_edge: 1{}", "0".repeat(99)));
+        assert_eq!(line("over"), "over: 1e100");
+        assert_eq!(line("neg"), "neg: -1E+400");
+        assert_eq!(
+            line("small_edge"),
+            format!("small_edge: 0.{}1", "0".repeat(98))
+        );
+        assert_eq!(line("small_over"), "small_over: 1e-100");
+        assert_eq!(line("zeros"), format!("zeros: 0.{}1", "0".repeat(98)));
+        assert_eq!(line("vast"), "vast: 1e999999999");
+        assert_eq!(line("past_i64"), "past_i64: 1e99999999999999999999");
+        assert_eq!(
+            line("long_edge"),
+            format!("long_edge: 1234567890{}", "0".repeat(90))
+        );
+    }
+
+    /// A number out of an f64's range in one call's arguments (a taf's `1e400`) never fails the
+    /// held list: `arguments` is read as raw bytes, so every call is still listed.
+    #[test]
+    fn a_number_out_of_an_f64s_range_never_empties_the_held_list() {
+        let held = r#"{"exceptions": [
+            {"id": "ce_a", "subject": "a", "action": "x", "entity_id": "e", "status": "held", "breaches": [],
+             "created_at": "2026-11-27T16:00:00Z", "expires_at": null, "accounting_version": 1,
+             "arguments": {"huge": 1e400, "small": -1e-400, "amount": 2550}},
+            {"id": "ce_b", "subject": "b", "action": "y", "entity_id": "f", "status": "held", "breaches": [],
+             "created_at": "2026-11-27T16:00:00Z", "expires_at": null, "accounting_version": 1}]}"#;
+        let list = read_held(held.as_bytes()).unwrap();
+        assert_eq!(
+            list.iter().map(|e| e.id.as_str()).collect::<Vec<_>>(),
+            ["ce_a", "ce_b"]
+        );
+        assert_eq!(
+            details(&list[0]),
+            ["amount: 2550", "huge: 1e400", "small: -1e-400"]
+        );
+    }
+
+    /// Case 7's edges beyond the vector: a zero is 0 however it's sent, an exponent past i64 is as
+    /// sent, and a key sent twice shows the last, which is what runs.
+    #[test]
+    fn a_held_calls_arguments_are_read_from_their_own_bytes() {
+        let Some(Arg::Object(args)) = read_arguments(
+            r#"{"zero_far": 0e500, "past": 1000e2147483647, "twice": 1, "twice": "last",
+                "nested": {"n": 1E+400, "list": [1.50, -0.0, "\u00e9"]}}"#,
+        ) else {
+            panic!("not an object")
+        };
+        let line = |k: &str| argument_lines(k, &args[k], 0);
+        assert_eq!(line("zero_far"), ["zero_far: 0"]);
+        assert_eq!(plain_literal("0e99999999999999999999"), "0");
+        assert_eq!(
+            plain_literal("1e99999999999999999999"),
+            "1e99999999999999999999"
+        );
+        assert_eq!(line("past"), ["past: 1000e2147483647"]);
+        assert_eq!(line("twice"), ["twice: last"]);
+        assert_eq!(
+            line("nested"),
+            [
+                "nested:",
+                "  list:",
+                "    1: 1.5",
+                "    2: 0",
+                "    3: é",
+                "  n: 1E+400"
+            ]
+        );
+        // Too deep to read is no arguments, never a stack overflow; nor is anything but JSON.
+        let deep = format!("{}1{}", "[".repeat(200), "]".repeat(200));
+        assert_eq!(read_arguments(&deep), None);
+        for bad in [r#"{"a": 1"#, r#"{"a" 1}"#, "{} x", r#"{"a": tru}"#, ""] {
+            assert_eq!(read_arguments(bad), None, "{bad}");
+        }
+    }
+
+    /// A held call's arguments under Details, every case of contracts/held-arguments.json: the
+    /// lines every app writes, exactly. Nothing is ever shortened to "…" (red-team, 27 Nov: a held
+    /// browse_act's steps showed as "steps: …").
+    #[test]
+    fn a_held_calls_arguments_are_the_contracts_lines_exactly() {
+        // Each case's arguments as the file's own bytes, as KIFF's would be: a serde_json
+        // Value would read 1e400 through an f64 and refuse it (cases 6 and 7).
+        #[derive(Deserialize)]
+        struct Case<'a> {
+            name: String,
+            #[serde(borrow)]
+            arguments: &'a serde_json::value::RawValue,
+            lines: Vec<String>,
+        }
+        #[derive(Deserialize)]
+        struct File<'a> {
+            #[serde(borrow)]
+            cases: Vec<Case<'a>>,
+        }
+        let file: File = serde_json::from_str(include_str!(
+            "../../../shared/contracts/held-arguments.json"
+        ))
+        .unwrap();
+        assert!(!file.cases.is_empty());
+        for case in &file.cases {
+            let held = format!(
+                r#"{{"exceptions": [{{"id": "ce_c", "subject": "a", "action": "x", "entity_id": "e",
+                "status": "held", "breaches": [], "created_at": "2026-11-27T16:00:00Z",
+                "expires_at": null, "accounting_version": 1, "arguments": {}}}]}}"#,
+                case.arguments.get()
+            );
+            let e = &read_held(held.as_bytes()).unwrap()[0];
+            assert_eq!(details(e), case.lines, "{}", case.name);
+        }
     }
 
     #[test]
