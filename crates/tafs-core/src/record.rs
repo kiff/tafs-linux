@@ -383,11 +383,14 @@ pub fn record(
         let Some(taf) = c.actor_id.as_deref().and_then(taf_of) else {
             continue;
         };
+        // Approved once only when KIFF carries the owner's approval as the call's answer (kiff/tafs#2225): a held
+        // call that went through because its Card changed has none, and is the Card's, as KIFF's own trail says.
+        let approved_once = c.held && c.answer.as_ref().is_some_and(|a| a.decision != "refused");
         let (kind, mut detail) = match c.outcome.as_str() {
             "allowed" => executed(
                 w,
                 c.tool_outcome.as_ref(),
-                c.held,
+                approved_once,
                 vendors.get(&c.action_name).map(String::as_str),
                 counted(c),
             )?,
@@ -424,7 +427,7 @@ pub fn record(
             detail,
             at: c.created_at,
             made_at: c.made_at,
-            owner_approved: c.outcome == "allowed" && c.held,
+            owner_approved: c.outcome == "allowed" && approved_once,
             amount: c.amount.clone(),
             read_only: c.read_only == Some(true),
             entity_id: c.entity_id.clone(),
