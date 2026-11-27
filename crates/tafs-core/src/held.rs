@@ -1122,6 +1122,27 @@ mod tests {
         );
     }
 
+    /// A number out of an f64's range in one call's arguments (a taf's `1e400`) never fails the
+    /// held list: `arguments` is read as raw bytes, so every call is still listed.
+    #[test]
+    fn a_number_out_of_an_f64s_range_never_empties_the_held_list() {
+        let held = r#"{"exceptions": [
+            {"id": "ce_a", "subject": "a", "action": "x", "entity_id": "e", "status": "held", "breaches": [],
+             "created_at": "2026-11-27T16:00:00Z", "expires_at": null, "accounting_version": 1,
+             "arguments": {"huge": 1e400, "small": -1e-400, "amount": 2550}},
+            {"id": "ce_b", "subject": "b", "action": "y", "entity_id": "f", "status": "held", "breaches": [],
+             "created_at": "2026-11-27T16:00:00Z", "expires_at": null, "accounting_version": 1}]}"#;
+        let list = read_held(held.as_bytes()).unwrap();
+        assert_eq!(
+            list.iter().map(|e| e.id.as_str()).collect::<Vec<_>>(),
+            ["ce_a", "ce_b"]
+        );
+        assert_eq!(
+            details(&list[0]),
+            ["amount: 2550", "huge: 1e400", "small: -1e-400"]
+        );
+    }
+
     /// Case 7's edges beyond the vector: a zero is 0 however it's sent, an exponent past i64 is as
     /// sent, and a key sent twice shows the last, which is what runs.
     #[test]
