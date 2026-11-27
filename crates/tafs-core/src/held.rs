@@ -748,19 +748,22 @@ pub fn plain_literal(n: &str) -> String {
         Some(rest) => ("-", rest),
         None => ("", n),
     };
-    let (mant, exp) = match n.find(['e', 'E']) {
-        Some(i) => match n[i + 1..].trim_start_matches('+').parse::<i64>() {
-            Ok(e) => (&n[..i], e),
-            Err(_) => return format!("{sign}{n}"),
-        },
-        None => (n, 0),
-    };
+    let (mant, exp) = n.split_once(['e', 'E']).unwrap_or((n, ""));
     let (whole, frac) = mant.split_once('.').unwrap_or((mant, ""));
     let digits = format!("{whole}{frac}");
     let digits = digits.trim_start_matches('0');
+    // A zero is one written digit, whatever its exponent ("0e500", and one past i64 too).
     if digits.is_empty() {
         return "0".into();
     }
+    let exp = if exp.is_empty() {
+        0
+    } else {
+        match exp.trim_start_matches('+').parse::<i64>() {
+            Ok(e) => e,
+            Err(_) => return sent.to_string(),
+        }
+    };
     // The plain form's digit count, worked out before a zero is written.
     let significant = digits.trim_end_matches('0');
     let s = frac.len() as i128 - exp as i128 - (digits.len() - significant.len()) as i128;
@@ -1131,6 +1134,11 @@ mod tests {
         };
         let line = |k: &str| argument_lines(k, &args[k], 0);
         assert_eq!(line("zero_far"), ["zero_far: 0"]);
+        assert_eq!(plain_literal("0e99999999999999999999"), "0");
+        assert_eq!(
+            plain_literal("1e99999999999999999999"),
+            "1e99999999999999999999"
+        );
         assert_eq!(line("past"), ["past: 1000e2147483647"]);
         assert_eq!(line("twice"), ["twice: last"]);
         assert_eq!(
