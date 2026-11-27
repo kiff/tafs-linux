@@ -1712,7 +1712,7 @@ fn only_what_the_owner_should_know_shows_and_only_since_the_chat_began() {
             "allowed",
             Some("sending"),
             "2026-11-16T09:10:00Z",
-            None,
+            Some("2026-11-16T09:11:00Z"),
         ),
         call("p-refused", "denied", None, "2026-11-16T09:10:00Z", None),
     ]);
@@ -1729,12 +1729,23 @@ fn an_outcome_says_what_became_of_the_call_in_its_tone_and_mark() {
     use crate::coach_lines::{Mark, Tone};
     use crate::record::Kind;
     let w = en();
+    // Held, then allowed with no answer from the owner (its Card changed): the Card's (kiff/tafs#2225).
+    let card = record_of(&[call(
+        "p0",
+        "allowed",
+        Some("done"),
+        "2026-11-16T09:00:10Z",
+        None,
+    )])
+    .remove(0);
+    assert_eq!(card.kind, Kind::Done);
+    assert!(!card.owner_approved);
     let mut e = record_of(&[call(
         "p1",
         "allowed",
         Some("done"),
         "2026-11-16T09:00:10Z",
-        None,
+        Some("2026-11-16T09:02:00Z"),
     )])
     .remove(0);
     let line = |e: &crate::record::Entry| {
@@ -1742,6 +1753,8 @@ fn an_outcome_says_what_became_of_the_call_in_its_tone_and_mark() {
         (o.text, o.tone, o.mark)
     };
     assert_eq!(e.kind, Kind::Approved);
+    assert!(e.owner_approved);
+    e.answer = None;
     assert_eq!(
         line(&e),
         ("Refund: approved, done".into(), Tone::Ok, Mark::Check)
