@@ -79,8 +79,8 @@ pub struct CardException {
     pub accounting_version: Option<i64>,
     #[serde(default)]
     pub title: Option<String>,
-    /// Each argument as text (`ArgumentText`): a string as it is, a number or a flag written
-    /// out, anything else "…".
+    /// Each argument as KIFF keeps it, whole: Details writes a list or object in full
+    /// (`details`, contracts/held-arguments.json).
     #[serde(default)]
     pub arguments: Option<BTreeMap<String, Value>>,
     #[serde(default)]
@@ -117,10 +117,11 @@ pub fn argument_text(v: &Value) -> String {
     match v {
         Value::String(s) => s.clone(),
         Value::Bool(b) => b.to_string(),
-        Value::Number(n) => match (n.as_i64(), n.as_f64()) {
-            (Some(i), _) => i.to_string(),
-            (None, Some(f)) => plain(f),
-            _ => "…".into(),
+        Value::Number(n) => match (n.as_i64(), n.as_u64(), n.as_f64()) {
+            (Some(i), _, _) => i.to_string(),
+            (None, Some(u), _) => u.to_string(),
+            (None, None, Some(f)) => plain(f),
+            _ => n.to_string(),
         },
         _ => "…".into(),
     }
@@ -521,7 +522,11 @@ pub fn ordinal(language: &str, n: i64) -> String {
     }
 }
 
-/// `details`: what a gateway call is on, one line an argument, not the amount, not KIFF's own.
+/// `details`: what a gateway call is on, as KIFF keeps its arguments: one line an argument, and a list
+/// or object written out in full below its name, each item (1, 2, ...) or field on its own line, two
+/// spaces deeper each level, keys in code point order at every level (contracts/held-arguments.json).
+/// Nothing the call carries is ever folded to "…": a held browser call's `steps` are what the owner
+/// signs (red-team, 27 Nov). Not the amount, not KIFF's own; an empty string at the top says nothing.
 pub fn details(e: &CardException) -> Vec<String> {
     let Some(arguments) = &e.arguments else {
         return vec![];
@@ -537,14 +542,66 @@ pub fn details(e: &CardException) -> Vec<String> {
             .map(|p| p.keys().map(|k| k.to_lowercase()).collect::<Vec<_>>())
             .unwrap_or_default(),
     );
-    arguments
-        .iter()
-        .filter_map(|(key, v)| {
+    sorted(arguments.iter())
+        .into_iter()
+        .flat_map(|(key, v)| {
             let k = key.to_lowercase();
-            let text = argument_text(v);
-            (!shown.contains(&k) && !KIFF_OWN_ARGUMENTS.contains(&k.as_str()) && !text.is_empty())
-                .then(|| format!("{key}: {text}"))
+            if shown.contains(&k)
+                || KIFF_OWN_ARGUMENTS.contains(&k.as_str())
+                || v.as_str() == Some("")
+            {
+                return vec![];
+            }
+            argument_lines(&visible(key), v, 0)
         })
+        .collect()
+}
+
+/// `argumentLines`: `label`'s `value` as lines. A plain value on its label's line; a list's items
+/// (1, 2, ...) and an object's fields below it, two spaces deeper each level. An empty string below
+/// the top is written `""`, so a fill with nothing still shows.
+pub fn argument_lines(label: &str, v: &Value, depth: usize) -> Vec<String> {
+    let pad = "  ".repeat(depth);
+    match v {
+        Value::Array(items) if items.is_empty() => vec![format!("{pad}{label}: []")],
+        Value::Array(items) => std::iter::once(format!("{pad}{label}:"))
+            .chain(
+                items
+                    .iter()
+                    .enumerate()
+                    .flat_map(|(i, x)| argument_lines(&(i + 1).to_string(), x, depth + 1)),
+            )
+            .collect(),
+        Value::Object(fields) if fields.is_empty() => vec![format!("{pad}{label}: {{}}")],
+        Value::Object(fields) => std::iter::once(format!("{pad}{label}:"))
+            .chain(
+                sorted(fields.iter())
+                    .into_iter()
+                    .flat_map(|(k, x)| argument_lines(&visible(k), x, depth + 1)),
+            )
+            .collect(),
+        Value::String(s) if s.is_empty() => vec![format!("{pad}{label}: \"\"")],
+        Value::Null => vec![format!("{pad}{label}: null")],
+        other => vec![format!("{pad}{label}: {}", visible(&argument_text(other)))],
+    }
+}
+
+/// Keys in Unicode code point order, the same on every app, whatever order a map keeps.
+fn sorted<'a>(
+    entries: impl Iterator<Item = (&'a String, &'a Value)>,
+) -> Vec<(&'a String, &'a Value)> {
+    let mut v: Vec<_> = entries.collect();
+    v.sort_by(|a, b| a.0.chars().cmp(b.0.chars()));
+    v
+}
+
+/// `visible`: a line from KIFF or a taf as Details draws it: no direction mark, so nothing can
+/// reorder what's beside it, and any other control character (a line break) as a space, so a
+/// value can't draw a line of its own.
+pub fn visible(text: &str) -> String {
+    text.chars()
+        .filter(|c| !crate::files::is_direction(*c))
+        .map(|c| if c.is_control() { ' ' } else { c })
         .collect()
 }
 
@@ -808,6 +865,32 @@ mod tests {
         assert_eq!(argument_text(&Value::from(42)), "42");
         assert_eq!(argument_text(&Value::from(true)), "true");
         assert_eq!(argument_text(&serde_json::json!({"a": 1})), "…");
+    }
+
+    /// A held call's arguments under Details, every case of contracts/held-arguments.json: the
+    /// lines every app writes, exactly. Nothing is ever shortened to "…" (red-team, 27 Nov: a held
+    /// browse_act's steps showed as "steps: …").
+    #[test]
+    fn a_held_calls_arguments_are_the_contracts_lines_exactly() {
+        let file: Value = serde_json::from_str(include_str!(
+            "../../../shared/contracts/held-arguments.json"
+        ))
+        .unwrap();
+        for case in file["cases"].as_array().unwrap() {
+            let name = case["name"].as_str().unwrap();
+            let held = serde_json::json!({"exceptions": [{"id": "ce_c", "subject": "a", "action": "x",
+                "entity_id": "e", "status": "held", "breaches": [], "created_at": "2026-11-27T16:00:00Z",
+                "expires_at": null, "accounting_version": 1,
+                "arguments": case["arguments"]}]});
+            let e = &read_held(held.to_string().as_bytes()).unwrap()[0];
+            let want: Vec<String> = case["lines"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|l| l.as_str().unwrap().to_string())
+                .collect();
+            assert_eq!(details(e), want, "{name}");
+        }
     }
 
     #[test]

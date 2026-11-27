@@ -165,7 +165,7 @@ pub fn has_text_start(f: &DeliveredFile) -> bool {
     TEXT_TYPES.contains(&f.kind.as_str())
 }
 
-fn is_direction(c: char) -> bool {
+pub(crate) fn is_direction(c: char) -> bool {
     matches!(c as u32, 0x202A..=0x202E | 0x2066..=0x2069 | 0x200E | 0x200F | 0x061C)
 }
 
