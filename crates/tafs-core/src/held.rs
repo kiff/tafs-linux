@@ -1165,24 +1165,34 @@ mod tests {
     /// browse_act's steps showed as "steps: …").
     #[test]
     fn a_held_calls_arguments_are_the_contracts_lines_exactly() {
-        let file: Value = serde_json::from_str(include_str!(
+        // Each case's arguments as the file's own bytes, as KIFF's would be: a serde_json
+        // Value would read 1e400 through an f64 and refuse it (cases 6 and 7).
+        #[derive(Deserialize)]
+        struct Case<'a> {
+            name: String,
+            #[serde(borrow)]
+            arguments: &'a serde_json::value::RawValue,
+            lines: Vec<String>,
+        }
+        #[derive(Deserialize)]
+        struct File<'a> {
+            #[serde(borrow)]
+            cases: Vec<Case<'a>>,
+        }
+        let file: File = serde_json::from_str(include_str!(
             "../../../shared/contracts/held-arguments.json"
         ))
         .unwrap();
-        for case in file["cases"].as_array().unwrap() {
-            let name = case["name"].as_str().unwrap();
-            let held = serde_json::json!({"exceptions": [{"id": "ce_c", "subject": "a", "action": "x",
-                "entity_id": "e", "status": "held", "breaches": [], "created_at": "2026-11-27T16:00:00Z",
-                "expires_at": null, "accounting_version": 1,
-                "arguments": case["arguments"]}]});
-            let e = &read_held(held.to_string().as_bytes()).unwrap()[0];
-            let want: Vec<String> = case["lines"]
-                .as_array()
-                .unwrap()
-                .iter()
-                .map(|l| l.as_str().unwrap().to_string())
-                .collect();
-            assert_eq!(details(e), want, "{name}");
+        assert!(!file.cases.is_empty());
+        for case in &file.cases {
+            let held = format!(
+                r#"{{"exceptions": [{{"id": "ce_c", "subject": "a", "action": "x", "entity_id": "e",
+                "status": "held", "breaches": [], "created_at": "2026-11-27T16:00:00Z",
+                "expires_at": null, "accounting_version": 1, "arguments": {}}}]}}"#,
+                case.arguments.get()
+            );
+            let e = &read_held(held.as_bytes()).unwrap()[0];
+            assert_eq!(details(e), case.lines, "{}", case.name);
         }
     }
 
