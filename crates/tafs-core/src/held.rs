@@ -582,8 +582,51 @@ pub fn argument_lines(label: &str, v: &Value, depth: usize) -> Vec<String> {
             .collect(),
         Value::String(s) if s.is_empty() => vec![format!("{pad}{label}: \"\"")],
         Value::Null => vec![format!("{pad}{label}: null")],
+        Value::Number(n) => vec![format!("{pad}{label}: {}", plain_literal(&n.to_string()))],
         other => vec![format!("{pad}{label}: {}", visible(&argument_text(other)))],
     }
+}
+
+/// A JSON number exactly as sent (serde_json keeps its text: `arbitrary_precision`), written
+/// plainly: no exponent, and no trailing zero after the point ("1.50" is 1.5, "2.0" is 2,
+/// "1.5e-05" is 0.000015), and every digit kept, past an f64 or an i64 too.
+pub fn plain_literal(n: &str) -> String {
+    let (sign, n) = match n.strip_prefix('-') {
+        Some(rest) => ("-", rest),
+        None => ("", n),
+    };
+    let (mant, exp) = match n.find(['e', 'E']) {
+        Some(i) => match n[i + 1..].trim_start_matches('+').parse::<i64>() {
+            Ok(e) => (&n[..i], e),
+            Err(_) => return format!("{sign}{n}"),
+        },
+        None => (n, 0),
+    };
+    let (whole, frac) = mant.split_once('.').unwrap_or((mant, ""));
+    let digits = format!("{whole}{frac}");
+    let digits = digits.trim_start_matches('0');
+    if digits.is_empty() {
+        return "0".into();
+    }
+    let scale = frac.len() as i64 - exp;
+    let text = if scale <= 0 {
+        format!("{digits}{}", "0".repeat((-scale) as usize))
+    } else {
+        let scale = scale as usize;
+        let digits = if digits.len() <= scale {
+            format!("{}{digits}", "0".repeat(scale - digits.len() + 1))
+        } else {
+            digits.to_string()
+        };
+        let (int, dec) = digits.split_at(digits.len() - scale);
+        let dec = dec.trim_end_matches('0');
+        if dec.is_empty() {
+            int.to_string()
+        } else {
+            format!("{int}.{dec}")
+        }
+    };
+    format!("{sign}{text}")
 }
 
 /// Keys in Unicode code point order, the same on every app, whatever order a map keeps.
@@ -865,6 +908,28 @@ mod tests {
         assert_eq!(argument_text(&Value::from(42)), "42");
         assert_eq!(argument_text(&Value::from(true)), "true");
         assert_eq!(argument_text(&serde_json::json!({"a": 1})), "…");
+    }
+
+    /// A number under Details exactly as sent, written plainly: no exponent, no trailing zero,
+    /// every digit (the vector's cases 5 and 6, kiff/tafs#2254 and the next).
+    #[test]
+    fn a_number_argument_keeps_every_digit_and_drops_trailing_zeros() {
+        let args: Value = serde_json::from_str(
+            r#"{"price": 1.50, "rate": 2.0, "share": 0.250, "tiny": 1.5e-05, "id_like": 12345678901234567.89,
+                "long": 0.12345678901234567890, "big": 98765432109876543210987, "neg": -0.5, "zero": 0.0, "e": 1E+3}"#,
+        )
+        .unwrap();
+        let line = |k: &str| argument_lines(k, &args[k], 0).remove(0);
+        assert_eq!(line("price"), "price: 1.5");
+        assert_eq!(line("rate"), "rate: 2");
+        assert_eq!(line("share"), "share: 0.25");
+        assert_eq!(line("tiny"), "tiny: 0.000015");
+        assert_eq!(line("id_like"), "id_like: 12345678901234567.89");
+        assert_eq!(line("long"), "long: 0.1234567890123456789");
+        assert_eq!(line("big"), "big: 98765432109876543210987");
+        assert_eq!(line("neg"), "neg: -0.5");
+        assert_eq!(line("zero"), "zero: 0");
+        assert_eq!(line("e"), "e: 1000");
     }
 
     /// A held call's arguments under Details, every case of contracts/held-arguments.json: the
